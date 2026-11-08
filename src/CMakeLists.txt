@@ -20,9 +20,17 @@ header_directories(${PROJECT}_INCLUDES)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/extras/GitSHA1.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/extras/GitSHA1.cpp" @ONLY)
 list(APPEND ${PROJECT}_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/extras/GitSHA1.cpp")
 
-add_executable(${EXECUTABLE} WIN32
-    ${${PROJECT}_SOURCES}
-)
+option(${PROJECT}_AS_STATIC_LIB "Build the game as a static library whose entry point is called from Rust (revc_cpp_main)" OFF)
+if(${PROJECT}_AS_STATIC_LIB)
+    add_library(${EXECUTABLE} STATIC
+        ${${PROJECT}_SOURCES}
+    )
+    target_compile_definitions(${EXECUTABLE} PRIVATE REVC_RUST_MAIN)
+else()
+    add_executable(${EXECUTABLE} WIN32
+        ${${PROJECT}_SOURCES}
+    )
+endif()
 
 target_link_libraries(${EXECUTABLE} PRIVATE
     librw::librw

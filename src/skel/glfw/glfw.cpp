@@ -1889,6 +1889,11 @@ WinMain(HINSTANCE instance,
 	}
 #endif
 
+#elif defined(REVC_RUST_MAIN)
+// Rust owns main() (rust/revc); it calls this with the process argv.
+extern "C" int
+revc_cpp_main(int argc, char *argv[])
+{
 #else
 int
 main(int argc, char *argv[])

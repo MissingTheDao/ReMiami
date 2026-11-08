@@ -1,3 +1,4 @@
+#include <limits.h>
 #include "common.h"
 #include "crossplatform.h"
 
@@ -249,10 +250,17 @@ char* casepath(char const* path, bool checkPathFirst)
             continue;
         }
 
+        // Prefer an exact-case match, falling back to a case-insensitive one.
+        // Otherwise "revc/" can resolve to a sibling "reVC/" depending on readdir order.
+        // (out currently holds the directory path ending in '/')
+        char exactPath[PATH_MAX];
+        snprintf(exactPath, sizeof(exactPath), "%s%s", out, c);
+        bool wantExact = access(exactPath, F_OK) == 0;
+
         struct dirent* e;
         while (e = readdir(d))
         {
-            if (strcasecmp(c, e->d_name) == 0)
+            if (wantExact ? strcmp(c, e->d_name) == 0 : strcasecmp(c, e->d_name) == 0)
             {
                 strcpy(out + rl, e->d_name);
                 int reportedLen = (int)strlen(e->d_name);
