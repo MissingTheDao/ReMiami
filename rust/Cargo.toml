@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["revc"]
+members = ["revc", "revc-audio"]
 
 [workspace.package]
 edition = "2024"

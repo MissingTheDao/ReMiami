@@ -30,6 +30,9 @@ fn main() {
         .args(["-G", "Ninja", "-DCMAKE_BUILD_TYPE=RelWithDebInfo", "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"])
         .args(["-DLIBRW_PLATFORM=GL3", "-DLIBRW_GL3_GFXLIB=HOST"])
         .args(["-DREVC_AUDIO=OAL", "-DREVC_VENDORED_LIBRW=ON", "-DREVC_AS_STATIC_LIB=ON"])
+        // Sound effects mixed in Rust. Passed every time so a one-off
+        // REVC_CMAKE_ARGS=-DREVC_RUST_SFX=OFF build (OpenAL, for comparison) doesn't stick in the cache.
+        .arg("-DREVC_RUST_SFX=ON")
         .args(["-DCMAKE_C_COMPILER=clang", "-DCMAKE_CXX_COMPILER=clang++"]);
     // Reproducible output: map checkout and build paths out of __FILE__ strings and debug
     // info, so a clone in any directory produces the same binary.

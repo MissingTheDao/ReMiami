@@ -173,6 +173,7 @@ impl Driver {
             Phase::WaitPlaying => {
                 if state == STATE_PLAYING {
                     log(format!("playing after {:.1}s", self.started.elapsed().as_secs_f32()));
+                    crate::audio::take_stats(); // count sound effects from here on
                     self.phase = Phase::Playing { start_ms: unsafe { revc_test_game_ms() }, start_frame: unsafe { revc_test_frame() } };
                 }
             }
@@ -187,6 +188,7 @@ impl Driver {
                     return false;
                 }
                 log(format!("captured after {elapsed} ms game time, {frames} frames"));
+                self.check_audio();
                 self.check_player();
                 if self.shot.is_some() || self.reference.is_some() {
                     crate::host::request_capture();
@@ -204,6 +206,20 @@ impl Driver {
             Phase::Done => {}
         }
         false
+    }
+
+    /// The game must have driven the Rust mixer (sound effects started). Volume is 0 in the
+    /// test settings, so the level isn't checked, only that voices were started and mixed.
+    fn check_audio(&mut self) {
+        match crate::audio::take_stats() {
+            Some(s) => {
+                log(format!("audio: {} sound effects started, up to {} at once", s.starts, s.max_active));
+                if s.starts == 0 {
+                    self.fail("no sound effects were started during play".into());
+                }
+            }
+            None => log("audio: Rust mixer not in use (REVC_RUST_SFX=OFF?)"),
+        }
     }
 
     fn check_player(&mut self) {

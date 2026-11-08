@@ -128,7 +128,7 @@ fn with<R>(f: impl FnOnce(&mut Host) -> R) -> R {
     HOST.with(|h| f(&mut h.borrow_mut()))
 }
 
-fn sdl_error() -> String {
+pub fn sdl_error() -> String {
     unsafe { CStr::from_ptr(SDL_GetError()) }.to_string_lossy().into_owned()
 }
 

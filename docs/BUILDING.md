@@ -69,3 +69,15 @@ scripts/test.sh --bless    # accept the current screenshots as the new reference
 Each run uses a throwaway game folder (game files symlinked, settings and saves from `tests/`),
 so your own `reVC.ini` and saves are never touched. A window opens while it runs. Logs,
 screenshots and diff images go to `rust/target/test-output/`. Details: `tests/README.md`.
+
+## Audio
+
+Sound effects are mixed in Rust (`rust/revc-audio`, unit-tested with `cargo test -p revc-audio`)
+and played through SDL3. Music, radio and cutscene audio still go through OpenAL for now.
+To compare with the original OpenAL sound effects, build once with:
+
+```bash
+cd rust && REVC_CMAKE_ARGS=-DREVC_RUST_SFX=OFF cargo run
+```
+
+The next plain `cargo run` switches back.
