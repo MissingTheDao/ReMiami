@@ -1,0 +1,47 @@
+//! reVC entry point. Rust owns `main()`, the SDL3 window/GL context and input (see `host`),
+//! and hands control to the C++ game loop in src/skel/host/host.cpp.
+
+mod host;
+
+use std::ffi::{CString, c_char, c_int};
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+unsafe extern "C" {
+    /// The game's original entry point, in src/skel/host/host.cpp.
+    fn revc_cpp_main(argc: c_int, argv: *mut *mut c_char) -> c_int;
+}
+
+/// The game loads data relative to the working directory.
+fn game_dir() -> PathBuf {
+    std::env::var_os("REVC_GAME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("REVC_DEFAULT_GAME_DIR")))
+}
+
+fn main() -> ExitCode {
+    let dir = game_dir();
+    if let Err(e) = std::env::set_current_dir(&dir) {
+        eprintln!("revc: cannot enter game directory {}: {e}", dir.display());
+        eprintln!("revc: set REVC_GAME_DIR to your Vice City data folder");
+        return ExitCode::FAILURE;
+    }
+
+    if let Err(e) = host::init() {
+        eprintln!("revc: SDL initialisation failed: {e}");
+        return ExitCode::FAILURE;
+    }
+
+    // C-style argv; the CStrings must outlive the call.
+    let args: Vec<CString> = std::env::args_os()
+        .map(|a| CString::new(a.into_encoded_bytes()).expect("argument contains NUL"))
+        .collect();
+    let mut argv: Vec<*mut c_char> = args.iter().map(|a| a.as_ptr().cast_mut()).collect();
+    argv.push(std::ptr::null_mut());
+
+    // SAFETY: argv is a NULL-terminated array of valid C strings that live for the call.
+    let rc = unsafe { revc_cpp_main((argv.len() - 1) as c_int, argv.as_mut_ptr()) };
+
+    host::shutdown();
+    ExitCode::from(rc.clamp(0, 255) as u8)
+}

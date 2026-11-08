@@ -1,0 +1,12 @@
+[workspace]
+resolver = "3"
+members = ["revc"]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+publish = false
+
+[profile.dev]
+# The C++ side is built RelWithDebInfo regardless; keep Rust debuggable.
+opt-level = 1
