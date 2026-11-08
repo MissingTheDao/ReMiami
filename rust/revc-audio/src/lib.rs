@@ -3,3 +3,4 @@
 
 pub mod al;
 pub mod mixer;
+pub mod reverb;

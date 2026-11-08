@@ -25,6 +25,7 @@ unsafe extern "C" {
     fn revc_test_frame() -> u32;
     fn revc_test_game_ms() -> u32;
     fn revc_test_fading() -> i32;
+    fn revc_test_audio_fx(supported: *mut i32, mode: *mut i32, level: *mut f32);
     fn revc_test_quit();
     fn revc_test_load_slot(slot: i32) -> i32;
     fn revc_test_player_pos(x: *mut f32, y: *mut f32, z: *mut f32);
@@ -175,6 +176,7 @@ impl Driver {
                     log(format!("playing after {:.1}s", self.started.elapsed().as_secs_f32()));
                     crate::audio::take_stats(); // count sound effects and streams from here on
                     crate::audio::take_stream_frames();
+                    crate::audio::take_nonzero_sends();
                     self.phase = Phase::Playing { start_ms: unsafe { revc_test_game_ms() }, start_frame: unsafe { revc_test_frame() } };
                 }
             }
@@ -215,6 +217,15 @@ impl Driver {
         match crate::audio::take_stats() {
             Some(s) => {
                 log(format!("audio: {} sound effects started, up to {} at once", s.starts, s.max_active));
+                let (mut sup, mut mode, mut level) = (0i32, 0i32, 0f32);
+                unsafe { revc_test_audio_fx(&mut sup, &mut mode, &mut level) };
+                let mode = ["off", "EAX", "EFX", "EAX3"].get(mode as usize).copied().unwrap_or("?");
+                log(format!(
+                    "audio: reverb {mode} (effects supported: {}), effects level {level:.2}, send up to {:.2} ({} reverb sends set)",
+                    sup != 0,
+                    s.max_send,
+                    crate::audio::take_nonzero_sends()
+                ));
                 if s.starts == 0 {
                     self.fail("no sound effects were started during play".into());
                 }

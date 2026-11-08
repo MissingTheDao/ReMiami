@@ -14,7 +14,28 @@
 #include "PlayerInfo.h"
 #include "GenericGameStorage.h"
 
+#ifdef AUDIO_OAL
+// Audio effects state (sampman_oal.cpp globals).
+extern bool _effectsSupported;
+extern bool _usingEFX;
+extern int usingEAX, usingEAX3;
+extern float _fEffectsLevel;
+#endif
+
 extern "C" {
+
+// Reverb state: whether effects are available/enabled and the current effects (reverb send) level.
+void
+revc_test_audio_fx(int *supported, int *mode, float *level)
+{
+#ifdef AUDIO_OAL
+	*supported = _effectsSupported;
+	*mode = usingEAX3 ? 3 : usingEAX ? 1 : _usingEFX ? 2 : 0; // 0 off, 1 EAX, 2 EFX, 3 EAX3
+	*level = _fEffectsLevel;
+#else
+	*supported = 0; *mode = 0; *level = 0.0f;
+#endif
+}
 
 // 0 = other (loading, init), 1 = front-end menu, 2 = playing.
 int

@@ -73,8 +73,9 @@ screenshots and diff images go to `rust/target/test-output/`. Details: `tests/RE
 ## Audio
 
 Sound effects and streams (music, radio, cutscene audio) are mixed in Rust (`rust/revc-audio`,
-unit-tested with `cargo test -p revc-audio`) and played through SDL3. OpenAL is still linked for
-reverb and the audio-provider menu until those move too. To compare with the original OpenAL
+unit-tested with `cargo test -p revc-audio`) and played through SDL3, including the environmental
+reverb (`revc-audio/src/reverb.rs`). OpenAL is still linked for device/provider detection and the
+audio-provider menu until those are removed. To compare with the original OpenAL
 output, build once with either or both switches off:
 
 ```bash

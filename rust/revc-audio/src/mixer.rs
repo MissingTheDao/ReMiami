@@ -1,7 +1,10 @@
 //! Software mixer for the game's sound-effect voices, reproducing OpenAL Soft's behaviour for
 //! the features the game uses: per-voice gain and pitch, listener-relative 3D position with the
-//! inverse-distance-clamped model, 2D (unpanned) voices, loop counts and loop points.
+//! inverse-distance-clamped model, 2D (unpanned) voices, loop counts and loop points, and a per-voice
+//! send into the environmental reverb (`reverb.rs`), like an EFX auxiliary send.
 //! Pure logic, unit-tested; SDL output is in `mod.rs`. First draft by the local model.
+
+use crate::reverb::{Reverb, ReverbParams};
 
 pub const OUTPUT_RATE: u32 = 48000;
 
@@ -21,13 +24,16 @@ pub struct Voice {
     loop_end: i32,
     playing: bool,
     cursor: f64,
-    /// Stored for the reverb stage; not used in mixing yet.
+    /// Send level into the reverb (the game's per-channel "effects level"), 0 = dry only.
     reverb_mix: f32,
 }
 
 pub struct Mixer {
     voices: Vec<Voice>,
     stats: Stats,
+    reverb: Reverb,
+    /// Mono reverb input for the current mix call (scratch, reused).
+    wet: Vec<f32>,
 }
 
 /// Counters for diagnostics and the regression harness, since the last `take_stats()`.
@@ -39,6 +45,8 @@ pub struct Stats {
     pub max_active: usize,
     /// Highest absolute output sample (before clamping).
     pub peak: f32,
+    /// Highest reverb send level of a playing voice (the game's effects level).
+    pub max_send: f32,
 }
 
 impl Default for Voice {
@@ -68,6 +76,8 @@ impl Mixer {
         Self {
             voices: (0..num_voices).map(|_| Voice::default()).collect(),
             stats: Stats::default(),
+            reverb: Reverb::new(OUTPUT_RATE),
+            wet: Vec::new(),
         }
     }
 
@@ -92,6 +102,11 @@ impl Mixer {
                 self.stats.starts += 1;
             }
         }
+    }
+
+    /// Sets the environment reverb (the game interpolates between presets every 16 frames).
+    pub fn set_reverb_params(&mut self, p: &ReverbParams) {
+        self.reverb.set_params(p);
     }
 
     /// Returns the counters since the previous call and resets them.
@@ -175,13 +190,19 @@ impl Mixer {
     /// Adds all playing voices to `out` (interleaved stereo; the caller starts it at silence and
     /// may have mixed other sources in already), then clamps the result to [-1, 1].
     pub fn mix(&mut self, out: &mut [f32]) {
+        let frames = out.len() / 2;
+        self.wet.clear();
+        self.wet.resize(frames, 0.0);
         let mut active = 0;
         for voice in &mut self.voices {
             if voice.playing {
                 active += 1;
-                voice.mix_into(out);
+                self.stats.max_send = self.stats.max_send.max(voice.reverb_mix);
+                voice.mix_into(out, &mut self.wet);
             }
         }
+        // The reverb always runs, so tails ring out after their voices stop.
+        self.reverb.process(&self.wet, out);
         self.stats.max_active = self.stats.max_active.max(active);
         for sample in out.iter_mut() {
             self.stats.peak = self.stats.peak.max(sample.abs());
@@ -191,12 +212,14 @@ impl Mixer {
 }
 
 impl Voice {
-    /// Left/right gains: 2D voices are unpanned at full gain; 3D voices use OpenAL's inverse
-    /// distance clamped model (rolloff 1) and constant-power panning on the x axis.
-    fn gains(&self) -> (f32, f32) {
+    /// Left/right gains and the reverb send gain. 2D voices are unpanned at full gain; 3D voices
+    /// use OpenAL's inverse distance clamped model (rolloff 1) and constant-power panning on the x
+    /// axis. The send follows the source gain and distance attenuation, scaled by the send level.
+    fn gains(&self) -> (f32, f32, f32) {
         let g = self.gain.clamp(0.0, 1.0);
+        let send = self.reverb_mix.clamp(0.0, 1.0);
         if self.is_2d {
-            return (g, g);
+            return (g, g, g * send);
         }
         let dist = (self.pos[0] * self.pos[0] + self.pos[1] * self.pos[1] + self.pos[2] * self.pos[2]).sqrt();
         let att = if self.ref_dist > 0.0 {
@@ -206,7 +229,7 @@ impl Voice {
             1.0
         };
         let pan = if dist > 1e-4 { (self.pos[0] / dist).clamp(-1.0, 1.0) } else { 0.0 };
-        (g * att * ((1.0 - pan) / 2.0).sqrt(), g * att * ((1.0 + pan) / 2.0).sqrt())
+        (g * att * ((1.0 - pan) / 2.0).sqrt(), g * att * ((1.0 + pan) / 2.0).sqrt(), g * att * send)
     }
 
     /// OpenAL ignores invalid loop points and loops the whole buffer.
@@ -219,7 +242,7 @@ impl Voice {
         }
     }
 
-    fn mix_into(&mut self, out: &mut [f32]) {
+    fn mix_into(&mut self, out: &mut [f32], wet: &mut [f32]) {
         let len = self.data.len();
         let step = self.freq as f64 * self.pitch.max(0.0) as f64 / OUTPUT_RATE as f64;
         if len == 0 || step <= 0.0 {
@@ -228,9 +251,9 @@ impl Voice {
             }
             return;
         }
-        let (lg, rg) = self.gains();
+        let (lg, rg, wg) = self.gains();
         let (rs, re) = self.loop_region();
-        for frame in out.chunks_exact_mut(2) {
+        for (frame, w) in out.chunks_exact_mut(2).zip(wet.iter_mut()) {
             let looping = self.loop_count == 0 || self.loops_left > 0;
             let i = (self.cursor as usize).min(len - 1);
             let frac = (self.cursor - i as f64) as f32;
@@ -238,6 +261,7 @@ impl Voice {
             let s = (self.data[i] as f32 + (self.data[next] as f32 - self.data[i] as f32) * frac) / 32768.0;
             frame[0] += s * lg;
             frame[1] += s * rg;
+            *w += s * wg;
 
             self.cursor += step;
             if looping {
@@ -423,6 +447,29 @@ mod tests {
         assert_eq!((s.starts, s.max_active), (1, 1));
         assert!((s.peak - 0.5).abs() < 1e-6);
         assert_eq!(m.take_stats(), Stats::default());
+    }
+
+    #[test]
+    fn reverb_send_adds_a_tail() {
+        let mut m = Mixer::new(1);
+        m.set_reverb_params(&ReverbParams { gain: 1.0, reflections_gain: 1.0, ..Default::default() });
+        m.set_2d(0, true);
+        m.set_reverb_mix(0, 1.0);
+        m.start(0, &[16384; 100], OUTPUT_RATE);
+        run(&mut m, 100);
+        assert!(!m.is_playing(0));
+        // The voice has ended but the reverb keeps ringing.
+        assert!(run(&mut m, 4800).iter().any(|s| s.abs() > 1e-4));
+    }
+
+    #[test]
+    fn no_send_no_tail() {
+        let mut m = Mixer::new(1);
+        m.set_reverb_params(&ReverbParams { gain: 1.0, ..Default::default() });
+        m.set_2d(0, true);
+        m.start(0, &[16384; 100], OUTPUT_RATE);
+        run(&mut m, 100);
+        assert!(run(&mut m, 4800).iter().all(|&s| s == 0.0));
     }
 
     #[test]

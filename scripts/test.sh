@@ -60,7 +60,7 @@ for s in "${SCENARIOS[@]}"; do
     [[ -n "$leaks" ]] && echo "$leaks" | sed 's/^/     leak: /'
     echo "     log: $log"
   fi
-  grep -E '^\[revc-test\] (player at|image diff|audio:)' "$log" | sed 's/^\[revc-test\] /     /'
+  grep -E '^\[revc-test\] (player at|image diff|audio)' "$log" | sed 's/^\[revc-test\] /     /'
   if (( BLESS )) && [[ -f "$OUT/$s.png" ]]; then
     cp "$OUT/$s.png" "$ROOT/tests/reference/$s.png" && echo "     blessed tests/reference/$s.png"
   fi

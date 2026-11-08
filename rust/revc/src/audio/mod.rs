@@ -18,6 +18,9 @@ static MIXER: Mutex<Option<Mixer>> = Mutex::new(None);
 /// Stream sources/buffers exist independently of the output device (the game creates them
 /// before opening sound-effect channels), so they live in their own lock.
 static STREAMS: Mutex<Option<AlStreams>> = Mutex::new(None);
+/// Last reverb preset from the game. It can arrive before the mixer opens, so it's kept here and
+/// applied on open.
+static REVERB: Mutex<Option<revc_audio::reverb::ReverbParams>> = Mutex::new(None);
 static STREAM: AtomicPtr<SDL_AudioStream> = AtomicPtr::new(null_mut());
 
 thread_local! {
@@ -76,7 +79,11 @@ pub extern "C" fn revc_sfx_open(voices: c_uint) -> c_int {
             return 0;
         }
     }
-    *MIXER.lock().unwrap_or_else(|e| e.into_inner()) = Some(Mixer::new(voices as usize));
+    let mut mixer = Mixer::new(voices as usize);
+    if let Some(p) = *REVERB.lock().unwrap_or_else(|e| e.into_inner()) {
+        mixer.set_reverb_params(&p);
+    }
+    *MIXER.lock().unwrap_or_else(|e| e.into_inner()) = Some(mixer);
     let spec = SDL_AudioSpec { format: SDL_AUDIO_F32, channels: CHANNELS as c_int, freq: OUTPUT_RATE as c_int };
     let stream = unsafe { SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, Some(feed), null_mut()) };
     if stream.is_null() {
@@ -107,6 +114,36 @@ pub fn take_stats() -> Option<revc_audio::mixer::Stats> {
 /// Stream source-frames mixed since the last call (None if streams aren't on the Rust mixer).
 pub fn take_stream_frames() -> Option<u64> {
     STREAMS.lock().ok()?.as_mut().map(|s| s.take_frames_mixed())
+}
+
+/// The environment reverb, already converted from the game's EAX3 preset (sampman_oal.cpp).
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_reverb_set(
+    density: c_float,
+    diffusion: c_float,
+    gain: c_float,
+    gain_hf: c_float,
+    decay_time: c_float,
+    decay_hf_ratio: c_float,
+    reflections_gain: c_float,
+    reflections_delay: c_float,
+    late_gain: c_float,
+    late_delay: c_float,
+) {
+    let p = revc_audio::reverb::ReverbParams {
+        density,
+        diffusion,
+        gain,
+        gain_hf,
+        decay_time,
+        decay_hf_ratio,
+        reflections_gain,
+        reflections_delay,
+        late_gain,
+        late_delay,
+    };
+    *REVERB.lock().unwrap_or_else(|e| e.into_inner()) = Some(p);
+    with_mixer(|m| m.set_reverb_params(&p));
 }
 
 #[unsafe(no_mangle)]
@@ -172,8 +209,18 @@ pub extern "C" fn revc_sfx_set_loop_count(id: c_uint, count: c_int) {
     with_mixer(|m| m.set_loop_count(id as usize, count));
 }
 
+/// Calls that set a non-zero reverb send (diagnostics for the regression harness).
+static NONZERO_SENDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+pub fn take_nonzero_sends() -> u64 {
+    NONZERO_SENDS.swap(0, Ordering::Relaxed)
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_sfx_set_reverb_mix(id: c_uint, mix: c_float) {
+    if mix > 0.0 {
+        NONZERO_SENDS.fetch_add(1, Ordering::Relaxed);
+    }
     with_mixer(|m| m.set_reverb_mix(id as usize, mix));
 }
 
