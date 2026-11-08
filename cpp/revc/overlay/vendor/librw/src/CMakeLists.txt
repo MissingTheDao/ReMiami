@@ -162,6 +162,10 @@ if(LIBRW_PLATFORM_GL3)
             PUBLIC
                 SDL2::SDL2
         )
+    elseif (LIBRW_GL3_GFXLIB STREQUAL "HOST")
+        # Window, GL context and video modes come from the embedding application
+        # through rw::gl3::HostWindowApi (see rwgl3.h).
+        target_compile_definitions(librw PUBLIC LIBRW_HOST)
     endif()
 
     set(OpenGL_GL_PREFERENCE GLVND)
