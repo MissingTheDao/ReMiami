@@ -3,6 +3,9 @@
 //!
 //! Scenarios:
 //!   REVC_TEST=boot      reach the front-end menu, then quit.
+//!   REVC_TEST=audio     like saveload, then plays a scripted scene with injected keys (walk
+//!                       forward 3 s, cycle weapon, fire 3 times) for the A/B audio comparison.
+//!                       REVC_TEST_WAV=path records the Rust mixer's output for the whole run.
 //!   REVC_TEST=saveload  load save slot REVC_TEST_SLOT (1-8, default 1), play until
 //!                       REVC_TEST_MS of game time (default 8000) have passed and the screen
 //!                       is no longer fading, check the player position, optionally capture a
@@ -38,6 +41,7 @@ const STATE_PLAYING: i32 = 2;
 enum Scenario {
     Boot,
     SaveLoad,
+    Audio,
 }
 
 #[derive(Debug)]
@@ -46,8 +50,26 @@ enum Phase {
     WaitPlaying,
     Playing { start_ms: u32, start_frame: u32 },
     Capturing,
+    /// Scripted input (audio scenario); `t0` is the game time it started.
+    Script { t0: u32, step: usize },
     Done,
 }
+
+/// (game ms after the script starts, RsKeyCodes key, down). Bindings from tests/config/*.ini:
+/// GO_FORWARD = UP, PED_CYCLE_WEAPON_RIGHT = PADENTER, PED_FIREWEAPON = LCTRL.
+const AUDIO_SCRIPT: &[(u32, i32, bool)] = &[
+    (0, 1019, true),     // rsUP: walk forward (footsteps, reverb-flagged indoors)
+    (3000, 1019, false),
+    (3500, 1039, true),  // rsPADENTER: cycle weapon
+    (3600, 1039, false),
+    (4000, 1049, true),  // rsLCTRL: fire
+    (4300, 1049, false),
+    (5000, 1049, true),
+    (5300, 1049, false),
+    (6000, 1049, true),
+    (6300, 1049, false),
+    (8000, 0, false),    // end (let tails ring out)
+];
 
 struct Driver {
     scenario: Scenario,
@@ -82,7 +104,8 @@ pub fn init() -> Result<bool, String> {
     let scenario = match name.as_str() {
         "boot" => Scenario::Boot,
         "saveload" => Scenario::SaveLoad,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload)")),
+        "audio" => Scenario::Audio,
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -98,6 +121,9 @@ pub fn init() -> Result<bool, String> {
         finished: false,
     };
     log(format!("scenario {scenario:?} started"));
+    if std::env::var_os("REVC_TEST_WAV").is_some() {
+        crate::audio::start_recording();
+    }
     DRIVER.with(|cell| *cell.borrow_mut() = Some(d));
 
     // Watchdog: also catches hangs where the main loop stops calling us.
@@ -161,7 +187,7 @@ impl Driver {
                 log(format!("front end reached after {:.1}s", self.started.elapsed().as_secs_f32()));
                 match self.scenario {
                     Scenario::Boot => return self.finish(),
-                    Scenario::SaveLoad => {
+                    Scenario::SaveLoad | Scenario::Audio => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -190,6 +216,13 @@ impl Driver {
                 if elapsed < self.wait_ms || frames < 30 || unsafe { revc_test_fading() } != 0 {
                     return false;
                 }
+                if self.scenario == Scenario::Audio {
+                    log(format!("script starts after {elapsed} ms game time"));
+                    crate::audio::take_stats();
+                    crate::audio::take_nonzero_sends();
+                    self.phase = Phase::Script { t0: unsafe { revc_test_game_ms() }, step: 0 };
+                    return false;
+                }
                 log(format!("captured after {elapsed} ms game time, {frames} frames"));
                 self.check_audio();
                 self.check_player();
@@ -199,6 +232,22 @@ impl Driver {
                 } else {
                     return self.finish();
                 }
+            }
+            Phase::Script { t0, step } => {
+                let t = unsafe { revc_test_game_ms() }.wrapping_sub(t0);
+                let mut step = step;
+                while let Some(&(at, key, down)) = AUDIO_SCRIPT.get(step) {
+                    if t < at {
+                        break;
+                    }
+                    if key == 0 {
+                        self.check_audio();
+                        return self.finish();
+                    }
+                    crate::host::inject_key(key, down);
+                    step += 1;
+                }
+                self.phase = Phase::Script { t0, step };
             }
             Phase::Capturing => {
                 if let Some((w, h, rgba)) = crate::host::take_capture() {
@@ -309,6 +358,17 @@ impl Driver {
     fn finish(&mut self) -> bool {
         self.phase = Phase::Done;
         self.finished = true;
+        if let Some(path) = std::env::var_os("REVC_TEST_WAV") {
+            let path = PathBuf::from(path);
+            match crate::audio::finish_recording(&path) {
+                Ok(frames) => log(format!(
+                    "recorded {:.1}s of mixer output -> {}",
+                    frames as f64 / revc_audio::mixer::OUTPUT_RATE as f64,
+                    path.display()
+                )),
+                Err(e) => self.fail(format!("cannot write {}: {e}", path.display())),
+            }
+        }
         if self.failures.is_empty() {
             log(format!("PASS {:?} in {:.1}s", self.scenario, self.started.elapsed().as_secs_f32()));
         } else {

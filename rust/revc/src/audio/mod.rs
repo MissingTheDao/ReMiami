@@ -23,6 +23,38 @@ static STREAMS: Mutex<Option<AlStreams>> = Mutex::new(None);
 static REVERB: Mutex<Option<revc_audio::reverb::ReverbParams>> = Mutex::new(None);
 static STREAM: AtomicPtr<SDL_AudioStream> = AtomicPtr::new(null_mut());
 
+/// When set, every mixed output buffer is appended here (stereo f32 at OUTPUT_RATE).
+static RECORDING: Mutex<Option<Vec<f32>>> = Mutex::new(None);
+
+/// Starts capturing the final mixed output (regression harness, A/B audio comparison).
+pub fn start_recording() {
+    *RECORDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(Vec::new());
+}
+
+/// Stops capturing and writes a 32-bit float stereo WAV. Returns the number of frames written.
+pub fn finish_recording(path: &std::path::Path) -> std::io::Result<usize> {
+    let data = RECORDING.lock().unwrap_or_else(|e| e.into_inner()).take().unwrap_or_default();
+    let bytes = (data.len() * 4) as u32;
+    let mut w = Vec::with_capacity(44 + bytes as usize);
+    w.extend_from_slice(b"RIFF");
+    w.extend_from_slice(&(36 + bytes).to_le_bytes());
+    w.extend_from_slice(b"WAVEfmt ");
+    w.extend_from_slice(&16u32.to_le_bytes());
+    w.extend_from_slice(&3u16.to_le_bytes()); // IEEE float
+    w.extend_from_slice(&(CHANNELS as u16).to_le_bytes());
+    w.extend_from_slice(&OUTPUT_RATE.to_le_bytes());
+    w.extend_from_slice(&(OUTPUT_RATE * BYTES_PER_FRAME as u32).to_le_bytes());
+    w.extend_from_slice(&(BYTES_PER_FRAME as u16).to_le_bytes());
+    w.extend_from_slice(&32u16.to_le_bytes());
+    w.extend_from_slice(b"data");
+    w.extend_from_slice(&bytes.to_le_bytes());
+    for s in &data {
+        w.extend_from_slice(&s.to_ne_bytes());
+    }
+    std::fs::write(path, w)?;
+    Ok(data.len() / CHANNELS)
+}
+
 thread_local! {
     /// Reused output buffer on the audio thread.
     static SCRATCH: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
@@ -55,6 +87,11 @@ unsafe extern "C" fn feed(_: *mut c_void, stream: *mut SDL_AudioStream, addition
             }
             Err(_) => return, // a panic elsewhere poisoned the lock; output silence
         }
+        if let Ok(mut rec) = RECORDING.lock() {
+            if let Some(rec) = rec.as_mut() {
+                rec.extend_from_slice(&buf);
+            }
+        }
         unsafe {
             SDL_PutAudioStreamData(stream, buf.as_ptr().cast(), (buf.len() * std::mem::size_of::<f32>()) as c_int);
         }
@@ -69,40 +106,56 @@ fn with_mixer(f: impl FnOnce(&mut Mixer)) {
     }
 }
 
-/// Opens the default playback device with `voices` sound-effect voices. Returns 0 on failure.
-#[unsafe(no_mangle)]
-pub extern "C" fn revc_sfx_open(voices: c_uint) -> c_int {
-    revc_sfx_close();
+/// Opens the SDL playback device if it isn't open yet. Both sound effects and streams need it,
+/// and either may be on the Rust mixer without the other (REVC_RUST_SFX / REVC_RUST_STREAMS).
+/// It stays open until `close_device()` (host shutdown).
+fn ensure_device() -> bool {
+    if !STREAM.load(Ordering::Acquire).is_null() {
+        return true;
+    }
     unsafe {
         if !SDL_InitSubSystem(SDL_INIT_AUDIO) {
             eprintln!("revc: SDL audio init failed: {}", crate::host::sdl_error());
-            return 0;
+            return false;
         }
     }
+    let spec = SDL_AudioSpec { format: SDL_AUDIO_F32, channels: CHANNELS as c_int, freq: OUTPUT_RATE as c_int };
+    let stream = unsafe { SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, Some(feed), null_mut()) };
+    if stream.is_null() {
+        eprintln!("revc: cannot open audio device: {}", crate::host::sdl_error());
+        return false;
+    }
+    STREAM.store(stream, Ordering::Release);
+    unsafe { SDL_ResumeAudioStreamDevice(stream) };
+    true
+}
+
+/// Stops output (the callback) and closes the device. Called from host shutdown.
+pub fn close_device() {
+    let stream = STREAM.swap(null_mut(), Ordering::AcqRel);
+    if !stream.is_null() {
+        unsafe { SDL_DestroyAudioStream(stream) };
+    }
+}
+
+/// Creates the sound-effect mixer with `voices` voices (and opens the device). 0 on failure.
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_sfx_open(voices: c_uint) -> c_int {
     let mut mixer = Mixer::new(voices as usize);
     if let Some(p) = *REVERB.lock().unwrap_or_else(|e| e.into_inner()) {
         mixer.set_reverb_params(&p);
     }
     *MIXER.lock().unwrap_or_else(|e| e.into_inner()) = Some(mixer);
-    let spec = SDL_AudioSpec { format: SDL_AUDIO_F32, channels: CHANNELS as c_int, freq: OUTPUT_RATE as c_int };
-    let stream = unsafe { SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, Some(feed), null_mut()) };
-    if stream.is_null() {
-        eprintln!("revc: cannot open audio device: {}", crate::host::sdl_error());
+    if !ensure_device() {
         *MIXER.lock().unwrap_or_else(|e| e.into_inner()) = None;
         return 0;
     }
-    STREAM.store(stream, Ordering::Release);
-    unsafe { SDL_ResumeAudioStreamDevice(stream) };
     1
 }
 
+/// Drops the sound-effect mixer; the device stays open for streams.
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_sfx_close() {
-    let stream = STREAM.swap(null_mut(), Ordering::AcqRel);
-    if !stream.is_null() {
-        // Stops the callback before the mixer goes away.
-        unsafe { SDL_DestroyAudioStream(stream) };
-    }
     *MIXER.lock().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
@@ -257,6 +310,7 @@ unsafe fn ids<'a>(n: c_int, p: *const c_uint) -> &'a [c_uint] {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn revc_alGenSources(n: c_int, out: *mut c_uint) {
     if out.is_null() || n <= 0 { return; }
+    ensure_device(); // streams may be on Rust while sound effects stay on OpenAL
     let v = with_streams(|a| a.gen_sources(n as usize));
     unsafe { std::ptr::copy_nonoverlapping(v.as_ptr(), out, v.len()) };
 }

@@ -4,6 +4,9 @@
 #   --bless  accept the current screenshots as the new references (tests/reference/)
 #   --keep   keep the temporary game folder
 # Needs a display (the game opens a window). Game data: REVC_GAME_DIR or ./game.
+# Scenarios: boot, saveload (default), audio (scripted scene with sound; see scripts/audio-ab.sh).
+# A scenario uses tests/config/<scenario>.ini if present, else tests/config/reVC.ini.
+# REVC_TEST_BIN=path runs that binary instead of building rust/ (used by scripts/audio-ab.sh).
 # Output and logs: rust/target/test-output/
 set -uo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -23,16 +26,19 @@ GAME=${REVC_GAME_DIR:-$ROOT/game}
 OUT=$ROOT/rust/target/test-output
 mkdir -p "$OUT"
 
-echo "== build"
-(cd "$ROOT/rust" && cargo build --locked -q) || { echo "build failed"; exit 1; }
-BIN=$ROOT/rust/target/debug/revc
+if [[ -n "${REVC_TEST_BIN:-}" ]]; then
+  BIN=$REVC_TEST_BIN
+else
+  echo "== build"
+  (cd "$ROOT/rust" && cargo build --locked -q) || { echo "build failed"; exit 1; }
+  BIN=$ROOT/rust/target/debug/revc
+fi
 
 # Isolated game folder: symlink the game files, but use the test settings and saves.
 TMP=$(mktemp -d); T=$TMP/game; mkdir -p "$T/userfiles"
 for f in "$GAME"/* ; do
   case "$(basename "$f")" in reVC.ini|userfiles) ;; *) ln -s "$f" "$T/" ;; esac
 done
-cp "$ROOT/tests/config/reVC.ini" "$T/"
 cp "$ROOT"/tests/saves/*.b "$T/userfiles/"
 printf 'width=1280\nheight=720\nmaximized=0\n' > "$T/userfiles/revc_window.ini"
 cleanup() { (( KEEP )) && echo "kept $T" || rm -rf "$TMP"; }
@@ -41,6 +47,8 @@ trap cleanup EXIT
 failed=0
 for s in "${SCENARIOS[@]}"; do
   log=$OUT/$s.log
+  ini=$ROOT/tests/config/$s.ini; [[ -f "$ini" ]] || ini=$ROOT/tests/config/reVC.ini
+  cp "$ini" "$T/reVC.ini"
   envs=(REVC_GAME_DIR="$T" REVC_TEST="$s")
   if [[ "$s" == saveload ]]; then
     envs+=(REVC_TEST_SHOT="$OUT/$s.png")

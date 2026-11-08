@@ -162,6 +162,7 @@ pub fn init() -> Result<(), String> {
 
 /// Tear down SDL objects. Called from main() after the game returns.
 pub fn shutdown() {
+    crate::audio::close_device();
     with(|h| {
         if h.geometry_dirty {
             h.geometry.save();
@@ -604,6 +605,13 @@ fn pump(h: &mut Host, out: &mut Vec<Cb>) {
             _ => {}
         }
     }
+}
+
+/// Sends a key press/release to the game exactly like a real key event (regression harness).
+/// `key` is an RsKeyCodes value (see host/keymap.rs).
+pub fn inject_key(key: c_int, down: bool) {
+    // SAFETY: game callback on the main thread; no host borrow is held here.
+    unsafe { revc_on_key(key, down as c_int) };
 }
 
 /// Processes window/input events and dispatches them to the game. Called by the main
