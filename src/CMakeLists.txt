@@ -20,12 +20,15 @@ header_directories(${PROJECT}_INCLUDES)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/extras/GitSHA1.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/extras/GitSHA1.cpp" @ONLY)
 list(APPEND ${PROJECT}_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/extras/GitSHA1.cpp")
 
-option(${PROJECT}_AS_STATIC_LIB "Build the game as a static library whose entry point is called from Rust (revc_cpp_main)" OFF)
+option(${PROJECT}_AS_STATIC_LIB "Build the game as a static library for the Rust host (rust/revc), entry point revc_cpp_main" OFF)
 if(${PROJECT}_AS_STATIC_LIB)
+    if(NOT (LIBRW_PLATFORM STREQUAL "GL3" AND LIBRW_GL3_GFXLIB STREQUAL "HOST"))
+        message(FATAL_ERROR "${PROJECT}_AS_STATIC_LIB requires -DLIBRW_PLATFORM=GL3 -DLIBRW_GL3_GFXLIB=HOST")
+    endif()
+    # Window, input and the process entry point come from Rust (skel/host/host.cpp).
     add_library(${EXECUTABLE} STATIC
         ${${PROJECT}_SOURCES}
     )
-    target_compile_definitions(${EXECUTABLE} PRIVATE REVC_RUST_MAIN)
 else()
     add_executable(${EXECUTABLE} WIN32
         ${${PROJECT}_SOURCES}

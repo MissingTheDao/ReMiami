@@ -1,4 +1,4 @@
-#if defined RW_GL3 && !defined LIBRW_SDL2
+#if defined RW_GL3 && !defined LIBRW_SDL2 && !defined LIBRW_HOST
 
 #ifdef _WIN32
 #include <shlobj.h>
@@ -284,6 +284,22 @@ psMouseSetPos(RwV2d *pos)
 
 	return;
 }
+
+/*
+ *****************************************************************************
+ * hostapi.h, implemented with GLFW (the Rust host implements it with SDL3)
+ */
+void hostGetCursorPos(double *x, double *y) { glfwGetCursorPos(PSGLOBAL(window), x, y); }
+void hostSetCursorPos(double x, double y) { glfwSetCursorPos(PSGLOBAL(window), x, y); }
+int hostGetMouseButton(int button) { return glfwGetMouseButton(PSGLOBAL(window), button); }
+int hostJoystickPresent(int jid) { return glfwJoystickPresent(jid); }
+const char *hostGetJoystickName(int jid) { return glfwGetJoystickName(jid); }
+const unsigned char *hostGetJoystickButtons(int jid, int *count) { return glfwGetJoystickButtons(jid, count); }
+
+static_assert(HOST_JOYSTICK_LAST == GLFW_JOYSTICK_LAST, "joystick slots");
+static_assert(HOST_MOUSE_BUTTON_5 == GLFW_MOUSE_BUTTON_5 && HOST_MOUSE_BUTTON_MIDDLE == GLFW_MOUSE_BUTTON_MIDDLE, "mouse layout");
+static_assert(HOST_PAD_BUTTON_GUIDE == GLFW_GAMEPAD_BUTTON_GUIDE && HOST_PAD_BUTTON_DPAD_LEFT == GLFW_GAMEPAD_BUTTON_DPAD_LEFT, "pad layout");
+static_assert(HOST_PAD_AXIS_RIGHT_TRIGGER == GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER, "pad axes");
 
 /*
  *****************************************************************************
@@ -1889,11 +1905,6 @@ WinMain(HINSTANCE instance,
 	}
 #endif
 
-#elif defined(REVC_RUST_MAIN)
-// Rust owns main() (rust/revc); it calls this with the process argv.
-extern "C" int
-revc_cpp_main(int argc, char *argv[])
-{
 #else
 int
 main(int argc, char *argv[])

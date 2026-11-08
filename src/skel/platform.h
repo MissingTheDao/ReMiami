@@ -46,6 +46,14 @@ extern void _InputInitialiseJoys();
 extern void HandleExit();
 
 extern void _psSelectScreenVM(RwInt32 videoMode);
+#ifdef LIBRW_HOST
+// Applies FrontEndMenuManager.m_nPrefsWindowed without re-creating the GL device,
+// so it also works while a game is loaded.
+extern void _psSwitchScreenModeLive(void);
+// Applies FrontEndMenuManager.m_nPrefsVideoMode live: the fullscreen display mode, or the
+// window size when windowed.
+extern void _psApplyResolutionLive(void);
+#endif
 
 extern void InitialiseLanguage();
 

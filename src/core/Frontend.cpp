@@ -634,7 +634,7 @@ CMenuManager::CentreMousePointer()
 		ClientToScreen(PSGLOBAL(window), &Point);
 		SetCursorPos(Point.x, Point.y);
 #elif defined RW_GL3
-		glfwSetCursorPos(PSGLOBAL(window), SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
+		hostSetCursorPos(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
 #endif
 
 		PSGLOBAL(lastMousePos.x) = SCREEN_WIDTH / 2;
@@ -854,8 +854,14 @@ CMenuManager::DisplayHelperText(char *text)
 				return;
 
 			if (aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_SCREENRES) {
+#ifdef LIBRW_HOST
+				// The SDL3 host changes resolution live, so it's available in-game too.
+				CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN),
+					TheText.Get("FET_MIG"));
+#else
 				CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN),
 					m_bGameNotLoaded ? TheText.Get("FET_MIG") : TheText.Get("FEH_NA"));
+#endif
 				return;
 			}
 
@@ -1292,7 +1298,12 @@ CMenuManager::DrawStandardMenus(bool activeScreen)
 					AsciiToUnicode(_psGetVideoModeList()[m_nDisplayVideoMode], unicodeTemp);
 					rightText = unicodeTemp;
 
-					if (!m_bGameNotLoaded) {
+#ifndef LIBRW_HOST
+					if (!m_bGameNotLoaded)
+#else
+					if (false)
+#endif
+					{
 						CFont::SetColor(CRGBA(DARKMENUOPTION_COLOR.r, DARKMENUOPTION_COLOR.g, DARKMENUOPTION_COLOR.b, FadeIn(255)));
 					}
 					break;
@@ -4852,6 +4863,12 @@ CMenuManager::ProcessUserInput(uint8 goDown, uint8 goUp, uint8 optionSelected, u
 			case MENUACTION_SCREENRES:
 				if (m_nDisplayVideoMode != m_nPrefsVideoMode) {
 					m_nPrefsVideoMode = m_nDisplayVideoMode;
+#ifdef LIBRW_HOST
+					// Live change on the existing window and GL context; the menu stays where it is.
+					_psApplyResolutionLive();
+					CentreMousePointer();
+					m_bShowMouse = true;
+#else
 					_psSelectScreenVM(m_nPrefsVideoMode);
 					DMAudio.ChangeMusicMode(MUSICMODE_FRONTEND);
 					DMAudio.Service();
@@ -4859,6 +4876,7 @@ CMenuManager::ProcessUserInput(uint8 goDown, uint8 goUp, uint8 optionSelected, u
 					m_bShowMouse = true;
 					m_nCurrOption = 5; // TODO(Miami): Because selected option is resetted after res. change. We'll need to revisit that.
 					m_nOptionHighlightTransitionBlend = 0;
+#endif
 					SaveSettings();
 				}
 				break;
@@ -4947,9 +4965,9 @@ CMenuManager::ProcessUserInput(uint8 goDown, uint8 goUp, uint8 optionSelected, u
 						ControlsManager.InitDefaultControlConfigJoyPad(devCaps.dwButtons);
 					}
 #else
-					if (PSGLOBAL(joy1id) != -1 && glfwJoystickPresent(PSGLOBAL(joy1id))) {
+					if (PSGLOBAL(joy1id) != -1 && hostJoystickPresent(PSGLOBAL(joy1id))) {
 						int count;
-						glfwGetJoystickButtons(PSGLOBAL(joy1id), &count);
+						hostGetJoystickButtons(PSGLOBAL(joy1id), &count);
 						ControlsManager.InitDefaultControlConfigJoyPad(count);
 					}
 #endif
@@ -5080,7 +5098,11 @@ CMenuManager::ProcessUserInput(uint8 goDown, uint8 goUp, uint8 optionSelected, u
 				break;
 #endif
 			case MENUACTION_SCREENRES:
+#ifdef LIBRW_HOST
+				if (true) {
+#else
 				if (m_bGameNotLoaded) {
+#endif
 					RwChar** videoMods = _psGetVideoModeList();
 					if (changeAmount > 0) {
 						do {

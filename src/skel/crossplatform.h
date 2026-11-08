@@ -61,9 +61,15 @@ int _caserename(const char *old_filename, const char *new_filename);
 #endif
 
 #ifdef RW_GL3
+#include "hostapi.h"
+
 typedef struct
 {
+#ifdef LIBRW_HOST
+    void*       window; // opaque, owned by the Rust host
+#else
     GLFWwindow* window;
+#endif
     RwBool		fullScreen;
     RwV2d		lastMousePos;
     double      mouseWheel; // glfw doesn't cache it

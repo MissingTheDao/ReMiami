@@ -46,35 +46,35 @@ void CControllerConfigManager::MakeControllerActionsBlank()
 #ifdef RW_GL3
 int MapIdToButtonId(int mapId) {
 	switch (mapId) {
-		case GLFW_GAMEPAD_BUTTON_A: // Cross
+		case HOST_PAD_BUTTON_A: // Cross
 			return 2;
-		case GLFW_GAMEPAD_BUTTON_B: // Circle
+		case HOST_PAD_BUTTON_B: // Circle
 			return 1;
-		case GLFW_GAMEPAD_BUTTON_X: // Square
+		case HOST_PAD_BUTTON_X: // Square
 			return 3;
-		case GLFW_GAMEPAD_BUTTON_Y: // Triangle
+		case HOST_PAD_BUTTON_Y: // Triangle
 			return 4;
-		case GLFW_GAMEPAD_BUTTON_LEFT_BUMPER:
+		case HOST_PAD_BUTTON_LEFT_BUMPER:
 			return 7;
-		case GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER:
+		case HOST_PAD_BUTTON_RIGHT_BUMPER:
 			return 8;
-		case GLFW_GAMEPAD_BUTTON_BACK:
+		case HOST_PAD_BUTTON_BACK:
 			return 9;
-		case GLFW_GAMEPAD_BUTTON_START:
+		case HOST_PAD_BUTTON_START:
 			return 12;
-		case GLFW_GAMEPAD_BUTTON_LEFT_THUMB:
+		case HOST_PAD_BUTTON_LEFT_THUMB:
 			return 10;
-		case GLFW_GAMEPAD_BUTTON_RIGHT_THUMB:
+		case HOST_PAD_BUTTON_RIGHT_THUMB:
 			return 11;
-		case GLFW_GAMEPAD_BUTTON_DPAD_UP:
+		case HOST_PAD_BUTTON_DPAD_UP:
 			return 13;
-		case GLFW_GAMEPAD_BUTTON_DPAD_RIGHT:
+		case HOST_PAD_BUTTON_DPAD_RIGHT:
 			return 14;
-		case GLFW_GAMEPAD_BUTTON_DPAD_DOWN:
+		case HOST_PAD_BUTTON_DPAD_DOWN:
 			return 15;
-		case GLFW_GAMEPAD_BUTTON_DPAD_LEFT:
+		case HOST_PAD_BUTTON_DPAD_LEFT:
 			return 16;
-		// GLFW sends those as axes, so I added them here manually.
+		// GLFW/the host send those as axes, so I added them here manually.
 		case 15: // Left trigger
 			return 5;
 		case 16: // Right trigger
@@ -2805,7 +2805,7 @@ void CControllerConfigManager::UpdateJoyButtonState(int32 padnumber)
 #elif defined RW_GL3
 	if (m_NewState.isGamepad) {
 		for (int32 i = 0; i < MAX_BUTTONS; i++) {
-			if (i == GLFW_GAMEPAD_BUTTON_GUIDE)
+			if (i == HOST_PAD_BUTTON_GUIDE)
 				continue;
 
 			m_aButtonStates[MapIdToButtonId(i)-1] = m_NewState.mappedButtons[i];

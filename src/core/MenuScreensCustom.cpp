@@ -38,7 +38,12 @@
 #ifdef CUSTOM_FRONTEND_OPTIONS
 
 #if defined(IMPROVED_VIDEOMODE) && !defined(GTA_HANDHELD)
+#ifdef LIBRW_HOST
+	// The SDL3 host switches modes live, so this stays available in-game.
+	#define VIDEOMODE_SELECTOR MENUACTION_CFO_SELECT, "FEM_SCF", { new CCFOSelect((int8*)&FrontEndMenuManager.m_nPrefsWindowed, "VideoMode", "Windowed", screenModes, 2, true, ScreenModeAfterChange, false) }, 0, 0, MENUALIGN_LEFT,
+#else
 	#define VIDEOMODE_SELECTOR MENUACTION_CFO_SELECT, "FEM_SCF", { new CCFOSelect((int8*)&FrontEndMenuManager.m_nPrefsWindowed, "VideoMode", "Windowed", screenModes, 2, true, ScreenModeAfterChange, true) }, 0, 0, MENUALIGN_LEFT,
+#endif
 #else
 	#define VIDEOMODE_SELECTOR
 #endif
@@ -283,7 +288,11 @@ wchar* MultiSamplingDraw(bool *disabled, bool userHovering) {
 const char* screenModes[] = { "FED_FLS", "FED_WND" };
 void ScreenModeAfterChange(int8 before, int8 after)
 {
+#ifdef LIBRW_HOST
+	_psSwitchScreenModeLive();
+#else
 	_psSelectScreenVM(FrontEndMenuManager.m_nPrefsVideoMode); // apply same resolution
+#endif
 	DMAudio.ChangeMusicMode(MUSICMODE_FRONTEND);
 	DMAudio.Service();
 	FrontEndMenuManager.SetHelperText(0);
@@ -302,9 +311,9 @@ wchar* DetectJoystickDraw(bool* disabled, bool userHovering) {
 	int found = -1;
 	const char *joyname;
 	if (userHovering) {
-		for (int i = 0; i <= GLFW_JOYSTICK_LAST; i++) {
-			if ((joyname = glfwGetJoystickName(i))) {
-				const uint8* buttons = glfwGetJoystickButtons(i, &numButtons);
+		for (int i = 0; i <= HOST_JOYSTICK_LAST; i++) {
+			if ((joyname = hostGetJoystickName(i))) {
+				const uint8* buttons = hostGetJoystickButtons(i, &numButtons);
 				for (int j = 0; j < numButtons; j++) {
 					if (buttons[j]) {
 						found = i;
