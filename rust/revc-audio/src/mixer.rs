@@ -172,9 +172,9 @@ impl Mixer {
         }
     }
 
-    /// Mixes all playing voices into `out` (interleaved stereo), replacing its contents.
+    /// Adds all playing voices to `out` (interleaved stereo; the caller starts it at silence and
+    /// may have mixed other sources in already), then clamps the result to [-1, 1].
     pub fn mix(&mut self, out: &mut [f32]) {
-        out.fill(0.0);
         let mut active = 0;
         for voice in &mut self.voices {
             if voice.playing {
@@ -423,6 +423,14 @@ mod tests {
         assert_eq!((s.starts, s.max_active), (1, 1));
         assert!((s.peak - 0.5).abs() < 1e-6);
         assert_eq!(m.take_stats(), Stats::default());
+    }
+
+    #[test]
+    fn mix_adds_to_existing_output() {
+        let mut m = Mixer::new(1);
+        let mut buf = vec![0.25f32; 8];
+        m.mix(&mut buf);
+        assert!(buf.iter().all(|&s| s == 0.25));
     }
 
     #[test]

@@ -33,6 +33,7 @@ fn main() {
         // Sound effects mixed in Rust. Passed every time so a one-off
         // REVC_CMAKE_ARGS=-DREVC_RUST_SFX=OFF build (OpenAL, for comparison) doesn't stick in the cache.
         .arg("-DREVC_RUST_SFX=ON")
+        .arg("-DREVC_RUST_STREAMS=ON")
         .args(["-DCMAKE_C_COMPILER=clang", "-DCMAKE_CXX_COMPILER=clang++"]);
     // Reproducible output: map checkout and build paths out of __FILE__ strings and debug
     // info, so a clone in any directory produces the same binary.

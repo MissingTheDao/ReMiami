@@ -173,7 +173,8 @@ impl Driver {
             Phase::WaitPlaying => {
                 if state == STATE_PLAYING {
                     log(format!("playing after {:.1}s", self.started.elapsed().as_secs_f32()));
-                    crate::audio::take_stats(); // count sound effects from here on
+                    crate::audio::take_stats(); // count sound effects and streams from here on
+                    crate::audio::take_stream_frames();
                     self.phase = Phase::Playing { start_ms: unsafe { revc_test_game_ms() }, start_frame: unsafe { revc_test_frame() } };
                 }
             }
@@ -219,6 +220,17 @@ impl Driver {
                 }
             }
             None => log("audio: Rust mixer not in use (REVC_RUST_SFX=OFF?)"),
+        }
+        match crate::audio::take_stream_frames() {
+            Some(frames) => {
+                // Both channels of a stereo stream are separate sources, so /2 for seconds.
+                let secs = frames as f64 / 2.0 / revc_audio::mixer::OUTPUT_RATE as f64;
+                log(format!("audio: {secs:.1}s of streamed audio mixed"));
+                if frames == 0 {
+                    self.fail("no streamed audio (music/ambience) was mixed during play".into());
+                }
+            }
+            None => log("audio: streams not on the Rust mixer (REVC_RUST_STREAMS=OFF?)"),
         }
     }
 

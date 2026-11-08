@@ -1,9 +1,11 @@
-//! Audio output through SDL3. For now this mixes the game's sound-effect voices (the C++
-//! `CChannel` class, cpp/re3-miami/src/audio/oal/channel_rust.cpp); streams still use OpenAL.
+//! Audio output through SDL3. Mixes the game's sound-effect voices (the C++ `CChannel` class,
+//! cpp/re3-miami/src/audio/oal/channel_rust.cpp) and its music/radio/cutscene streams
+//! (oal/stream.cpp via the OpenAL-subset in oal/rust_al.h, implemented by `revc_audio::al`).
 //!
 //! The mixer state is shared between the game thread (the `revc_sfx_*` setters) and SDL's
 //! audio thread (the stream callback), behind a mutex. Mixing itself is in the `revc-audio` crate.
 
+use revc_audio::al::{AlStreams, State};
 use revc_audio::mixer::{Mixer, OUTPUT_RATE};
 use sdl3_sys::everything::*;
 use std::cell::RefCell;
@@ -13,6 +15,9 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
 static MIXER: Mutex<Option<Mixer>> = Mutex::new(None);
+/// Stream sources/buffers exist independently of the output device (the game creates them
+/// before opening sound-effect channels), so they live in their own lock.
+static STREAMS: Mutex<Option<AlStreams>> = Mutex::new(None);
 static STREAM: AtomicPtr<SDL_AudioStream> = AtomicPtr::new(null_mut());
 
 thread_local! {
@@ -33,6 +38,12 @@ unsafe extern "C" fn feed(_: *mut c_void, stream: *mut SDL_AudioStream, addition
         let mut buf = s.borrow_mut();
         buf.clear();
         buf.resize(frames * CHANNELS, 0.0);
+        // Streams first (added), then sound effects (added, then the result is clamped).
+        if let Ok(mut st) = STREAMS.lock() {
+            if let Some(st) = st.as_mut() {
+                st.mix(&mut buf);
+            }
+        }
         match MIXER.lock() {
             Ok(mut m) => {
                 if let Some(m) = m.as_mut() {
@@ -91,6 +102,11 @@ pub extern "C" fn revc_sfx_close() {
 /// Mixer counters since the last call (None if audio isn't open). For the regression harness.
 pub fn take_stats() -> Option<revc_audio::mixer::Stats> {
     MIXER.lock().ok()?.as_mut().map(|m| m.take_stats())
+}
+
+/// Stream source-frames mixed since the last call (None if streams aren't on the Rust mixer).
+pub fn take_stream_frames() -> Option<u64> {
+    STREAMS.lock().ok()?.as_mut().map(|s| s.take_frames_mixed())
 }
 
 #[unsafe(no_mangle)]
@@ -159,4 +175,150 @@ pub extern "C" fn revc_sfx_set_loop_count(id: c_uint, count: c_int) {
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_sfx_set_reverb_mix(id: c_uint, mix: c_float) {
     with_mixer(|m| m.set_reverb_mix(id as usize, mix));
+}
+
+// ---------------------------------------------------------------- OpenAL subset for streams
+// Called from oal/stream.cpp and sampman_oal.cpp through the renames in oal/rust_al.h,
+// with the same argument types and enum values as OpenAL.
+
+const AL_SOURCE_RELATIVE: c_int = 0x202;
+const AL_PITCH: c_int = 0x1003;
+const AL_POSITION: c_int = 0x1004;
+const AL_GAIN: c_int = 0x100A;
+const AL_SOURCE_STATE: c_int = 0x1010;
+const AL_INITIAL: c_int = 0x1011;
+const AL_PLAYING: c_int = 0x1012;
+const AL_PAUSED: c_int = 0x1013;
+const AL_STOPPED: c_int = 0x1014;
+const AL_BUFFERS_QUEUED: c_int = 0x1015;
+const AL_BUFFERS_PROCESSED: c_int = 0x1016;
+const AL_ROLLOFF_FACTOR: c_int = 0x1021;
+const AL_SAMPLE_OFFSET: c_int = 0x1025;
+const AL_BYTE_OFFSET: c_int = 0x1026;
+const AL_FORMAT_MONO16: c_int = 0x1101;
+
+fn with_streams<R>(f: impl FnOnce(&mut AlStreams) -> R) -> R {
+    let mut g = STREAMS.lock().unwrap_or_else(|e| e.into_inner());
+    f(g.get_or_insert_with(AlStreams::default))
+}
+
+/// SAFETY (all below): pointers come from C++ with the element counts OpenAL would require.
+unsafe fn ids<'a>(n: c_int, p: *const c_uint) -> &'a [c_uint] {
+    if p.is_null() || n <= 0 { &[] } else { unsafe { std::slice::from_raw_parts(p, n as usize) } }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_alGenSources(n: c_int, out: *mut c_uint) {
+    if out.is_null() || n <= 0 { return; }
+    let v = with_streams(|a| a.gen_sources(n as usize));
+    unsafe { std::ptr::copy_nonoverlapping(v.as_ptr(), out, v.len()) };
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_alDeleteSources(n: c_int, p: *const c_uint) {
+    let list = unsafe { ids(n, p) };
+    with_streams(|a| list.iter().for_each(|&id| a.delete_source(id)));
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_alGenBuffers(n: c_int, out: *mut c_uint) {
+    if out.is_null() || n <= 0 { return; }
+    let v = with_streams(|a| a.gen_buffers(n as usize));
+    unsafe { std::ptr::copy_nonoverlapping(v.as_ptr(), out, v.len()) };
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_alDeleteBuffers(n: c_int, p: *const c_uint) {
+    let list = unsafe { ids(n, p) };
+    with_streams(|a| list.iter().for_each(|&id| a.delete_buffer(id)));
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_alIsBuffer(id: c_uint) -> u8 {
+    with_streams(|a| a.is_buffer(id)) as u8
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_alBufferData(id: c_uint, format: c_int, data: *const c_void, size: c_int, freq: c_int) {
+    if format != AL_FORMAT_MONO16 || data.is_null() || size < 0 || freq <= 0 {
+        return; // streams only ever upload mono 16-bit
+    }
+    let samples = unsafe { std::slice::from_raw_parts(data.cast::<i16>(), size as usize / 2) };
+    with_streams(|a| a.buffer_data(id, samples, freq as u32));
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_alSourceQueueBuffers(src: c_uint, n: c_int, p: *const c_uint) {
+    let list = unsafe { ids(n, p) };
+    with_streams(|a| list.iter().for_each(|&b| a.queue_buffer(src, b)));
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_alSourceUnqueueBuffers(src: c_uint, n: c_int, out: *mut c_uint) {
+    if out.is_null() || n <= 0 { return; }
+    with_streams(|a| {
+        for i in 0..n as usize {
+            // OpenAL would fail the whole call; the game only asks for processed buffers.
+            let id = a.unqueue_buffer(src).unwrap_or(0);
+            unsafe { *out.add(i) = id };
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_alSourcePlay(src: c_uint) {
+    with_streams(|a| a.play(src));
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_alSourcePause(src: c_uint) {
+    with_streams(|a| a.pause(src));
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_alSourceStop(src: c_uint) {
+    with_streams(|a| a.stop(src));
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_alGetSourcei(src: c_uint, param: c_int, value: *mut c_int) {
+    if value.is_null() { return; }
+    let v = with_streams(|a| match param {
+        AL_SOURCE_STATE => match a.state(src) {
+            State::Initial => AL_INITIAL,
+            State::Playing => AL_PLAYING,
+            State::Paused => AL_PAUSED,
+            State::Stopped => AL_STOPPED,
+        },
+        AL_BUFFERS_QUEUED => a.buffers_queued(src),
+        AL_BUFFERS_PROCESSED => a.buffers_processed(src),
+        AL_SAMPLE_OFFSET => a.sample_offset(src),
+        AL_BYTE_OFFSET => a.byte_offset(src),
+        _ => 0,
+    });
+    unsafe { *value = v };
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_alSourcei(src: c_uint, param: c_int, value: c_int) {
+    if param == AL_SOURCE_RELATIVE {
+        with_streams(|a| a.set_relative(src, value != 0));
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_alSourcef(src: c_uint, param: c_int, value: c_float) {
+    with_streams(|a| match param {
+        AL_GAIN => a.set_gain(src, value),
+        AL_PITCH => a.set_pitch(src, value),
+        AL_ROLLOFF_FACTOR => a.set_rolloff(src, value),
+        _ => {}
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_alSource3f(src: c_uint, param: c_int, x: c_float, y: c_float, z: c_float) {
+    if param == AL_POSITION {
+        with_streams(|a| a.set_position(src, x, y, z));
+    }
 }
