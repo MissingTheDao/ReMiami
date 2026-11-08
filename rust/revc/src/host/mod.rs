@@ -606,8 +606,9 @@ fn pump(h: &mut Host, out: &mut Vec<Cb>) {
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn hostPollEvents() {
+/// Processes window/input events and dispatches them to the game. Called by the main
+/// loop before every revc_game_frame().
+pub fn poll_events() {
     let mut cbs = Vec::new();
     with(|h| pump(h, &mut cbs));
     for cb in cbs {
