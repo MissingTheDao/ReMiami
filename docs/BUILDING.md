@@ -58,3 +58,14 @@ scripts/check-reproducible.sh   # clones HEAD twice into different paths, builds
 
 Inputs that are pinned: Rust toolchain, `Cargo.lock`, librw (vendored), system packages
 (`scripts/deps.lock`, checked, not enforced unless `--strict`).
+
+## Tests
+
+```bash
+scripts/test.sh            # boot + saveload; prints PASS/FAIL, exit code 0 when all pass
+scripts/test.sh --bless    # accept the current screenshots as the new references
+```
+
+Each run uses a throwaway game folder (game files symlinked, settings and saves from `tests/`),
+so your own `reVC.ini` and saves are never touched. A window opens while it runs. Logs,
+screenshots and diff images go to `rust/target/test-output/`. Details: `tests/README.md`.

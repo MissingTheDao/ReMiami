@@ -93,6 +93,9 @@ struct Host {
     /// Windowed-mode geometry, remembered across launches.
     geometry: Geometry,
     geometry_dirty: bool,
+    /// Regression harness: read back the next presented frame.
+    capture_requested: bool,
+    captured: Option<(u32, u32, Vec<u8>)>,
 }
 
 impl Default for Host {
@@ -111,6 +114,8 @@ impl Default for Host {
             joysticks: Joysticks::default(),
             geometry: Geometry::default(),
             geometry_dirty: false,
+            capture_requested: false,
+            captured: None,
         }
     }
 }
@@ -404,6 +409,10 @@ unsafe extern "C" fn api_swap_buffers(_: *mut c_void, win: *mut c_void, vsync: i
             unsafe { SDL_GL_SetSwapInterval(vsync) };
             h.swap_interval = Some(vsync);
         }
+        if h.capture_requested {
+            h.capture_requested = false;
+            h.captured = read_back_buffer(win.cast());
+        }
     });
     unsafe { SDL_GL_SwapWindow(win.cast()) };
 }
@@ -417,6 +426,50 @@ unsafe extern "C" fn api_get_proc_address(_: *mut c_void, name: *const c_char) -
 
 unsafe extern "C" fn api_get_drawable_size(_: *mut c_void, win: *mut c_void, w: *mut i32, h: *mut i32) {
     unsafe { SDL_GetWindowSizeInPixels(win.cast(), w, h) };
+}
+
+/// Reads the finished frame from the back buffer (before the swap) as top-down RGBA.
+fn read_back_buffer(win: *mut SDL_Window) -> Option<(u32, u32, Vec<u8>)> {
+    type ReadPixels = unsafe extern "C" fn(i32, i32, i32, i32, u32, u32, *mut c_void);
+    type PixelStorei = unsafe extern "C" fn(u32, i32);
+    type ReadBuffer = unsafe extern "C" fn(u32);
+    const GL_BACK: u32 = 0x0405;
+    const GL_PACK_ALIGNMENT: u32 = 0x0D05;
+    const GL_RGBA: u32 = 0x1908;
+    const GL_UNSIGNED_BYTE: u32 = 0x1401;
+    unsafe {
+        let read: ReadPixels = std::mem::transmute(SDL_GL_GetProcAddress(c"glReadPixels".as_ptr())?);
+        let store: PixelStorei = std::mem::transmute(SDL_GL_GetProcAddress(c"glPixelStorei".as_ptr())?);
+        let buffer: ReadBuffer = std::mem::transmute(SDL_GL_GetProcAddress(c"glReadBuffer".as_ptr())?);
+        let (mut w, mut h) = (0, 0);
+        SDL_GetWindowSizeInPixels(win, &mut w, &mut h);
+        if w <= 0 || h <= 0 {
+            return None;
+        }
+        let row = w as usize * 4;
+        let mut px = vec![0u8; row * h as usize];
+        buffer(GL_BACK);
+        store(GL_PACK_ALIGNMENT, 1);
+        read(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.as_mut_ptr().cast());
+        // GL rows are bottom-up.
+        let mut flipped = vec![0u8; px.len()];
+        for y in 0..h as usize {
+            flipped[y * row..(y + 1) * row].copy_from_slice(&px[(h as usize - 1 - y) * row..(h as usize - y) * row]);
+        }
+        // The default framebuffer's alpha is meaningless here.
+        flipped.chunks_exact_mut(4).for_each(|p| p[3] = 255);
+        Some((w as u32, h as u32, flipped))
+    }
+}
+
+/// Regression harness: capture the next frame that is presented.
+pub fn request_capture() {
+    with(|h| h.capture_requested = true);
+}
+
+/// Regression harness: the captured frame, once available.
+pub fn take_capture() -> Option<(u32, u32, Vec<u8>)> {
+    with(|h| h.captured.take())
 }
 
 static WINDOW_API: HostWindowApi = HostWindowApi {
@@ -573,6 +626,7 @@ pub extern "C" fn hostPollEvents() {
             }
         }
     }
+    crate::testdrive::tick();
 }
 
 #[unsafe(no_mangle)]

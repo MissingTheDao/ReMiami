@@ -2,6 +2,7 @@
 //! and hands control to the C++ game loop in src/skel/host/host.cpp.
 
 mod host;
+mod testdrive;
 
 use std::ffi::{CString, c_char, c_int};
 use std::path::PathBuf;
@@ -37,6 +38,14 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    let testing = match testdrive::init() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("revc: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
     if let Err(e) = host::init() {
         eprintln!("revc: SDL initialisation failed: {e}");
         return ExitCode::FAILURE;
@@ -53,5 +62,8 @@ fn main() -> ExitCode {
     let rc = unsafe { revc_cpp_main((argv.len() - 1) as c_int, argv.as_mut_ptr()) };
 
     host::shutdown();
+    if testing {
+        return ExitCode::from(testdrive::exit_code() as u8);
+    }
     ExitCode::from(rc.clamp(0, 255) as u8)
 }
