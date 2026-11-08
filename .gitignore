@@ -1,0 +1,8 @@
+# Never commit game data (copyrighted) or local AI models/builds.
+/game/
+/ai/
+/logs/
+# Build output
+/rust/target/
+/cpp/re3-miami/build/
+*.gguf
