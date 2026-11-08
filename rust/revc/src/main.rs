@@ -12,15 +12,25 @@ unsafe extern "C" {
     fn revc_cpp_main(argc: c_int, argv: *mut *mut c_char) -> c_int;
 }
 
-/// The game loads data relative to the working directory.
-fn game_dir() -> PathBuf {
-    std::env::var_os("REVC_GAME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("REVC_DEFAULT_GAME_DIR")))
+/// The game loads data relative to the working directory. Uses REVC_GAME_DIR, else the
+/// nearest `game/` folder (one containing `models/`) above the current directory or the
+/// executable, which finds `revc/game` for both `cargo run` and the built binary.
+/// No absolute path is compiled in, so builds are the same in every checkout.
+fn game_dir() -> Option<PathBuf> {
+    if let Some(dir) = std::env::var_os("REVC_GAME_DIR") {
+        return Some(PathBuf::from(dir));
+    }
+    let starts = [std::env::current_dir().ok(), std::env::current_exe().ok()];
+    starts.into_iter().flatten().find_map(|start| {
+        start.ancestors().map(|a| a.join("game")).find(|g| g.join("models").is_dir())
+    })
 }
 
 fn main() -> ExitCode {
-    let dir = game_dir();
+    let Some(dir) = game_dir() else {
+        eprintln!("revc: no game folder found; set REVC_GAME_DIR to your Vice City data folder");
+        return ExitCode::FAILURE;
+    };
     if let Err(e) = std::env::set_current_dir(&dir) {
         eprintln!("revc: cannot enter game directory {}: {e}", dir.display());
         eprintln!("revc: set REVC_GAME_DIR to your Vice City data folder");

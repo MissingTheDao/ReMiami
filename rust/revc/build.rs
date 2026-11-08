@@ -30,8 +30,16 @@ fn main() {
         .args(["-G", "Ninja", "-DCMAKE_BUILD_TYPE=RelWithDebInfo", "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"])
         .args(["-DLIBRW_PLATFORM=GL3", "-DLIBRW_GL3_GFXLIB=HOST"])
         .args(["-DREVC_AUDIO=OAL", "-DREVC_VENDORED_LIBRW=ON", "-DREVC_AS_STATIC_LIB=ON"])
-        .args(["-DCMAKE_C_COMPILER=clang", "-DCMAKE_CXX_COMPILER=clang++"])
-        .arg("-DCMAKE_CXX_FLAGS=-Wno-everything -fpermissive");
+        .args(["-DCMAKE_C_COMPILER=clang", "-DCMAKE_CXX_COMPILER=clang++"]);
+    // Reproducible output: map checkout and build paths out of __FILE__ strings and debug
+    // info, so a clone in any directory produces the same binary.
+    let prefix_map = format!(
+        "-ffile-prefix-map={}=re3-miami -ffile-prefix-map={}=cmake-build",
+        src.display(),
+        build.display()
+    );
+    cfg.arg(format!("-DCMAKE_C_FLAGS={prefix_map}"))
+        .arg(format!("-DCMAKE_CXX_FLAGS=-Wno-everything -fpermissive {prefix_map}"));
     if which("sccache") {
         cfg.args(["-DCMAKE_C_COMPILER_LAUNCHER=sccache", "-DCMAKE_CXX_COMPILER_LAUNCHER=sccache"]);
     }
@@ -60,5 +68,4 @@ fn main() {
     }
     println!("cargo:rerun-if-env-changed=REVC_CPP_DIR");
     println!("cargo:rerun-if-env-changed=REVC_CMAKE_ARGS");
-    println!("cargo:rustc-env=REVC_DEFAULT_GAME_DIR={}", manifest.join("../../game").display());
 }

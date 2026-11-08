@@ -6,6 +6,7 @@ members = ["revc"]
 edition = "2024"
 version = "0.1.0"
 publish = false
+rust-version = "1.99"
 
 [profile.dev]
 # The C++ side is built RelWithDebInfo regardless; keep Rust debuggable.

@@ -1,0 +1,4 @@
+# Pinned toolchain. Honoured by rustup; with a system Rust (Arch `rust` package),
+# scripts/build.sh checks that rustc matches this version instead.
+[toolchain]
+channel = "1.99.1"

@@ -1,0 +1,60 @@
+# Building reVC
+
+One repository holds everything needed to build:
+
+| Path | What |
+|---|---|
+| `rust/` | Cargo workspace: the `revc` launcher and SDL3 platform host |
+| `cpp/re3-miami/` | The C++ game (re3-miami snapshot 2021-09-02 plus our changes) |
+| `cpp/re3-miami/vendor/librw/` | librw, vendored at aap/librw `5501c4f` plus the HOST gfxlib commit |
+| `scripts/` | `build.sh`, `check-reproducible.sh`, `deps.lock` |
+| `bin/` | Local helpers (`ai-serve.sh`, `ask-local.py`) |
+
+Never committed: `game/` (your private copy of Vice City), `ai/` (llama.cpp and models), build output.
+
+## Requirements
+
+Arch / CachyOS packages (exact versions the build was verified with are in `scripts/deps.lock`):
+
+```bash
+sudo pacman -S --needed rust clang cmake ninja sdl3 openal mpg123 libglvnd
+```
+
+Optional: `sccache` (C++ compile cache, used automatically when installed).
+
+Rust is pinned in `rust/rust-toolchain.toml`. rustup honours it; with the system `rust` package,
+`scripts/build.sh` checks the version instead.
+
+## Build
+
+```bash
+scripts/build.sh            # warns if toolchain/packages differ from the pins
+scripts/build.sh --strict   # refuses to build if they differ
+```
+
+The result is `rust/target/release/revc` and its SHA-256 is printed.
+
+For day-to-day work, `cd rust && cargo run` builds a dev binary and starts the game.
+
+## Game data
+
+The game needs your own Vice City files. `revc` looks for them in this order:
+
+1. `REVC_GAME_DIR`
+2. the nearest `game/` folder (one containing `models/`) above the current directory or the executable
+
+So a checkout with your game copy in `./game` just works. reVC's extra data files
+(`cpp/re3-miami/gamefiles/`) must be copied into the game folder once.
+
+## Reproducibility
+
+Builds don't depend on where the checkout lives: C++ uses `-ffile-prefix-map` (set in
+`rust/revc/build.rs`), Rust uses `--remap-path-prefix` (set by `scripts/build.sh`), and nothing
+uses `__DATE__`/`__TIME__`. To verify:
+
+```bash
+scripts/check-reproducible.sh   # clones HEAD twice into different paths, builds both, compares
+```
+
+Inputs that are pinned: Rust toolchain, `Cargo.lock`, librw (vendored), system packages
+(`scripts/deps.lock`, checked, not enforced unless `--strict`).

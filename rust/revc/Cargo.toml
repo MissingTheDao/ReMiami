@@ -3,6 +3,7 @@ name = "revc"
 edition.workspace = true
 version.workspace = true
 publish.workspace = true
+rust-version.workspace = true
 description = "reVC launcher: Rust owns main() and links the C++ game as a static library"
 build = "build.rs"
 
