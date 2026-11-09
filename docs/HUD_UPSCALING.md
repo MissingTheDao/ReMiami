@@ -31,7 +31,14 @@ shipped.
 
 ## Upscalers (local, AMD + Vulkan on Linux)
 
-Nothing is installed yet. Candidates that run on Vulkan without a Python ML stack:
+Installed (2026-11-09, with the user's go-ahead): Real-ESRGAN ncnn-vulkan v0.2.5.0 in
+`tools/realesrgan/` (git-ignored; source and SHA-256 in its SOURCE.md), with the realesrgan-x4plus,
+x4plus-anime and animevideov3 x2/x3/x4 models. Usage:
+`tools/realesrgan/realesrgan-ncnn-vulkan -i in.png -o out.png -n realesrgan-x4plus-anime -s 4`.
+First test: under a second per texture on the RX 9070 XT (512x512 to 2048x2048 in 0.95 s), RGBA
+kept; the Vice City logo, radio logos and the radar ring come out clean and sharp, the menu
+background sharper with a few specks (check per texture). Other candidates that run on Vulkan
+without a Python ML stack:
 realesrgan-ncnn-vulkan (BSD-3, x4plus / anime models), waifu2x-ncnn-vulkan (MIT; good on flat
 UI art and text), realcugan-ncnn-vulkan (MIT). Models from OpenModelDB vary in licence
 (many CC BY-NC-SA: fine for personal use, check each). VRAM is no issue at these sizes.

@@ -7,3 +7,4 @@
 /rust/target-*/
 /cpp/re3-miami/build/
 *.gguf
+/tools/
