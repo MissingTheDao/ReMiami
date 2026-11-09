@@ -84,6 +84,10 @@ compare() {
     return 0
   fi
   echo "== against $(basename "$BASELINE") (tolerance ${TOL})"
+  # Results are comparable only with the same display state (header: "display on|off").
+  local db dr
+  db=$(head -1 "$BASELINE" | sed -n 's/.*display \([a-z]*\).*/\1/p'); dr=$(head -1 "$result" | sed -n 's/.*display \([a-z]*\).*/\1/p')
+  [[ "${db:-?}" != "${dr:-?}" ]] && echo "   WARNING: display ${dr:-unknown} now, ${db:-unknown} for the baseline: not comparable (the box's visible desktop costs ~1.9 ms a frame)"
   join <(means "$BASELINE" | awk '{ print $1 "/" $2 "/" $3, $4 }') <(means "$result" | awk '{ print $1 "/" $2 "/" $3, $4 }') |
     awk -v tol="$TOL" '
       { r = $3 / $2; flag = r > 1 + tol ? "  SLOWER" : (r < 1 - tol ? "  faster" : "");
@@ -168,7 +172,9 @@ case "$cmd" in
     done
     NAME=perf-$(date +%Y%m%d-%H%M%S)
     start_job "$NAME" "
-echo \"# \$(cat COMMIT) runs $RUNS\" > results/$NAME.txt
+# The TV's state matters: compositing a visible 4K desktop costs the game ~1.9 ms a frame here.
+tv=off; for c in /sys/class/drm/card*-*; do [[ \$(cat \$c/status) == connected && \$(cat \$c/dpms) == On ]] && tv=on; done
+echo \"# \$(cat COMMIT) runs $RUNS display \$tv\" > results/$NAME.txt
 for s in $SIZES; do for b in $BACKENDS; do
   timeout -k 10 $((RUNS * 300)) scripts/perf.sh --backend \$b --size \$s --runs $RUNS --out results/$NAME.txt --logs results/failed |
     grep -E '^==|all spots|failed' || echo \"   \$b \$s: no result (hung or crashed; killed after the timeout)\"

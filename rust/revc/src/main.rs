@@ -7,6 +7,7 @@ mod padtest;
 mod texmods;
 mod text;
 mod textutil;
+mod math;
 mod messages;
 mod pager;
 mod savefile;
