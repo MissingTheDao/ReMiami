@@ -22,6 +22,9 @@
 #                            (thermal throttling, leaks) and crashes. Saved under logs/n150/.
 #   info                     hardware, driver versions, temperatures
 # Host: N150_HOST (default steam@192.168.20.239), folder there: N150_DIR (default revc-bench).
+# Game runs (test, perf, soak) are headless by default: inside a private, invisible compositor
+# (scripts/headless.sh), so the box's screen may be locked, off or in use. N150_SCREEN=1 runs them
+# on its desktop instead (then it must be unlocked and awake; that is what the TV playtests need).
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 HOST=${N150_HOST:-steam@192.168.20.239}
@@ -29,6 +32,9 @@ DIR=${N150_DIR:-revc-bench}
 LOCAL=$ROOT/logs/n150
 BASELINE=$ROOT/tests/perf/n150-baseline.txt
 TOL=${REVC_PERF_TOLERANCE:-0.10}
+SCREEN=${N150_SCREEN:-0}
+# Prefix for game-running commands on the box.
+if [[ "$SCREEN" == 1 ]]; then RUN=""; else RUN="scripts/headless.sh"; fi
 mkdir -p "$LOCAL"
 
 # Runs a bash script on the box inside its graphical session (Wayland socket of user 1000).
@@ -36,17 +42,20 @@ remote() {
   ssh -o BatchMode=yes "$HOST" bash -s -- "$@" <<EOF
 set -uo pipefail
 export XDG_RUNTIME_DIR=/run/user/\$(id -u)
-export WAYLAND_DISPLAY=\$(basename "\$(ls -d \$XDG_RUNTIME_DIR/wayland-[0-9] 2>/dev/null | head -1)")
-[[ -n "\$WAYLAND_DISPLAY" ]] || { echo "no desktop session on the box (log in on its screen)"; exit 2; }
+if [[ $SCREEN == 1 ]]; then
+  export WAYLAND_DISPLAY=\$(basename "\$(ls -d \$XDG_RUNTIME_DIR/wayland-[0-9] 2>/dev/null | head -1)")
+  [[ -n "\$WAYLAND_DISPLAY" ]] || { echo "no desktop session on the box (log in on its screen)"; exit 2; }
+fi
 cd ~/$DIR || exit 2
 $REMOTE_SCRIPT
 EOF
 }
 
 # The game's window must be on a visible, unlocked screen: otherwise the compositor sends no frame
-# callbacks, Vulkan is throttled (~20 fps) and GL waits forever. Override: N150_ALLOW_LOCKED=1.
+# callbacks, Vulkan is throttled (~20 fps) and GL waits forever. Only with N150_SCREEN=1 (headless
+# runs don't use the screen). Override: N150_ALLOW_LOCKED=1.
 check_screen() {
-  [[ "${N150_ALLOW_LOCKED:-0}" == 1 ]] && return 0
+  [[ "$SCREEN" != 1 || "${N150_ALLOW_LOCKED:-0}" == 1 ]] && return 0
   local state
   state=$(ssh -o BatchMode=yes "$HOST" bash -s <<'EOF'
 s=$(loginctl list-sessions --no-legend | awk '$4 == "seat0" { print $1; exit }')
@@ -90,7 +99,7 @@ cat > results/$name.sh <<'JOB'
 trap 'touch results/$name.done' EXIT
 $body
 JOB
-nohup bash results/$name.sh > results/$name.log 2>&1 < /dev/null &
+nohup $RUN bash results/$name.sh > results/$name.log 2>&1 < /dev/null &
 echo \"started $name on $HOST (scripts/n150.sh wait $name collects it)\"" remote
 }
 
@@ -119,7 +128,7 @@ case "$cmd" in
     mkdir -p "$STAGE/bin" "$STAGE/scripts"
     cp "$ROOT/rust/target/release/revc" "$STAGE/bin/revc-gl3"
     cp "$ROOT/rust/target-wgpu/release/revc" "$STAGE/bin/revc-wgpu"
-    cp "$ROOT/scripts/perf.sh" "$ROOT/scripts/test.sh" "$STAGE/scripts/"
+    cp "$ROOT/scripts/perf.sh" "$ROOT/scripts/test.sh" "$ROOT/scripts/headless.sh" "$STAGE/scripts/"
     cp -r "$ROOT/tests" "$STAGE/"
     git -C "$ROOT" describe --always --dirty > "$STAGE/COMMIT"
     rsync -a --delete --exclude game --exclude rust --exclude results "$STAGE/" "$HOST:$DIR/" || exit 1
@@ -139,9 +148,9 @@ case "$cmd" in
       shift
     done
     if (( WGPU )); then
-      REMOTE_SCRIPT="REVC_RENDERER_BACKEND=$BACKEND REVC_TEST_BIN=\$PWD/bin/revc-wgpu scripts/test.sh --wgpu ${ARGS[*]:-}" remote
+      REMOTE_SCRIPT="REVC_RENDERER_BACKEND=$BACKEND REVC_TEST_BIN=\$PWD/bin/revc-wgpu $RUN scripts/test.sh --wgpu ${ARGS[*]:-}" remote
     else
-      REMOTE_SCRIPT="REVC_TEST_BIN=\$PWD/bin/revc-gl3 scripts/test.sh ${ARGS[*]:-}" remote
+      REMOTE_SCRIPT="REVC_TEST_BIN=\$PWD/bin/revc-gl3 $RUN scripts/test.sh ${ARGS[*]:-}" remote
     fi
     ;;
   perf)
