@@ -24,6 +24,7 @@ mod particlecfg;
 mod timecyc;
 mod directory;
 mod zones;
+mod clock;
 mod savegame;
 mod host;
 mod testdrive;
