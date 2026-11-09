@@ -250,6 +250,8 @@ struct PipeKey {
     z_test: bool,
     z_write: bool,
     cull: u32,
+    /// MSAA sample count of the target (the scene's; texture targets have 1).
+    samples: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -705,6 +707,10 @@ pub struct Renderer {
     blit_pipeline: wgpu::RenderPipeline,
     blit_layout: wgpu::BindGroupLayout,
     scene: Option<(wgpu::Texture, wgpu::BindGroup, (u32, u32))>,
+    /// MSAA sample count of the scene (1 = off) and its multisampled colour target, resolved
+    /// into the scene texture at the end of every pass.
+    samples: u32,
+    msaa: Option<(wgpu::Texture, wgpu::TextureView, (u32, u32))>,
     shader: wgpu::ShaderModule,
     texture_layout: wgpu::BindGroupLayout,
     uniform_layout: wgpu::BindGroupLayout,
@@ -744,7 +750,7 @@ pub struct Renderer {
     vertex_buf: wgpu::Buffer,
     vertex3_buf: wgpu::Buffer,
     /// Depth buffers by size (the scene's and those of texture targets).
-    depths: HashMap<(u32, u32), (wgpu::Texture, wgpu::TextureView)>,
+    depths: HashMap<(u32, u32, u32), (wgpu::Texture, wgpu::TextureView)>,
     /// Render target being recorded (0 = scene).
     recording_target: u32,
     ops: Vec<Op>,
@@ -872,6 +878,27 @@ fn write_levels(gpu: &Gpu, t: &Tex, levels: &[&[u8]]) {
 impl Renderer {
     /// For output targets of `output` format (the window's swapchain format).
     pub fn new(gpu: &Gpu, output: wgpu::TextureFormat) -> Renderer {
+        Self::with_samples(gpu, output, 1)
+    }
+
+    /// The largest MSAA sample count up to `wanted` that the scene's colour and depth formats
+    /// support on this device (1, 2, 4, 8, ...).
+    pub fn supported_samples(gpu: &Gpu, wanted: u32) -> u32 {
+        let colour = gpu.adapter.get_texture_format_features(SCENE_FORMAT).flags;
+        let depth = gpu.adapter.get_texture_format_features(DEPTH_FORMAT).flags;
+        let mut n = wanted.clamp(1, 16).next_power_of_two();
+        if n > wanted.max(1) {
+            n /= 2;
+        }
+        while n > 1 && !(colour.sample_count_supported(n) && depth.sample_count_supported(n)) {
+            n /= 2;
+        }
+        n
+    }
+
+    /// As `new`, drawing the scene with `samples`-times MSAA (clamped to what the device does).
+    pub fn with_samples(gpu: &Gpu, output: wgpu::TextureFormat, samples: u32) -> Renderer {
+        let samples = Self::supported_samples(gpu, samples);
         let d = &gpu.device;
         let format = SCENE_FORMAT;
         let blit_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -975,6 +1002,8 @@ impl Renderer {
             blit_pipeline,
             blit_layout,
             scene: None,
+            samples,
+            msaa: None,
             shader,
             texture_layout,
             uniform_layout,
@@ -1316,6 +1345,7 @@ impl Renderer {
         let uniform = self.uniforms.len() as u32 - 1;
 
         let pipe = PipeKey {
+            samples: if self.recording_target == 0 { self.samples } else { 1 },
             kind,
             shader: if kind == Kind::Im3D { 0 } else { state.shader },
             lines: is_line_primitive(prim),
@@ -1425,7 +1455,7 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
+            multisample: wgpu::MultisampleState { count: key.samples, ..Default::default() },
             multiview_mask: None,
             cache: None,
         });
@@ -1552,13 +1582,28 @@ impl Renderer {
             gpu.queue.write_buffer(&self.bones_buf, 0, &bytes);
         }
 
+        // The scene's multisampled colour target.
+        if self.samples > 1 && self.msaa.as_ref().is_none_or(|m| m.2 != size) {
+            let t = gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("scene msaa"),
+                size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: self.samples,
+                dimension: wgpu::TextureDimension::D2,
+                format: SCENE_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            let v = t.create_view(&Default::default());
+            self.msaa = Some((t, v, size));
+        }
         // Depth buffers for the scene and every texture target of the frame.
-        let mut sizes = vec![size];
+        let mut sizes = vec![(size.0, size.1, self.samples)];
         for op in &ops {
             if let Op::Target { texture } = *op
                 && let Some(t) = self.textures.get(&texture)
             {
-                sizes.push((t.width, t.height));
+                sizes.push((t.width, t.height, 1));
             }
         }
         for sz in sizes {
@@ -1567,7 +1612,7 @@ impl Renderer {
                     label: Some("depth"),
                     size: wgpu::Extent3d { width: sz.0, height: sz.1, depth_or_array_layers: 1 },
                     mip_level_count: 1,
-                    sample_count: 1,
+                    sample_count: sz.2,
                     dimension: wgpu::TextureDimension::D2,
                     format: DEPTH_FORMAT,
                     usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -1639,11 +1684,17 @@ impl Renderer {
             }
         }
         let depths = &self.depths;
+        let msaa_view = self.msaa.as_ref().filter(|_| self.samples > 1).map(|m| &m.1);
+        let scene_depth = (size.0, size.1, self.samples);
         // `target` 0 is the scene; `first` is the scene's first pass of the frame.
         let begin = |enc: &mut wgpu::CommandEncoder, to: u32, first: bool, color: Option<[f64; 4]>, depth: bool| {
-            let (view, depth_view) = match target_views.get(&to) {
-                Some((v, sz)) => (v, &depths[sz].1),
-                None => (&scene_view, &depths[&size].1),
+            // The scene with MSAA draws into the multisampled target and resolves into the scene.
+            let (view, resolve, depth_view) = match target_views.get(&to) {
+                Some((v, sz)) => (v, None, &depths[&(sz.0, sz.1, 1)].1),
+                None => match msaa_view {
+                    Some(m) => (m, Some(&scene_view), &depths[&scene_depth].1),
+                    None => (&scene_view, None, &depths[&scene_depth].1),
+                },
             };
             let color_load = match color {
                 Some(c) => wgpu::LoadOp::Clear(wgpu::Color { r: c[0], g: c[1], b: c[2], a: 1.0 }),
@@ -1655,7 +1706,7 @@ impl Renderer {
                 label: Some("frame"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view,
-                    resolve_target: None,
+                    resolve_target: resolve,
                     depth_slice: None,
                     ops: wgpu::Operations { load: color_load, store: wgpu::StoreOp::Store },
                 })],

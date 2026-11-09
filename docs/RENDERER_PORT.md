@@ -170,6 +170,16 @@ the capture reseed, so both renderers place them the same); with 60 drops on the
 pixels the drops change agree 71-89 % between GL3 and wgpu (rest: filtering). Offscreen test of
 the droplet shader on both backends. Not part of the regression set (no rain there).
 
+**MSAA (plan task 22, first antialiasing option).** The game's own MultiSampling setting
+(Display Setup, 2x/4x/8x; applied by recreating the window, as in GL3) now reaches the wgpu
+renderer: the scene is drawn into a multisampled colour and depth target and resolved into the
+scene texture at the end of every pass, so frame copies (colour filter, droplets), screenshots
+and the window all see the resolved image; texture targets (env map) stay single-sampled. The
+count is clamped to what the device supports for the scene formats
+(`Renderer::supported_samples`); the log says `revc: MSAA 4x (asked 4x)`. Checked: offscreen
+test (edge pixels only with MSAA) on both backends; in game 4x on Vulkan and GL, visibly smooth
+edges. Next for task 22: post-process AA (FXAA/SMAA), resolution scale, live switching.
+
 ## What the game calls
 
 The game reaches librw only through the RenderWare-style API in `cpp/re3-miami/src/fakerw`

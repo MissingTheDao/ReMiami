@@ -55,13 +55,18 @@ fn pixel_size(window: *mut SDL_Window) -> (u32, u32) {
     (w.max(1) as u32, h.max(1) as u32)
 }
 
-/// Sets up presenting to `window` (created without SDL_WINDOW_OPENGL).
-pub fn create(window: *mut SDL_Window) -> Result<(), String> {
+/// Sets up presenting to `window` (created without SDL_WINDOW_OPENGL), with `samples`-times
+/// MSAA (the game's MultiSampling setting; clamped to what the GPU does).
+pub fn create(window: *mut SDL_Window, samples: i32) -> Result<(), String> {
     let (w, h) = pixel_size(window);
     let p = unsafe { Presenter::new(backend(), native(window)?, w, h, true)? };
     let bc = p.gpu.bc_textures();
     eprintln!("revc: wgpu renderer on {} ({:?}), {:?} {w}x{h}, DXT {}", p.gpu.info.name, p.gpu.info.backend, p.format(), if bc { "on the GPU" } else { "decoded on the CPU" });
-    let r = Renderer::new(&p.gpu, p.format());
+    let r = Renderer::with_samples(&p.gpu, p.format(), samples.max(1) as u32);
+    let used = Renderer::supported_samples(&p.gpu, samples.max(1) as u32);
+    if used > 1 || samples > 1 {
+        eprintln!("revc: MSAA {used}x (asked {samples}x)");
+    }
     RENDERER.with(|c| *c.borrow_mut() = Some(r));
     PRESENTER.with(|c| *c.borrow_mut() = Some(p));
     WINDOW.with(|c| c.set(window));

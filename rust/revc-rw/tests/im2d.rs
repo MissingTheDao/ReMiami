@@ -662,3 +662,47 @@ fn droplet_vulkan() {
 fn droplet_gl() {
     droplet(Backend::Gl);
 }
+
+/// MSAA: a diagonal triangle edge gets in-between colours with 4x, only pure ones without;
+/// the scene is resolved before it is shown.
+fn msaa(backend: Backend) {
+    let gpu = Gpu::headless(backend).expect("gpu");
+    assert!(Renderer::supported_samples(&gpu, 4) == 4, "{backend:?}: 4x MSAA not supported");
+    let edge_pixels = |samples: u32| {
+        let mut r = Renderer::with_samples(&gpu, wgpu::TextureFormat::Rgba8Unorm, samples);
+        let v = |x: f32, y: f32| Vertex2D { x, y, z: 0.0, w: 1.0, r: 255, g: 255, b: 255, a: 255, u: 0.0, v: 0.0 };
+        r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+        r.draw_2d(&base(), 3, &[v(0.0, 0.0), v(64.0, 0.0), v(0.0, 61.0)], None);
+        let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let mut enc = gpu.device.create_command_encoder(&Default::default());
+        r.encode(&gpu, &mut enc, &target.create_view(&Default::default()), (SIZE, SIZE));
+        r.end_frame();
+        let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+        gpu.queue.submit([enc.finish()]);
+        let img = readback_finish(&gpu, rb).expect("readback");
+        img.as_chunks::<4>().0.iter().filter(|p| p[0] > 10 && p[0] < 245).count()
+    };
+    let plain = edge_pixels(1);
+    let smooth = edge_pixels(4);
+    assert_eq!(plain, 0, "{backend:?}: no MSAA must give only pure pixels");
+    assert!(smooth > 30, "{backend:?}: 4x MSAA gave only {smooth} edge pixels");
+}
+
+#[test]
+fn msaa_vulkan() {
+    msaa(Backend::Vulkan);
+}
+
+#[test]
+fn msaa_gl() {
+    msaa(Backend::Gl);
+}

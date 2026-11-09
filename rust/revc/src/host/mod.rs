@@ -357,7 +357,7 @@ unsafe extern "C" fn api_create_window(
     // wgpu renderer: a window without a GL context; revc-rw presents to it.
     #[cfg(feature = "wgpu")]
     {
-        let _ = (samples, gles, glversion);
+        let _ = (gles, glversion);
         let win = unsafe { SDL_CreateWindow(title, w, h, SDL_WINDOW_RESIZABLE) };
         if win.is_null() {
             eprintln!("revc: SDL_CreateWindow failed: {}", sdl_error());
@@ -371,7 +371,7 @@ unsafe extern "C" fn api_create_window(
                 SDL_SetWindowFullscreen(win, true);
             }
         }
-        if let Err(e) = wgpu::create(win) {
+        if let Err(e) = wgpu::create(win, samples) {
             eprintln!("revc: {e}");
             unsafe { SDL_DestroyWindow(win) };
             return null_mut();
