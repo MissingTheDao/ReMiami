@@ -1,6 +1,7 @@
 //! Software mixer for the game's sound-effect voices, reproducing OpenAL Soft's behaviour for
 //! the features the game uses: per-voice gain and pitch, listener-relative 3D position with the
-//! inverse-distance-clamped model, 2D (unpanned) voices, loop counts and loop points, and a per-voice
+//! inverse-distance-clamped model and OpenAL Soft's linear stereo pan (measured, see
+//! tests/calibrate/openal-soft-gains.txt), 2D (unpanned) voices, loop counts and loop points, and a per-voice
 //! send into the environmental reverb (`reverb.rs`), like an EFX auxiliary send.
 //! Pure logic, unit-tested; SDL output is in `mod.rs`. First draft by the local model.
 
@@ -213,8 +214,9 @@ impl Mixer {
 
 impl Voice {
     /// Left/right gains and the reverb send gain. 2D voices are unpanned at full gain; 3D voices
-    /// use OpenAL's inverse distance clamped model (rolloff 1) and constant-power panning on the x
-    /// axis. The send follows the source gain and distance attenuation, scaled by the send level.
+    /// use OpenAL's inverse distance clamped model (rolloff 1) and OpenAL Soft's stereo pan, which
+    /// is linear in the sideways component: L = (1-p)/2, R = (1+p)/2 (0.5 each when centred).
+    /// The send follows the source gain and distance attenuation, scaled by the send level.
     fn gains(&self) -> (f32, f32, f32) {
         let g = self.gain.clamp(0.0, 1.0);
         let send = self.reverb_mix.clamp(0.0, 1.0);
@@ -229,7 +231,7 @@ impl Voice {
             1.0
         };
         let pan = if dist > 1e-4 { (self.pos[0] / dist).clamp(-1.0, 1.0) } else { 0.0 };
-        (g * att * ((1.0 - pan) / 2.0).sqrt(), g * att * ((1.0 + pan) / 2.0).sqrt(), g * att * send)
+        (g * att * (1.0 - pan) / 2.0, g * att * (1.0 + pan) / 2.0, g * att * send)
     }
 
     /// OpenAL ignores invalid loop points and loops the whole buffer.
@@ -404,8 +406,31 @@ mod tests {
         m.set_distances(0, 4.0, 1.0);
         m.start(0, &[32767; LEN], OUTPUT_RATE);
         let out = run(&mut m, 1);
-        let expect = 0.25 * 0.5f32.sqrt(); // att at 4.0, centred
+        let expect = 0.25 * 0.5; // att at 4.0, centred
         assert!((out[0] - expect).abs() < 1e-3 && (out[1] - expect).abs() < 1e-3, "{out:?}");
+    }
+
+    /// Every position measured from OpenAL Soft (tests/calibrate/run.sh) must come out the same.
+    #[test]
+    fn matches_measured_openal_soft_gains() {
+        let table = include_str!("../../../tests/calibrate/openal-soft-gains.txt");
+        let mut checked = 0;
+        for line in table.lines().filter(|l| !l.starts_with('#')) {
+            let f: Vec<&str> = line.split_whitespace().collect();
+            let num = |i: usize| f[i].parse::<f32>().unwrap();
+            let (x, y, z, stereo, gl, gr) = (num(1), num(2), num(3), f[4] == "stereo", num(5), num(6));
+            let mut m = Mixer::new(1);
+            m.set_2d(0, stereo);
+            m.set_position(0, x, y, z);
+            m.set_distances(0, f32::MAX, 1.0);
+            m.start(0, &[16384; LEN], OUTPUT_RATE);
+            let out = run(&mut m, 4);
+            let (l, r) = (out[0] / 0.5, out[1] / 0.5); // input sample is 0.5
+            // 0.02 absolute = within ~0.2 dB for the louder channel (elevated sources differ slightly).
+            assert!((l - gl).abs() < 0.02 && (r - gr).abs() < 0.02, "{}: got ({l:.3}, {r:.3}), OpenAL ({gl}, {gr})", f[0]);
+            checked += 1;
+        }
+        assert!(checked >= 30);
     }
 
     #[test]

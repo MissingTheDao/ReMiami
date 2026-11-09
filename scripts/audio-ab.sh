@@ -6,7 +6,12 @@
 #   sfx      candidate = only sound effects (+ reverb) on Rust, streams on OpenAL
 #   streams  candidate = only streams on Rust, sound effects on OpenAL
 #   baseline candidate = OpenAL again: shows how much two runs of the same build differ
-# Both runs are audible (normal volume). Leave the window alone while it runs.
+# Both runs are audible (sound effects at normal volume; music is muted in tests/config/audio.ini
+# because where the hotel track starts varies per run and swamps everything else).
+# Noise: two runs of the same build differ by up to ~1.2 dB level, ~0.8 dB balance, ~1.3 dB per
+# band, so one run catches gross breakage, not 1-2 dB differences. The exact check is the
+# calibration test (rust/revc-audio, tests/calibrate/openal-soft-gains.txt).
+# Leave the window alone while it runs.
 # Output: rust/target/test-output/audio-{openal,rust}.wav and the comparison report.
 set -uo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)

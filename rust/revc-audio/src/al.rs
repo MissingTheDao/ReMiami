@@ -48,8 +48,9 @@ impl Source {
         } else {
             1.0
         };
+        // OpenAL Soft's stereo pan (measured): linear in the sideways component.
         let pan = if dist > 1e-4 { (p[0] / dist).clamp(-1.0, 1.0) } else { 0.0 };
-        (g * att * ((1.0 - pan) / 2.0).sqrt(), g * att * ((1.0 + pan) / 2.0).sqrt())
+        (g * att * (1.0 - pan) / 2.0, g * att * (1.0 + pan) / 2.0)
     }
 
     /// Runs out of queued audio: OpenAL stops the source and marks everything processed.
@@ -479,7 +480,7 @@ mod tests {
         a.play(srcs[0]);
         let out = run(&mut a, 200);
         // Frame 199 reads sample 99.5 of buffer A, halfway to B's first sample.
-        let centre = 0.5f32.sqrt(); // centred source, constant-power pan
+        let centre = 0.5f32; // centred source: 0.5 per channel (OpenAL Soft's linear pan)
         assert!((out[199 * 2] - 0.5 * centre).abs() < 1e-3, "{}", out[199 * 2]);
         // Then buffer B plays.
         let out = run(&mut a, 2);

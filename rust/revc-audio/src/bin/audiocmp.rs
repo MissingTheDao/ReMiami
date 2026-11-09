@@ -7,16 +7,18 @@
 //!
 //! Recordings never match sample for sample (different engines, start times and game randomness),
 //! so the comparison works on robust measures: the candidate is aligned to the reference by
-//! cross-correlating 50 ms loudness envelopes, then overall level, left/right balance, the
-//! low/mid/high band shape and the loudness-over-time correlation are compared on the windows
-//! where there is sound. (A local-model draft got the stereo frame handling wrong throughout;
+//! cross-correlating 50 ms loudness envelopes, then overall level, left/right balance and the
+//! low/mid/high band shape are compared on the windows where there is sound. Loudness-over-time
+//! correlation is reported for information only (two runs of the same build give 0.1..0.35). (A local-model draft got the stereo frame handling wrong throughout;
 //! rewritten around explicit frames.)
 
 use std::process::ExitCode;
 
 const RATE: u32 = 48000;
 const WIN: usize = 2400; // 50 ms
-const MAX_LAG: i64 = 400; // windows (+-20 s)
+// Both recordings start with the process, so they differ by well under a second; a wider search
+// lets flat ambience lock onto a wrong offset.
+const MAX_LAG: i64 = 40; // windows (+-2 s)
 const SILENCE_DB: f64 = -60.0;
 
 type Frame = (f32, f32);
@@ -258,7 +260,7 @@ fn compare(a: &[Frame], b: &[Frame]) -> Result<Report, String> {
         diff("low band <300 Hz (dB)", ra.low_db, rb.low_db, 4.0),
         diff("mid band (dB)", ra.mid_db, rb.mid_db, 4.0),
         diff("high band >3 kHz (dB)", ra.high_db, rb.high_db, 4.0),
-        ("loudness-over-time correlation".to_string(), corr, 0.6, corr >= 0.6),
+
     ];
     Ok(Report {
         durations: (a.len() as f64 / RATE as f64, b.len() as f64 / RATE as f64),
@@ -282,8 +284,10 @@ fn print_text(r: &Report) {
     m("mid band, rel. to level (dB)", r.reference.mid_db, r.candidate.mid_db);
     m("high band, rel. to level (dB)", r.reference.high_db, r.candidate.high_db);
     println!();
+    // Informational: two runs of the same build give 0.1..0.35 (mostly steady ambience).
+    println!("info loudness-over-time correlation: {:.2}", r.envelope_corr);
     for (name, v, limit, ok) in &r.checks {
-        let what = if name.starts_with("loudness") { format!("{v:.2} (min {limit})") } else { format!("{v:+.2} (limit +-{limit})") };
+        let what = format!("{v:+.2} (limit +-{limit})");
         println!("{} {name}: {what}", if *ok { "PASS" } else { "FAIL" });
     }
 }
@@ -382,7 +386,7 @@ mod tests {
         let r = compare(&a, &a).unwrap();
         assert_eq!(r.lag_s, 0.0);
         assert!(r.checks.iter().all(|c| c.3));
-        assert!((r.envelope_corr - 1.0).abs() < 1e-9);
+        assert!((r.envelope_corr - 1.0).abs() < 1e-9); // reported, not checked
     }
 
     #[test]
