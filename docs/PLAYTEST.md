@@ -56,6 +56,8 @@ Controller):
 - [ ] Start a mission (mission text loads): objectives and subtitles show and go away on time,
       no "... missing"; the mission title and "MISSION PASSED" big messages appear.
 - [ ] Pause menu > Brief: lists the last objectives / subtitles, newest first.
+- [ ] Pager messages (e.g. when a phone mission becomes available): the text scrolls through the
+      pager at the top, restarts after cutscenes, and the next queued message follows.
 
 ## Task 2: N150 frame times (needs the N150 box)
 
