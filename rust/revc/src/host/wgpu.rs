@@ -306,14 +306,18 @@ pub extern "C" fn revc_rw_copy_frame(texture: u32, x: u32, y: u32) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn revc_rw_present(_vsync: i32) {
+pub extern "C" fn revc_rw_present(vsync: i32) {
     let capture = super::with(|h| std::mem::take(&mut h.capture_requested));
     let shot = PRESENTER.with(|pc| {
         RENDERER.with(|rc| match (pc.borrow_mut().as_mut(), rc.borrow_mut().as_mut()) {
-            (Some(p), Some(r)) => p.present_frame(r, capture).unwrap_or_else(|e| {
-                eprintln!("revc: present: {e}");
-                None
-            }),
+            (Some(p), Some(r)) => {
+                // The game's VSync setting (rwRASTERFLIPWAITVSYNC), like GL3's swap interval.
+                p.set_vsync(vsync != 0);
+                p.present_frame(r, capture).unwrap_or_else(|e| {
+                    eprintln!("revc: present: {e}");
+                    None
+                })
+            }
             _ => None,
         })
     });

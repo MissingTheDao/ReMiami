@@ -89,6 +89,16 @@ impl Presenter {
         self.config.format
     }
 
+    /// Waits for vertical blank on present (the game's VSync setting) or not; reconfigures the
+    /// surface only when this changes.
+    pub fn set_vsync(&mut self, vsync: bool) {
+        let mode = if vsync { wgpu::PresentMode::AutoVsync } else { wgpu::PresentMode::AutoNoVsync };
+        if self.config.present_mode != mode {
+            self.config.present_mode = mode;
+            self.surface.configure(&self.gpu.device, &self.config);
+        }
+    }
+
     /// After the window changed size.
     pub fn resize(&mut self, width: u32, height: u32) {
         self.config.width = width.max(1);

@@ -2,14 +2,17 @@
 # Frame-time baseline at the fixed spots (plan tasks 2 and 14).
 #
 # usage: scripts/perf.sh [--bin PATH] [--game DIR] [--size WxH] [--backend gl3|vulkan|gl] [--runs N]
+#                        [--out FILE] [--logs DIR]
+#   --out   append one line per spot and run: backend size spot mean median p99 max (ms)
+#   --logs  keep the game log of every failed run there
 #
 # Runs REVC_TEST=spots with the test settings but VSync and the frame limiter off, and prints the
 # `perf` lines (frame times over the 3 s before each spot's capture). Screenshots are not compared.
 # Works from a repository checkout or from a deployed folder holding bin/, tests/ and game/
-# (scripts/deploy-n150.sh). --backend vulkan|gl needs a wgpu build (--bin); gl3 a normal one.
+# (scripts/n150.sh deploy). --backend vulkan|gl needs a wgpu build (--bin); gl3 a normal one.
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BIN="" GAME=$ROOT/game SIZE=1280x720 BACKEND=gl3 RUNS=1
+BIN="" GAME=$ROOT/game SIZE=1280x720 BACKEND=gl3 RUNS=1 OUTFILE="" LOGS=""
 while (( $# )); do
   case "$1" in
     --bin) BIN=$2; shift ;;
@@ -17,6 +20,8 @@ while (( $# )); do
     --size) SIZE=$2; shift ;;
     --backend) BACKEND=$2; shift ;;
     --runs) RUNS=$2; shift ;;
+    --out) OUTFILE=$2; shift ;;
+    --logs) LOGS=$2; shift ;;
     *) echo "unknown option $1"; exit 2 ;;
   esac
   shift
@@ -42,8 +47,16 @@ envs=(REVC_GAME_DIR="$T" REVC_TEST=spots)
 echo "== $(basename "$BIN") backend $BACKEND ${W}x${H}"
 for ((i = 1; i <= RUNS; i++)); do
   log=$TMP/run$i.log
-  env "${envs[@]}" "$BIN" > "$log" 2>&1
+  # A hard limit besides the game's own watchdog (KILL: a process stuck in the driver ignores TERM).
+  timeout -k 10 300 env "${envs[@]}" "$BIN" > "$log" 2>&1
   rc=$?
   grep -E '^\[revc-test\] perf' "$log" | sed 's/^\[revc-test\] /   /'
-  (( rc == 0 )) || { echo "   run $i failed (exit $rc)"; grep -E 'FAIL|panic|error' "$log" | head -5; }
+  if [[ -n "$OUTFILE" ]]; then
+    sed -nE 's/^\[revc-test\] perf ([a-z_]+): [0-9]+ frames, mean ([0-9.]+) ms \([0-9]+ fps\), median ([0-9.]+), p99 ([0-9.]+), max ([0-9.]+) ms$/\1 \2 \3 \4 \5/p' "$log" |
+      while read -r spot mean median p99 max; do echo "$BACKEND $SIZE $spot $mean $median $p99 $max"; done >> "$OUTFILE"
+  fi
+  if (( rc != 0 )); then
+    echo "   run $i failed (exit $rc)"; grep -E 'FAIL|panic|error' "$log" | head -5
+    [[ -n "$LOGS" ]] && mkdir -p "$LOGS" && cp "$log" "$LOGS/$(date +%Y%m%d-%H%M%S)-$BACKEND-$SIZE-run$i.log"
+  fi
 done
