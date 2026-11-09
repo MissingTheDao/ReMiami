@@ -7,6 +7,7 @@ mod padtest;
 mod texmods;
 mod text;
 mod textutil;
+mod messages;
 mod host;
 mod testdrive;
 

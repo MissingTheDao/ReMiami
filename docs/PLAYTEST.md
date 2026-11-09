@@ -53,7 +53,9 @@ Controller):
 
 - [ ] Options > Language: switch through the languages; menus and in-game text change and look
       right (accents in French/German/Spanish/Italian), then switch back.
-- [ ] Start a mission (mission text loads): objectives and subtitles show, no "... missing".
+- [ ] Start a mission (mission text loads): objectives and subtitles show and go away on time,
+      no "... missing"; the mission title and "MISSION PASSED" big messages appear.
+- [ ] Pause menu > Brief: lists the last objectives / subtitles, newest first.
 
 ## Task 2: N150 frame times (needs the N150 box)
 
