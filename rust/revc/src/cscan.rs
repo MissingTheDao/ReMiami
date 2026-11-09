@@ -1,5 +1,5 @@
-//! sscanf conversions as glibc does them (%s %d %x %f), for the data file loaders ported from
-//! C++. Each returns None where sscanf would stop (input or matching failure).
+//! C library number parsing as glibc does it, for the data file loaders ported from C++: atof/atoi,
+//! and sscanf's %s %d %x %f (each returns None where sscanf would stop).
 
 /// A simple scanner for parsing formatted text data, emulating scanf behavior.
 pub struct Scan<'a> {
@@ -174,3 +174,61 @@ impl<'a> Scan<'a> {
 fn is_hex_digit(b: u8) -> bool {
     b.is_ascii_hexdigit()
 }
+
+/// atof (strtod): the longest decimal float prefix, correctly rounded to f64; 0 when none.
+pub fn atof(w: &[u8]) -> f64 {
+    let mut i = 0;
+    while i < w.len() && (w[i] == b' ' || (b'\t'..=b'\r').contains(&w[i])) {
+        i += 1;
+    }
+    let start = i;
+    if i < w.len() && (w[i] == b'+' || w[i] == b'-') {
+        i += 1;
+    }
+    let digits = |i: &mut usize| {
+        let s = *i;
+        while *i < w.len() && w[*i].is_ascii_digit() {
+            *i += 1;
+        }
+        *i - s
+    };
+    let mut n = digits(&mut i);
+    if i < w.len() && w[i] == b'.' {
+        i += 1;
+        n += digits(&mut i);
+    }
+    if n == 0 {
+        return 0.0;
+    }
+    let mantissa_end = i;
+    if i < w.len() && (w[i] == b'e' || w[i] == b'E') {
+        let mut j = i + 1;
+        if j < w.len() && (w[j] == b'+' || w[j] == b'-') {
+            j += 1;
+        }
+        if digits(&mut j) > 0 {
+            i = j;
+        }
+    }
+    let _ = mantissa_end;
+    std::str::from_utf8(&w[start..i]).ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0)
+}
+
+/// atoi (strtol base 10, wrapped to int).
+pub fn atoi(w: &[u8]) -> i32 {
+    let mut i = 0;
+    while i < w.len() && (w[i] == b' ' || (b'\t'..=b'\r').contains(&w[i])) {
+        i += 1;
+    }
+    let neg = i < w.len() && w[i] == b'-';
+    if i < w.len() && (w[i] == b'+' || w[i] == b'-') {
+        i += 1;
+    }
+    let mut v: i64 = 0;
+    while i < w.len() && w[i].is_ascii_digit() {
+        v = v.wrapping_mul(10).wrapping_add((w[i] - b'0') as i64);
+        i += 1;
+    }
+    (if neg { v.wrapping_neg() } else { v }) as i32
+}
+
