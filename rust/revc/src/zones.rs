@@ -515,6 +515,141 @@ unsafe fn insert_recursive(inner: *mut Zone, outer: *mut Zone) -> bool {
     }
 }
 
+
+// ---- save/load (CTheZones::SaveAllZones / LoadAllZones) ----
+
+/// Bytes of one zone in a save: name, box, type, level, the zone info indices and the three
+/// hierarchy links as navigation zone indices (-1 for none).
+const ZONE_SAVE_SIZE: usize = 8 + 6 * 4 + 4 + 4 + 2 + 2 + 3 * 4;
+const SAVE_HEADER_SIZE: usize = 8;
+
+/// The whole zones block, header included.
+pub const ZONES_SAVE_SIZE: usize = SAVE_HEADER_SIZE + 4 + 2 + 2 + ZONE_SAVE_SIZE * NUMNAVIGZONES + ZONE_SAVE_SIZE * NUMINFOZONES
+    + std::mem::size_of::<ZoneInfo>() * 2 * NUMINFOZONES + 2 * 3 + 2 + ZONE_SAVE_SIZE * NUMMAPZONES + 2 * NUMAUDIOZONES + 2 + 2;
+
+impl View {
+    fn nav_index(&self, p: *mut Zone) -> i32 {
+        if p.is_null() { -1 } else { unsafe { p.offset_from(self.nav) as i32 } }
+    }
+    fn nav_pointer(&self, i: i32) -> *mut Zone {
+        if i == -1 { std::ptr::null_mut() } else { self.nav.wrapping_offset(i as isize) }
+    }
+
+    unsafe fn save_zone(&self, z: &Zone, out: &mut Vec<u8>) {
+        out.extend_from_slice(&z.name);
+        for f in [z.minx, z.miny, z.minz, z.maxx, z.maxy, z.maxz] {
+            out.extend_from_slice(&f.to_le_bytes());
+        }
+        out.extend_from_slice(&z.type_.to_le_bytes());
+        out.extend_from_slice(&z.level.to_le_bytes());
+        out.extend_from_slice(&z.zoneinfo_day.to_le_bytes());
+        out.extend_from_slice(&z.zoneinfo_night.to_le_bytes());
+        for p in [z.child, z.parent, z.next] {
+            out.extend_from_slice(&self.nav_index(p).to_le_bytes());
+        }
+    }
+
+    /// SaveAllZones.
+    pub unsafe fn save(&self) -> Vec<u8> {
+        unsafe {
+            let mut out = Vec::with_capacity(ZONES_SAVE_SIZE);
+            out.extend_from_slice(b"ZNS\0");
+            out.extend_from_slice(&((ZONES_SAVE_SIZE - SAVE_HEADER_SIZE) as u32).to_le_bytes());
+            out.extend_from_slice(&(*self.curr_level).to_le_bytes());
+            out.extend_from_slice(&(*self.find_index).to_le_bytes());
+            out.extend_from_slice(&0i16.to_le_bytes());
+            for i in 0..NUMNAVIGZONES {
+                self.save_zone(&*self.nav.add(i), &mut out);
+            }
+            for i in 0..NUMINFOZONES {
+                self.save_zone(&*self.info.add(i), &mut out);
+            }
+            for i in 0..2 * NUMINFOZONES {
+                let w: [u8; 68] = std::mem::transmute(*self.zone_infos.add(i));
+                out.extend_from_slice(&w);
+            }
+            for c in [*self.num_nav, *self.num_info, *self.num_zone_infos, 0] {
+                out.extend_from_slice(&c.to_le_bytes());
+            }
+            for i in 0..NUMMAPZONES {
+                self.save_zone(&*self.map.add(i), &mut out);
+            }
+            for i in 0..NUMAUDIOZONES {
+                out.extend_from_slice(&(*self.audio.add(i)).to_le_bytes());
+            }
+            out.extend_from_slice(&(*self.num_map).to_le_bytes());
+            out.extend_from_slice(&(*self.num_audio).to_le_bytes());
+            debug_assert_eq!(out.len(), ZONES_SAVE_SIZE);
+            out
+        }
+    }
+
+    unsafe fn load_zone(&self, z: &mut Zone, r: &mut Reader) {
+        z.name = r.take::<8>();
+        z.minx = f32::from_le_bytes(r.take());
+        z.miny = f32::from_le_bytes(r.take());
+        z.minz = f32::from_le_bytes(r.take());
+        z.maxx = f32::from_le_bytes(r.take());
+        z.maxy = f32::from_le_bytes(r.take());
+        z.maxz = f32::from_le_bytes(r.take());
+        z.type_ = i32::from_le_bytes(r.take());
+        z.level = i32::from_le_bytes(r.take());
+        z.zoneinfo_day = i16::from_le_bytes(r.take());
+        z.zoneinfo_night = i16::from_le_bytes(r.take());
+        z.child = self.nav_pointer(i32::from_le_bytes(r.take()));
+        z.parent = self.nav_pointer(i32::from_le_bytes(r.take()));
+        z.next = self.nav_pointer(i32::from_le_bytes(r.take()));
+    }
+
+    /// LoadAllZones (the header isn't checked, as in release builds of the original). A short
+    /// buffer reads as zeros past its end.
+    pub unsafe fn load(&self, buf: &[u8]) {
+        unsafe {
+            let mut r = Reader { buf, at: SAVE_HEADER_SIZE };
+            *self.curr_level = i32::from_le_bytes(r.take());
+            *self.find_index = i16::from_le_bytes(r.take());
+            r.at += 2;
+            for i in 0..NUMNAVIGZONES {
+                self.load_zone(&mut *self.nav.add(i), &mut r);
+            }
+            for i in 0..NUMINFOZONES {
+                self.load_zone(&mut *self.info.add(i), &mut r);
+            }
+            for i in 0..2 * NUMINFOZONES {
+                *self.zone_infos.add(i) = std::mem::transmute::<[u8; 68], ZoneInfo>(r.take());
+            }
+            *self.num_nav = u16::from_le_bytes(r.take());
+            *self.num_info = u16::from_le_bytes(r.take());
+            *self.num_zone_infos = u16::from_le_bytes(r.take());
+            r.at += 2;
+            for i in 0..NUMMAPZONES {
+                self.load_zone(&mut *self.map.add(i), &mut r);
+            }
+            for i in 0..NUMAUDIOZONES {
+                *self.audio.add(i) = i16::from_le_bytes(r.take());
+            }
+            *self.num_map = u16::from_le_bytes(r.take());
+            *self.num_audio = u16::from_le_bytes(r.take());
+        }
+    }
+}
+
+struct Reader<'a> {
+    buf: &'a [u8],
+    at: usize,
+}
+
+impl Reader<'_> {
+    fn take<const N: usize>(&mut self) -> [u8; N] {
+        let mut out = [0u8; N];
+        for (k, b) in out.iter_mut().enumerate() {
+            *b = self.buf.get(self.at + k).copied().unwrap_or(0);
+        }
+        self.at += N;
+        out
+    }
+}
+
 // ---- C ABI: CTheZones forwards here with its bound view ----
 
 static VIEW: std::sync::Mutex<Option<View>> = std::sync::Mutex::new(None);
@@ -611,6 +746,19 @@ mod ffi {
                 _ => w.set_ped_group(zoneid, day != 0, v),
             }
         }
+    }
+    /// SaveAllZones into `buf` (room for ZONES_SAVE_SIZE); the size in `size`.
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn revc_zones_save(buf: *mut u8, size: *mut u32) {
+        unsafe {
+            let data = view().save();
+            std::ptr::copy_nonoverlapping(data.as_ptr(), buf, data.len());
+            *size = data.len() as u32;
+        }
+    }
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn revc_zones_load(buf: *const u8, size: u32) {
+        unsafe { view().load(std::slice::from_raw_parts(buf, size as usize)) }
     }
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn revc_zones_audio_zone(pos: *const V3) -> i16 {
@@ -714,6 +862,7 @@ mod golden {
         let mut s = Store::new();
         let v = s.view();
         let mut n = 0;
+        let mut saved: Vec<u8> = Vec::new();
         for (ln, line) in text.lines().enumerate() {
             let (lhs, want) = line.split_once(" =>").unwrap();
             let w: Vec<&str> = lhs.split(' ').collect();
@@ -736,6 +885,16 @@ mod golden {
                         String::new()
                     }
                     "state" => state(&v, &s),
+                    "save" => {
+                        saved = v.save();
+                        let h = saved.iter().fold(0xcbf29ce484222325u64, |h, &c| (h ^ c as u64).wrapping_mul(0x100000001b3));
+                        format!(" {} {h:016x}", saved.len())
+                    }
+                    "load" => {
+                        v.init();
+                        v.load(&saved);
+                        String::new()
+                    }
                     "level" => format!(" {}", v.get_level_from_position(&p(1))),
                     "infozone" => format!(" {}", v.find_information_zone_for_position(&p(1)).offset_from(v.info)),
                     "navzone" => {

@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <string>
 #include "Clock.h"
+#include "SaveBuf.h"
 #define class struct
 #include "Zones.h"
 #undef class
@@ -109,6 +110,18 @@ int main() {
 			CTheZones::GetZoneInfoForTimeOfDay(&p, &info);
 			printf("tod"); f(p.x); f(p.y); f(p.z); printf(" %d =>", g_hour); dumpinfo(info); printf("\n");
 		}
+		state();
+		// Save, then load the save into freshly initialised zones.
+		static uint8 buf[64 * 1024];
+		uint32 size = 0;
+		memset(buf, 0xA5, sizeof(buf));
+		CTheZones::SaveAllZones(buf, &size);
+		uint64_t h = 0xcbf29ce484222325ull;
+		for (uint32 k = 0; k < size; k++) h = (h ^ buf[k]) * 0x100000001b3ull;
+		printf("save => %u %016llx\n", size, (unsigned long long)h);
+		CTheZones::Init();
+		CTheZones::LoadAllZones(buf, size);
+		printf("load =>\n");
 		state();
 	}
 }
