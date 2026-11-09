@@ -4,10 +4,10 @@
 # (Vulkan throttled, GL stalled), the virtual output always does. The GPU still renders; only the
 # compositor's output goes nowhere.
 #
-# usage: scripts/headless.sh [--size WxH] command [args ...]   (default size 2560x1440, room for a
-#        1080p window with its decorations)
+# usage: scripts/headless.sh [--size WxH] command [args ...]   (default size 4096x2304, room for a
+#        3840x2160 window with its decorations)
 set -u
-SIZE=2560x1440
+SIZE=4096x2304
 [[ "${1:-}" == --size ]] && { SIZE=$2; shift 2; }
 (( $# )) || { echo "usage: headless.sh [--size WxH] command [args ...]"; exit 2; }
 command -v kwin_wayland > /dev/null || { echo "headless.sh: kwin_wayland not installed"; exit 2; }

@@ -15,11 +15,12 @@
 #   wait <job>               collect a perf/soak job (they run detached on the box and survive
 #                            this machine going away; perf and soak wait for theirs themselves)
 #   baseline [FILE]          make a perf result (default: the latest) the new baseline
-#   soak [--minutes M] [--backend B] [--size WxH]
+#   soak [--minutes M] [--backend B] [--size WxH] [--capped]
 #                            repeat the spots run for M minutes (default 30): every run's frame
 #                            times, failures with their logs, and every 5 s the CPU package
 #                            temperature, CPU/GPU clocks and the game's memory; reports drift
 #                            (thermal throttling, leaks) and crashes. Saved under logs/n150/.
+#                            --capped: player defaults (frame limiter: display refresh, 60 Hz headless).
 #   info                     hardware, driver versions, temperatures
 # Host: N150_HOST (default steam@192.168.20.239), folder there: N150_DIR (default revc-bench).
 # Game runs (test, perf, soak) are headless by default: inside a private, invisible compositor
@@ -187,12 +188,13 @@ done; done"
     ;;
   soak)
     check_screen
-    MIN=30 BACKEND=gl3 SIZE=1280x720
+    MIN=30 BACKEND=gl3 SIZE=1280x720 CAP=""
     while (( $# )); do
       case "$1" in
         --minutes) MIN=$2; shift ;;
         --backend) BACKEND=$2; shift ;;
         --size) SIZE=$2; shift ;;
+        --capped) CAP=--capped ;;
         *) echo "unknown option $1"; exit 2 ;;
       esac
       shift
@@ -200,7 +202,7 @@ done; done"
     NAME=soak-$(date +%Y%m%d-%H%M%S)
     start_job "$NAME" "
 out=results/$NAME.txt; mon=results/$NAME-sensors.txt
-echo \"# \$(cat COMMIT) soak $MIN min $BACKEND $SIZE\" > \$out
+echo \"# \$(cat COMMIT) soak $MIN min $BACKEND $SIZE $CAP\" > \$out
 echo '# time pkg_temp_C cpu_avg_MHz gpu_MHz revc_rss_MB' > \$mon
 ( while :; do
     z=\$(grep -l x86_pkg_temp /sys/class/thermal/thermal_zone*/type | head -1)
@@ -216,7 +218,7 @@ end=\$(( \$(date +%s) + $MIN * 60 )); runs=0; fails=0
 while (( \$(date +%s) < end )); do
   runs=\$((runs + 1))
   before=\$(grep -vc '^#' \$out)
-  timeout -k 10 300 scripts/perf.sh --backend $BACKEND --size $SIZE --out \$out --logs results/failed > /dev/null
+  timeout -k 10 300 scripts/perf.sh --backend $BACKEND --size $SIZE $CAP --out \$out --logs results/failed > /dev/null
   got=\$(( \$(grep -vc '^#' \$out) - before ))
   (( got < 8 )) && fails=\$((fails + 1))
   echo \"run \$runs: \$( (( got >= 8 )) && tail -8 \$out | awk '{ s += \$4 } END { printf \"mean %.2f ms\", s / NR }' || echo FAILED)\"

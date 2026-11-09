@@ -2,9 +2,11 @@
 # Frame-time baseline at the fixed spots (plan tasks 2 and 14).
 #
 # usage: scripts/perf.sh [--bin PATH] [--game DIR] [--size WxH] [--backend gl3|vulkan|gl] [--runs N]
-#                        [--out FILE] [--logs DIR]
+#                        [--out FILE] [--logs DIR] [--capped]
 #   --out   append one line per spot and run: backend size spot mean median p99 max (ms)
 #   --logs  keep the game log of every failed run there
+#   --capped  keep the player defaults (frame limiter on: waits for the display refresh, 60 Hz
+#             headless) instead of uncapped
 #
 # Runs REVC_TEST=spots with the test settings but VSync and the frame limiter off, and prints the
 # `perf` lines (frame times over the 3 s before each spot's capture). Screenshots are not compared.
@@ -12,7 +14,7 @@
 # (scripts/n150.sh deploy). --backend vulkan|gl needs a wgpu build (--bin); gl3 a normal one.
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BIN="" GAME=$ROOT/game SIZE=1280x720 BACKEND=gl3 RUNS=1 OUTFILE="" LOGS=""
+BIN="" GAME=$ROOT/game SIZE=1280x720 BACKEND=gl3 RUNS=1 OUTFILE="" LOGS="" CAPPED=0
 while (( $# )); do
   case "$1" in
     --bin) BIN=$2; shift ;;
@@ -22,6 +24,7 @@ while (( $# )); do
     --runs) RUNS=$2; shift ;;
     --out) OUTFILE=$2; shift ;;
     --logs) LOGS=$2; shift ;;
+    --capped) CAPPED=1 ;;
     *) echo "unknown option $1"; exit 2 ;;
   esac
   shift
@@ -40,7 +43,8 @@ for f in "$GAME"/*; do
 done
 cp "$ROOT"/tests/saves/*.b "$T/userfiles/"
 printf 'width=%s\nheight=%s\nmaximized=0\n' "$W" "$H" > "$T/userfiles/revc_window.ini"
-sed -e 's/^VSync=.*/VSync=0/' -e 's/^FrameLimiter=.*/FrameLimiter=0/' "$ROOT/tests/config/reVC.ini" > "$T/reVC.ini"
+if (( CAPPED )); then cp "$ROOT/tests/config/reVC.ini" "$T/reVC.ini"
+else sed -e 's/^VSync=.*/VSync=0/' -e 's/^FrameLimiter=.*/FrameLimiter=0/' "$ROOT/tests/config/reVC.ini" > "$T/reVC.ini"; fi
 
 envs=(REVC_GAME_DIR="$T" REVC_TEST=spots)
 [[ "$BACKEND" != gl3 ]] && envs+=(REVC_RENDERER_BACKEND="$BACKEND")
