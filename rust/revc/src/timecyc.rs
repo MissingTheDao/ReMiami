@@ -64,6 +64,7 @@ pub struct Tables {
 }
 
 impl Tables {
+    #[allow(dead_code)] // the tests start from it
     pub fn zeroed() -> Tables {
         Tables {
             ambient_red: [[0; 7]; 24],
@@ -217,14 +218,14 @@ pub fn parse(buf: &[u8], t: &mut Tables) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn revc_timecyc_parse(data: *const u8, len: usize, out: *mut Tables) {
+pub unsafe extern "C" fn revc_timecyc_parse(data: *const u8, len: usize, out: *mut Tables) { unsafe {
     if data.is_null() || out.is_null() {
         return;
     }
     let buf = std::slice::from_raw_parts(data, len);
     let t = &mut *out;
     parse(buf, t);
-}
+}}
 
 #[cfg(test)]
 mod golden {

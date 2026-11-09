@@ -323,12 +323,12 @@ impl Hooks for CppHooks {
 /// * `data` must point to a valid memory region of `len` bytes.
 /// * `infos` must point to a valid memory region of at least 37 * `size_of::<WeaponInfo>()` bytes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn revc_weapon_load(data: *const u8, len: usize, infos: *mut WeaponInfo) {
+pub unsafe extern "C" fn revc_weapon_load(data: *const u8, len: usize, infos: *mut WeaponInfo) { unsafe {
     let data_slice = std::slice::from_raw_parts(data, len);
     let infos_slice = std::slice::from_raw_parts_mut(infos, 37);
     let mut hooks = CppHooks;
     load(data_slice, infos_slice, &mut hooks);
-}
+}}
 
 #[cfg(test)]
 mod golden {

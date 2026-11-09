@@ -1,5 +1,4 @@
 use crate::cscan::{atof, atoi};
-use std::ptr::null_mut;
 
 /// Maximum number of particle systems that can be loaded.
 pub const MAX_PARTICLES: usize = 83;

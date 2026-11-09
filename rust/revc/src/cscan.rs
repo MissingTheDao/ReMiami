@@ -48,7 +48,7 @@ impl<'a> Scan<'a> {
         if self.i >= self.s.len() {
             return None;
         }
-        let start = self.i;
+        let _start = self.i;
         let mut sign = 1;
         if self.s[self.i] == b'+' || self.s[self.i] == b'-' {
             if self.s[self.i] == b'-' {
@@ -75,7 +75,7 @@ impl<'a> Scan<'a> {
         if self.i >= self.s.len() {
             return None;
         }
-        let start = self.i;
+        let _start = self.i;
         let mut sign = 1;
         if self.s[self.i] == b'+' || self.s[self.i] == b'-' {
             if self.s[self.i] == b'-' {

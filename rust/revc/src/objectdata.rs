@@ -32,7 +32,7 @@ pub trait Hooks {
     fn set_object_id(&mut self, model: i32, id: i16);
 }
 
-/// External C functions for hooks.
+// External C functions for hooks.
 unsafe extern "C" {
     fn revc_cpp_find_model(name: *const u8, len: usize) -> i32;
     fn revc_cpp_set_object_id(model: i32, id: i16);
@@ -239,12 +239,12 @@ pub fn initialise(buf: &[u8], infos: &mut [ObjectInfo], hooks: &mut dyn Hooks) {
 
 /// Unsafe external interface to initialise object data.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn revc_object_data_init(data: *const u8, len: usize, infos: *mut ObjectInfo) {
+pub unsafe extern "C" fn revc_object_data_init(data: *const u8, len: usize, infos: *mut ObjectInfo) { unsafe {
     let data_slice = std::slice::from_raw_parts(data, len);
     let infos_slice = std::slice::from_raw_parts_mut(infos, NUMOBJECTINFO);
     let mut hooks = CppHooks;
     initialise(data_slice, infos_slice, &mut hooks);
-}
+}}
 
 #[cfg(test)]
 mod golden {
