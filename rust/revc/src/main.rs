@@ -21,6 +21,7 @@ mod weaponinfo;
 mod pedtype;
 mod objectdata;
 mod particlecfg;
+mod timecyc;
 mod savegame;
 mod host;
 mod testdrive;

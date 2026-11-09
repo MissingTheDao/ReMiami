@@ -2,7 +2,7 @@
 //! for peds, car parts, body parts, cutscene objects and weapons. The models stay C++ statics; this
 //! fills them and owns their sphere arrays. Checked against the original by
 //! tests/golden/tempcolmodels.txt. (Translated by the local model, reviewed.)
-#![allow(non_upper_case_globals, dead_code, static_mut_refs)]
+#![allow(non_upper_case_globals, dead_code, static_mut_refs, unsafe_op_in_unsafe_fn)]
 
 use crate::collision::{ColModel, ColSphere, Sphere, BBox};
 use crate::math::V3;
