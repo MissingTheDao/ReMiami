@@ -18,6 +18,7 @@ tests replay every line, so the port keeps the exact behaviour (quirks included)
 | `tempcolmodels.txt` | CTempColModels::Initialise: all 18 built-in col models (bounds, counts, spheres) | `rust/revc/src/tempcolmodels.rs`, test `golden::matches_cpp_golden` |
 | `timecyc.txt` | CTimeCycle::Initialise (timecyc.dat in binary mode, values carried over from line to line, the float to int8/int16/uint8 conversions) on 12 synthetic files in `tests/golden/timecyc/` and the game's file (when present): FNV-1a 64 of each of the 52 tables | `rust/revc/src/timecyc.rs`, test `golden::matches_cpp_golden` |
 | `weaponinfo.txt` | CWeaponInfo::Initialise + LoadWeaponData (sscanf semantics; values that carry over between lines, including the model remap) on 24 synthetic files in `tests/golden/weaponinfo/` and the game's `data/weapon.dat` (when present): SetWeaponInfo calls and FNV-1a 64 per entry | `rust/revc/src/weaponinfo.rs`, test `golden::matches_cpp_golden` |
+| `zones.txt` | CTheZones logic (Init, CreateZone, the navigation zone hierarchy, audio zones, level/info/navigation/audio lookups, label search, zone info setters, time of day blending) in 6 random scenarios: 1072 ops with full state dumps (pointers as indices) | `rust/revc/src/zones.rs`, test `golden::matches_cpp_golden` |
 | `textutil.txt` | CMessages string helpers and Text.cpp's UnicodeToAscii* / GetUpperCase (commit before the text port) | `rust/revc/src/textutil.rs`, test `matches_cpp_golden` |
 
 Line format: `op flags args => result`, strings as comma-separated hex units (`-` = empty).
@@ -26,4 +27,4 @@ with the C++ code; see the git history of the commit that added this file.
 
 The math recorder is kept: `tests/golden/recorders/math/record.sh` rebuilds it against the C++ from
 git history and rewrites `math.txt` (the result must not change).
-So are the collision, temp col model, handling, weapon info, ped type, surface, object data, particle, time cycle and directory recorders (`tests/golden/recorders/{collision,tempcolmodels,handling,weaponinfo,pedtype,surface,objectdata,particlecfg,timecyc,directory}/record.sh`, C++ from 1017bca / 113352a) and the save fix recorder: `tests/golden/recorders/savefix/record.sh` (C++ from commit 48e9e38).
+So are the collision, temp col model, handling, weapon info, ped type, surface, object data, particle, time cycle, directory and zones recorders (`tests/golden/recorders/{collision,tempcolmodels,handling,weaponinfo,pedtype,surface,objectdata,particlecfg,timecyc,directory,zones}/record.sh`, C++ from 1017bca / 113352a) and the save fix recorder: `tests/golden/recorders/savefix/record.sh` (C++ from commit 48e9e38).

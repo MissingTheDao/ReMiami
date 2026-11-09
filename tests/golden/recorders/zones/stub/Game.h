@@ -1,0 +1,2 @@
+#pragma once
+enum eLevelName { LEVEL_IGNORE = -1, LEVEL_GENERIC = 0, LEVEL_BEACH, LEVEL_MAINLAND, NUM_LEVELS };

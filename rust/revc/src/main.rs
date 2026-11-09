@@ -23,6 +23,7 @@ mod objectdata;
 mod particlecfg;
 mod timecyc;
 mod directory;
+mod zones;
 mod savegame;
 mod host;
 mod testdrive;
