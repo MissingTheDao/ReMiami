@@ -11,6 +11,7 @@ pub mod dff;
 pub mod gxt;
 pub mod img;
 pub mod rw;
+pub mod save;
 pub mod scm;
 pub mod text;
 pub mod txd;

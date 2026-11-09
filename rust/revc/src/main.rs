@@ -9,6 +9,7 @@ mod text;
 mod textutil;
 mod messages;
 mod pager;
+mod savefile;
 mod host;
 mod testdrive;
 

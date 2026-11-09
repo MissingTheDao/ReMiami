@@ -59,6 +59,11 @@ Controller):
 - [ ] Pager messages (e.g. when a phone mission becomes available): the text scrolls through the
       pager at the top, restarts after cutscenes, and the next queued message follows.
 
+## Task 15: save files (file check now in Rust)
+
+- [ ] Load Game menu lists your saves with names and dates; a damaged save shows as corrupted.
+- [ ] Save in a safehouse, then load that slot.
+
 ## Task 2: N150 frame times (needs the N150 box)
 
 - [ ] Record frame times at the fixed spots (the `spots` test places are a good set).
