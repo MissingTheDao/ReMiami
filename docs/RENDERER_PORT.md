@@ -225,6 +225,14 @@ sharp; it is not a player setting (user decision 2026-11-09) but the hook for th
 only when scaled or antialiased) on both backends; in game at 50 % (temporary setting, since
 removed): world at half resolution, HUD identical to 100 %.
 
+**Visual style presets (plan task 13).** Graphics > Visual Style (both builds) picks a platform
+look in one step: PC (PC colour filter, no PS2 alpha test, MatFX cars), PS2 (PS2/Xbox filter,
+PS2 alpha test), XBOX (as PS2 plus the Neo pipelines: vehicle reflections, rim light, world
+lightmaps, road gloss; the reference look), MOBILE (mobile filter). The Neo switches are set only
+when game/neo/neo.txd exists. It stores nothing itself: it reads and sets the individual options
+(which stay in the menu and the ini), and shows CUSTOM for any other combination. Motion blur and
+antialiasing are not part of a style. Xbox/PS2 HUD and menus are a later step.
+
 ## What the game calls
 
 The game reaches librw only through the RenderWare-style API in `cpp/re3-miami/src/fakerw`

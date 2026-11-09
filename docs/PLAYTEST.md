@@ -60,6 +60,9 @@ Build: `cd rust && CARGO_TARGET_DIR=target-wgpu cargo build --features wgpu`, ru
 - [ ] Display Setup > Antialiasing: step through all 9 levels in game (SMAA smooths edges without blurring HUD text as much as FXAA); the picture changes at once,
       edges get smoother the higher the level, frame rate drops at SSAA; the level is kept after a
       restart.
+- [ ] Graphics > Visual Style: left/right cycles PC, PS2, XBOX, MOBILE; each changes colour
+      filter, PS2 alpha test and (with game/neo) vehicle pipeline, rim light, lightmaps, road gloss
+      at once (those rows follow); changing one of them by hand shows CUSTOM; kept after a restart.
 - [ ] Options > Display Setup > Colour Filter: each of None, Simple, PS2/XBOX, Mobile, PC
       changes the look at once and is kept after a restart (both builds).
 

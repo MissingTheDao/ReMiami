@@ -19,7 +19,9 @@
 //!                       and checks pad detection, glyph-set switching and rumble (padtest.rs).
 //!   REVC_TEST=spots     like saveload, then visits SPOTS (no peds/traffic, noon, sunny, fixed
 //!                       camera) and compares each frame with REVC_TEST_REF_DIR/<spot>.png,
-//!                       writing REVC_TEST_SHOT_DIR/<spot>.png (plan task 3).
+//!                       writing REVC_TEST_SHOT_DIR/<spot>.png (plan task 3). Logs the frame
+//!                       times at each spot (`perf <spot>: ...`, the last 3 s before the
+//!                       capture; plan task 2 baselines, run with VSync and FrameLimiter off).
 //!   REVC_TEST=formats   like saveload, then dumps what the C++ loaders hold and compares it
 //!                       with revc-formats (formatcheck.rs).
 //! Options:
@@ -98,6 +100,8 @@ const SPOTS: &[(&str, f32, f32, f32, f32, f32)] = &[
 ];
 const SPOT_WAIT_MS: u32 = 4000;
 const SPOT_PERIOD_MS: u32 = 6000;
+/// Game time before each spot's capture over which frame times are measured.
+const PERF_WINDOW_MS: u32 = 3000;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum SpotStage {
@@ -135,6 +139,11 @@ struct Driver {
     finished: bool,
     pads: crate::padtest::PadTest,
     pad_capture_requested: bool,
+    /// Real time of the previous tick and the frame times (ms) collected at the current spot.
+    last_tick: Option<Instant>,
+    frame_ms: Vec<f32>,
+    /// Per spot: (name, mean ms, p99 ms) for the summary.
+    perf: Vec<(&'static str, f32, f32)>,
 }
 
 thread_local! {
@@ -178,6 +187,9 @@ pub fn init() -> Result<bool, String> {
         finished: false,
         pads: Default::default(),
         pad_capture_requested: false,
+        last_tick: None,
+        frame_ms: Vec::new(),
+        perf: Vec::new(),
     };
     log(format!("scenario {scenario:?} started"));
     if std::env::var_os("REVC_TEST_WAV").is_some() {
@@ -227,6 +239,9 @@ impl Driver {
         if matches!(self.phase, Phase::Done) {
             return false;
         }
+        let now_real = Instant::now();
+        let frame_ms = self.last_tick.map(|t| (now_real - t).as_secs_f32() * 1000.0);
+        self.last_tick = Some(now_real);
         let timeout = Duration::from_secs(env("REVC_TEST_TIMEOUT", 180));
         if self.started.elapsed() > timeout {
             self.fail(format!("timeout in phase {:?}", self.phase));
@@ -346,6 +361,10 @@ impl Driver {
                 unsafe { revc_test_clear_help() };
                 let now = unsafe { revc_test_game_ms() };
                 let visit = base + idx as u32 * SPOT_PERIOD_MS;
+                // Frame times over the last 3 s before the capture (streaming has settled).
+                if stage == SpotStage::Settle && now + PERF_WINDOW_MS >= visit + SPOT_WAIT_MS {
+                    self.frame_ms.extend(frame_ms);
+                }
                 match stage {
                     SpotStage::Travel if now >= visit => {
                         self.goto_spot(idx);
@@ -353,6 +372,7 @@ impl Driver {
                     }
                     SpotStage::Settle if now >= visit + SPOT_WAIT_MS && unsafe { revc_test_fading() } == 0 => {
                         log(format!("{}: captured at game time {now}", SPOTS[idx].0));
+                        self.report_perf(SPOTS[idx].0);
                         crate::host::request_capture();
                         self.phase = Phase::Spot { idx, base, stage: SpotStage::Capturing };
                     }
@@ -431,6 +451,31 @@ impl Driver {
         }
         if failed != 1 {
             self.fail(format!("texmods: {failed} files rejected (expected siterocket.png only)"));
+        }
+    }
+
+    /// Logs the frame times collected at a spot: mean, median, 99th percentile, worst, fps.
+    fn report_perf(&mut self, name: &'static str) {
+        let mut t = std::mem::take(&mut self.frame_ms);
+        if t.is_empty() {
+            return;
+        }
+        t.sort_by(f32::total_cmp);
+        let mean = t.iter().sum::<f32>() / t.len() as f32;
+        let pct = |p: f32| t[((t.len() - 1) as f32 * p).round() as usize];
+        let p99 = pct(0.99);
+        log(format!(
+            "perf {name}: {} frames, mean {mean:.2} ms ({:.0} fps), median {:.2}, p99 {p99:.2}, max {:.2} ms",
+            t.len(),
+            1000.0 / mean,
+            pct(0.5),
+            t[t.len() - 1]
+        ));
+        self.perf.push((name, mean, p99));
+        if self.perf.len() == SPOTS.len() {
+            let mean = self.perf.iter().map(|p| p.1).sum::<f32>() / self.perf.len() as f32;
+            let worst = self.perf.iter().map(|p| p.2).fold(0.0, f32::max);
+            log(format!("perf all spots: mean {mean:.2} ms ({:.0} fps), worst p99 {worst:.2} ms", 1000.0 / mean));
         }
     }
 
