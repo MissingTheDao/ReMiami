@@ -295,20 +295,23 @@ pub struct Antialiasing {
     pub supersample: u32,
     /// FXAA post pass on the final image.
     pub fxaa: bool,
+    /// SMAA 1x (preset high) on the final image; takes precedence over FXAA.
+    pub smaa: bool,
 }
 
 impl Antialiasing {
-    pub const OFF: Antialiasing = Antialiasing { msaa: 1, supersample: 1, fxaa: false };
+    pub const OFF: Antialiasing = Antialiasing { msaa: 1, supersample: 1, fxaa: false, smaa: false };
     /// Levels 0.. from cheapest to most expensive.
-    pub const LEVELS: [(&'static str, Antialiasing); 8] = [
+    pub const LEVELS: [(&'static str, Antialiasing); 9] = [
         ("Off", Antialiasing::OFF),
-        ("FXAA", Antialiasing { msaa: 1, supersample: 1, fxaa: true }),
-        ("MSAA 2x", Antialiasing { msaa: 2, supersample: 1, fxaa: false }),
-        ("MSAA 4x", Antialiasing { msaa: 4, supersample: 1, fxaa: false }),
-        ("MSAA 4x + FXAA", Antialiasing { msaa: 4, supersample: 1, fxaa: true }),
-        ("MSAA 8x", Antialiasing { msaa: 8, supersample: 1, fxaa: false }),
-        ("SSAA 2x", Antialiasing { msaa: 1, supersample: 2, fxaa: false }),
-        ("SSAA 2x + MSAA 4x", Antialiasing { msaa: 4, supersample: 2, fxaa: false }),
+        ("FXAA", Antialiasing { msaa: 1, supersample: 1, fxaa: true, smaa: false }),
+        ("SMAA", Antialiasing { msaa: 1, supersample: 1, fxaa: false, smaa: true }),
+        ("MSAA 2x", Antialiasing { msaa: 2, supersample: 1, fxaa: false, smaa: false }),
+        ("MSAA 4x", Antialiasing { msaa: 4, supersample: 1, fxaa: false, smaa: false }),
+        ("MSAA 4x + SMAA", Antialiasing { msaa: 4, supersample: 1, fxaa: false, smaa: true }),
+        ("MSAA 8x", Antialiasing { msaa: 8, supersample: 1, fxaa: false, smaa: false }),
+        ("SSAA 2x", Antialiasing { msaa: 1, supersample: 2, fxaa: false, smaa: false }),
+        ("SSAA 2x + MSAA 4x", Antialiasing { msaa: 4, supersample: 2, fxaa: false, smaa: false }),
     ];
 
     pub fn level(n: u32) -> Antialiasing {
@@ -800,6 +803,16 @@ pub struct Renderer {
     /// Supersampling factor of the scene and FXAA (Antialiasing).
     scale: u32,
     fxaa: bool,
+    smaa: bool,
+    smaa_layout: wgpu::BindGroupLayout,
+    smaa_edges: wgpu::RenderPipeline,
+    smaa_weights: wgpu::RenderPipeline,
+    smaa_blend: wgpu::RenderPipeline,
+    smaa_point: wgpu::Sampler,
+    smaa_area: wgpu::Texture,
+    smaa_search: wgpu::Texture,
+    /// Window-size SMAA intermediates: edges (RG8) and blending weights (RGBA8).
+    smaa_tex: Option<(wgpu::Texture, wgpu::Texture, (u32, u32))>,
     post_layout: wgpu::BindGroupLayout,
     post_sampler: wgpu::Sampler,
     down_pipeline: wgpu::RenderPipeline,
@@ -1030,6 +1043,63 @@ impl Renderer {
         };
         let down_pipeline = post_pipeline("down");
         let fxaa_pipeline = post_pipeline("fxaa");
+        // SMAA: three passes over the final image with its lookup textures (assets/smaa).
+        let tex_entry = |binding: u32| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+            count: None,
+        };
+        let smaa_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("smaa"),
+            entries: &[
+                tex_entry(0),
+                tex_entry(1),
+                tex_entry(2),
+                wgpu::BindGroupLayoutEntry { binding: 3, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
+                wgpu::BindGroupLayoutEntry { binding: 4, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
+            ],
+        });
+        let smaa_shader = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("smaa"), source: wgpu::ShaderSource::Wgsl(include_str!("smaa.wgsl").into()) });
+        let smaa_pl = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("smaa"), bind_group_layouts: &[Some(&smaa_layout)], immediate_size: 0 });
+        let smaa_pipeline = |entry: &str, format: wgpu::TextureFormat| {
+            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(entry),
+                layout: Some(&smaa_pl),
+                vertex: wgpu::VertexState { module: &smaa_shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
+                fragment: Some(wgpu::FragmentState { module: &smaa_shader, entry_point: Some(entry), targets: &[Some(format.into())], compilation_options: Default::default() }),
+                primitive: Default::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let smaa_edges = smaa_pipeline("edges", wgpu::TextureFormat::Rg8Unorm);
+        let smaa_weights = smaa_pipeline("weights", wgpu::TextureFormat::Rgba8Unorm);
+        let smaa_blend = smaa_pipeline("blend", SCENE_FORMAT);
+        let smaa_point = d.create_sampler(&wgpu::SamplerDescriptor { label: Some("smaa point"), ..Default::default() });
+        let lookup = |label: &str, w: u32, h: u32, format: wgpu::TextureFormat, bytes_per_texel: u32, data: &[u8]| {
+            let t = d.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            gpu.queue.write_texture(
+                wgpu::TexelCopyTextureInfo { texture: &t, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+                data,
+                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(w * bytes_per_texel), rows_per_image: Some(h) },
+                wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            );
+            t
+        };
+        let smaa_area = lookup("smaa area", 160, 560, wgpu::TextureFormat::Rg8Unorm, 2, include_bytes!("../assets/smaa/area_160x560.rg8"));
+        let smaa_search = lookup("smaa search", 64, 16, wgpu::TextureFormat::R8Unorm, 1, include_bytes!("../assets/smaa/search_64x16.r8"));
         let post_sampler = d.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("post"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -1142,6 +1212,15 @@ impl Renderer {
             msaa: None,
             scale: 1,
             fxaa: false,
+            smaa: false,
+            smaa_layout,
+            smaa_edges,
+            smaa_weights,
+            smaa_blend,
+            smaa_point,
+            smaa_area,
+            smaa_search,
+            smaa_tex: None,
             post_layout,
             post_sampler,
             down_pipeline,
@@ -1676,11 +1755,12 @@ impl Renderer {
         self.samples = Self::supported_samples(gpu, aa.msaa);
         self.scale = aa.supersample.clamp(1, 2);
         self.fxaa = aa.fxaa;
+        self.smaa = aa.smaa;
     }
 
     /// The antialiasing in effect (MSAA after clamping to the device).
     pub fn antialiasing(&self) -> Antialiasing {
-        Antialiasing { msaa: self.samples, supersample: self.scale, fxaa: self.fxaa }
+        Antialiasing { msaa: self.samples, supersample: self.scale, fxaa: self.fxaa, smaa: self.smaa }
     }
 
     fn window_texture(gpu: &Gpu, slot: &mut Option<(wgpu::Texture, (u32, u32))>, size: (u32, u32), label: &str) {
@@ -1697,6 +1777,61 @@ impl Renderer {
             });
             *slot = Some((t, size));
         }
+    }
+
+    /// The three SMAA passes: `src` (window size) antialiased into `dst`.
+    fn smaa_passes(&mut self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, src: &wgpu::Texture, dst: &wgpu::TextureView) {
+        let size = (src.width(), src.height());
+        if self.smaa_tex.as_ref().is_none_or(|t| t.2 != size) {
+            let make = |label: &str, format: wgpu::TextureFormat| {
+                gpu.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some(label),
+                    size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                })
+            };
+            self.smaa_tex = Some((make("smaa edges", wgpu::TextureFormat::Rg8Unorm), make("smaa weights", wgpu::TextureFormat::Rgba8Unorm), size));
+        }
+        let (edges, weights, _) = self.smaa_tex.as_ref().unwrap();
+        let view = |t: &wgpu::Texture| t.create_view(&Default::default());
+        let (src_v, edges_v, weights_v, area_v, search_v) = (view(src), view(edges), view(weights), view(&self.smaa_area), view(&self.smaa_search));
+        let bind = |a: &wgpu::TextureView, b: &wgpu::TextureView, c: &wgpu::TextureView| {
+            gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("smaa"),
+                layout: &self.smaa_layout,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(a) },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(b) },
+                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(c) },
+                    wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Sampler(&self.post_sampler) },
+                    wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Sampler(&self.smaa_point) },
+                ],
+            })
+        };
+        let pass = |enc: &mut wgpu::CommandEncoder, pipeline: &wgpu::RenderPipeline, group: &wgpu::BindGroup, target: &wgpu::TextureView| {
+            let mut p = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("smaa"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    depth_slice: None,
+                    // Edges and weights must start at 0 (the edge pass discards edge-free pixels).
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store },
+                })],
+                ..Default::default()
+            });
+            p.set_pipeline(pipeline);
+            p.set_bind_group(0, group, &[]);
+            p.draw(0..3, 0..1);
+        };
+        pass(enc, &self.smaa_edges, &bind(&src_v, &src_v, &src_v), &edges_v);
+        pass(enc, &self.smaa_weights, &bind(&edges_v, &area_v, &search_v), &weights_v);
+        pass(enc, &self.smaa_blend, &bind(&src_v, &weights_v, &src_v), dst);
     }
 
     /// One filtering pass: `src` sampled into `dst` (whole texture, or the `viewport`).
@@ -2045,11 +2180,15 @@ impl Renderer {
             self.post_pass(gpu, enc, &self.down_pipeline, &self.scene.as_ref().unwrap().0, &dst, None);
             last = 1;
         }
-        if self.fxaa {
-            Self::window_texture(gpu, &mut self.post_tex, window, "fxaa");
-            let src = if last == 1 { &self.frame_tex.as_ref().unwrap().0 } else { &self.scene.as_ref().unwrap().0 };
+        if self.smaa || self.fxaa {
+            Self::window_texture(gpu, &mut self.post_tex, window, "post aa");
+            let src = if last == 1 { self.frame_tex.as_ref().unwrap().0.clone() } else { self.scene.as_ref().unwrap().0.clone() };
             let dst = self.post_tex.as_ref().unwrap().0.create_view(&Default::default());
-            self.post_pass(gpu, enc, &self.fxaa_pipeline, src, &dst, None);
+            if self.smaa {
+                self.smaa_passes(gpu, enc, &src, &dst);
+            } else {
+                self.post_pass(gpu, enc, &self.fxaa_pipeline, &src, &dst, None);
+            }
             last = 2;
         }
         self.last_output = last;

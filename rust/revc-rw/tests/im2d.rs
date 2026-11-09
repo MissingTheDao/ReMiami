@@ -715,6 +715,8 @@ fn aa_levels(backend: Backend) {
     let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
     let v = |x: f32, y: f32| Vertex2D { x, y, z: 0.0, w: 1.0, r: 255, g: 255, b: 255, a: 255, u: 0.0, v: 0.0 };
     let mut counts = Vec::new();
+    let mut images = Vec::new();
+    assert_eq!(Antialiasing::LEVELS[6].0, "MSAA 8x");
     for (i, (name, aa)) in Antialiasing::LEVELS.iter().enumerate() {
         r.set_antialiasing(&gpu, Antialiasing::level(i as u32));
         assert_eq!(r.antialiasing(), *aa, "{backend:?} {name}");
@@ -743,7 +745,16 @@ fn aa_levels(backend: Backend) {
         assert_eq!(px(&img, 56, 56), [0, 0, 0, 255], "{backend:?} {name}: outside");
         let edge = img.as_chunks::<4>().0.iter().filter(|p| p[0] > 10 && p[0] < 245).count();
         counts.push((*name, edge));
+        images.push(img);
     }
+    // Quality: distance to MSAA 8x (close to the true coverage of the edge). Post-process AA
+    // must get much closer to it than no antialiasing.
+    let reference = &images[6];
+    let err = |img: &Vec<u8>| img.iter().zip(reference).map(|(a, b)| a.abs_diff(*b) as u64).sum::<u64>() as f64 / img.len() as f64;
+    let (off, fxaa, smaa) = (err(&images[0]), err(&images[1]), err(&images[2]));
+    eprintln!("{backend:?} mean difference to MSAA 8x: off {off:.3}, FXAA {fxaa:.3}, SMAA {smaa:.3}");
+    assert!(smaa < off * 0.8 && smaa < fxaa, "{backend:?} SMAA {smaa:.3} not closer to MSAA 8x than off {off:.3} and FXAA {fxaa:.3}");
+    assert!(fxaa < off, "{backend:?} FXAA {fxaa:.3} not closer to MSAA 8x than off {off:.3}");
     assert_eq!(counts[0].1, 0, "{backend:?} Off must leave edges hard: {counts:?}");
     for (name, n) in &counts[1..] {
         assert!(*n > 20, "{backend:?} {name}: only {n} soft edge pixels ({counts:?})");

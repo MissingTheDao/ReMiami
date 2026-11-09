@@ -181,30 +181,35 @@ test (edge pixels only with MSAA) on both backends; in game 4x on Vulkan and GL,
 edges.
 
 **Antialiasing suite (plan task 22).** One setting, Display Setup > Antialiasing (wgpu build;
-replaces MultiSampling there; ini `[Graphics] Antialiasing=0..7`), switches live, levels from
+replaces MultiSampling there; ini `[Graphics] Antialiasing=0..8`), switches live, levels from
 cheapest to most expensive:
 
 | Level | Method | Cost |
 |---|---|---|
 | 0 Off | | none |
 | 1 FXAA | post pass on the final image | one cheap full-screen pass |
-| 2 MSAA 2x | multisampled scene, resolved each pass | 2 samples on geometry edges |
-| 3 MSAA 4x | | 4 samples |
-| 4 MSAA 4x + FXAA | both | |
-| 5 MSAA 8x | | 8 samples |
-| 6 SSAA 2x | scene drawn at 2x width and height, filtered down | 4x the pixels |
-| 7 SSAA 2x + MSAA 4x | both | highest |
+| 2 SMAA | SMAA 1x (preset High): edges, blend weights, blend | three full-screen passes |
+| 3 MSAA 2x | multisampled scene, resolved each pass | 2 samples on geometry edges |
+| 4 MSAA 4x | | 4 samples |
+| 5 MSAA 4x + SMAA | both | |
+| 6 MSAA 8x | | 8 samples |
+| 7 SSAA 2x | scene drawn at 2x width and height, filtered down | 4x the pixels |
+| 8 SSAA 2x + MSAA 4x | both | highest |
 
 `revc_rw::frame::Antialiasing::LEVELS`; the device sends the level to the renderer when it
 changes (`rw::wgpu::antialiasing`, checked in beginUpdate) and again for a new window. After the
-scene, a short chain: supersampled scene filtered down to window size, then FXAA, then shown;
+scene, a short chain: supersampled scene filtered down to window size, then FXAA or SMAA, then shown;
 screenshots read the last image; frame copies (colour filter, droplets) are filtered down too when
 supersampling. MSAA counts other than 1 and 4 need wgpu's adapter-specific format features, now
 requested when available (2x/8x then work on Vulkan; without them the count falls back).
-Checked: offscreen test of all eight levels on both backends (pure inside/outside, Off leaves the
+Checked: offscreen test of all nine levels on both backends (pure inside/outside, Off leaves the
 edge hard, every other level softens it); in game every level applies (log
-`revc: antialiasing ...`). FXAA also softens HUD text a little, as FXAA does. Not in the suite:
-SMAA (needs its lookup textures, MIT, from the SMAA repository: asks first), TAA (no motion
+`revc: antialiasing ...`). FXAA also softens HUD text a little, as FXAA does. SMAA is a WGSL port of
+the reference SMAA.hlsl (iryoku/smaa, MIT) with its precomputed area and search textures in
+`rust/revc-rw/assets/smaa/` (source and hashes in SOURCE.md); the offscreen test requires it to
+come closer to MSAA 8x than Off and FXAA (Vulkan and GL: off 0.83, FXAA 0.77, SMAA 0.62 mean
+difference). The levels were renumbered when SMAA came in: an ini saved before now picks the
+next cheaper level. Not in the suite: TAA (no motion
 vectors in this renderer). Temporal upscalers (FSR 3/4, XeSS, DLSS) are a later goal.
 
 ## What the game calls

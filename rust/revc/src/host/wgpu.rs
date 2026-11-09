@@ -272,7 +272,7 @@ pub extern "C" fn revc_rw_set_antialiasing(level: i32) {
                 let (name, _) = Antialiasing::LEVELS.get(level.max(0) as usize).copied().unwrap_or(Antialiasing::LEVELS[0]);
                 r.set_antialiasing(&p.gpu, Antialiasing::level(level.max(0) as u32));
                 let aa = r.antialiasing();
-                eprintln!("revc: antialiasing {name} (MSAA {}x, supersampling {}x, FXAA {})", aa.msaa, aa.supersample, if aa.fxaa { "on" } else { "off" });
+                eprintln!("revc: antialiasing {name} (MSAA {}x, supersampling {}x, FXAA {}, SMAA {})", aa.msaa, aa.supersample, if aa.fxaa { "on" } else { "off" }, if aa.smaa { "on" } else { "off" });
             }
         })
     });
