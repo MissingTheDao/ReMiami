@@ -1,0 +1,11 @@
+; synthetic surface.dat
+;
+  Rubber	8.124
+Hard, -	3.240  -
+Road	8.3	4,0.1
+
+Loose, 5.01e0  4.903,8.2,0.6  2.46e0
+Sand	8.682, 0.1134859	8	2.0	3.6255672
+; comment line
+
+Wet 0 7 0.1504295	8.4049520  0.925		6.787

@@ -1,0 +1,15 @@
+; synthetic surface.dat
+;
+; comment line
+Rubber		3.36e0
+; comment line
+
+  Hard,8.7, -
+; comment line
+Road		7.100, 4.6270175, 3.178  2.06e0
+
+Loose		6.549	8.5294790  0.91e0,1.07e0
+; comment line
+
+Sand,1 5.0	3.3  -,7
+Wet,6.237 6.8022518, 1.7	-, 4.9,7.505

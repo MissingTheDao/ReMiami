@@ -14,6 +14,7 @@ mod savefile;
 mod collision;
 mod cscan;
 mod savefix;
+mod surface;
 mod tempcolmodels;
 mod handling;
 mod weaponinfo;
