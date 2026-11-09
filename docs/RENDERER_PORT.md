@@ -20,6 +20,18 @@ swapchain (the game's colours are gamma-space, like GL3's output). Check by hand
 RX 9070 XT. Headless GL picked the integrated GPU; with a window the surface decides and both
 backends use the discrete GPU.
 
+**Stage 1, step 1 done: the game runs on librw's new WGPU platform** (`vendor/librw/src/wgpu/`,
+`PLATFORM_WGPU`). Build it with `cd rust && CARGO_TARGET_DIR=target-wgpu cargo build --features wgpu`
+(the default build stays GL3); pick the backend with `REVC_RENDERER_BACKEND=vulkan|gl`. The host
+creates the window without a GL context and `rust/revc/src/host/wgpu.rs` presents through
+`Presenter`. The device clears the camera and presents (`revc_rw_begin_frame/clear/present`);
+rasters are RGBA8 in memory for every mip level (`wgpuraster.cpp`), not on the GPU yet; Im2D,
+Im3D and atomics are no-ops, so frames are blank. Checked: `REVC_TEST=boot` reaches the front end
+on Vulkan and GL, `saveload` loads into the world with a clean shutdown (screenshots aren't
+possible yet: the camera raster can't be read). The game's PC-host input code, gated on
+`RW_GL3`, now also builds for `RW_WGPU`; the GL3/D3D9-only extras (colour filter, custom
+pipelines, droplets, new renderer) are compiled out for WGPU until the renderer can do them.
+
 ## What the game calls
 
 The game reaches librw only through the RenderWare-style API in `cpp/re3-miami/src/fakerw`

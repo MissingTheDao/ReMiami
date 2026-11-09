@@ -12,6 +12,8 @@ mod joystick;
 mod keymap;
 mod glyphs;
 mod pads;
+#[cfg(feature = "wgpu")]
+mod wgpu;
 
 pub use pads::PadKind;
 
@@ -321,6 +323,7 @@ unsafe extern "C" fn api_get_video_mode(_: *mut c_void, display: i32, index: i32
 }
 
 /// Same fallback order as librw's SDL2/GLFW backends.
+#[cfg(not(feature = "wgpu"))]
 const PROFILES: [(SDL_GLProfile, c_int, c_int); 4] = [
     (SDL_GL_CONTEXT_PROFILE_CORE, 3, 3),
     (SDL_GL_CONTEXT_PROFILE_COMPATIBILITY, 2, 1),
@@ -351,6 +354,41 @@ unsafe extern "C" fn api_create_window(
     let remembered = with(|host| host.geometry);
     let (w, h) = if fullscreen { (mode.width, mode.height) } else { remembered.size.unwrap_or((width, height)) };
 
+    // wgpu renderer: a window without a GL context; revc-rw presents to it.
+    #[cfg(feature = "wgpu")]
+    {
+        let _ = (samples, gles, glversion);
+        let win = unsafe { SDL_CreateWindow(title, w, h, SDL_WINDOW_RESIZABLE) };
+        if win.is_null() {
+            eprintln!("revc: SDL_CreateWindow failed: {}", sdl_error());
+            return null_mut();
+        }
+        if !fullscreen {
+            restore_windowed_placement(win, &remembered);
+        } else {
+            unsafe {
+                SDL_SetWindowFullscreenMode(win, sdl_mode);
+                SDL_SetWindowFullscreen(win, true);
+            }
+        }
+        if let Err(e) = wgpu::create(win) {
+            eprintln!("revc: {e}");
+            unsafe { SDL_DestroyWindow(win) };
+            return null_mut();
+        }
+        unsafe {
+            *gles = 0;
+            *glversion = 0;
+        }
+        with(|host| {
+            host.window = win;
+            host.cursor = (w as f64 / 2.0, h as f64 / 2.0);
+        });
+        #[allow(clippy::needless_return)]
+        return win.cast();
+    }
+
+    #[cfg(not(feature = "wgpu"))]
     unsafe {
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
         SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
@@ -359,6 +397,7 @@ unsafe extern "C" fn api_create_window(
         SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, samples.max(0));
     }
 
+    #[cfg(not(feature = "wgpu"))]
     for (profile, major, minor) in PROFILES {
         unsafe {
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, profile.0);
@@ -397,11 +436,16 @@ unsafe extern "C" fn api_create_window(
         });
         return win.cast();
     }
-    eprintln!("revc: could not create an OpenGL context: {}", sdl_error());
-    null_mut()
+    #[cfg(not(feature = "wgpu"))]
+    {
+        eprintln!("revc: could not create an OpenGL context: {}", sdl_error());
+        null_mut()
+    }
 }
 
 unsafe extern "C" fn api_destroy_window(_: *mut c_void, win: *mut c_void) {
+    #[cfg(feature = "wgpu")]
+    wgpu::destroy();
     with(|h| unsafe {
         if !h.gl.is_null() {
             SDL_GL_DestroyContext(h.gl);

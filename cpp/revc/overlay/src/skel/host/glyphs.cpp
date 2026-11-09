@@ -3,7 +3,7 @@
 // follow the pad in use: the Rust host (rust/revc/src/host/glyphs.rs) picks and decodes the right
 // images from assets/glyphs (Kenney Input Prompts); without those assets the game's own
 // x360btns / ps3btns / nswbtns TXDs are used per pad family.
-#if defined RW_GL3 && defined LIBRW_HOST
+#if defined LIBRW_HOST
 
 #include "common.h"
 #include "rwcore.h"

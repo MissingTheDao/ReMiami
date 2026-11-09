@@ -19,3 +19,9 @@ png = "0.18"
 revc-audio = { path = "../revc-audio" }
 revc-timing = { path = "../revc-timing" }
 revc-formats = { path = "../revc-formats" }
+# Renderer on wgpu (plan task 12), only with the `wgpu` feature.
+revc-rw = { path = "../revc-rw", optional = true }
+
+[features]
+# Draw with revc-rw on wgpu (Vulkan/OpenGL) through librw's WGPU platform instead of GL3.
+wgpu = ["dep:revc-rw"]

@@ -1,6 +1,6 @@
 // Automation hooks for the regression harness (rust/revc/src/testdrive.rs, scripts/test.sh).
 // Plain C entry points over game state; they do nothing unless the Rust host is in test mode.
-#if defined RW_GL3 && defined LIBRW_HOST
+#if defined LIBRW_HOST
 
 #include "common.h"
 #include "rwcore.h"

@@ -4,5 +4,6 @@
 /logs/
 # Build output
 /rust/target/
+/rust/target-*/
 /cpp/re3-miami/build/
 *.gguf

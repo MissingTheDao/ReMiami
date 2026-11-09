@@ -22,6 +22,10 @@
 #define RW_GLES
 #endif
 
+#ifdef RW_WGPU
+#define RWDEVICE wgpu
+#endif
+
 #ifdef RW_D3D9
 #define RWDEVICE d3d
 #define RWHALFPIXEL
@@ -540,6 +544,7 @@ enum Platform
 
 	PLATFORM_WDGL = 11,	// WarDrum OpenGL
 	PLATFORM_GL3  = 12,	// my GL3 implementation
+	PLATFORM_WGPU = 13,	// revc: Rust host on wgpu (Vulkan / OpenGL)
 
 	NUM_PLATFORMS,
 
@@ -613,6 +618,7 @@ enum PluginID
 	ID_RASTERD3D9    = MAKEPLUGINID(VEND_RASTER, PLATFORM_D3D9),
 	ID_RASTERWDGL    = MAKEPLUGINID(VEND_RASTER, PLATFORM_WDGL),
 	ID_RASTERGL3     = MAKEPLUGINID(VEND_RASTER, PLATFORM_GL3),
+	ID_RASTERWGPU    = MAKEPLUGINID(VEND_RASTER, PLATFORM_WGPU),
 
 	// anything driver/device related (only as allocation tag)
 	ID_DRIVER        = MAKEPLUGINID(VEND_DRIVER, 0)

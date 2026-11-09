@@ -1,6 +1,6 @@
 // Texture mods, C++ half: swap rasters of loaded textures for images supplied by the Rust host
 // (rust/revc/src/texmods.rs indexes mods/textures and decodes PNG/DDS to RGBA8).
-#if defined RW_GL3 && defined LIBRW_HOST
+#if defined LIBRW_HOST
 
 #include "common.h"
 #include "rwcore.h"

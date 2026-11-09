@@ -28,7 +28,12 @@ fn main() {
     let mut cfg = Command::new("cmake");
     cfg.arg("-S").arg(&src).arg("-B").arg(&build)
         .args(["-G", "Ninja", "-DCMAKE_BUILD_TYPE=RelWithDebInfo", "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"])
-        .args(["-DLIBRW_PLATFORM=GL3", "-DLIBRW_GL3_GFXLIB=HOST"])
+        // Feature `wgpu`: librw's WGPU platform, drawing in Rust (plan task 12); else GL3.
+        .args(if env::var_os("CARGO_FEATURE_WGPU").is_some() {
+            &["-DLIBRW_PLATFORM=WGPU", "-DLIBRW_GL3_GFXLIB=HOST"][..]
+        } else {
+            &["-DLIBRW_PLATFORM=GL3", "-DLIBRW_GL3_GFXLIB=HOST"][..]
+        })
         .args(["-DREVC_AUDIO=OAL", "-DREVC_VENDORED_LIBRW=ON"])
         .args(["-DCMAKE_C_COMPILER=clang", "-DCMAKE_CXX_COMPILER=clang++"]);
     // Reproducible output: map checkout and build paths out of __FILE__ strings and debug

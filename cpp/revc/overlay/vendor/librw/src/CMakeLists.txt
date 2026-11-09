@@ -82,6 +82,10 @@ add_library(librw
     gl/glad/glad.c
     gl/glad/khrplatform.h
 
+    wgpu/rwwgpu.h
+    wgpu/wgpudevice.cpp
+    wgpu/wgpuraster.cpp
+
     lodepng/lodepng.h
     lodepng/lodepng.cpp
 
@@ -148,6 +152,10 @@ set_target_properties(librw
         PREFIX ""
 )
 
+if(LIBRW_PLATFORM_WGPU)
+    # revc: window from the host (like the GL3 HOST gfxlib), drawing in the Rust host on wgpu.
+    target_compile_definitions(librw PUBLIC LIBRW_HOST)
+endif()
 if(LIBRW_PLATFORM_GL3)
     if (LIBRW_GL3_GFXLIB STREQUAL "GLFW")
         find_package(glfw3 REQUIRED)

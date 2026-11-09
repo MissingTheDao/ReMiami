@@ -732,6 +732,7 @@ dependencies = [
  "png",
  "revc-audio",
  "revc-formats",
+ "revc-rw",
  "revc-timing",
  "sdl3-sys",
 ]
