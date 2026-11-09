@@ -1,0 +1,15 @@
+[package]
+name = "revc-rw"
+description = "Rust replacement for librw (plan task 12): RenderWare-style rendering on wgpu with a selectable Vulkan or OpenGL backend"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+wgpu = "30.0.1"
+pollster = "1.0.1"
+revc-formats = { path = "../revc-formats" }
+
+[dev-dependencies]
+png = "0.18"
