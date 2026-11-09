@@ -26,6 +26,7 @@ unsafe extern "C" {
     fn revc_test_show_buttons();
     fn revc_test_glyph_sets_loaded() -> i32;
     fn revc_test_game_ms() -> u32;
+    fn revc_test_touch_input();
     fn revc_test_set_prompt_style(style: i32);
 }
 
@@ -95,8 +96,9 @@ pub struct PadTest {
     frames: u32,
     /// Game time the current step started (for waits).
     t0: u32,
-    /// Game time the scenario started: screenshots are taken at fixed times after it, so animated
-    /// things in the scene (pickups, zone names) look the same whatever the frame pacing.
+    /// Game time the screenshot times count from: the scenario start rounded up to a multiple of
+    /// SPIN_PERIOD_MS, so animated things in the scene (pickups, zone names) look the same whatever
+    /// the frame pacing and the game time the scenario happened to start at.
     start: Option<u32>,
     ps5: Option<SDL_JoystickID>,
     deck: Option<SDL_JoystickID>,
@@ -112,6 +114,9 @@ const HELP_SETTLE_MS: u32 = 1500;
 /// Game time after the scenario start of the three glyph screenshots (each step needs well under
 /// a second plus HELP_SETTLE_MS; the log shows the margin).
 const CAPTURE_AT_MS: [u32; 3] = [4000, 9000, 14000];
+/// Pickups spin with the absolute game time (CPickups::DoPickUpEffects: periods of 0x200 to 0x1000
+/// ms), so the base of the screenshot times must be the same modulo the longest period.
+const SPIN_PERIOD_MS: u32 = 0x1000;
 
 impl PadTest {
     fn next(&mut self) {
@@ -141,17 +146,23 @@ impl PadTest {
         }
         self.frames += 1;
         let waited_too_long = self.frames > STEP_LIMIT;
+        // No idle animations (random) in the screenshots.
+        unsafe { revc_test_touch_input() };
         let now = unsafe { revc_test_game_ms() };
-        let start = *self.start.get_or_insert(now);
+        let start = *self.start.get_or_insert(now.div_ceil(SPIN_PERIOD_MS) * SPIN_PERIOD_MS);
         let help_shown = now.wrapping_sub(self.t0) >= HELP_SETTLE_MS;
         let capture_index = match self.step {
             4 => 0,
             9 => 1,
             _ => 2,
         };
-        let settled = help_shown && now.wrapping_sub(start) >= CAPTURE_AT_MS[capture_index];
+        let settled = help_shown && now >= start && now - start >= CAPTURE_AT_MS[capture_index];
         if settled && matches!(self.step, 4 | 9 | 12) {
-            self.log.push(format!("capture at +{} ms (help box up since +{} ms)", now.wrapping_sub(start), self.t0.wrapping_add(HELP_SETTLE_MS).wrapping_sub(start)));
+            self.log.push(format!(
+                "capture at +{} ms, game time {now} (help box up since {:+} ms)",
+                now.wrapping_sub(start),
+                i64::from(self.t0.wrapping_add(HELP_SETTLE_MS)) - i64::from(start)
+            ));
         }
         match self.step {
             0 => {

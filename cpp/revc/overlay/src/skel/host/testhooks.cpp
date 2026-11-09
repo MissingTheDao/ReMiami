@@ -79,6 +79,14 @@ revc_test_game_ms(void)
 	return CTimer::GetTimeInMilliseconds();
 }
 
+// Counts as player 1 input now: the player's idle animations (CPlayerPed::PlayIdleAnimations,
+// random, after 30 s without input) stay off, so screenshots don't depend on them.
+void
+revc_test_touch_input(void)
+{
+	CPad::GetPad(0)->LastTimeTouched = CTimer::GetTimeInMilliseconds();
+}
+
 // Non-zero while the screen is fading or faded (e.g. the fade-in after loading a save).
 int
 revc_test_fading(void)

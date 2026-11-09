@@ -4,7 +4,7 @@
 # needs no build tools (builds are made here and copied).
 #
 # usage: scripts/n150.sh <command> [args]
-#   deploy                   build release (GL3 + wgpu), copy them with tests/ and game/ to the box
+#   deploy                   build release (GL3 + wgpu), copy them with assets/, tests/ and game/ to the box
 #   test [--wgpu] [--backend vulkan|gl] [scenario ...]
 #                            run the regression suite there (Intel driver: catches driver-specific
 #                            rendering bugs; runs alongside a local suite as a second runner)
@@ -129,7 +129,7 @@ case "$cmd" in
     cp "$ROOT/rust/target/release/revc" "$STAGE/bin/revc-gl3"
     cp "$ROOT/rust/target-wgpu/release/revc" "$STAGE/bin/revc-wgpu"
     cp "$ROOT/scripts/perf.sh" "$ROOT/scripts/test.sh" "$ROOT/scripts/headless.sh" "$STAGE/scripts/"
-    cp -r "$ROOT/tests" "$STAGE/"
+    cp -r "$ROOT/tests" "$ROOT/assets" "$STAGE/"   # assets: controller glyphs, found next to bin/
     git -C "$ROOT" describe --always --dirty > "$STAGE/COMMIT"
     rsync -a --delete --exclude game --exclude rust --exclude results "$STAGE/" "$HOST:$DIR/" || exit 1
     # Your own game files (never committed); user mods and settings stay here.
