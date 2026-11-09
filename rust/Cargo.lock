@@ -94,11 +94,16 @@ version = "0.1.0"
 dependencies = [
  "png",
  "revc-audio",
+ "revc-timing",
  "sdl3-sys",
 ]
 
 [[package]]
 name = "revc-audio"
+version = "0.1.0"
+
+[[package]]
+name = "revc-timing"
 version = "0.1.0"
 
 [[package]]

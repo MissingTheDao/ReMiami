@@ -17,3 +17,4 @@ sdl3-sys = "0.7"
 # PNG screenshots for the regression harness (testdrive.rs).
 png = "0.18"
 revc-audio = { path = "../revc-audio" }
+revc-timing = { path = "../revc-timing" }

@@ -796,6 +796,30 @@ pub unsafe extern "C" fn hostGetDesktopMode(w: *mut c_int, ht: *mut c_int, hz: *
     }
 }
 
+// ---------------------------------------------------------------- fixed-timestep clock
+
+thread_local! {
+    static SIM_CLOCK: RefCell<(revc_timing::FixedStep, Option<std::time::Instant>)> =
+        RefCell::new((revc_timing::FixedStep::new(30, 4), None));
+}
+
+/// 30 Hz simulation steps due this frame (see revc_timing::FixedStep); `alpha` gets the
+/// position between the last step and the next one, for render interpolation.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn hostSimStepsDue(alpha: *mut f32) -> c_int {
+    let (steps, a) = SIM_CLOCK.with(|c| {
+        let mut c = c.borrow_mut();
+        let now = std::time::Instant::now();
+        let elapsed = c.1.map_or(std::time::Duration::ZERO, |t| now - t);
+        c.1 = Some(now);
+        c.0.advance(elapsed)
+    });
+    if !alpha.is_null() {
+        unsafe { *alpha = a };
+    }
+    steps as c_int
+}
+
 // ---------------------------------------------------------------- joysticks
 
 #[unsafe(no_mangle)]
