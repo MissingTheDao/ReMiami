@@ -1,10 +1,9 @@
 #include "common.h"
 
-#if defined(AUDIO_OAL) && defined(AUDIO_RUST_SFX)
+#ifdef AUDIO_OAL
 // CChannel backed by the Rust mixer (rust/revc/src/audio): sound-effect voices are mixed in Rust
-// and played through SDL3. Streams (music, radio, cutscene audio) still use OpenAL
-// (oal/stream.cpp) until they move too. Build with -DREVC_RUST_SFX=OFF to use channel.cpp
-// (OpenAL voices) instead, e.g. to compare by ear.
+// and played through SDL3. Streams (music, radio, cutscene audio) go through oal/stream.cpp and the
+// OpenAL-subset in oal/rust_al.h, also implemented in Rust.
 #include "channel.h"
 #include "sampman.h"
 #include <float.h>

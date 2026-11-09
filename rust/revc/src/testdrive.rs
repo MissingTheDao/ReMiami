@@ -279,7 +279,7 @@ impl Driver {
                     self.fail("no sound effects were started during play".into());
                 }
             }
-            None => log("audio: Rust mixer not in use (REVC_RUST_SFX=OFF?)"),
+            None => log("audio: sound-effect mixer not open"),
         }
         match crate::audio::take_stream_frames() {
             Some(frames) => {
@@ -290,7 +290,7 @@ impl Driver {
                     self.fail("no streamed audio (music/ambience) was mixed during play".into());
                 }
             }
-            None => log("audio: streams not on the Rust mixer (REVC_RUST_STREAMS=OFF?)"),
+            None => log("audio: no stream sources created"),
         }
     }
 

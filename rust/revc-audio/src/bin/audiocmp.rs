@@ -1,4 +1,4 @@
-//! A/B audio comparison of two recordings of the same scene (scripts/audio-ab.sh).
+//! Audio comparison of two recordings of the same scene (scripts/test.sh audio with REVC_TEST_WAV).
 //!
 //! usage: audiocmp <reference.wav> <candidate.wav[+other.wav...]> [--json]
 //! A candidate given as `a.wav+b.wav` is the sum of those recordings (a build that plays through

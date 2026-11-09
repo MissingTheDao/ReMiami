@@ -4,9 +4,9 @@
 #   --bless  accept the current screenshots as the new references (tests/reference/)
 #   --keep   keep the temporary game folder
 # Needs a display (the game opens a window). Game data: REVC_GAME_DIR or ./game.
-# Scenarios: boot, saveload (default), audio (scripted scene with sound; see scripts/audio-ab.sh).
+# Scenarios: boot, saveload (default), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
 # A scenario uses tests/config/<scenario>.ini if present, else tests/config/reVC.ini.
-# REVC_TEST_BIN=path runs that binary instead of building rust/ (used by scripts/audio-ab.sh).
+# REVC_TEST_BIN=path runs that binary instead of building rust/.
 # Output and logs: rust/target/test-output/
 set -uo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)

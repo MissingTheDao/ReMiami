@@ -1,12 +1,40 @@
 #pragma once
 
-// Streams (music, radio, cutscene audio) on the Rust mixer (rust/revc-audio/src/al.rs).
-// That module implements the OpenAL streaming-source subset oal/stream.cpp uses, so stream.cpp
-// keeps its logic and only has its al* calls renamed here. Same AL types and enum values.
-// Build with -DREVC_RUST_STREAMS=OFF to use real OpenAL for streams instead.
+// The OpenAL subset reVC's audio code still uses, implemented by the Rust host (rust/revc/src/audio,
+// rust/revc-audio). OpenAL itself is no longer used: this header provides the type names and
+// constants (same values as OpenAL) and redirects the stream calls in oal/stream.cpp and
+// sampman_oal.cpp to Rust, so that code keeps its logic unchanged.
 
-#if defined(AUDIO_OAL) && defined(AUDIO_RUST_STREAMS)
-#include <AL/al.h>
+#ifdef AUDIO_OAL
+
+typedef unsigned int ALuint;
+typedef int ALint;
+typedef int ALenum;
+typedef int ALsizei;
+typedef float ALfloat;
+typedef char ALboolean;
+typedef char ALchar;
+typedef void ALvoid;
+
+#define AL_NONE 0
+#define AL_FALSE 0
+#define AL_TRUE 1
+#define AL_SOURCE_RELATIVE 0x202
+#define AL_PITCH 0x1003
+#define AL_POSITION 0x1004
+#define AL_GAIN 0x100A
+#define AL_SOURCE_STATE 0x1010
+#define AL_INITIAL 0x1011
+#define AL_PLAYING 0x1012
+#define AL_PAUSED 0x1013
+#define AL_STOPPED 0x1014
+#define AL_BUFFERS_QUEUED 0x1015
+#define AL_BUFFERS_PROCESSED 0x1016
+#define AL_ROLLOFF_FACTOR 0x1021
+#define AL_SAMPLE_OFFSET 0x1025
+#define AL_BYTE_OFFSET 0x1026
+#define AL_FORMAT_MONO16 0x1101
+#define AL_FORMAT_STEREO16 0x1103
 
 #ifdef __cplusplus
 extern "C" {

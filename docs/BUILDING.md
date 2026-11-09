@@ -17,7 +17,7 @@ Never committed: `game/` (your private copy of Vice City), `ai/` (llama.cpp and 
 Arch / CachyOS packages (exact versions the build was verified with are in `scripts/deps.lock`):
 
 ```bash
-sudo pacman -S --needed rust clang cmake ninja sdl3 openal mpg123 libglvnd
+sudo pacman -S --needed rust clang cmake ninja sdl3 mpg123 libglvnd
 ```
 
 Optional: `sccache` (C++ compile cache, used automatically when installed).
@@ -74,12 +74,11 @@ screenshots and diff images go to `rust/target/test-output/`. Details: `tests/RE
 
 Sound effects and streams (music, radio, cutscene audio) are mixed in Rust (`rust/revc-audio`,
 unit-tested with `cargo test -p revc-audio`) and played through SDL3, including the environmental
-reverb (`revc-audio/src/reverb.rs`). OpenAL is still linked for device/provider detection and the
-audio-provider menu until those are removed. To compare with the original OpenAL
-output, build once with either or both switches off:
+reverb (`revc-audio/src/reverb.rs`). OpenAL is not used any more; the game's OpenAL-style audio code
+(`sampman_oal.cpp`, `oal/stream.cpp`) talks to the Rust mixer through `oal/rust_al.h`.
 
-```bash
-cd rust && REVC_CMAKE_ARGS="-DREVC_RUST_SFX=OFF -DREVC_RUST_STREAMS=OFF" cargo run
-```
-
-The next plain `cargo run` switches back.
+The mixer reproduces OpenAL Soft's measured gains (`tests/calibrate/`, checked by a unit test).
+For listening comparisons: `scripts/test.sh audio` plays a scripted scene (walk, fire) and
+`REVC_TEST_WAV=out.wav` records the mixer output; `cargo run -p revc-audio --bin audiocmp a.wav b.wav`
+compares two recordings. The last commit that could still build with OpenAL (for an A/B reference)
+is `15d2669`.

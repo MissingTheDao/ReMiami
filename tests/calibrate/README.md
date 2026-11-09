@@ -8,6 +8,8 @@ The result is saved as `openal-soft-gains.txt`; `rust/revc-audio` has a unit tes
 Finding (OpenAL Soft 1.25.2): stereo panning is linear in the sideways component,
 L = (1 - p)/2, R = (1 + p)/2, i.e. 0.5 per channel for a centred source (not constant power).
 
+The game no longer uses OpenAL; re-measuring needs the `openal` package installed:
+
 ```bash
-tests/calibrate/run.sh > tests/calibrate/openal-soft-gains.txt   # after an OpenAL update
+tests/calibrate/run.sh > tests/calibrate/openal-soft-gains.txt
 ```

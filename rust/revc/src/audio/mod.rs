@@ -107,7 +107,7 @@ fn with_mixer(f: impl FnOnce(&mut Mixer)) {
 }
 
 /// Opens the SDL playback device if it isn't open yet. Both sound effects and streams need it,
-/// and either may be on the Rust mixer without the other (REVC_RUST_SFX / REVC_RUST_STREAMS).
+/// and streams create their sources before the sound-effect channels are opened.
 /// It stays open until `close_device()` (host shutdown).
 fn ensure_device() -> bool {
     if !STREAM.load(Ordering::Acquire).is_null() {
