@@ -107,6 +107,7 @@ struct WgpuRaster
 	uint8 *levels[16];
 	bool32 hasAlpha;
 	int32 baseWidth, baseHeight;
+	int32 dxt;		// 0: RGBA8 levels; 1, 3, 5: DXT blocks as in the TXD (top row first)
 	uint32 texId;		// host texture, 0 = not uploaded yet
 	bool32 dirty;		// written since the last upload
 	bool32 autogenMipmap;	// MIPMAP|AUTOMIPMAP: one level here, the host builds the chain
@@ -130,6 +131,11 @@ struct DrawState
 
 // Uploads the raster if it changed; returns its host texture (0 if it has no pixels).
 uint32 uploadRaster(Raster *raster);
+
+// Makes a (DONTALLOCATE) texture raster hold DXT blocks (D3D8 TXD textures keep their
+// compression; the host samples them as BC or decodes them).
+void allocateDXT(Raster *raster, int32 dxt, int32 numLevels, bool32 hasAlpha);
+int32 dxtLevelSize(int32 dxt, int32 width, int32 height);
 
 extern int32 nativeRasterOffset;
 #define GETWGPURASTEREXT(raster) PLUGINOFFSET(rw::wgpu::WgpuRaster, raster, rw::wgpu::nativeRasterOffset)

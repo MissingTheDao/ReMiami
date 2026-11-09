@@ -185,12 +185,12 @@ mod tests {
         let width = 4u32;
         let height = 2u32;
         let mut base = vec![0u8; (width * height * 4) as usize];
-        
+
         // Fill with distinct values for testing
         for y in 0..height {
             for x in 0..width {
                 let idx = (y * width + x) * 4;
-                base[idx as usize] = 100;     // R
+                base[idx as usize] = 100; // R
                 base[idx as usize + 1] = 150; // G
                 base[idx as usize + 2] = 200; // B
                 base[idx as usize + 3] = 255; // A
@@ -201,13 +201,13 @@ mod tests {
 
         // Expected levels: 4x2, 2x1, 1x1
         assert_eq!(mips.len(), 3);
-        
+
         // Level 0: 4x2
         assert_eq!(mips[0].len(), (4 * 2 * 4) as usize);
-        
+
         // Level 1: 2x1
         assert_eq!(mips[1].len(), (2 * 4) as usize);
-        
+
         // Level 2: 1x1
         assert_eq!(mips[2].len(), 4);
 
@@ -218,10 +218,10 @@ mod tests {
         // Actually, for 4x2 -> 2x1:
         //   dst[0,0] averages src[0,0], src[1,0], src[0,1], src[1,1]
         //   dst[1,0] averages src[2,0], src[3,0], src[2,1], src[3,1]
-        
+
         // All src texels are 100,150,200,255
         // So avg should be 100,150,200,255
-        
+
         assert_eq!(mips[1][0], 100);
         assert_eq!(mips[1][1], 150);
         assert_eq!(mips[1][2], 200);

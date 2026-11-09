@@ -2,7 +2,7 @@
 //! textured quads (texture orientation, nearest filtering), RW alpha blending and alpha test,
 //! and a camera clear in the middle of a frame.
 
-use revc_rw::frame::{DrawState, Renderer, Vertex2D, readback_finish, readback_start};
+use revc_rw::frame::{DrawState, Renderer, TexData, Vertex2D, readback_finish, readback_start};
 use revc_rw::{Backend, Gpu};
 
 const SIZE: u32 = 64;
@@ -32,7 +32,7 @@ fn render(backend: Backend) -> Vec<u8> {
     let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
     // 2x2: red, green / blue, white (top row first).
     let texels = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255];
-    let tex = r.upload_texture(&gpu, 0, 2, 2, &[&texels], false);
+    let tex = r.upload_texture(&gpu, 0, 2, 2, TexData::Rgba8, &[&texels], false);
 
     r.clear(Some([0.0, 0.0, 1.0, 1.0]), true);
     let fan = 5;
@@ -79,14 +79,14 @@ fn near(a: [u8; 4], b: [u8; 4]) -> bool {
 fn check(backend: Backend) {
     let img = render(backend);
     let expect = [
-        ((8, 8), [255, 0, 0, 255]),      // untextured red
-        ((40, 8), [255, 0, 0, 255]),     // texture top-left
-        ((56, 8), [0, 255, 0, 255]),     // texture top-right
-        ((40, 24), [0, 0, 255, 255]),    // texture bottom-left
+        ((8, 8), [255, 0, 0, 255]),       // untextured red
+        ((40, 8), [255, 0, 0, 255]),      // texture top-left
+        ((56, 8), [0, 255, 0, 255]),      // texture top-right
+        ((40, 24), [0, 0, 255, 255]),     // texture bottom-left
         ((56, 24), [255, 255, 255, 255]), // texture bottom-right
-        ((8, 48), [128, 128, 255, 191]), // 50 % white over blue; alpha blends with the same factors (glBlendFunc)
-        ((40, 48), [0, 0, 255, 255]),    // alpha-tested away
-        ((62, 62), [0, 255, 0, 255]),    // drawn after the depth-only clear
+        ((8, 48), [128, 128, 255, 191]),  // 50 % white over blue; alpha blends with the same factors (glBlendFunc)
+        ((40, 48), [0, 0, 255, 255]),     // alpha-tested away
+        ((62, 62), [0, 255, 0, 255]),     // drawn after the depth-only clear
     ];
     for ((x, y), want) in expect {
         let got = px(&img, x, y);
@@ -102,4 +102,126 @@ fn im2d_vulkan() {
 #[test]
 fn im2d_gl() {
     check(Backend::Gl);
+}
+
+/// DXT textures: kept as BC on the GPU (8x4, whole blocks) or decoded on the CPU (2x2) — both
+/// must sample exactly like revc-formats' decoder with nearest filtering.
+fn dxt_case(backend: Backend, width: u32, height: u32, kind: u8, data: TexData, blocks: &[u8]) {
+    let gpu = Gpu::headless(backend).expect("gpu");
+    let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+    let tex = r.upload_texture(&gpu, 0, width, height, data, &[blocks], false);
+    // No blending or alpha test: compare raw colour (alpha is checked separately below).
+    let state = DrawState { texture: tex, alpha_func: 0, ..base() };
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.draw_2d(&state, 5, &quad(0.0, 0.0, 64.0, 64.0, [255, 255, 255, 255]), None);
+    let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    r.encode(&gpu, &mut enc, &target.create_view(&Default::default()), (SIZE, SIZE));
+    r.end_frame();
+    let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+    gpu.queue.submit([enc.finish()]);
+    let img = readback_finish(&gpu, rb).expect("readback");
+    let want = revc_formats::dds::decode_dxt(kind, width, height, blocks).expect("decode");
+    for ty in 0..height {
+        for tx in 0..width {
+            let (x, y) = ((tx * 2 + 1) * SIZE / (width * 2), (ty * 2 + 1) * SIZE / (height * 2));
+            let i = ((ty * width + tx) * 4) as usize;
+            let w = [want[i], want[i + 1], want[i + 2], want[i + 3]];
+            let got = px(&img, x, y);
+            // Hardware BC decoders round the interpolated colours their own way (a level or two).
+            assert!(got[..3].iter().zip(&w[..3]).all(|(a, b)| a.abs_diff(*b) <= 3), "{backend:?} {data:?} {width}x{height} texel ({tx},{ty}): got {got:?}, want {w:?}");
+            assert_eq!(got[3], w[3], "{backend:?} {data:?} texel ({tx},{ty}) alpha");
+        }
+    }
+}
+
+fn dxt(backend: Backend) {
+    // DXT1 block: red / blue endpoints (four-colour mode), every index once per row.
+    let red: u16 = 0xF800;
+    let blue: u16 = 0x001F;
+    let mut b1 = Vec::new();
+    b1.extend(red.to_le_bytes());
+    b1.extend(blue.to_le_bytes());
+    b1.extend(0xE4E4_E4E4u32.to_le_bytes());
+    // Second block: punch-through mode (c0 <= c1), index 3 transparent black.
+    b1.extend(blue.to_le_bytes());
+    b1.extend(red.to_le_bytes());
+    b1.extend(0x1B1B_1B1Bu32.to_le_bytes());
+    dxt_case(backend, 8, 4, 1, TexData::Dxt1, &b1);
+    // DXT3: explicit 4-bit alpha ramp, then the first colour block.
+    let mut b3: Vec<u8> = (0..8u8).map(|i| (i * 2) | ((i * 2 + 1) << 4)).collect();
+    b3.extend_from_slice(&b1[..8]);
+    dxt_case(backend, 4, 4, 3, TexData::Dxt3, &b3);
+    // 2x2 isn't whole blocks: decoded on the CPU.
+    dxt_case(backend, 2, 2, 1, TexData::Dxt1, &b1[..8]);
+}
+
+#[test]
+fn dxt_vulkan() {
+    dxt(Backend::Vulkan);
+}
+
+#[test]
+fn dxt_gl() {
+    dxt(Backend::Gl);
+}
+
+/// Im3D: camera-space quads through the device's projection (wgpu depth range): the nearer quad
+/// wins whatever the draw order, and the far one only shows where nothing is in front.
+fn im3d(backend: Backend) {
+    use revc_rw::frame::{Mat4, Vertex3D};
+    let gpu = Gpu::headless(backend).expect("gpu");
+    let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+    let (n, f) = (1.0f32, 100.0f32);
+    // As wgpudevice.cpp beginUpdate: view window 1x1, depth mapped to 0..1.
+    let proj: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, f / (f - n), 1.0, 0.0, 0.0, -n * f / (f - n), 0.0];
+    let quad3 = |x0: f32, y0: f32, x1: f32, y1: f32, z: f32, c: [u8; 4]| {
+        let v = |x, y| Vertex3D { x, y, z, r: c[0], g: c[1], b: c[2], a: c[3], u: 0.0, v: 0.0 };
+        [v(x0, y0), v(x1, y0), v(x1, y1), v(x0, y1)]
+    };
+    let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, ..base() };
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    // At z, the view spans -z..z: red covers the middle, green (nearer) its left half.
+    r.draw_3d(&state, 5, &quad3(-10.0, -10.0, 10.0, 10.0, 20.0, [255, 0, 0, 255]), None, &proj);
+    r.draw_3d(&state, 5, &quad3(-5.0, -5.0, 0.0, 5.0, 10.0, [0, 255, 0, 255]), None, &proj);
+    // Blue far behind, drawn last, covering the whole view.
+    r.draw_3d(&state, 3, &quad3(-90.0, -90.0, 90.0, 90.0, 90.0, [0, 0, 255, 255]), Some(&[0, 1, 2, 0, 2, 3]), &proj);
+    let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    r.encode(&gpu, &mut enc, &target.create_view(&Default::default()), (SIZE, SIZE));
+    r.end_frame();
+    let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+    gpu.queue.submit([enc.finish()]);
+    let img = readback_finish(&gpu, rb).expect("readback");
+    for ((x, y), want) in [((24, 32), [0, 255, 0, 255]), ((40, 32), [255, 0, 0, 255]), ((4, 4), [0, 0, 255, 255]), ((32, 20), [255, 0, 0, 255]), ((32, 10), [0, 0, 255, 255])] {
+        assert_eq!(px(&img, x, y), want, "{backend:?} im3d pixel ({x},{y})");
+    }
+}
+
+#[test]
+fn im3d_vulkan() {
+    im3d(Backend::Vulkan);
+}
+
+#[test]
+fn im3d_gl() {
+    im3d(Backend::Gl);
 }

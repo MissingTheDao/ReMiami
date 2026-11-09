@@ -41,6 +41,11 @@ pub struct Gpu {
 }
 
 impl Gpu {
+    /// Whether DXT textures are sampled as BC formats (else they're decoded on the CPU).
+    pub fn bc_textures(&self) -> bool {
+        self.device.features().contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
+    }
+
     /// A device without a window (for tests and offscreen work).
     pub fn headless(backend: Backend) -> Result<Gpu, String> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor { backends: backend.wgpu(), ..wgpu::InstanceDescriptor::new_without_display_handle() });
@@ -61,6 +66,9 @@ impl Gpu {
             label: Some("revc-rw"),
             // What GL (GLES 3 level) can do too, so both backends run the same code.
             required_limits: wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
+            // DXT textures stay compressed where the GPU samples BC formats (both backends on
+            // desktop GPUs); otherwise they are decoded on the CPU.
+            required_features: adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC,
             ..Default::default()
         }))
         .map_err(|e| format!("{backend:?} device: {e}"))?;

@@ -49,6 +49,26 @@ GL3 keeps DXT textures compressed on the GPU (`d3d_to_gl3`) while WGPU decodes t
 so the next texture step (BC formats on the GPU) is the first thing to check. The boot screen
 can't be compared automatically: the menu background animates (two GL3 runs differ by 4.7 %).
 
+**Stage 1, step 3 done: DXT textures stay compressed, and Im3D draws.**
+- DXT1/3/5 TXD textures keep their blocks in WGPU rasters (`d3d_to_wgpu` in raster.cpp, no flip:
+  GL3's `d3d_to_gl3` flips them because its shaders sample `1 - v`) and are sampled as BC1/2/3
+  where the device has `TEXTURE_COMPRESSION_BC` (Vulkan and GL on the dev machine); elsewhere, or
+  for sizes that aren't whole blocks, the host decodes them with revc-formats. The game log says
+  which (`DXT on the GPU` / `decoded on the CPU`). `tests/im2d.rs` checks both paths against the
+  CPU decoder on both backends.
+- This did *not* change the menu-text difference to GL3 (still 0.73 % of text-area pixels), so
+  texture decoding is ruled out. Also ruled out by experiment: filtering and mip choice, a
+  rounding tie at pixel centres, the depth test and the alpha test. Forcing wrap addressing
+  changes a few of those pixels: GL3's `setAddressU/V` only apply an addressing change while a
+  raster is being bound (they compare with `==`), so GL3 sometimes samples with stale addressing.
+  The WGPU device applies states immediately, like D3D8 and the original game; matching GL3
+  pixel for pixel here would mean copying its bugs.
+- Im3D: the device builds view and projection like gl3 `beginUpdate` (left-handed view) with
+  depth mapped to 0..1, and sends one projection*view*world matrix per draw; the shader mirrors
+  gl3 im3d.vert (fog from clip w). Transforms without UVs unbind the texture, as in GL3. In game:
+  sea at the horizon, the player's shadow, car lights. Tested offscreen: projection and depth
+  order against draw order, on both backends.
+
 ## What the game calls
 
 The game reaches librw only through the RenderWare-style API in `cpp/re3-miami/src/fakerw`
@@ -131,7 +151,7 @@ struct EngineOpenParams;
 
 Order inside stage 1, smallest testable steps first: device + camera clear + show raster (a
 blank game frame, done) -> rasters and textures + Im2D + render states (whole front end, done) ->
-DXT kept compressed (BC) -> Im3D (effects) -> default atomic pipeline (world, cars) -> skin -> MatFX.
+DXT kept compressed (BC, done) -> Im3D (effects, done) -> default atomic pipeline (world, cars) -> skin -> MatFX.
 The front-end and HUD come first because the boot scenario and every in-game screenshot show
 them.
 

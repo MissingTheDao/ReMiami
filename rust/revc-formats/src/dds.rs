@@ -73,7 +73,7 @@ pub fn decode(data: &[u8]) -> Result<Image> {
 
 /// DXT1 (`kind` 1), DXT3 (3) or DXT5 (5) blocks of a `width` x `height` image to RGBA8, top row
 /// first. None if `data` is too short.
-pub(crate) fn decode_dxt(kind: u8, width: u32, height: u32, data: &[u8]) -> Option<Vec<u8>> {
+pub fn decode_dxt(kind: u8, width: u32, height: u32, data: &[u8]) -> Option<Vec<u8>> {
     let block_bytes = if kind == 1 { 8 } else { 16 };
     let (bw, bh) = (width.div_ceil(4) as usize, height.div_ceil(4) as usize);
     let blocks = data.get(..bw * bh * block_bytes)?;

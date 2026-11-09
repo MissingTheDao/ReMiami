@@ -4,7 +4,7 @@
 //! revc_rw::frame::Renderer and drawn when the frame is presented; Im3D and models come next.
 
 use revc_rw::Backend;
-use revc_rw::frame::{DrawState, Renderer, Vertex2D};
+use revc_rw::frame::{DrawState, Mat4, Renderer, TexData, Vertex2D, Vertex3D};
 use revc_rw::present::{NativeWindow, Presenter};
 use sdl3_sys::everything::*;
 use std::cell::{Cell, RefCell};
@@ -59,7 +59,8 @@ fn pixel_size(window: *mut SDL_Window) -> (u32, u32) {
 pub fn create(window: *mut SDL_Window) -> Result<(), String> {
     let (w, h) = pixel_size(window);
     let p = unsafe { Presenter::new(backend(), native(window)?, w, h, true)? };
-    eprintln!("revc: wgpu renderer on {} ({:?}), {:?} {w}x{h}", p.gpu.info.name, p.gpu.info.backend, p.format());
+    let bc = p.gpu.bc_textures();
+    eprintln!("revc: wgpu renderer on {} ({:?}), {:?} {w}x{h}, DXT {}", p.gpu.info.name, p.gpu.info.backend, p.format(), if bc { "on the GPU" } else { "decoded on the CPU" });
     let r = Renderer::new(&p.gpu, p.format());
     RENDERER.with(|c| *c.borrow_mut() = Some(r));
     PRESENTER.with(|c| *c.borrow_mut() = Some(p));
@@ -100,12 +101,14 @@ pub extern "C" fn revc_rw_clear(r: f32, g: f32, b: f32, a: f32, mode: u32) {
     });
 }
 
-/// Creates (id 0) or updates a texture from RGBA8 mip levels; returns its id, 0 without a window.
+/// Creates (id 0) or updates a texture from mip levels, RGBA8 (`dxt` 0) or DXT1/3/5 blocks;
+/// returns its id, 0 without a window.
 ///
 /// # Safety
-/// `levels` points at `num_levels` buffers of (width >> i) * (height >> i) * 4 bytes (min 1x1).
+/// `levels` points at `num_levels` buffers holding level i of a width x height texture: RGBA8
+/// ((width >> i) * (height >> i) * 4 bytes, min 1x1) or whole DXT blocks.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn revc_rw_texture_upload(id: u32, width: i32, height: i32, num_levels: i32, levels: *const *const u8, autogen: i32) -> u32 {
+pub unsafe extern "C" fn revc_rw_texture_upload(id: u32, width: i32, height: i32, dxt: i32, num_levels: i32, levels: *const *const u8, autogen: i32) -> u32 {
     if levels.is_null() || width <= 0 || height <= 0 || num_levels <= 0 {
         return 0;
     }
@@ -113,7 +116,12 @@ pub unsafe extern "C" fn revc_rw_texture_upload(id: u32, width: i32, height: i32
     let slices: Vec<&[u8]> = (0..num_levels.min(16) as usize)
         .map_while(|i| {
             let p = unsafe { *levels.add(i) };
-            let len = ((w >> i).max(1) * (h >> i).max(1) * 4) as usize;
+            let (lw, lh) = ((w >> i).max(1), (h >> i).max(1));
+            let len = match dxt {
+                0 => (lw * lh * 4) as usize,
+                1 => (lw.div_ceil(4) * lh.div_ceil(4) * 8) as usize,
+                _ => (lw.div_ceil(4) * lh.div_ceil(4) * 16) as usize,
+            };
             (!p.is_null()).then(|| unsafe { std::slice::from_raw_parts(p, len) })
         })
         .collect();
@@ -122,7 +130,7 @@ pub unsafe extern "C" fn revc_rw_texture_upload(id: u32, width: i32, height: i32
     }
     PRESENTER.with(|pc| {
         RENDERER.with(|rc| match (pc.borrow().as_ref(), rc.borrow_mut().as_mut()) {
-            (Some(p), Some(r)) => r.upload_texture(&p.gpu, id, w, h, &slices, autogen != 0),
+            (Some(p), Some(r)) => r.upload_texture(&p.gpu, id, w, h, TexData::from_dxt(dxt as u32), &slices, autogen != 0),
             _ => 0,
         })
     })
@@ -151,6 +159,24 @@ pub unsafe extern "C" fn revc_rw_im2d(state: *const DrawState, prim: u32, vertic
     RENDERER.with(|c| {
         if let Some(r) = c.borrow_mut().as_mut() {
             r.draw_2d(state, prim, verts, idx);
+        }
+    });
+}
+
+/// # Safety
+/// As `revc_rw_im2d`, with Im3DVertex; `mvp` points at 16 floats.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_rw_im3d(state: *const DrawState, prim: u32, vertices: *const Vertex3D, num_vertices: i32, indices: *const u16, num_indices: i32, mvp: *const f32) {
+    if state.is_null() || vertices.is_null() || num_vertices <= 0 || mvp.is_null() {
+        return;
+    }
+    let state = unsafe { &*state };
+    let verts = unsafe { std::slice::from_raw_parts(vertices, num_vertices as usize) };
+    let idx = (!indices.is_null() && num_indices > 0).then(|| unsafe { std::slice::from_raw_parts(indices, num_indices as usize) });
+    let mvp: Mat4 = unsafe { *mvp.cast::<Mat4>() };
+    RENDERER.with(|c| {
+        if let Some(r) = c.borrow_mut().as_mut() {
+            r.draw_3d(state, prim, verts, idx, &mvp);
         }
     });
 }
