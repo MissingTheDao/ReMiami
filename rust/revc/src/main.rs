@@ -14,6 +14,7 @@ mod savefile;
 mod collision;
 mod savefix;
 mod tempcolmodels;
+mod handling;
 mod savegame;
 mod host;
 mod testdrive;

@@ -4,6 +4,7 @@ tests replay every line, so the port keeps the exact behaviour (quirks included)
 | File | Recorded from | Checked by |
 |---|---|---|
 | `collision.txt` | src/collision (CCollision tests and processes on spheres, boxes, lines, triangles; line of sight, vertical line, col model against col model; DistToLine; CColTrianglePlane::Set): 12400 random cases, inputs and outputs as hex words, ColPoint/StoredCollPoly as raw bytes from a 0xA5/0x5A fill. Two masks for the original's undefined behaviour (zero-length line: NaN distance, then ProcessLineBox writes its uninitialised point) | `rust/revc/src/collision.rs`, test `golden::matches_cpp_golden` |
+| `handling.txt` | cHandlingDataMgr::LoadHandlingData (with ConvertDataToGameUnits, ConvertBikeDataToGameUnits, cTransmission::InitGearRatios) on 16 synthetic files in `tests/golden/handling/` (number formats, separators, CRLF, short lines) and on the game's `data/handling.cfg` (checked when the game data is present): FNV-1a 64 of every table entry | `rust/revc/src/handling.rs`, test `golden::matches_cpp_golden` |
 | `math.txt` | src/math (CVector, CQuaternion, CMatrix, TransformPoint, compressed matrices): 40 functions x 150 cases (random rotations, scaled and arbitrary matrices, special values), floats as hex bits; products' uninitialised w column masked | `rust/revc/src/math.rs`, test `golden::matches_cpp_golden` (bit for bit) |
 | `messages.txt` | CMessages' queues (brief and big messages, previous briefs): 4000 random operations, state after each | `rust/revc/src/messages.rs`, test `golden::matches_cpp_golden` |
 | `pager.txt` | CPager (scrolling pager messages): 4000 random operations with the HUD/widescreen "blocked" state, pager and previous-briefs state after each | `rust/revc/src/pager.rs`, test `golden::matches_cpp_golden` |
@@ -18,4 +19,4 @@ with the C++ code; see the git history of the commit that added this file.
 
 The math recorder is kept: `tests/golden/recorders/math/record.sh` rebuilds it against the C++ from
 git history and rewrites `math.txt` (the result must not change).
-So are the collision and temp col model recorders (`tests/golden/recorders/{collision,tempcolmodels}/record.sh`, C++ from 1017bca) and the save fix recorder: `tests/golden/recorders/savefix/record.sh` (C++ from commit 48e9e38).
+So are the collision, temp col model and handling recorders (`tests/golden/recorders/{collision,tempcolmodels,handling}/record.sh`, C++ from 1017bca / 113352a) and the save fix recorder: `tests/golden/recorders/savefix/record.sh` (C++ from commit 48e9e38).
