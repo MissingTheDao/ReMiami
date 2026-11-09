@@ -1,0 +1,54 @@
+# In-person test checklist
+
+Things the automated tests (`scripts/test.sh`) can't judge: they need a person at the machine,
+real hardware or a second machine. Tick items off here (or tell Claude the result) and the plan
+task can be marked Done.
+
+Start the game with `cargo run` in `rust/` (settings in `game/reVC.ini`).
+
+## Task 8: fixed 30 Hz simulation with render interpolation (high refresh rate)
+
+On a 120/144 Hz display, frame limiter off (Display Setup), VSync on:
+
+- [ ] Walk, run and turn the camera with the mouse: movement looks smooth, no judder or
+      "double images" compared with 30/60 fps.
+- [ ] Drive fast along a straight road and through turns: car, wheels and camera smooth; no
+      jumps when the frame rate dips.
+- [ ] Other cars and peds look smooth too.
+- [ ] Handling feels the same as before (the simulation itself still runs at 30 Hz).
+- [ ] Teleports and respawns (death, Busted, cutscene starts, loading a save): no streak or
+      sliding from the old position.
+
+Known limits, not bugs: shadows, lights and particles still move in 30 Hz steps; ped limbs
+animate at 30 Hz (only the body moves smoothly).
+
+## Task 9: controllers
+
+Plug in each pad you have (Xbox, DualSense / DualShock, Switch Pro, Steam Deck, Steam
+Controller):
+
+- [ ] Detected when plugged in after the game started, and when unplugged / replugged.
+- [ ] Prompts with buttons (e.g. a weapon pickup's "Press ~ to ...", tutorial tips) show the
+      glyphs of that pad; a Switch pad shows B on the bottom button.
+- [ ] Use another pad, or the keyboard then a pad: prompts switch to the pad just used.
+- [ ] Controls menu, BUTTON PROMPTS: each style shows its glyphs; AUTO follows the pad again.
+- [ ] Rumble: set `Vibration = 1` under `[Controller]` in `game/reVC.ini`; gunfire, explosions
+      and crashes vibrate, and it stops afterwards (no menu toggle on Linux yet).
+- [ ] Two pads: the second one doesn't steal player 1's input.
+
+## Task 11: texture mods
+
+- [ ] Put a PNG (any size) at `game/mods/textures/<txd>/<texture>.png` for a texture you can
+      see (list names with `cargo run -p revc-formats --example txdlist -- ../game/models/gta3.img:<model>.txd`),
+      restart: it shows in game, correct way up, not blurry up close, fine in the distance.
+- [ ] Same with a DDS (DXT1 or DXT5) file.
+- [ ] A broken file: the console says `texmods: ... keeping the original` and the game shows
+      the original texture.
+
+## Task 7 leftovers
+
+- [ ] Change the screen resolution in the in-game Display Setup menu (not only at start-up).
+
+## Task 2: N150 frame times (needs the N150 box)
+
+- [ ] Record frame times at the fixed spots (the `spots` test places are a good set).
