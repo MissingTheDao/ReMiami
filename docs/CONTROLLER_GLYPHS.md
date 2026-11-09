@@ -1,7 +1,8 @@
 # Controller glyphs (plan task 9): sourcing notes
 
 Goal: every on-screen prompt shows the buttons of the pad in use, switching when another pad is
-used. Assets are not in the repo yet; this records what to use and how pads map to glyph sets.
+used. The glyphs are in `assets/glyphs/kenney-input-prompts/` (see its `SOURCE.md` for version,
+checksum and which sets are included); drawing them in the game's prompts is still to do.
 
 ## Recommended asset pack: Kenney "Input Prompts"
 
@@ -13,8 +14,8 @@ used. Assets are not in the repo yet; this records what to use and how pads map 
   button). About 1500 files, 64x64 tiles; vector sources mentioned in the changelog.
 - Covers: Xbox 360, Xbox One / Series; PlayStation 1-5; Nintendo Switch, Switch 2, Wii, Wii U,
   GameCube; Steam Deck, Steam Controller; keyboard and mouse; generic controls; Playdate; touch.
-- Download is a button on the page (no stable zip URL); version and file list should be pinned in
-  `scripts/deps.lock` when it is added, like the other external inputs.
+- Download is a button on the page (signed, expiring link, no stable URL); the archive's name,
+  size and SHA-256 are recorded in `assets/glyphs/kenney-input-prompts/SOURCE.md`.
 
 Alternatives considered:
 - Kenney "Input Prompts Pixel" (CC0, 16x16 pixel art): wrong style for an HD HUD.
