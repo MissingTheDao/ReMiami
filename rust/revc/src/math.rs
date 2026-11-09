@@ -58,6 +58,13 @@ pub struct Matrix {
     pub has_rw_matrix: bool,
 }
 
+impl Default for Matrix {
+    /// Zeros, not attached (a C++ static CMatrix).
+    fn default() -> Matrix {
+        Matrix { f: [0.0; 16], attachment: std::ptr::null_mut(), has_rw_matrix: false }
+    }
+}
+
 // Element indices.
 const RX: usize = 0;
 const RY: usize = 1;
