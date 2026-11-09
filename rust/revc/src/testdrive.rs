@@ -54,6 +54,9 @@ unsafe extern "C" {
 
 const STATE_FRONTEND: i32 = 1;
 const STATE_PLAYING: i32 = 2;
+/// Part of the gamepad screenshots compared with the reference (fractions of width and height:
+/// x0, y0, x1, y1): the help box with every button glyph, top left.
+const GLYPH_BOX: [f32; 4] = [0.0, 0.0, 0.3, 0.2];
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Scenario {
@@ -390,7 +393,7 @@ impl Driver {
                             if std::env::var_os("REVC_TEST_REF_DIR").is_some() && reference.is_none() {
                                 self.fail(format!("{name}: no reference image (run with --bless)"));
                             }
-                            self.check_image_at(w, h, &rgba, dir("REVC_TEST_SHOT_DIR"), reference, &format!("{name}: "));
+                            self.check_image_at(w, h, &rgba, dir("REVC_TEST_SHOT_DIR"), reference, &format!("{name}: "), None);
                             if idx + 1 < SPOTS.len() {
                                 self.phase = Phase::Spot { idx: idx + 1, base, stage: SpotStage::Travel };
                             } else {
@@ -420,7 +423,9 @@ impl Driver {
                     if std::env::var_os("REVC_TEST_REF_DIR").is_some() && reference.is_none() {
                         self.fail(format!("{name}: no reference image (run with --bless)"));
                     }
-                    self.check_image_at(w, h, &rgba, dir("REVC_TEST_SHOT_DIR"), reference, &format!("{name}: "));
+                    // Only the help box with the glyphs counts: the scene behind it has things that
+                    // differ between machines (a pickup bobbing by its memory address, the clock).
+                    self.check_image_at(w, h, &rgba, dir("REVC_TEST_SHOT_DIR"), reference, &format!("{name}: "), Some(GLYPH_BOX));
                     self.pads.capture = None;
                     self.pad_capture_requested = false;
                 }
@@ -568,12 +573,30 @@ impl Driver {
     }
 
     fn check_image(&mut self, w: u32, h: u32, rgba: &[u8]) {
-        self.check_image_at(w, h, rgba, self.shot.clone(), self.reference.clone(), "");
+        self.check_image_at(w, h, rgba, self.shot.clone(), self.reference.clone(), "", None);
     }
 
     /// Writes the frame to `shot` and compares it with `reference` (both optional); `label`
-    /// prefixes the log lines when several images are checked in one run.
-    fn check_image_at(&mut self, w: u32, h: u32, rgba: &[u8], shot: Option<PathBuf>, reference: Option<PathBuf>, label: &str) {
+    /// prefixes the log lines when several images are checked in one run. `region` (fractions of
+    /// the width and height: x0, y0, x1, y1) limits the comparison to that part of the image.
+    #[allow(clippy::too_many_arguments)]
+    fn check_image_at(
+        &mut self,
+        w: u32,
+        h: u32,
+        rgba: &[u8],
+        shot: Option<PathBuf>,
+        reference: Option<PathBuf>,
+        label: &str,
+        region: Option<[f32; 4]>,
+    ) {
+        let [x0, y0, x1, y1] = region.unwrap_or([0.0, 0.0, 1.0, 1.0]);
+        let (x0, x1) = ((x0 * w as f32) as u32, (x1 * w as f32) as u32);
+        let (y0, y1) = ((y0 * h as f32) as u32, (y1 * h as f32) as u32);
+        let inside = |i: usize| {
+            let (x, y) = (i as u32 % w, i as u32 / w);
+            (x0..x1).contains(&x) && (y0..y1).contains(&y)
+        };
         if let Some(path) = shot.clone() {
             match write_png(&path, w, h, rgba) {
                 Ok(()) => log(format!("screenshot {}x{} -> {}", w, h, path.display())),
@@ -597,7 +620,7 @@ impl Driver {
         let mut differing = 0usize;
         for (i, (a, b)) in rgba.chunks_exact(4).zip(rref.chunks_exact(4)).enumerate() {
             let d = (0..3).map(|c| a[c].abs_diff(b[c])).max().unwrap();
-            if d > 32 {
+            if d > 32 && inside(i) {
                 differing += 1;
                 diff_img[i * 4..i * 4 + 4].copy_from_slice(&[255, 0, 255, 255]);
             } else {
@@ -608,8 +631,9 @@ impl Driver {
                 diff_img[i * 4 + 3] = 255;
             }
         }
-        let frac = differing as f64 / (w as f64 * h as f64);
-        log(format!("{label}image diff: {:.3}% of pixels differ (limit {:.3}%)", frac * 100.0, self.max_diff * 100.0));
+        let frac = differing as f64 / ((x1 - x0) as f64 * (y1 - y0) as f64).max(1.0);
+        let what = if region.is_some() { format!("of pixels in {}x{} at {x0},{y0}", x1 - x0, y1 - y0) } else { "of pixels".into() };
+        log(format!("{label}image diff: {:.3}% {what} differ (limit {:.3}%)", frac * 100.0, self.max_diff * 100.0));
         if frac > self.max_diff {
             let mut p = shot.clone().unwrap_or_else(|| std::env::temp_dir().join("revc-test.png")).into_os_string();
             p.push(".diff.png");

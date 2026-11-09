@@ -80,6 +80,9 @@ for s in "${SCENARIOS[@]}"; do
     envs+=(REVC_TEST_SHOT_DIR="$OUT/$s")
     (( BLESS == 0 )) && envs+=(REVC_TEST_REF_DIR="$REF/$s")
   fi
+  # Real controllers plugged in would take player slots from the virtual pads: SDL ignores every
+  # pad except the virtual ones' models (DualSense, Steam Deck).
+  [[ "$s" == gamepad ]] && envs+=(SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x054c/0x0ce6,0x28de/0x1205)
   [[ "$s" == boot ]] && envs+=(REVC_TEST_SHOT="$OUT/$s.png")
   if [[ "$s" == saveload || "$s" == texmods ]]; then
     envs+=(REVC_TEST_SHOT="$OUT/$s.png")
