@@ -15,6 +15,7 @@ mod collision;
 mod savefix;
 mod tempcolmodels;
 mod handling;
+mod weaponinfo;
 mod savegame;
 mod host;
 mod testdrive;

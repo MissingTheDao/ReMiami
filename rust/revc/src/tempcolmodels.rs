@@ -101,7 +101,7 @@ static mut s_aBodyPartSpheres2: [ColSphere; 2] = [
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn revc_temp_col_models_init(models: *const *mut ColModel) {
-    initialise(&*(models as *const [*mut ColModel; 18]));
+    unsafe { initialise(&*(models as *const [*mut ColModel; 18])) }
 }
 
 pub unsafe fn initialise(models: &[*mut ColModel; 18]) {
