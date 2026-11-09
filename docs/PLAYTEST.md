@@ -53,6 +53,9 @@ Build: `cd rust && CARGO_TARGET_DIR=target-wgpu cargo build --features wgpu`, ru
 - [ ] Cars have their shiny reflections (MatFX environment map) like the normal build, on both
       backends; nothing looks inside out or too bright.
 - [ ] Peds walk and animate normally (skinning); no stretched limbs.
+- [ ] Display Setup > Vehicle pipeline NEO, rim light, lightmaps, road gloss on: cars get the
+      Xbox-style reflections and specular highlights (compare with the normal build), peds a rim
+      light, roads a gloss; nothing flickers when turning the camera.
 - [ ] Menus, HUD, text, radar look like the normal build.
 - [ ] Options > Display Setup > Colour Filter: each of None, Simple, PS2/XBOX, Mobile, PC
       changes the look at once and is kept after a restart (both builds).

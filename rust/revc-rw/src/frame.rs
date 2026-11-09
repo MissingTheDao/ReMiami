@@ -60,8 +60,10 @@ pub struct MeshVertex {
     pub normal: [f32; 3],
     pub color: [u8; 4],
     pub uv: [f32; 2],
+    /// Second texture coordinate set (Neo world lightmaps); 0 without one.
+    pub uv2: [f32; 2],
 }
-const _: () = assert!(std::mem::size_of::<MeshVertex>() == 36);
+const _: () = assert!(std::mem::size_of::<MeshVertex>() == 44);
 
 /// A skinned model vertex: up to four bones per vertex (gl3 skinInstanceCB: RW skin weights and
 /// bone indices as stored in the geometry's skin).
@@ -72,7 +74,7 @@ pub struct SkinVertex {
     pub weights: [f32; 4],
     pub indices: [u8; 4],
 }
-const _: () = assert!(std::mem::size_of::<SkinVertex>() == 56);
+const _: () = assert!(std::mem::size_of::<SkinVertex>() == 64);
 
 /// Bone matrices per skinned draw (gl3 u_boneMatrices).
 pub const MAX_BONES: usize = 64;
@@ -100,7 +102,22 @@ pub struct ModelState {
     pub color_clamp: [f32; 4],
     pub env_color: [f32; 4],
     pub fx_params: [f32; 4],
+    /// Parameters of the re3 Neo shaders (MESH_NEO_*), as their render callbacks upload them.
+    pub extra: [[f32; 4]; 12],
 }
+
+/// DrawState::shader for meshes: re3's Neo pipelines (EXTENDED_PIPELINES, the Xbox look).
+/// Vehicle: extra = eye, (fresnel, light strength, shininess, specularity), 5 spec light
+/// directions (w = power), 5 spec colours; tex1 = env map.
+pub const MESH_NEO_VEHICLE: u32 = 10;
+/// World lightmaps: extra[0] = light map factors (rgb blend, a = material alpha); tex1 = the
+/// MatFX dual texture (white without one); second UV set.
+pub const MESH_NEO_WORLD: u32 = 11;
+/// Road gloss (additive pass with the gloss texture): extra = eye, (gloss mult, 0, 0, 0).
+pub const MESH_NEO_GLOSS: u32 = 12;
+/// Rim light (peds, also skinned): extra = view vector, ramp start, ramp end, (offset, scale,
+/// scaling, 0).
+pub const MESH_NEO_RIM: u32 = 13;
 
 impl ModelState {
     /// A model state without lights or environment map.
@@ -115,6 +132,7 @@ impl ModelState {
             color_clamp: [0.0; 4],
             env_color: [0.0; 4],
             fx_params: [0.0; 4],
+            extra: [[0.0; 4]; 12],
         }
     }
 }
@@ -243,6 +261,9 @@ enum Op {
     Draw { pipe: PipeKey, texture: u32, sampler: SamplerKey, uniform: u32, first: u32, count: u32, mesh: Option<MeshDraw> },
     /// The frame so far copied into a texture at (x, y) (librw rasterRenderFast of the camera).
     CopyFrame { texture: u32, x: u32, y: u32 },
+    /// Following clears and draws go to this texture (a camera rendering into a texture, like
+    /// the Neo env map camera), or to the scene with 0.
+    Target { texture: u32 },
 }
 
 /// The frame is drawn into an offscreen texture of this format, then shown (blitted) on the
@@ -365,10 +386,17 @@ struct M {
     color_clamp: vec4<f32>,
     env_color: vec4<f32>,
     fx: vec4<f32>,
+    extra: array<vec4<f32>, 12>,
 };
 @group(2) @binding(0) var<uniform> m: M;
 
+// `mask`: light types the shader handles (1 directional, 2 point, 4 spot), as gl3's
+// DIRECTIONALS / POINTLIGHTS / SPOTLIGHTS shader defines.
 fn dynamic_light(v: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    return dynamic_light_mask(v, n, 7u);
+}
+
+fn dynamic_light_mask(v: vec3<f32>, n: vec3<f32>, mask: u32) -> vec3<f32> {
     var color = vec3<f32>(0.0);
     for (var i = 0; i < 8; i++) {
         let params = m.lights[i * 4];
@@ -379,13 +407,15 @@ fn dynamic_light(v: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
             break;
         }
         if (params.x == 1.0) {
-            color += max(0.0, dot(n, -dir)) * col;
-        } else if (params.x == 2.0) {
+            if ((mask & 1u) != 0u) {
+                color += max(0.0, dot(n, -dir)) * col;
+            }
+        } else if (params.x == 2.0 && (mask & 2u) != 0u) {
             let d = v - pos;
             let dist = length(d);
             let atten = max(0.0, 1.0 - dist / params.y);
             color += max(0.0, dot(n, -normalize(d))) * col * atten;
-        } else if (params.x == 3.0) {
+        } else if (params.x == 3.0 && (mask & 4u) != 0u) {
             let d = v - pos;
             let dist = length(d);
             let atten = max(0.0, 1.0 - dist / params.y);
@@ -416,7 +446,7 @@ struct Bones { m: array<mat4x4<f32>, 64> };
 @group(3) @binding(0) var<uniform> bones: Bones;
 
 @vertex
-fn vs_skin(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @location(4) weights: vec4<f32>, @location(5) indices: vec4<u32>) -> Out {
+fn vs_skin(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @location(5) weights: vec4<f32>, @location(6) indices: vec4<u32>) -> Out {
     var p = vec3<f32>(0.0);
     var n = vec3<f32>(0.0);
     for (var i = 0; i < 4; i++) {
@@ -470,6 +500,142 @@ fn vs_env(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location
     o.color = c * m.mat_color;
     o.fog = clamp((o.pos.w - u.fog.y) * u.fog.z, u.fog.w, 1.0);
     return o;
+}
+
+// re3 Neo shaders (extras/shaders/neo*.vert/.frag, default_UV2.vert, neoWorldVC.frag).
+fn neo_lit(v: vec4<f32>, n: vec3<f32>, color: vec4<f32>, mask: u32, light_strength: f32) -> vec4<f32> {
+    var c = color;
+    c = vec4<f32>(c.rgb + m.ambient.rgb * m.surf.x, c.a);
+    c = vec4<f32>(c.rgb + dynamic_light_mask(v.xyz, n, mask) * m.surf.z * light_strength, c.a);
+    return clamp(c, vec4<f32>(0.0), vec4<f32>(1.0));
+}
+
+@vertex
+fn vs_neo_vehicle(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>) -> OutEnv {
+    var o: OutEnv;
+    let v = m.world * vec4<f32>(pos, 1.0);
+    o.pos = u.mvp * v;
+    let n = (m.world * vec4<f32>(normal, 0.0)).xyz;
+    let refl = m.extra[1];
+    let view = normalize(m.extra[0].xyz - v.xyz);
+    o.uv = uv;
+    o.color = neo_lit(v, n, color, 1u, refl.y) * m.mat_color;
+    let uv2 = n * dot(view, n) * 2.0 - view;
+    o.uv1 = uv2.xy * 0.5 + 0.5;
+    let b = 1.0 - clamp(dot(view, n), 0.0, 1.0);
+    var rc = vec4<f32>(0.0, 0.0, 0.0, mix(b * b * b * b * b, 1.0, refl.x) * refl.z);
+    for (var k = 0; k < 5; k++) {
+        let d = m.extra[2 + k];
+        let col = m.extra[7 + k].rgb;
+        rc = vec4<f32>(rc.rgb + pow(clamp(dot(n, normalize(view - d.xyz)), 0.0, 1.0), d.w) * col * refl.w * refl.y, rc.a);
+    }
+    o.env_color = rc;
+    o.fog = clamp((o.pos.w - u.fog.y) * u.fog.z, u.fog.w, 1.0);
+    return o;
+}
+
+@fragment
+fn fs_neo_vehicle(i: OutEnv) -> @location(0) vec4<f32> {
+    var p1 = i.color * textureSample(tex, samp, i.uv);
+    let env = textureSample(env_tex, env_samp, i.uv1).rgb;
+    p1 = vec4<f32>(mix(p1.rgb, env, i.env_color.a), p1.a);
+    p1 = vec4<f32>(mix(u.fog_color.rgb, p1.rgb, i.fog), p1.a);
+    let p2 = i.env_color.rgb * i.fog;
+    let c = vec4<f32>(p1.rgb * p1.a + p2, p1.a);
+    if (c.a < u.alpha.x || c.a >= u.alpha.y) {
+        discard;
+    }
+    return c;
+}
+
+// default_UV2.vert is built without light defines: ambient only.
+@vertex
+fn vs_neo_world(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @location(4) uv2: vec2<f32>) -> OutEnv {
+    var o: OutEnv;
+    let v = m.world * vec4<f32>(pos, 1.0);
+    o.pos = u.mvp * v;
+    let n = (m.world * vec4<f32>(normal, 0.0)).xyz;
+    o.uv = uv;
+    o.uv1 = uv2;
+    o.color = neo_lit(v, n, color, 0u, 1.0) * m.mat_color;
+    o.env_color = vec4<f32>(0.0);
+    o.fog = clamp((o.pos.w - u.fog.y) * u.fog.z, u.fog.w, 1.0);
+    return o;
+}
+
+@fragment
+fn fs_neo_world(i: OutEnv) -> @location(0) vec4<f32> {
+    let lm = m.extra[0];
+    let t0 = textureSample(tex, samp, i.uv);
+    let t1 = textureSample(env_tex, env_samp, i.uv1);
+    var c = t0 * i.color * (1.0 + lm * (t1 - 1.0));
+    c = vec4<f32>(mix(u.fog_color.rgb, c.rgb, i.fog), i.color.a * t0.a * lm.a);
+    if (c.a < u.alpha.x || c.a >= u.alpha.y) {
+        discard;
+    }
+    return c;
+}
+
+// Gloss: the light direction is the first light's (u_lightDirection[0]); the normal is up.
+@vertex
+fn vs_neo_gloss(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>) -> OutEnv {
+    var o: OutEnv;
+    let v = m.world * vec4<f32>(pos, 1.0);
+    o.pos = u.mvp * v;
+    o.uv = uv;
+    let view = normalize(m.extra[0].xyz - v.xyz);
+    let light = normalize(view - m.lights[2].xyz);
+    o.env_color = vec4<f32>(0.5 * (1.0 + light), 0.0);
+    o.color = vec4<f32>(1.0);
+    o.uv1 = vec2<f32>(0.0);
+    o.fog = clamp((o.pos.w - u.fog.y) * u.fog.z, u.fog.w, 1.0);
+    return o;
+}
+
+@fragment
+fn fs_neo_gloss(i: OutEnv) -> @location(0) vec4<f32> {
+    var c = textureSample(tex, samp, i.uv);
+    let s = dot(vec3<f32>(0.0, 0.0, 1.0), 2.0 * i.env_color.xyz - 1.0);
+    let s2 = s * s;
+    let s4 = s2 * s2;
+    c = s4 * s4 * c * i.fog * m.extra[1].x;
+    if (c.a < u.alpha.x || c.a >= u.alpha.y) {
+        discard;
+    }
+    return c;
+}
+
+fn rim(v: vec4<f32>, n: vec3<f32>, color: vec4<f32>, uv: vec2<f32>) -> Out {
+    var o: Out;
+    o.pos = u.mvp * v;
+    o.uv = uv;
+    var c = color;
+    c = vec4<f32>(c.rgb + m.ambient.rgb * m.surf.x, c.a);
+    c = vec4<f32>(c.rgb + dynamic_light_mask(v.xyz, n, 1u) * m.surf.z, c.a);
+    let rd = m.extra[3];
+    let f = rd.x - rd.y * dot(n, m.extra[0].xyz);
+    let rimlight = clamp(mix(m.extra[2], m.extra[1], f) * rd.z, vec4<f32>(0.0), vec4<f32>(1.0));
+    c = vec4<f32>(c.rgb + rimlight.rgb, c.a);
+    o.color = clamp(c, vec4<f32>(0.0), vec4<f32>(1.0)) * m.mat_color;
+    o.fog = clamp((o.pos.w - u.fog.y) * u.fog.z, u.fog.w, 1.0);
+    return o;
+}
+
+@vertex
+fn vs_neo_rim(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>) -> Out {
+    return rim(m.world * vec4<f32>(pos, 1.0), (m.world * vec4<f32>(normal, 0.0)).xyz, color, uv);
+}
+
+@vertex
+fn vs_neo_rim_skin(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @location(5) weights: vec4<f32>, @location(6) indices: vec4<u32>) -> Out {
+    var p = vec3<f32>(0.0);
+    var n = vec3<f32>(0.0);
+    for (var i = 0; i < 4; i++) {
+        let b = bones.m[min(indices[i], 63u)];
+        p += (b * vec4<f32>(pos, 1.0)).xyz * weights[i];
+        n += (b * vec4<f32>(normal, 0.0)).xyz * weights[i];
+    }
+    return rim(m.world * vec4<f32>(p, 1.0), (m.world * vec4<f32>(n, 0.0)).xyz, color, uv);
 }
 
 @fragment
@@ -565,7 +731,10 @@ pub struct Renderer {
     uniform_bind: wgpu::BindGroup,
     vertex_buf: wgpu::Buffer,
     vertex3_buf: wgpu::Buffer,
-    depth: Option<(wgpu::Texture, wgpu::TextureView, (u32, u32))>,
+    /// Depth buffers by size (the scene's and those of texture targets).
+    depths: HashMap<(u32, u32), (wgpu::Texture, wgpu::TextureView)>,
+    /// Render target being recorded (0 = scene).
+    recording_target: u32,
     ops: Vec<Op>,
     verts: Vec<Vertex2D>,
     verts3: Vec<Vertex3D>,
@@ -577,8 +746,8 @@ pub struct Renderer {
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const ATTRS_2D: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x4, 1 => Unorm8x4, 2 => Float32x2];
 const ATTRS_3D: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Unorm8x4, 2 => Float32x2];
-const ATTRS_MESH: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x2];
-const ATTRS_SKIN: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x2, 4 => Float32x4, 5 => Uint8x4];
+const ATTRS_MESH: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x2, 4 => Float32x2];
+const ATTRS_SKIN: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x2, 4 => Float32x2, 5 => Float32x4, 6 => Uint8x4];
 
 fn blend_factor(f: u32) -> wgpu::BlendFactor {
     use wgpu::BlendFactor as B;
@@ -615,7 +784,12 @@ fn new_texture(gpu: &Gpu, format: wgpu::TextureFormat, width: u32, height: u32, 
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        // Uncompressed textures can also be render targets (camera textures).
+        usage: if format.is_compressed() {
+            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST
+        } else {
+            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::RENDER_ATTACHMENT
+        },
         view_formats: &[],
     });
     let view = texture.create_view(&Default::default());
@@ -779,7 +953,8 @@ impl Renderer {
             uniform_bind,
             vertex_buf,
             vertex3_buf,
-            depth: None,
+            depths: HashMap::new(),
+            recording_target: 0,
             ops: Vec::new(),
             verts: Vec::new(),
             verts3: Vec::new(),
@@ -1068,7 +1243,7 @@ impl Renderer {
 
         let pipe = PipeKey {
             kind,
-            shader: if kind == Kind::Im2D { state.shader } else { 0 },
+            shader: if kind == Kind::Im3D { 0 } else { state.shader },
             lines: is_line_primitive(prim),
             blend: (state.blend != 0).then_some((state.src_blend, state.dst_blend)),
             z_test: state.z_test != 0,
@@ -1121,6 +1296,14 @@ impl Renderer {
                     Kind::Mesh => "vs_mesh",
                     Kind::Skin => "vs_skin",
                     Kind::MeshEnv => "vs_env",
+                })
+                .map(|e| match (key.kind, key.shader) {
+                    (Kind::MeshEnv, MESH_NEO_VEHICLE) => "vs_neo_vehicle",
+                    (Kind::MeshEnv, MESH_NEO_WORLD) => "vs_neo_world",
+                    (Kind::Mesh, MESH_NEO_GLOSS) => "vs_neo_gloss",
+                    (Kind::Mesh, MESH_NEO_RIM) => "vs_neo_rim",
+                    (Kind::Skin, MESH_NEO_RIM) => "vs_neo_rim_skin",
+                    _ => e,
                 }),
                 buffers: &[Some(match key.kind {
                     Kind::Im2D => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex2D>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_2D },
@@ -1133,6 +1316,9 @@ impl Renderer {
             fragment: Some(wgpu::FragmentState {
                 module: &self.shader,
                 entry_point: Some(match (key.kind, key.shader) {
+                    (Kind::MeshEnv, MESH_NEO_VEHICLE) => "fs_neo_vehicle",
+                    (Kind::MeshEnv, MESH_NEO_WORLD) => "fs_neo_world",
+                    (Kind::Mesh, MESH_NEO_GLOSS) => "fs_neo_gloss",
                     (Kind::MeshEnv, _) => "fs_env",
                     (Kind::Im2D, 1) => "fs_colourfilter",
                     (Kind::Im2D, 2) => "fs_contrast",
@@ -1208,6 +1394,15 @@ impl Renderer {
         self.bind_groups.insert((texture, key), bind);
     }
 
+    /// Following clears and draws render into texture `texture` (level 0), or into the scene
+    /// with 0.
+    pub fn set_target(&mut self, texture: u32) {
+        if texture != self.recording_target {
+            self.ops.push(Op::Target { texture });
+            self.recording_target = texture;
+        }
+    }
+
     /// The frame so far, copied into texture `texture` at (x, y) when the frame is drawn.
     pub fn copy_frame(&mut self, texture: u32, x: u32, y: u32) {
         self.ops.push(Op::CopyFrame { texture, x, y });
@@ -1277,19 +1472,30 @@ impl Renderer {
             gpu.queue.write_buffer(&self.bones_buf, 0, &bytes);
         }
 
-        if self.depth.as_ref().is_none_or(|d| d.2 != size) {
-            let t = gpu.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("depth"),
-                size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: DEPTH_FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
+        // Depth buffers for the scene and every texture target of the frame.
+        let mut sizes = vec![size];
+        for op in &ops {
+            if let Op::Target { texture } = *op
+                && let Some(t) = self.textures.get(&texture)
+            {
+                sizes.push((t.width, t.height));
+            }
+        }
+        for sz in sizes {
+            self.depths.entry(sz).or_insert_with(|| {
+                let t = gpu.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("depth"),
+                    size: wgpu::Extent3d { width: sz.0, height: sz.1, depth_or_array_layers: 1 },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: DEPTH_FORMAT,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
+                });
+                let v = t.create_view(&Default::default());
+                (t, v)
             });
-            let v = t.create_view(&Default::default());
-            self.depth = Some((t, v, size));
         }
         if uniforms.len() > self.uniform_capacity {
             let cap = uniforms.len().next_power_of_two();
@@ -1331,8 +1537,26 @@ impl Renderer {
             }
         }
 
-        let depth_view = &self.depth.as_ref().unwrap().1;
-        let begin = |enc: &mut wgpu::CommandEncoder, first: bool, color: Option<[f64; 4]>, depth: bool| {
+        // Attachment views (level 0) of the frame's texture targets.
+        let mut target_views: HashMap<u32, (wgpu::TextureView, (u32, u32))> = HashMap::new();
+        for op in &ops {
+            if let Op::Target { texture } = *op
+                && texture != 0
+                && let Some(t) = self.textures.get(&texture)
+                && !t.format.is_compressed()
+            {
+                target_views.entry(texture).or_insert_with(|| {
+                    (t.texture.create_view(&wgpu::TextureViewDescriptor { base_mip_level: 0, mip_level_count: Some(1), ..Default::default() }), (t.width, t.height))
+                });
+            }
+        }
+        let depths = &self.depths;
+        // `target` 0 is the scene; `first` is the scene's first pass of the frame.
+        let begin = |enc: &mut wgpu::CommandEncoder, to: u32, first: bool, color: Option<[f64; 4]>, depth: bool| {
+            let (view, depth_view) = match target_views.get(&to) {
+                Some((v, sz)) => (v, &depths[sz].1),
+                None => (&scene_view, &depths[&size].1),
+            };
             let color_load = match color {
                 Some(c) => wgpu::LoadOp::Clear(wgpu::Color { r: c[0], g: c[1], b: c[2], a: 1.0 }),
                 None if first => wgpu::LoadOp::Clear(wgpu::Color::BLACK),
@@ -1342,7 +1566,7 @@ impl Renderer {
             enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("frame"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &scene_view,
+                    view,
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations { load: color_load, store: wgpu::StoreOp::Store },
@@ -1362,14 +1586,24 @@ impl Renderer {
         // geometry's buffers).
         let mut bound: Option<Kind> = None;
         let mut started = false;
+        // Current render target (0 = scene) and whether it can be drawn to (a destroyed or
+        // compressed target texture swallows its draws).
+        let mut cur_target = 0u32;
+        let mut target_ok = true;
         for op in &ops {
             match *op {
+                Op::Target { texture } => {
+                    drop(pass.take());
+                    bound = None;
+                    cur_target = texture;
+                    target_ok = texture == 0 || target_views.contains_key(&texture);
+                }
                 Op::CopyFrame { texture, x, y } => {
                     drop(pass.take());
                     bound = None;
                     if !started {
                         // Nothing drawn yet: the scene is still last frame's.
-                        pass = Some(begin(enc, true, None, false));
+                        pass = Some(begin(enc, 0, true, None, false));
                         started = true;
                         drop(pass.take());
                     }
@@ -1385,15 +1619,21 @@ impl Renderer {
                     );
                 }
                 Op::Clear { color, depth } => {
+                    if !target_ok {
+                        continue;
+                    }
                     drop(pass.take());
-                    pass = Some(begin(enc, !started, color, depth));
-                    started = true;
+                    pass = Some(begin(enc, cur_target, cur_target == 0 && !started, color, depth));
+                    started |= cur_target == 0;
                     bound = None;
                 }
                 Op::Draw { pipe, texture, sampler, uniform, first, count, mesh } => {
+                    if !target_ok {
+                        continue;
+                    }
                     if pass.is_none() {
-                        pass = Some(begin(enc, !started, None, false));
-                        started = true;
+                        pass = Some(begin(enc, cur_target, cur_target == 0 && !started, None, false));
+                        started |= cur_target == 0;
                         bound = None;
                     }
                     let p = pass.as_mut().unwrap();
@@ -1426,8 +1666,9 @@ impl Renderer {
                 }
             }
         }
+        drop(pass.take());
         if !started {
-            pass = Some(begin(enc, true, None, false));
+            pass = Some(begin(enc, 0, true, None, false));
         }
         drop(pass);
 
@@ -1464,6 +1705,7 @@ impl Renderer {
         self.models.clear();
         self.bones.clear();
         self.retired.clear();
+        self.recording_target = 0;
         for id in std::mem::take(&mut self.dead_textures) {
             self.textures.remove(&id);
             self.bind_groups.retain(|k, _| k.0 != id);

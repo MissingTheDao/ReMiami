@@ -243,6 +243,15 @@ pub unsafe extern "C" fn revc_rw_draw_mesh(state: *const DrawState, geometry: u3
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn revc_rw_set_target(texture: u32) {
+    RENDERER.with(|c| {
+        if let Some(r) = c.borrow_mut().as_mut() {
+            r.set_target(texture);
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn revc_rw_copy_frame(texture: u32, x: u32, y: u32) {
     RENDERER.with(|c| {
         if let Some(r) = c.borrow_mut().as_mut() {

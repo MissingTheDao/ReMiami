@@ -151,6 +151,79 @@ int32 dxtLevelSize(int32 dxt, int32 width, int32 height);
 void currentDrawState(DrawState *s);
 const float32 *viewProjMatrix(void);
 
+// Model drawing (wgpupipe.cpp), shared by the default, MatFX and skin pipelines and re3's custom
+// (Neo) pipelines in custompipes_wgpu.cpp.
+// revc_rw::frame::MeshVertex
+struct MeshVertex
+{
+	float32 pos[3];
+	float32 normal[3];
+	uint8 color[4];
+	float32 uv[2];
+	float32 uv2[2];	// second texture coordinate set (Neo world lightmaps)
+};
+
+// revc_rw::frame::SkinVertex
+struct SkinVertex
+{
+	MeshVertex base;
+	float32 weights[4];
+	uint8 indices[4];
+};
+
+// revc_rw::frame::ModelState
+struct ModelState
+{
+	float32 world[16];
+	float32 matColor[4];
+	float32 surfProps[4];
+	float32 ambient[4];
+	float32 lights[8][4][4];	// params, position, direction, colour
+	float32 texMatrix[16];	// MatFX env: normal to env texcoords
+	float32 colorClamp[4];
+	float32 envColor[4];
+	float32 fxParams[4];	// coefficient, 1 - frame-buffer alpha
+	float32 extra[12][4];	// Neo shader parameters (revc_rw::frame::MESH_NEO_*)
+};
+
+struct InstanceData
+{
+	uint32 first, count;	// triangle-list index range in the host geometry
+	Material *material;
+	bool32 vertexAlpha;
+};
+
+struct InstanceDataHeader : rw::InstanceDataHeader
+{
+	uint32 serialNumber;
+	int32 numMeshes;
+	InstanceData *inst;
+	uint32 geometry;	// host geometry id
+	bool32 skinned;
+};
+
+// DrawState::shader values for meshes (revc_rw::frame::MESH_NEO_*).
+enum { MESH_NEO_VEHICLE = 10, MESH_NEO_WORLD = 11, MESH_NEO_GLOSS = 12, MESH_NEO_RIM = 13 };
+
+// Instances the atomic's geometry with `pipe` (skinned if it is a skin pipeline); nil if there
+// is nothing to draw.
+InstanceDataHeader *instanceAtomic(ObjPipeline *pipe, Atomic *atomic);
+// World matrix, lights (gl3 lightingCB) and, for skinned geometry, bone matrices.
+void beginModel(Atomic *atomic, InstanceDataHeader *header, ModelState *model);
+// Direction of light slot 0 as gl3's u_lightDirection[0] holds it: set by the last atomic whose
+// first light has a direction, kept across unlit atomics (the Neo gloss shader reads it).
+const float32 *lastLightDirection(void);
+// gl3 setMaterial: colour and surface properties.
+void setModelMaterial(ModelState *model, const RGBA &color, const SurfaceProperties &surfProps);
+// gl3 setTexture on stage 0: raster, filter, addressing (nil: untextured).
+void setTexture(Texture *tex);
+// Draws one mesh (with the PS2 alpha test emulation) using shader `shader` (0 = default
+// lighting) and, if `useTex1`, `tex1` as second texture (nil = white).
+void drawMesh(InstanceDataHeader *header, InstanceData *inst, const ModelState *model, uint32 shader,
+	bool32 useTex1, Texture *tex1);
+// The default/MatFX/skin pipeline's drawing of an instanced atomic (gl3 defaultRenderCB etc.).
+void renderDefault(ObjPipeline *pipe, Atomic *atomic, InstanceDataHeader *header);
+
 // Default atomic pipeline (wgpupipe.cpp) and freeing of its instance data with the geometry.
 ObjPipeline *makeDefaultPipeline(void);
 // MatFX atomics (cars, ...): the default pipeline for now (no environment map pass yet).

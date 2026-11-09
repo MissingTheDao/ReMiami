@@ -236,7 +236,7 @@ fn mesh(backend: Backend) {
     let (n, f) = (1.0f32, 100.0f32);
     let proj: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, f / (f - n), 1.0, 0.0, 0.0, -n * f / (f - n), 0.0];
     // Two quads facing the camera (normal -z) at z = 10, left and right of the centre.
-    let v = |x: f32, y: f32| MeshVertex { pos: [x, y, 0.0], normal: [0.0, 0.0, -1.0], color: [0, 0, 0, 255], uv: [0.0, 0.0] };
+    let v = |x: f32, y: f32| MeshVertex { pos: [x, y, 0.0], normal: [0.0, 0.0, -1.0], color: [0, 0, 0, 255], uv: [0.0, 0.0], uv2: [0.0, 0.0] };
     let verts = [v(-5.0, -5.0), v(0.0, -5.0), v(0.0, 5.0), v(-5.0, 5.0), v(0.0, -5.0), v(5.0, -5.0), v(5.0, 5.0), v(0.0, 5.0)];
     let indices = [0u16, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
     let geo = r.upload_geometry(&gpu, 0, &verts, &indices);
@@ -295,7 +295,7 @@ fn skin(backend: Backend) {
     let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
     let (n, f) = (1.0f32, 100.0f32);
     let proj: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, f / (f - n), 1.0, 0.0, 0.0, -n * f / (f - n), 0.0];
-    let v = |x: f32, y: f32, w: [f32; 4]| SkinVertex { base: MeshVertex { pos: [x, y, 0.0], normal: [0.0, 0.0, -1.0], color: [255, 255, 255, 255], uv: [0.0, 0.0] }, weights: w, indices: [0, 1, 0, 0] };
+    let v = |x: f32, y: f32, w: [f32; 4]| SkinVertex { base: MeshVertex { pos: [x, y, 0.0], normal: [0.0, 0.0, -1.0], color: [255, 255, 255, 255], uv: [0.0, 0.0], uv2: [0.0, 0.0] }, weights: w, indices: [0, 1, 0, 0] };
     let one = [0.0, 1.0, 0.0, 0.0];
     let half = [0.5, 0.5, 0.0, 0.0];
     // Left quad on bone 1 (moved +5 in x => ends up right of centre); a thin strip halfway.
@@ -355,7 +355,7 @@ fn env(backend: Backend) {
     let proj: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, f / (f - n), 1.0, 0.0, 0.0, -n * f / (f - n), 0.0];
     let texels = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255];
     let env_tex = r.upload_texture(&gpu, 0, 2, 2, TexData::Rgba8, &[&texels], false);
-    let v = |x: f32, y: f32| MeshVertex { pos: [x, y, 0.0], normal: [0.0, 0.0, -1.0], color: [0, 0, 0, 255], uv: [0.0, 0.0] };
+    let v = |x: f32, y: f32| MeshVertex { pos: [x, y, 0.0], normal: [0.0, 0.0, -1.0], color: [0, 0, 0, 255], uv: [0.0, 0.0], uv2: [0.0, 0.0] };
     let verts = [v(-5.0, -5.0), v(0.0, -5.0), v(0.0, 5.0), v(-5.0, 5.0), v(0.0, -5.0), v(5.0, -5.0), v(5.0, 5.0), v(0.0, 5.0)];
     let geo = r.upload_geometry(&gpu, 0, &verts, &[0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
     let mut world = [0.0f32; 16];
@@ -505,4 +505,115 @@ fn colour_filter_vulkan() {
 #[test]
 fn colour_filter_gl() {
     colour_filter(Backend::Gl);
+}
+
+/// Render targets (a camera rendering into a texture, as the Neo env map camera does): clear and
+/// draw into a texture, then use it in the scene.
+fn render_to_texture(backend: Backend) {
+    let gpu = Gpu::headless(backend).expect("gpu");
+    let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+    let blank = vec![0u8; 16 * 16 * 4];
+    let tex = r.upload_texture(&gpu, 0, 16, 16, TexData::Rgba8, &[&blank], false);
+    r.clear(Some([0.0, 0.0, 1.0, 1.0]), true);
+    r.set_target(tex);
+    r.clear(Some([1.0, 0.0, 0.0, 1.0]), true);
+    // Green square in the texture's left half (xform for a 16x16 target).
+    let small = DrawState { xform: [2.0 / 16.0, -2.0 / 16.0, -1.0, 1.0], ..base() };
+    r.draw_2d(&small, 5, &quad(0.0, 0.0, 8.0, 16.0, [0, 255, 0, 255]), None);
+    r.set_target(0);
+    r.draw_2d(&DrawState { texture: tex, ..base() }, 5, &quad(0.0, 0.0, 32.0, 32.0, [255; 4]), None);
+    let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    r.encode(&gpu, &mut enc, &target.create_view(&Default::default()), (SIZE, SIZE));
+    r.end_frame();
+    let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+    gpu.queue.submit([enc.finish()]);
+    let img = readback_finish(&gpu, rb).expect("readback");
+    for ((x, y), want) in [((4, 16), [0, 255, 0, 255]), ((24, 16), [255, 0, 0, 255]), ((48, 48), [0, 0, 255, 255])] {
+        assert_eq!(px(&img, x, y), want, "{backend:?} render-to-texture pixel ({x},{y})");
+    }
+}
+
+#[test]
+fn render_to_texture_vulkan() {
+    render_to_texture(Backend::Vulkan);
+}
+
+#[test]
+fn render_to_texture_gl() {
+    render_to_texture(Backend::Gl);
+}
+
+/// Neo world lightmaps (neoWorldVC.frag): colour = t0 * lit * (1 + lm * (t1 - 1)), alpha =
+/// lit.a * t0.a * lm.a, with the lightmap sampled at the second UV set; ambient only.
+fn neo_world(backend: Backend) {
+    use revc_rw::frame::{EnvMap, MESH_NEO_WORLD, Mat4, MeshExtras, MeshVertex, ModelState};
+    let gpu = Gpu::headless(backend).expect("gpu");
+    let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+    let (n, f) = (1.0f32, 100.0f32);
+    let proj: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, f / (f - n), 1.0, 0.0, 0.0, -n * f / (f - n), 0.0];
+    // Lightmap: left texel dark grey (64), right texel white; the quad maps uv2 to the left one.
+    let lmtex = r.upload_texture(&gpu, 0, 2, 1, TexData::Rgba8, &[&[64, 64, 64, 255, 255, 255, 255, 255]], false);
+    let v = |x: f32, y: f32| MeshVertex { pos: [x, y, 0.0], normal: [0.0, 0.0, -1.0], color: [200, 100, 50, 255], uv: [0.0, 0.0], uv2: [0.25, 0.5] };
+    let verts = [v(-5.0, -5.0), v(5.0, -5.0), v(5.0, 5.0), v(-5.0, 5.0)];
+    let geo = r.upload_geometry(&gpu, 0, &verts, &[0, 1, 2, 0, 2, 3]);
+    let mut world = [0.0f32; 16];
+    world[0] = 1.0;
+    world[5] = 1.0;
+    world[10] = 1.0;
+    world[14] = 10.0;
+    world[15] = 1.0;
+    let mut extra = [[0.0f32; 4]; 12];
+    extra[0] = [0.5, 0.5, 0.5, 1.0];
+    // A directional light that the world shader must ignore (ambient only).
+    let mut lights = [[0.0f32; 4]; 32];
+    lights[0] = [1.0, 0.0, 0.0, 0.0];
+    lights[2] = [0.0, 0.0, 1.0, 0.0];
+    lights[3] = [1.0, 1.0, 1.0, 1.0];
+    let model = ModelState { ambient: [0.1, 0.1, 0.1, 1.0], lights, extra, ..ModelState::new(world) };
+    let e = MeshExtras { bones: None, env: Some(EnvMap { texture: lmtex, filter: 1, address_u: 3, address_v: 3 }) };
+    let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, shader: MESH_NEO_WORLD, ..base() };
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.draw_mesh(&state, geo, 0, 6, &proj, &model, &e);
+    let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    r.encode(&gpu, &mut enc, &target.create_view(&Default::default()), (SIZE, SIZE));
+    r.end_frame();
+    let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+    gpu.queue.submit([enc.finish()]);
+    let img = readback_finish(&gpu, rb).expect("readback");
+    // lit = prelit + 0.1 ambient (no directional); t0 white; lm factor 0.5 with t1 = 0.25.
+    let lit = [200.0 / 255.0 + 0.1, 100.0 / 255.0 + 0.1, 50.0 / 255.0 + 0.1];
+    let k = 1.0 + 0.5 * (64.0 / 255.0 - 1.0);
+    let want = [0, 1, 2].map(|c| (lit[c] * k * 255.0f32).round() as u8);
+    let got = px(&img, 32, 32);
+    assert!(near(got, [want[0], want[1], want[2], 255]), "{backend:?} neo world: got {got:?}, want {want:?}");
+}
+
+#[test]
+fn neo_world_vulkan() {
+    neo_world(Backend::Vulkan);
+}
+
+#[test]
+fn neo_world_gl() {
+    neo_world(Backend::Gl);
 }

@@ -143,6 +143,25 @@ Vulkan and wgpu GL.
 - test.sh: blessing saveload/texmods creates the reference folder (it silently failed before),
   and a missing saveload/texmods reference is reported instead of silently skipping the check.
 
+**Neo pipelines, the Xbox look (stage 1, step 9).** `EXTENDED_PIPELINES` now works on WGPU:
+`src/extras/custompipes_wgpu.cpp` ports custompipes_gl.cpp's render callbacks onto a small model
+API of the WGPU device (`instanceAtomic`, `beginModel`, `setModelMaterial`, `setTexture`,
+`drawMesh`, `renderDefault` in rwwgpu.h), and revc-rw has the Neo shaders in WGSL
+(MESH_NEO_VEHICLE / WORLD / GLOSS / RIM; rim also skinned). Needed for it:
+- Render targets: a camera whose frame buffer is a camera texture draws into that texture
+  (`Op::Target`; depth buffer per size). The env map camera renders the scene into it every frame.
+- Model vertices carry the second UV set (world lightmaps); the model uniform has a 12-vector
+  block for the Neo parameters.
+- Faithful to gl3: vehicle and rim shaders light with directionals only, the world shader with
+  ambient only (default_UV2.vert is built without light defines), and the gloss pass reads
+  light 0's direction as gl3 leaves it from the last lit atomic (roads are unlit).
+Checked against GL3 with all four effects on (scratch config, not a committed test): per shot the
+Neo-on minus Neo-off delta matches between the renderers (saveload, where Neo changes 5.7 % of
+pixels: 98 % of those agree; elsewhere the mismatches are at most 0.12 % of pixels). Offscreen
+tests: render to texture and the world lightmap formula, both backends. Cars with the Neo vehicle
+shader still need a look in person (no car in the test shots). Still compiled out on WGPU:
+SCREEN_DROPLETS, NEW_RENDERER.
+
 ## What the game calls
 
 The game reaches librw only through the RenderWare-style API in `cpp/re3-miami/src/fakerw`
