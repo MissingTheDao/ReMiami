@@ -45,6 +45,16 @@ Controller):
 - [ ] A broken file: the console says `texmods: ... keeping the original` and the game shows
       the original texture.
 
+## Task 12: wgpu renderer (work in progress)
+
+Build: `cd rust && CARGO_TARGET_DIR=target-wgpu cargo build --features wgpu`, run
+`target-wgpu/debug/revc` (backend: `REVC_RENDERER_BACKEND=vulkan` or `gl`). No colour filter yet.
+
+- [ ] Cars have their shiny reflections (MatFX environment map) like the normal build, on both
+      backends; nothing looks inside out or too bright.
+- [ ] Peds walk and animate normally (skinning); no stretched limbs.
+- [ ] Menus, HUD, text, radar look like the normal build.
+
 ## Task 7 leftovers
 
 - [ ] Change the screen resolution in the in-game Display Setup menu (not only at start-up).

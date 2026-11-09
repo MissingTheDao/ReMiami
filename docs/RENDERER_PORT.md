@@ -97,6 +97,23 @@ test on both backends; in game the player stands in the same pose as in the GL3 
 remaining difference to GL3 in saveload (19 %) is the colour filter, which the WGPU build doesn't
 run yet; the user likes the unfiltered look, so the filter will get an off switch (plan 13, 23).
 
+**Stage 1, step 6 done: MatFX environment maps (car reflections) and the colour filter.**
+- MatFX env: one pass like gl3 matfxEnvRender / matfx_env shaders (env matrix from the env
+  frame or camera as gl3 uploadEnvMatrix, coefficient, PC/PS2 lighting clamp, env colour,
+  premultiplied, source blend ONE). In game the env pass runs (about 28k env draws over the spots
+  run); the look of cars still needs a person (docs/PLAYTEST.md), the test scenes show no car
+  up close. Offscreen test: env texel choice and coefficient on both backends.
+- Frames are drawn into an offscreen RGBA8 scene texture and blitted to the window. librw
+  `rasterRenderFast` (camera into a texture, CMBlur's frame copy) becomes a copy of the scene so
+  far; screenshots read the scene texture (no swapchain copy, no extra redraw on GL). The scene
+  has no alpha channel, like D3D's X8R8G8B8 back buffer (writes are colour only, alpha reads 1).
+- With that CMBlur's colour filter and glow run: the difference to the GL3 references drops from
+  ~19 % to 0.7-3.7 % (saveload 1.1 %), average colour equal. What remains are fringes at bright
+  edges in the glow layer. Ruled out: frame pacing (identical without vsync), a global shift, and
+  the glow direction (mirroring the game's +2 px glow offset doesn't help). The WGPU path follows
+  the game code and D3D semantics, so the GL3 references are close guides here, not pixel truth;
+  the wgpu build will need its own reference set when it becomes the default.
+
 ## What the game calls
 
 The game reaches librw only through the RenderWare-style API in `cpp/re3-miami/src/fakerw`
@@ -180,7 +197,7 @@ struct EngineOpenParams;
 Order inside stage 1, smallest testable steps first: device + camera clear + show raster (a
 blank game frame, done) -> rasters and textures + Im2D + render states (whole front end, done) ->
 DXT kept compressed (BC, done) -> Im3D (effects, done) -> default atomic pipeline (world, cars,
-done) -> skin (done) -> MatFX -> post effects (colour filter: frame as a texture).
+done) -> skin (done) -> MatFX (done) -> post effects (colour filter done; others to check).
 The front-end and HUD come first because the boot scenario and every in-game screenshot show
 them.
 

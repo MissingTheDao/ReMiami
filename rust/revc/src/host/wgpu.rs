@@ -4,7 +4,7 @@
 //! revc_rw::frame::Renderer and drawn when the frame is presented; Im3D and models come next.
 
 use revc_rw::Backend;
-use revc_rw::frame::{DrawState, MAX_BONES, Mat4, MeshVertex, ModelState, Renderer, SkinVertex, TexData, Vertex2D, Vertex3D};
+use revc_rw::frame::{DrawState, EnvMap, MAX_BONES, Mat4, MeshExtras, MeshVertex, ModelState, Renderer, SkinVertex, TexData, Vertex2D, Vertex3D};
 use revc_rw::present::{NativeWindow, Presenter};
 use sdl3_sys::everything::*;
 use std::cell::{Cell, RefCell};
@@ -224,19 +224,29 @@ pub extern "C" fn revc_rw_geometry_destroy(id: u32) {
 
 /// # Safety
 /// `state` and `model` (a ModelState) are valid; `view_proj` points at 16 floats; `bones` is null
-/// (unskinned) or holds `num_bones` matrices of 16 floats.
+/// (unskinned) or holds `num_bones` matrices of 16 floats; `env` is null or a MatFX env map.
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
-pub unsafe extern "C" fn revc_rw_draw_mesh(state: *const DrawState, geometry: u32, first: u32, count: u32, view_proj: *const f32, model: *const ModelState, bones: *const Mat4, num_bones: i32) {
+pub unsafe extern "C" fn revc_rw_draw_mesh(state: *const DrawState, geometry: u32, first: u32, count: u32, view_proj: *const f32, model: *const ModelState, bones: *const Mat4, num_bones: i32, env: *const EnvMap) {
     if state.is_null() || view_proj.is_null() || model.is_null() {
         return;
     }
     let (state, model) = unsafe { (&*state, &*model) };
     let vp: Mat4 = unsafe { *view_proj.cast::<Mat4>() };
     let bones = (!bones.is_null()).then(|| unsafe { std::slice::from_raw_parts(bones, num_bones.clamp(0, MAX_BONES as i32) as usize) });
+    let env = (!env.is_null()).then(|| unsafe { *env });
     RENDERER.with(|c| {
         if let Some(r) = c.borrow_mut().as_mut() {
-            r.draw_mesh(state, geometry, first, count, &vp, model, bones);
+            r.draw_mesh(state, geometry, first, count, &vp, model, &MeshExtras { bones, env });
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_rw_copy_frame(texture: u32, x: u32, y: u32) {
+    RENDERER.with(|c| {
+        if let Some(r) = c.borrow_mut().as_mut() {
+            r.copy_frame(texture, x, y);
         }
     });
 }

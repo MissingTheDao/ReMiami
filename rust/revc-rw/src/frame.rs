@@ -93,6 +93,50 @@ pub struct ModelState {
     /// 8 lights x (params: type 0 end / 1 directional / 2 point / 3 spot, radius, minusCosAngle,
     /// hardSpot; position; direction; colour).
     pub lights: [[f32; 4]; 32],
+    /// MatFX environment map (only read by environment-mapped draws, gl3 matfx_env): normal to
+    /// env texture coordinates, the lit colour's lower clamp (0 = PC style lit env map, 1 = env
+    /// map at full strength), the env colour, and (coefficient, 1 - frame-buffer alpha flag).
+    pub tex_matrix: [f32; 16],
+    pub color_clamp: [f32; 4],
+    pub env_color: [f32; 4],
+    pub fx_params: [f32; 4],
+}
+
+impl ModelState {
+    /// A model state without lights or environment map.
+    pub fn new(world: [f32; 16]) -> ModelState {
+        ModelState {
+            world,
+            mat_color: [1.0; 4],
+            surf_props: [1.0, 0.0, 1.0, 0.0],
+            ambient: [0.0; 4],
+            lights: [[0.0; 4]; 32],
+            tex_matrix: [0.0; 16],
+            color_clamp: [0.0; 4],
+            env_color: [0.0; 4],
+            fx_params: [0.0; 4],
+        }
+    }
+}
+
+/// The environment texture of a MatFX draw, with its texture's filter and addressing (the
+/// device passes it as is: `RevcEnvMap` in wgpupipe.cpp).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EnvMap {
+    pub texture: u32,
+    pub filter: u32,
+    pub address_u: u32,
+    pub address_v: u32,
+}
+
+/// What a mesh draw adds to the plain lit pipeline.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MeshExtras<'a> {
+    /// Bone matrices of a skinned geometry.
+    pub bones: Option<&'a [Mat4]>,
+    /// MatFX environment map pass.
+    pub env: Option<EnvMap>,
 }
 const MODEL_FLOATS: usize = std::mem::size_of::<ModelState>() / 4;
 
@@ -147,6 +191,17 @@ enum Kind {
     Im3D,
     Mesh,
     Skin,
+    MeshEnv,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct MeshDraw {
+    geometry: u32,
+    model: u32,
+    /// Bone block for skinned draws.
+    bones: u32,
+    /// Environment texture and sampler for MatFX draws.
+    env: Option<(u32, SamplerKey)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -175,8 +230,29 @@ enum Op {
     /// Immediate geometry (first/count vertices) or, with `mesh` = (geometry, model uniform), an
     /// index range of a stored geometry.
     /// For skinned meshes the third value is the bone-matrix block.
-    Draw { pipe: PipeKey, texture: u32, sampler: SamplerKey, uniform: u32, first: u32, count: u32, mesh: Option<(u32, u32, u32)> },
+    Draw { pipe: PipeKey, texture: u32, sampler: SamplerKey, uniform: u32, first: u32, count: u32, mesh: Option<MeshDraw> },
+    /// The frame so far copied into a texture at (x, y) (librw rasterRenderFast of the camera).
+    CopyFrame { texture: u32, x: u32, y: u32 },
 }
+
+/// The frame is drawn into an offscreen texture of this format, then shown (blitted) on the
+/// output; frame copies (post effects) and screenshots read it.
+pub const SCENE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+
+const BLIT_SHADER: &str = r#"
+@group(0) @binding(0) var scene: texture_2d<f32>;
+
+@vertex
+fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+    let p = vec2<f32>(f32((i << 1u) & 2u), f32(i & 2u));
+    return vec4<f32>(p * 2.0 - 1.0, 0.0, 1.0);
+}
+
+@fragment
+fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    return textureLoad(scene, vec2<i32>(pos.xy), 0);
+}
+"#;
 
 struct Geom {
     vertices: wgpu::Buffer,
@@ -269,7 +345,17 @@ fn vs_3d(@location(0) pos: vec3<f32>, @location(1) color: vec4<f32>, @location(2
 
 // gl3 default.vert: prelit colour + ambient * surfAmbient + dynamic lights * surfDiffuse,
 // clamped, times the material colour. Normals are transformed by the world matrix unnormalised.
-struct M { world: mat4x4<f32>, mat_color: vec4<f32>, surf: vec4<f32>, ambient: vec4<f32>, lights: array<vec4<f32>, 32> };
+struct M {
+    world: mat4x4<f32>,
+    mat_color: vec4<f32>,
+    surf: vec4<f32>,
+    ambient: vec4<f32>,
+    lights: array<vec4<f32>, 32>,
+    tex_matrix: mat4x4<f32>,
+    color_clamp: vec4<f32>,
+    env_color: vec4<f32>,
+    fx: vec4<f32>,
+};
 @group(2) @binding(0) var<uniform> m: M;
 
 fn dynamic_light(v: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
@@ -345,6 +431,51 @@ fn lit(pos: vec3<f32>, normal: vec3<f32>, color: vec4<f32>, uv: vec2<f32>) -> Ou
     return o;
 }
 
+// gl3 matfx_env.vert/.frag: base pass and environment map in one, colour premultiplied by
+// the base alpha (drawn with source blend ONE).
+struct OutEnv {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) color: vec4<f32>,
+    @location(1) uv: vec2<f32>,
+    @location(2) fog: f32,
+    @location(3) env_color: vec4<f32>,
+    @location(4) uv1: vec2<f32>,
+};
+@group(3) @binding(0) var env_tex: texture_2d<f32>;
+@group(3) @binding(1) var env_samp: sampler;
+
+@vertex
+fn vs_env(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>) -> OutEnv {
+    var o: OutEnv;
+    let v = m.world * vec4<f32>(pos, 1.0);
+    o.pos = u.mvp * v;
+    let n = (m.world * vec4<f32>(normal, 0.0)).xyz;
+    o.uv = uv;
+    o.uv1 = (m.tex_matrix * vec4<f32>(n, 1.0)).xy;
+    var c = color;
+    c = vec4<f32>(c.rgb + m.ambient.rgb * m.surf.x, c.a);
+    c = vec4<f32>(c.rgb + dynamic_light(v.xyz, n) * m.surf.z, c.a);
+    c = clamp(c, vec4<f32>(0.0), vec4<f32>(1.0));
+    o.env_color = max(c, m.color_clamp) * m.env_color;
+    o.color = c * m.mat_color;
+    o.fog = clamp((o.pos.w - u.fog.y) * u.fog.z, u.fog.w, 1.0);
+    return o;
+}
+
+@fragment
+fn fs_env(i: OutEnv) -> @location(0) vec4<f32> {
+    var p1 = i.color * textureSample(tex, samp, i.uv);
+    var p2 = i.env_color * m.fx.x * textureSample(env_tex, env_samp, i.uv1);
+    p1 = vec4<f32>(mix(u.fog_color.rgb, p1.rgb, i.fog), p1.a);
+    p2 = vec4<f32>(p2.rgb * i.fog, p2.a);
+    let fba = max(p1.a, m.fx.y);
+    let c = vec4<f32>(p1.rgb * p1.a + p2.rgb * fba, p1.a);
+    if (c.a < u.alpha.x || c.a >= u.alpha.y) {
+        discard;
+    }
+    return c;
+}
+
 @fragment
 fn fs_simple(i: Out) -> @location(0) vec4<f32> {
     var c = i.color * textureSample(tex, samp, i.uv);
@@ -357,7 +488,11 @@ fn fs_simple(i: Out) -> @location(0) vec4<f32> {
 "#;
 
 pub struct Renderer {
+    /// Pipelines draw into the scene texture (SCENE_FORMAT).
     format: wgpu::TextureFormat,
+    blit_pipeline: wgpu::RenderPipeline,
+    blit_layout: wgpu::BindGroupLayout,
+    scene: Option<(wgpu::Texture, wgpu::BindGroup, (u32, u32))>,
     shader: wgpu::ShaderModule,
     texture_layout: wgpu::BindGroupLayout,
     uniform_layout: wgpu::BindGroupLayout,
@@ -370,6 +505,7 @@ pub struct Renderer {
     model_bind: wgpu::BindGroup,
     models: Vec<ModelState>,
     skin_layout: wgpu::PipelineLayout,
+    env_layout: wgpu::PipelineLayout,
     bones_layout: wgpu::BindGroupLayout,
     bones_stride: u64,
     bones_buf: wgpu::Buffer,
@@ -475,9 +611,32 @@ fn write_levels(gpu: &Gpu, t: &Tex, levels: &[&[u8]]) {
 }
 
 impl Renderer {
-    /// For render targets of `format` (the window's swapchain format).
-    pub fn new(gpu: &Gpu, format: wgpu::TextureFormat) -> Renderer {
+    /// For output targets of `output` format (the window's swapchain format).
+    pub fn new(gpu: &Gpu, output: wgpu::TextureFormat) -> Renderer {
         let d = &gpu.device;
+        let format = SCENE_FORMAT;
+        let blit_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("blit"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                count: None,
+            }],
+        });
+        let blit_shader = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("blit"), source: wgpu::ShaderSource::Wgsl(BLIT_SHADER.into()) });
+        let blit_pl = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("blit"), bind_group_layouts: &[Some(&blit_layout)], immediate_size: 0 });
+        let blit_pipeline = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("blit"),
+            layout: Some(&blit_pl),
+            vertex: wgpu::VertexState { module: &blit_shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
+            fragment: Some(wgpu::FragmentState { module: &blit_shader, entry_point: Some("fs"), targets: &[Some(output.into())], compilation_options: Default::default() }),
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            multiview_mask: None,
+            cache: None,
+        });
         let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("im2d"), source: wgpu::ShaderSource::Wgsl(SHADER.into()) });
         let uniform_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("draw uniforms"),
@@ -505,7 +664,7 @@ impl Renderer {
             label: Some("model uniforms"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: true, min_binding_size: None },
                 count: None,
             }],
@@ -513,6 +672,11 @@ impl Renderer {
         let mesh_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("mesh"),
             bind_group_layouts: &[Some(&uniform_layout), Some(&texture_layout), Some(&model_layout)],
+            immediate_size: 0,
+        });
+        let env_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("mesh env"),
+            bind_group_layouts: &[Some(&uniform_layout), Some(&texture_layout), Some(&model_layout), Some(&texture_layout)],
             immediate_size: 0,
         });
         let align = d.limits().min_uniform_buffer_offset_alignment as u64;
@@ -542,6 +706,9 @@ impl Renderer {
         let vertex3_buf = Self::make_vertices(gpu, 4096 * std::mem::size_of::<Vertex3D>());
         Renderer {
             format,
+            blit_pipeline,
+            blit_layout,
+            scene: None,
             shader,
             texture_layout,
             uniform_layout,
@@ -554,6 +721,7 @@ impl Renderer {
             model_bind,
             models: Vec::new(),
             skin_layout,
+            env_layout,
             bones_layout,
             bones_stride,
             bones_buf,
@@ -760,10 +928,11 @@ impl Renderer {
     }
 
     /// Triangles `first..first + count` of the index list of a stored geometry, lit with
-    /// `model`; `view_proj` = projection * view. A skinned geometry gets its `bones` (at most
-    /// MAX_BONES; missing ones are identity).
+    /// `model`; `view_proj` = projection * view. A skinned geometry gets its bones (at most
+    /// MAX_BONES; missing ones are identity); a MatFX material its environment map.
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_mesh(&mut self, state: &DrawState, geometry: u32, first: u32, count: u32, view_proj: &Mat4, model: &ModelState, bones: Option<&[Mat4]>) {
+    pub fn draw_mesh(&mut self, state: &DrawState, geometry: u32, first: u32, count: u32, view_proj: &Mat4, model: &ModelState, extras: &MeshExtras) {
+        let bones = extras.bones;
         if !self.geometries.contains_key(&geometry) {
             return;
         }
@@ -786,11 +955,17 @@ impl Renderer {
             }
             None => (Kind::Mesh, u32::MAX),
         };
-        self.record(state, 3, kind, first, count, view_proj, Some((geometry, mi, bi)));
+        let env = extras.env.map(|e| {
+            let t = if self.textures.contains_key(&e.texture) { e.texture } else { 0 };
+            (t, SamplerKey { filter: e.filter, address_u: e.address_u, address_v: e.address_v })
+        });
+        // Skinned atomics never take the MatFX path (as in gl3, whose skin pipeline has no env pass).
+        let kind = if env.is_some() && kind == Kind::Mesh { Kind::MeshEnv } else { kind };
+        self.record(state, 3, kind, first, count, view_proj, Some(MeshDraw { geometry, model: mi, bones: bi, env }));
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn record(&mut self, state: &DrawState, prim: u32, kind: Kind, first: u32, count: u32, mvp: &Mat4, mesh: Option<(u32, u32, u32)>) {
+    fn record(&mut self, state: &DrawState, prim: u32, kind: Kind, first: u32, count: u32, mvp: &Mat4, mesh: Option<MeshDraw>) {
         if count == 0 {
             return;
         }
@@ -884,10 +1059,12 @@ impl Renderer {
                 Kind::Im3D => "im3d",
                 Kind::Mesh => "mesh",
                 Kind::Skin => "skin",
+                Kind::MeshEnv => "mesh env",
             }),
             layout: Some(match key.kind {
                 Kind::Mesh => &self.mesh_layout,
                 Kind::Skin => &self.skin_layout,
+                Kind::MeshEnv => &self.env_layout,
                 _ => &self.pipeline_layout,
             }),
             vertex: wgpu::VertexState {
@@ -897,19 +1074,22 @@ impl Renderer {
                     Kind::Im3D => "vs_3d",
                     Kind::Mesh => "vs_mesh",
                     Kind::Skin => "vs_skin",
+                    Kind::MeshEnv => "vs_env",
                 }),
                 buffers: &[Some(match key.kind {
                     Kind::Im2D => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex2D>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_2D },
                     Kind::Im3D => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex3D>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_3D },
-                    Kind::Mesh => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<MeshVertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_MESH },
+                    Kind::Mesh | Kind::MeshEnv => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<MeshVertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_MESH },
                     Kind::Skin => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<SkinVertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_SKIN },
                 })],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &self.shader,
-                entry_point: Some("fs_simple"),
-                targets: &[Some(wgpu::ColorTargetState { format: self.format, blend, write_mask: wgpu::ColorWrites::ALL })],
+                entry_point: Some(if key.kind == Kind::MeshEnv { "fs_env" } else { "fs_simple" }),
+                // The frame has no alpha channel (D3D's X8R8G8B8 back buffer, GL3's window): alpha
+                // stays 1, so destination alpha and copies of the frame read opaque.
+                targets: &[Some(wgpu::ColorTargetState { format: self.format, blend, write_mask: wgpu::ColorWrites::COLOR })],
                 compilation_options: Default::default(),
             }),
             primitive: wgpu::PrimitiveState {
@@ -972,9 +1152,38 @@ impl Renderer {
         self.bind_groups.insert((texture, key), bind);
     }
 
-    /// Encodes the recorded frame into `target` (`size` pixels, the renderer's format). The
-    /// recording stays until `end_frame`, so a frame can be encoded into more than one target.
+    /// The frame so far, copied into texture `texture` at (x, y) when the frame is drawn.
+    pub fn copy_frame(&mut self, texture: u32, x: u32, y: u32) {
+        self.ops.push(Op::CopyFrame { texture, x, y });
+    }
+
+    /// The last encoded frame (SCENE_FORMAT, COPY_SRC), for screenshots.
+    pub fn scene_texture(&self) -> Option<&wgpu::Texture> {
+        self.scene.as_ref().map(|s| &s.0)
+    }
+
+    /// Encodes the recorded frame into the scene texture and shows it on `target` (`size` pixels,
+    /// the output format given to `new`). The recording stays until `end_frame`.
     pub fn encode(&mut self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32)) {
+        if self.scene.as_ref().is_none_or(|s| s.2 != size) {
+            let t = gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("scene"),
+                size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: SCENE_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("blit"),
+                layout: &self.blit_layout,
+                entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&t.create_view(&Default::default())) }],
+            });
+            self.scene = Some((t, bind, size));
+        }
+        let scene_view = self.scene.as_ref().unwrap().0.create_view(&Default::default());
         let ops = std::mem::take(&mut self.ops);
         let verts = std::mem::take(&mut self.verts);
         let verts3 = std::mem::take(&mut self.verts3);
@@ -1057,16 +1266,19 @@ impl Renderer {
             gpu.queue.write_buffer(&self.vertex3_buf, 0, bytes3);
         }
         for op in &ops {
-            if let Op::Draw { pipe, texture, sampler, .. } = *op {
+            if let Op::Draw { pipe, texture, sampler, mesh, .. } = *op {
                 self.ensure_pipeline(gpu, pipe);
                 self.ensure_bind_group(gpu, texture, sampler);
+                if let Some(MeshDraw { env: Some((t, s)), .. }) = mesh {
+                    self.ensure_bind_group(gpu, t, s);
+                }
             }
         }
 
         let depth_view = &self.depth.as_ref().unwrap().1;
         let begin = |enc: &mut wgpu::CommandEncoder, first: bool, color: Option<[f64; 4]>, depth: bool| {
             let color_load = match color {
-                Some(c) => wgpu::LoadOp::Clear(wgpu::Color { r: c[0], g: c[1], b: c[2], a: c[3] }),
+                Some(c) => wgpu::LoadOp::Clear(wgpu::Color { r: c[0], g: c[1], b: c[2], a: 1.0 }),
                 None if first => wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                 None => wgpu::LoadOp::Load,
             };
@@ -1074,7 +1286,7 @@ impl Renderer {
             enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("frame"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target,
+                    view: &scene_view,
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations { load: color_load, store: wgpu::StoreOp::Store },
@@ -1096,6 +1308,26 @@ impl Renderer {
         let mut started = false;
         for op in &ops {
             match *op {
+                Op::CopyFrame { texture, x, y } => {
+                    drop(pass.take());
+                    bound = None;
+                    if !started {
+                        // Nothing drawn yet: the scene is still last frame's.
+                        pass = Some(begin(enc, true, None, false));
+                        started = true;
+                        drop(pass.take());
+                    }
+                    let Some(t) = self.textures.get(&texture) else { continue };
+                    let (w, h) = (size.0.min(t.width.saturating_sub(x)), size.1.min(t.height.saturating_sub(y)));
+                    if t.format != SCENE_FORMAT || w == 0 || h == 0 {
+                        continue;
+                    }
+                    enc.copy_texture_to_texture(
+                        wgpu::TexelCopyTextureInfo { texture: &self.scene.as_ref().unwrap().0, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+                        wgpu::TexelCopyTextureInfo { texture: &t.texture, mip_level: 0, origin: wgpu::Origin3d { x, y, z: 0 }, aspect: wgpu::TextureAspect::All },
+                        wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                    );
+                }
                 Op::Clear { color, depth } => {
                     drop(pass.take());
                     pass = Some(begin(enc, !started, color, depth));
@@ -1113,11 +1345,14 @@ impl Renderer {
                     p.set_bind_group(0, &self.uniform_bind, &[(uniform as u64 * self.uniform_stride) as u32]);
                     p.set_bind_group(1, &self.bind_groups[&(texture, sampler)], &[]);
                     match mesh {
-                        Some((geometry, model, bones)) => {
+                        Some(MeshDraw { geometry, model, bones, env }) => {
                             let Some(g) = self.geometries.get(&geometry) else { continue };
                             p.set_bind_group(2, &self.model_bind, &[(model as u64 * self.model_stride) as u32]);
                             if pipe.kind == Kind::Skin {
                                 p.set_bind_group(3, &self.bones_bind, &[(bones as u64 * self.bones_stride) as u32]);
+                            }
+                            if let (Kind::MeshEnv, Some(e)) = (pipe.kind, env) {
+                                p.set_bind_group(3, &self.bind_groups[&e], &[]);
                             }
                             p.set_vertex_buffer(0, g.vertices.slice(..));
                             p.set_index_buffer(g.indices.slice(..), wgpu::IndexFormat::Uint16);
@@ -1135,10 +1370,26 @@ impl Renderer {
                 }
             }
         }
-        if pass.is_none() {
+        if !started {
             pass = Some(begin(enc, true, None, false));
         }
         drop(pass);
+
+        // Show the scene on the output.
+        let mut blit = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("blit"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                resolve_target: None,
+                depth_slice: None,
+                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+            })],
+            ..Default::default()
+        });
+        blit.set_pipeline(&self.blit_pipeline);
+        blit.set_bind_group(0, &self.scene.as_ref().unwrap().1, &[]);
+        blit.draw(0..3, 0..1);
+        drop(blit);
 
         self.ops = ops;
         self.verts = verts;

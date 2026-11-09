@@ -76,10 +76,6 @@ impl Presenter {
         if let Some(f) = pick {
             config.format = f;
         }
-        // Screenshots for the regression harness copy the swapchain image.
-        if surface.get_capabilities(&gpu.adapter).usages.contains(wgpu::TextureUsages::COPY_SRC) {
-            config.usage |= wgpu::TextureUsages::COPY_SRC;
-        }
         config.present_mode = if vsync { wgpu::PresentMode::AutoVsync } else { wgpu::PresentMode::AutoNoVsync };
         surface.configure(&gpu.device, &config);
         Ok(Presenter { gpu, surface, config })
@@ -122,25 +118,8 @@ impl Presenter {
         let view = frame.texture.create_view(&Default::default());
         let mut enc = self.gpu.device.create_command_encoder(&Default::default());
         renderer.encode(&self.gpu, &mut enc, &view, size);
-        let readback = if !capture {
-            None
-        } else if self.config.usage.contains(wgpu::TextureUsages::COPY_SRC) {
-            Some(readback_start(&self.gpu, &mut enc, &frame.texture, size))
-        } else {
-            // The swapchain can't be copied from (GL): draw the frame once more offscreen.
-            let shot = self.gpu.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("capture"),
-                size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.config.format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[],
-            });
-            renderer.encode(&self.gpu, &mut enc, &shot.create_view(&Default::default()), size);
-            Some(readback_start(&self.gpu, &mut enc, &shot, size))
-        };
+        // Screenshots read the scene texture (RGBA8) the frame was drawn into.
+        let readback = if capture { renderer.scene_texture().map(|t| readback_start(&self.gpu, &mut enc, t, size)) } else { None };
         renderer.end_frame();
         self.gpu.queue.submit([enc.finish()]);
         let shot = match readback {

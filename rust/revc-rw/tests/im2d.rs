@@ -84,7 +84,7 @@ fn check(backend: Backend) {
         ((56, 8), [0, 255, 0, 255]),      // texture top-right
         ((40, 24), [0, 0, 255, 255]),     // texture bottom-left
         ((56, 24), [255, 255, 255, 255]), // texture bottom-right
-        ((8, 48), [128, 128, 255, 191]),  // 50 % white over blue; alpha blends with the same factors (glBlendFunc)
+        ((8, 48), [128, 128, 255, 255]), // 50 % white over blue (the frame keeps no alpha, like D3D's X8R8G8B8)
         ((40, 48), [0, 0, 255, 255]),     // alpha-tested away
         ((62, 62), [0, 255, 0, 255]),     // drawn after the depth-only clear
     ];
@@ -110,8 +110,9 @@ fn dxt_case(backend: Backend, width: u32, height: u32, kind: u8, data: TexData, 
     let gpu = Gpu::headless(backend).expect("gpu");
     let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
     let tex = r.upload_texture(&gpu, 0, width, height, data, &[blocks], false);
-    // No blending or alpha test: compare raw colour (alpha is checked separately below).
-    let state = DrawState { texture: tex, alpha_func: 0, ..base() };
+    // Blended over black without alpha test: the frame shows colour * alpha, which checks the
+    // decoded alpha too (the frame itself keeps no alpha).
+    let state = DrawState { texture: tex, alpha_func: 0, blend: 1, ..base() };
     r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
     r.draw_2d(&state, 5, &quad(0.0, 0.0, 64.0, 64.0, [255, 255, 255, 255]), None);
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -138,8 +139,8 @@ fn dxt_case(backend: Backend, width: u32, height: u32, kind: u8, data: TexData, 
             let w = [want[i], want[i + 1], want[i + 2], want[i + 3]];
             let got = px(&img, x, y);
             // Hardware BC decoders round the interpolated colours their own way (a level or two).
-            assert!(got[..3].iter().zip(&w[..3]).all(|(a, b)| a.abs_diff(*b) <= 3), "{backend:?} {data:?} {width}x{height} texel ({tx},{ty}): got {got:?}, want {w:?}");
-            assert_eq!(got[3], w[3], "{backend:?} {data:?} texel ({tx},{ty}) alpha");
+            let w = [0, 1, 2].map(|c| (w[c] as u32 * w[3] as u32 / 255) as u8);
+            assert!(got[..3].iter().zip(&w).all(|(a, b)| a.abs_diff(*b) <= 3), "{backend:?} {data:?} {width}x{height} texel ({tx},{ty}): got {got:?}, want rgb*a {w:?}");
         }
     }
 }
@@ -229,7 +230,7 @@ fn im3d_gl() {
 /// Lit geometry (gl3 default pipeline maths): prelit black + ambient * surfAmbient + directional
 /// * surfDiffuse, clamped, times the material colour; two meshes as index ranges of one geometry.
 fn mesh(backend: Backend) {
-    use revc_rw::frame::{Mat4, MeshVertex, ModelState};
+    use revc_rw::frame::{Mat4, MeshExtras, MeshVertex, ModelState};
     let gpu = Gpu::headless(backend).expect("gpu");
     let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
     let (n, f) = (1.0f32, 100.0f32);
@@ -249,11 +250,11 @@ fn mesh(backend: Backend) {
     world[10] = 1.0;
     world[14] = 10.0;
     world[15] = 1.0;
-    let model = ModelState { world, mat_color: [1.0; 4], surf_props: [1.0, 0.0, 1.0, 0.0], ambient: [0.2, 0.2, 0.2, 1.0], lights };
+    let model = ModelState { ambient: [0.2, 0.2, 0.2, 1.0], lights, ..ModelState::new(world) };
     let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, ..base() };
     r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
-    r.draw_mesh(&state, geo, 0, 6, &proj, &model, None);
-    r.draw_mesh(&state, geo, 6, 6, &proj, &ModelState { mat_color: [0.5, 0.5, 0.5, 1.0], ..model }, None);
+    r.draw_mesh(&state, geo, 0, 6, &proj, &model, &MeshExtras::default());
+    r.draw_mesh(&state, geo, 6, 6, &proj, &ModelState { mat_color: [0.5, 0.5, 0.5, 1.0], ..model }, &MeshExtras::default());
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
@@ -289,7 +290,7 @@ fn mesh_gl() {
 /// Skinning: a quad bound fully to bone 1 is moved by that bone's matrix (gl3 skin.vert), and
 /// half-and-half weights blend the two bones.
 fn skin(backend: Backend) {
-    use revc_rw::frame::{Mat4, MeshVertex, ModelState, SkinVertex};
+    use revc_rw::frame::{Mat4, MeshExtras, MeshVertex, ModelState, SkinVertex};
     let gpu = Gpu::headless(backend).expect("gpu");
     let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
     let (n, f) = (1.0f32, 100.0f32);
@@ -306,11 +307,11 @@ fn skin(backend: Backend) {
     moved[12] = 6.0;
     let mut world = ident;
     world[14] = 10.0;
-    let model = ModelState { world, mat_color: [1.0; 4], surf_props: [1.0, 0.0, 1.0, 0.0], ambient: [0.0; 4], lights: [[0.0; 4]; 32] };
+    let model = ModelState::new(world);
     let state = DrawState { z_test: 1, z_write: 0, alpha_func: 0, ..base() };
     r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
-    r.draw_mesh(&state, geo, 0, 6, &proj, &model, Some(&[ident, moved]));
-    r.draw_mesh(&state, geo, 6, 6, &proj, &ModelState { mat_color: [0.0, 1.0, 0.0, 1.0], ..model }, Some(&[ident, moved]));
+    r.draw_mesh(&state, geo, 0, 6, &proj, &model, &MeshExtras { bones: Some(&[ident, moved]), env: None });
+    r.draw_mesh(&state, geo, 6, 6, &proj, &ModelState { mat_color: [0.0, 1.0, 0.0, 1.0], ..model }, &MeshExtras { bones: Some(&[ident, moved]), env: None });
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
@@ -342,4 +343,111 @@ fn skin_vulkan() {
 #[test]
 fn skin_gl() {
     skin(Backend::Gl);
+}
+
+/// MatFX environment map (gl3 matfx_env): base pass black, env texel chosen by the env matrix
+/// and scaled by the coefficient, added on top (source blend ONE).
+fn env(backend: Backend) {
+    use revc_rw::frame::{EnvMap, Mat4, MeshExtras, MeshVertex, ModelState};
+    let gpu = Gpu::headless(backend).expect("gpu");
+    let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+    let (n, f) = (1.0f32, 100.0f32);
+    let proj: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, f / (f - n), 1.0, 0.0, 0.0, -n * f / (f - n), 0.0];
+    let texels = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255];
+    let env_tex = r.upload_texture(&gpu, 0, 2, 2, TexData::Rgba8, &[&texels], false);
+    let v = |x: f32, y: f32| MeshVertex { pos: [x, y, 0.0], normal: [0.0, 0.0, -1.0], color: [0, 0, 0, 255], uv: [0.0, 0.0] };
+    let verts = [v(-5.0, -5.0), v(0.0, -5.0), v(0.0, 5.0), v(-5.0, 5.0), v(0.0, -5.0), v(5.0, -5.0), v(5.0, 5.0), v(0.0, 5.0)];
+    let geo = r.upload_geometry(&gpu, 0, &verts, &[0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
+    let mut world = [0.0f32; 16];
+    world[0] = 1.0;
+    world[5] = 1.0;
+    world[10] = 1.0;
+    world[14] = 10.0;
+    world[15] = 1.0;
+    // The env matrix ignores the normal and lands on a fixed texel (its translation column).
+    let mut texm = [0.0f32; 16];
+    texm[12] = 0.25;
+    texm[13] = 0.25;
+    texm[15] = 1.0;
+    let first = ModelState { surf_props: [0.0, 0.0, 0.0, 0.0], tex_matrix: texm, color_clamp: [1.0; 4], env_color: [1.0; 4], fx_params: [1.0, 0.0, 0.0, 0.0], ..ModelState::new(world) };
+    let mut texm2 = texm;
+    texm2[12] = 0.75;
+    let second = ModelState { tex_matrix: texm2, fx_params: [0.5, 0.0, 0.0, 0.0], ..first };
+    let e = MeshExtras { bones: None, env: Some(EnvMap { texture: env_tex, filter: 1, address_u: 1, address_v: 1 }) };
+    let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, blend: 1, src_blend: 2, dst_blend: 6, ..base() };
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.draw_mesh(&state, geo, 0, 6, &proj, &first, &e);
+    r.draw_mesh(&state, geo, 6, 6, &proj, &second, &e);
+    let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    r.encode(&gpu, &mut enc, &target.create_view(&Default::default()), (SIZE, SIZE));
+    r.end_frame();
+    let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+    gpu.queue.submit([enc.finish()]);
+    let img = readback_finish(&gpu, rb).expect("readback");
+    for ((x, y), want) in [((24, 32), [255, 0, 0, 255]), ((40, 32), [0, 128, 0, 255])] {
+        assert!(near(px(&img, x, y), want), "{backend:?} env pixel ({x},{y}): got {:?}, want {want:?}", px(&img, x, y));
+    }
+}
+
+#[test]
+fn env_vulkan() {
+    env(Backend::Vulkan);
+}
+
+#[test]
+fn env_gl() {
+    env(Backend::Gl);
+}
+
+/// Frame copy (librw rasterRenderFast of the camera into a camera texture, as CMBlur does): the
+/// frame so far lands in the texture top row first and can be drawn back after a clear.
+fn copy_frame(backend: Backend) {
+    let gpu = Gpu::headless(backend).expect("gpu");
+    let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+    let blank = vec![0u8; (SIZE * SIZE * 4) as usize];
+    let tex = r.upload_texture(&gpu, 0, SIZE, SIZE, TexData::Rgba8, &[&blank], false);
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.draw_2d(&base(), 5, &quad(0.0, 0.0, 32.0, 16.0, [255, 0, 0, 255]), None);
+    r.copy_frame(tex, 0, 0);
+    r.clear(Some([0.0, 0.0, 1.0, 1.0]), true);
+    r.draw_2d(&DrawState { texture: tex, ..base() }, 5, &quad(0.0, 0.0, 64.0, 64.0, [255, 255, 255, 255]), None);
+    let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    r.encode(&gpu, &mut enc, &target.create_view(&Default::default()), (SIZE, SIZE));
+    r.end_frame();
+    let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+    gpu.queue.submit([enc.finish()]);
+    let img = readback_finish(&gpu, rb).expect("readback");
+    for ((x, y), want) in [((8, 4), [255, 0, 0, 255]), ((40, 4), [0, 0, 0, 255]), ((8, 40), [0, 0, 0, 255])] {
+        assert_eq!(px(&img, x, y), want, "{backend:?} copy pixel ({x},{y})");
+    }
+}
+
+#[test]
+fn copy_frame_vulkan() {
+    copy_frame(Backend::Vulkan);
+}
+
+#[test]
+fn copy_frame_gl() {
+    copy_frame(Backend::Gl);
 }
