@@ -252,8 +252,8 @@ fn mesh(backend: Backend) {
     let model = ModelState { world, mat_color: [1.0; 4], surf_props: [1.0, 0.0, 1.0, 0.0], ambient: [0.2, 0.2, 0.2, 1.0], lights };
     let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, ..base() };
     r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
-    r.draw_mesh(&state, geo, 0, 6, &proj, &model);
-    r.draw_mesh(&state, geo, 6, 6, &proj, &ModelState { mat_color: [0.5, 0.5, 0.5, 1.0], ..model });
+    r.draw_mesh(&state, geo, 0, 6, &proj, &model, None);
+    r.draw_mesh(&state, geo, 6, 6, &proj, &ModelState { mat_color: [0.5, 0.5, 0.5, 1.0], ..model }, None);
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
@@ -284,4 +284,62 @@ fn mesh_vulkan() {
 #[test]
 fn mesh_gl() {
     mesh(Backend::Gl);
+}
+
+/// Skinning: a quad bound fully to bone 1 is moved by that bone's matrix (gl3 skin.vert), and
+/// half-and-half weights blend the two bones.
+fn skin(backend: Backend) {
+    use revc_rw::frame::{Mat4, MeshVertex, ModelState, SkinVertex};
+    let gpu = Gpu::headless(backend).expect("gpu");
+    let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+    let (n, f) = (1.0f32, 100.0f32);
+    let proj: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, f / (f - n), 1.0, 0.0, 0.0, -n * f / (f - n), 0.0];
+    let v = |x: f32, y: f32, w: [f32; 4]| SkinVertex { base: MeshVertex { pos: [x, y, 0.0], normal: [0.0, 0.0, -1.0], color: [255, 255, 255, 255], uv: [0.0, 0.0] }, weights: w, indices: [0, 1, 0, 0] };
+    let one = [0.0, 1.0, 0.0, 0.0];
+    let half = [0.5, 0.5, 0.0, 0.0];
+    // Left quad on bone 1 (moved +5 in x => ends up right of centre); a thin strip halfway.
+    let verts = [v(-5.0, -5.0, one), v(-1.0, -5.0, one), v(-1.0, 5.0, one), v(-5.0, 5.0, one), v(-5.0, -5.0, half), v(-4.0, -5.0, half), v(-4.0, 5.0, half), v(-5.0, 5.0, half)];
+    let indices = [0u16, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
+    let geo = r.upload_skinned_geometry(&gpu, 0, &verts, &indices);
+    let ident: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+    let mut moved = ident;
+    moved[12] = 6.0;
+    let mut world = ident;
+    world[14] = 10.0;
+    let model = ModelState { world, mat_color: [1.0; 4], surf_props: [1.0, 0.0, 1.0, 0.0], ambient: [0.0; 4], lights: [[0.0; 4]; 32] };
+    let state = DrawState { z_test: 1, z_write: 0, alpha_func: 0, ..base() };
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.draw_mesh(&state, geo, 0, 6, &proj, &model, Some(&[ident, moved]));
+    r.draw_mesh(&state, geo, 6, 6, &proj, &ModelState { mat_color: [0.0, 1.0, 0.0, 1.0], ..model }, Some(&[ident, moved]));
+    let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    r.encode(&gpu, &mut enc, &target.create_view(&Default::default()), (SIZE, SIZE));
+    r.end_frame();
+    let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+    gpu.queue.submit([enc.finish()]);
+    let img = readback_finish(&gpu, rb).expect("readback");
+    // Bone 1 moved x -5..-1 to 1..5 (pixels ~35..48); the half-weighted strip -5..-4 to -2..-1
+    // (pixels ~22..29); the original place of the quad (-5..-1 => ~16..29 minus the strip) is empty.
+    for ((x, y), want) in [((42, 32), [255, 255, 255, 255]), ((26, 32), [0, 255, 0, 255]), ((18, 32), [0, 0, 0, 255])] {
+        assert_eq!(px(&img, x, y), want, "{backend:?} skin pixel ({x},{y})");
+    }
+}
+
+#[test]
+fn skin_vulkan() {
+    skin(Backend::Vulkan);
+}
+
+#[test]
+fn skin_gl() {
+    skin(Backend::Gl);
 }

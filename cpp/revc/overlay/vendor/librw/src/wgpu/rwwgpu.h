@@ -146,6 +146,8 @@ const float32 *viewProjMatrix(void);
 ObjPipeline *makeDefaultPipeline(void);
 // MatFX atomics (cars, ...): the default pipeline for now (no environment map pass yet).
 void initMatFX(void);
+// Skinned atomics (peds): bone matrices like gl3 uploadSkinMatrices, skinned on the GPU.
+void initSkin(void);
 void *destroyNativeData(void *object, int32, int32);
 
 extern int32 nativeRasterOffset;

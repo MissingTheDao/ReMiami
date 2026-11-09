@@ -86,6 +86,17 @@ aren't drawn yet (librw gives platforms without a skin pipeline a do-nothing pla
 car reflections. One GL3 bug not copied: its spot light code returns early and drops the other
 lights.
 
+**Stage 1, step 5 done: skinned models (peds, the player).** WGPU registers its own skin and
+MatFX pipelines (librw otherwise gives a platform a do-nothing placeholder, so skinned and MatFX
+atomics were invisible). Skinned geometry carries four weights and bone indices per vertex; the
+bone matrices are computed like gl3 `uploadSkinMatrices` (inverse bind matrix times the bone's
+matrix relative to the atomic, or local-space hierarchies as they are; identity without a
+hierarchy; at most 64) and the shader blends position and normal like gl3 skin.vert, then lights
+like the default pipeline (fog from clip w; gl3's skin shader uses clip z). Checked: skinning
+test on both backends; in game the player stands in the same pose as in the GL3 shot. The
+remaining difference to GL3 in saveload (19 %) is the colour filter, which the WGPU build doesn't
+run yet; the user likes the unfiltered look, so the filter will get an off switch (plan 13, 23).
+
 ## What the game calls
 
 The game reaches librw only through the RenderWare-style API in `cpp/re3-miami/src/fakerw`
@@ -169,7 +180,7 @@ struct EngineOpenParams;
 Order inside stage 1, smallest testable steps first: device + camera clear + show raster (a
 blank game frame, done) -> rasters and textures + Im2D + render states (whole front end, done) ->
 DXT kept compressed (BC, done) -> Im3D (effects, done) -> default atomic pipeline (world, cars,
-done) -> skin -> MatFX -> post effects (colour filter: frame as a texture).
+done) -> skin (done) -> MatFX -> post effects (colour filter: frame as a texture).
 The front-end and HUD come first because the boot scenario and every in-game screenshot show
 them.
 

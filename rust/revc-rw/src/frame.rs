@@ -63,6 +63,21 @@ pub struct MeshVertex {
 }
 const _: () = assert!(std::mem::size_of::<MeshVertex>() == 36);
 
+/// A skinned model vertex: up to four bones per vertex (gl3 skinInstanceCB: RW skin weights and
+/// bone indices as stored in the geometry's skin).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct SkinVertex {
+    pub base: MeshVertex,
+    pub weights: [f32; 4],
+    pub indices: [u8; 4],
+}
+const _: () = assert!(std::mem::size_of::<SkinVertex>() == 56);
+
+/// Bone matrices per skinned draw (gl3 u_boneMatrices).
+pub const MAX_BONES: usize = 64;
+const BONE_FLOATS: usize = MAX_BONES * 16;
+
 /// Per-draw model data for the lit pipeline (gl3 Object uniforms + material).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -131,6 +146,7 @@ enum Kind {
     Im2D,
     Im3D,
     Mesh,
+    Skin,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -158,7 +174,8 @@ enum Op {
     Clear { color: Option<[f64; 4]>, depth: bool },
     /// Immediate geometry (first/count vertices) or, with `mesh` = (geometry, model uniform), an
     /// index range of a stored geometry.
-    Draw { pipe: PipeKey, texture: u32, sampler: SamplerKey, uniform: u32, first: u32, count: u32, mesh: Option<(u32, u32)> },
+    /// For skinned meshes the third value is the bone-matrix block.
+    Draw { pipe: PipeKey, texture: u32, sampler: SamplerKey, uniform: u32, first: u32, count: u32, mesh: Option<(u32, u32, u32)> },
 }
 
 struct Geom {
@@ -294,6 +311,27 @@ fn dynamic_light(v: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
 
 @vertex
 fn vs_mesh(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>) -> Out {
+    return lit(pos, normal, color, uv);
+}
+
+// gl3 skin.vert: position and normal blended over up to four bones, then lit like vs_mesh
+// (fog from clip w like the default pipeline; gl3's skin shader uses clip z there).
+struct Bones { m: array<mat4x4<f32>, 64> };
+@group(3) @binding(0) var<uniform> bones: Bones;
+
+@vertex
+fn vs_skin(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @location(4) weights: vec4<f32>, @location(5) indices: vec4<u32>) -> Out {
+    var p = vec3<f32>(0.0);
+    var n = vec3<f32>(0.0);
+    for (var i = 0; i < 4; i++) {
+        let b = bones.m[min(indices[i], 63u)];
+        p += (b * vec4<f32>(pos, 1.0)).xyz * weights[i];
+        n += (b * vec4<f32>(normal, 0.0)).xyz * weights[i];
+    }
+    return lit(p, n, color, uv);
+}
+
+fn lit(pos: vec3<f32>, normal: vec3<f32>, color: vec4<f32>, uv: vec2<f32>) -> Out {
     var o: Out;
     let v = m.world * vec4<f32>(pos, 1.0);
     o.pos = u.mvp * v;
@@ -331,6 +369,14 @@ pub struct Renderer {
     model_capacity: usize,
     model_bind: wgpu::BindGroup,
     models: Vec<ModelState>,
+    skin_layout: wgpu::PipelineLayout,
+    bones_layout: wgpu::BindGroupLayout,
+    bones_stride: u64,
+    bones_buf: wgpu::Buffer,
+    bones_capacity: usize,
+    bones_bind: wgpu::BindGroup,
+    /// BONE_FLOATS per skinned draw.
+    bones: Vec<f32>,
     geometries: HashMap<u32, Geom>,
     next_geometry: u32,
     /// Textures and geometries destroyed while a recorded frame may still use them.
@@ -362,6 +408,7 @@ const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const ATTRS_2D: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x4, 1 => Unorm8x4, 2 => Float32x2];
 const ATTRS_3D: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Unorm8x4, 2 => Float32x2];
 const ATTRS_MESH: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x2];
+const ATTRS_SKIN: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x2, 4 => Float32x4, 5 => Uint8x4];
 
 fn blend_factor(f: u32) -> wgpu::BlendFactor {
     use wgpu::BlendFactor as B;
@@ -470,7 +517,23 @@ impl Renderer {
         });
         let align = d.limits().min_uniform_buffer_offset_alignment as u64;
         let model_stride = (std::mem::size_of::<ModelState>() as u64).next_multiple_of(align);
-        let (model_buf, model_bind) = Self::make_model_uniforms(gpu, &model_layout, model_stride, 64);
+        let (model_buf, model_bind) = Self::make_dyn_uniforms(gpu, &model_layout, model_stride, 64, std::mem::size_of::<ModelState>() as u64);
+        let bones_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("bone matrices"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: true, min_binding_size: None },
+                count: None,
+            }],
+        });
+        let skin_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("skin"),
+            bind_group_layouts: &[Some(&uniform_layout), Some(&texture_layout), Some(&model_layout), Some(&bones_layout)],
+            immediate_size: 0,
+        });
+        let bones_stride = ((BONE_FLOATS * 4) as u64).next_multiple_of(align);
+        let (bones_buf, bones_bind) = Self::make_dyn_uniforms(gpu, &bones_layout, bones_stride, 16, (BONE_FLOATS * 4) as u64);
         let uniform_stride = (d.limits().min_uniform_buffer_offset_alignment as u64).max(std::mem::size_of::<Uniforms>() as u64);
         let (uniform_buf, uniform_bind) = Self::make_uniforms(gpu, &uniform_layout, uniform_stride, 256);
         let white = new_texture(gpu, wgpu::TextureFormat::Rgba8Unorm, 1, 1, 1);
@@ -490,6 +553,13 @@ impl Renderer {
             model_capacity: 64,
             model_bind,
             models: Vec::new(),
+            skin_layout,
+            bones_layout,
+            bones_stride,
+            bones_buf,
+            bones_capacity: 16,
+            bones_bind,
+            bones: Vec::new(),
             geometries: HashMap::new(),
             next_geometry: 1,
             dead_textures: Vec::new(),
@@ -535,26 +605,38 @@ impl Renderer {
         (buf, bind)
     }
 
-    fn make_model_uniforms(gpu: &Gpu, layout: &wgpu::BindGroupLayout, stride: u64, capacity: usize) -> (wgpu::Buffer, wgpu::BindGroup) {
+    /// A uniform buffer of `capacity` blocks `stride` apart, bound with a dynamic offset and
+    /// `binding` bytes visible per block.
+    fn make_dyn_uniforms(gpu: &Gpu, layout: &wgpu::BindGroupLayout, stride: u64, capacity: usize, binding: u64) -> (wgpu::Buffer, wgpu::BindGroup) {
         let buf = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("model uniforms"),
+            label: Some("per-draw uniforms"),
             size: stride * capacity as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("model uniforms"),
+            label: Some("per-draw uniforms"),
             layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &buf, offset: 0, size: wgpu::BufferSize::new(std::mem::size_of::<ModelState>() as u64) }),
-            }],
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &buf, offset: 0, size: wgpu::BufferSize::new(binding) }) }],
         });
         (buf, bind)
     }
 
     /// Creates or replaces a geometry (vertices + triangle-list indices); returns its id.
     pub fn upload_geometry(&mut self, gpu: &Gpu, id: u32, vertices: &[MeshVertex], indices: &[u16]) -> u32 {
+        // SAFETY: MeshVertex is repr(C) plain data without padding (36 bytes, asserted above).
+        let vbytes = unsafe { std::slice::from_raw_parts(vertices.as_ptr().cast::<u8>(), std::mem::size_of_val(vertices)) };
+        self.upload_raw(gpu, id, vbytes, indices)
+    }
+
+    /// A skinned geometry (drawn with bone matrices by `draw_mesh`).
+    pub fn upload_skinned_geometry(&mut self, gpu: &Gpu, id: u32, vertices: &[SkinVertex], indices: &[u16]) -> u32 {
+        // SAFETY: SkinVertex is repr(C) plain data without padding (56 bytes, asserted above).
+        let vbytes = unsafe { std::slice::from_raw_parts(vertices.as_ptr().cast::<u8>(), std::mem::size_of_val(vertices)) };
+        self.upload_raw(gpu, id, vbytes, indices)
+    }
+
+    fn upload_raw(&mut self, gpu: &Gpu, id: u32, vbytes: &[u8], indices: &[u16]) -> u32 {
         let id = if id != 0 && self.geometries.contains_key(&id) {
             id
         } else {
@@ -562,8 +644,6 @@ impl Renderer {
             self.next_geometry += 1;
             id
         };
-        // SAFETY: MeshVertex is repr(C) plain data without padding (36 bytes, asserted above).
-        let vbytes = unsafe { std::slice::from_raw_parts(vertices.as_ptr().cast::<u8>(), std::mem::size_of_val(vertices)) };
         let mut ibytes: Vec<u8> = indices.iter().flat_map(|i| i.to_le_bytes()).collect();
         // Buffer copies come in multiples of 4 bytes.
         ibytes.resize(ibytes.len().next_multiple_of(4).max(4), 0);
@@ -680,8 +760,10 @@ impl Renderer {
     }
 
     /// Triangles `first..first + count` of the index list of a stored geometry, lit with
-    /// `model`; `view_proj` = projection * view.
-    pub fn draw_mesh(&mut self, state: &DrawState, geometry: u32, first: u32, count: u32, view_proj: &Mat4, model: &ModelState) {
+    /// `model`; `view_proj` = projection * view. A skinned geometry gets its `bones` (at most
+    /// MAX_BONES; missing ones are identity).
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_mesh(&mut self, state: &DrawState, geometry: u32, first: u32, count: u32, view_proj: &Mat4, model: &ModelState, bones: Option<&[Mat4]>) {
         if !self.geometries.contains_key(&geometry) {
             return;
         }
@@ -689,11 +771,26 @@ impl Renderer {
             self.models.push(*model);
         }
         let mi = self.models.len() as u32 - 1;
-        self.record(state, 3, Kind::Mesh, first, count, view_proj, Some((geometry, mi)));
+        let (kind, bi) = match bones {
+            Some(b) => {
+                let mut block = [0.0f32; BONE_FLOATS];
+                for i in 0..MAX_BONES {
+                    let m = b.get(i).copied().unwrap_or([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]);
+                    block[i * 16..][..16].copy_from_slice(&m);
+                }
+                let n = self.bones.len();
+                if n < BONE_FLOATS || self.bones[n - BONE_FLOATS..] != block {
+                    self.bones.extend_from_slice(&block);
+                }
+                (Kind::Skin, (self.bones.len() / BONE_FLOATS - 1) as u32)
+            }
+            None => (Kind::Mesh, u32::MAX),
+        };
+        self.record(state, 3, kind, first, count, view_proj, Some((geometry, mi, bi)));
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn record(&mut self, state: &DrawState, prim: u32, kind: Kind, first: u32, count: u32, mvp: &Mat4, mesh: Option<(u32, u32)>) {
+    fn record(&mut self, state: &DrawState, prim: u32, kind: Kind, first: u32, count: u32, mvp: &Mat4, mesh: Option<(u32, u32, u32)>) {
         if count == 0 {
             return;
         }
@@ -786,19 +883,26 @@ impl Renderer {
                 Kind::Im2D => "im2d",
                 Kind::Im3D => "im3d",
                 Kind::Mesh => "mesh",
+                Kind::Skin => "skin",
             }),
-            layout: Some(if key.kind == Kind::Mesh { &self.mesh_layout } else { &self.pipeline_layout }),
+            layout: Some(match key.kind {
+                Kind::Mesh => &self.mesh_layout,
+                Kind::Skin => &self.skin_layout,
+                _ => &self.pipeline_layout,
+            }),
             vertex: wgpu::VertexState {
                 module: &self.shader,
                 entry_point: Some(match key.kind {
                     Kind::Im2D => "vs_2d",
                     Kind::Im3D => "vs_3d",
                     Kind::Mesh => "vs_mesh",
+                    Kind::Skin => "vs_skin",
                 }),
                 buffers: &[Some(match key.kind {
                     Kind::Im2D => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex2D>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_2D },
                     Kind::Im3D => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex3D>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_3D },
                     Kind::Mesh => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<MeshVertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_MESH },
+                    Kind::Skin => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<SkinVertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_SKIN },
                 })],
                 compilation_options: Default::default(),
             },
@@ -878,7 +982,7 @@ impl Renderer {
         let models = std::mem::take(&mut self.models);
         if models.len() > self.model_capacity {
             let cap = models.len().next_power_of_two();
-            (self.model_buf, self.model_bind) = Self::make_model_uniforms(gpu, &self.model_layout, self.model_stride, cap);
+            (self.model_buf, self.model_bind) = Self::make_dyn_uniforms(gpu, &self.model_layout, self.model_stride, cap, std::mem::size_of::<ModelState>() as u64);
             self.model_capacity = cap;
         }
         if !models.is_empty() {
@@ -889,6 +993,23 @@ impl Renderer {
                 bytes[i * self.model_stride as usize..][..src.len()].copy_from_slice(src);
             }
             gpu.queue.write_buffer(&self.model_buf, 0, &bytes);
+        }
+        let bones = std::mem::take(&mut self.bones);
+        let blocks = bones.len() / BONE_FLOATS;
+        if blocks > self.bones_capacity {
+            let cap = blocks.next_power_of_two();
+            (self.bones_buf, self.bones_bind) = Self::make_dyn_uniforms(gpu, &self.bones_layout, self.bones_stride, cap, (BONE_FLOATS * 4) as u64);
+            self.bones_capacity = cap;
+        }
+        if blocks > 0 {
+            let mut bytes = vec![0u8; blocks * self.bones_stride as usize];
+            for (i, block) in bones.as_chunks::<BONE_FLOATS>().0.iter().enumerate() {
+                let at = i * self.bones_stride as usize;
+                for (j, f) in block.iter().enumerate() {
+                    bytes[at + j * 4..at + j * 4 + 4].copy_from_slice(&f.to_le_bytes());
+                }
+            }
+            gpu.queue.write_buffer(&self.bones_buf, 0, &bytes);
         }
 
         if self.depth.as_ref().is_none_or(|d| d.2 != size) {
@@ -992,9 +1113,12 @@ impl Renderer {
                     p.set_bind_group(0, &self.uniform_bind, &[(uniform as u64 * self.uniform_stride) as u32]);
                     p.set_bind_group(1, &self.bind_groups[&(texture, sampler)], &[]);
                     match mesh {
-                        Some((geometry, model)) => {
+                        Some((geometry, model, bones)) => {
                             let Some(g) = self.geometries.get(&geometry) else { continue };
                             p.set_bind_group(2, &self.model_bind, &[(model as u64 * self.model_stride) as u32]);
+                            if pipe.kind == Kind::Skin {
+                                p.set_bind_group(3, &self.bones_bind, &[(bones as u64 * self.bones_stride) as u32]);
+                            }
                             p.set_vertex_buffer(0, g.vertices.slice(..));
                             p.set_index_buffer(g.indices.slice(..), wgpu::IndexFormat::Uint16);
                             bound = None;
@@ -1021,6 +1145,7 @@ impl Renderer {
         self.verts3 = verts3;
         self.uniforms = uniforms;
         self.models = models;
+        self.bones = bones;
     }
 
     /// Drops the recorded frame (keeping the allocations) to start recording the next one.
@@ -1030,6 +1155,7 @@ impl Renderer {
         self.verts3.clear();
         self.uniforms.clear();
         self.models.clear();
+        self.bones.clear();
         self.retired.clear();
         for id in std::mem::take(&mut self.dead_textures) {
             self.textures.remove(&id);

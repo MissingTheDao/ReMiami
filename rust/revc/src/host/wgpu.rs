@@ -4,7 +4,7 @@
 //! revc_rw::frame::Renderer and drawn when the frame is presented; Im3D and models come next.
 
 use revc_rw::Backend;
-use revc_rw::frame::{DrawState, Mat4, MeshVertex, ModelState, Renderer, TexData, Vertex2D, Vertex3D};
+use revc_rw::frame::{DrawState, MAX_BONES, Mat4, MeshVertex, ModelState, Renderer, SkinVertex, TexData, Vertex2D, Vertex3D};
 use revc_rw::present::{NativeWindow, Presenter};
 use sdl3_sys::everything::*;
 use std::cell::{Cell, RefCell};
@@ -197,6 +197,22 @@ pub unsafe extern "C" fn revc_rw_geometry_upload(id: u32, vertices: *const MeshV
     })
 }
 
+/// As `revc_rw_geometry_upload`, for a skinned geometry.
+///
+/// # Safety
+/// `vertices` holds `num_vertices` SkinVertex, `indices` `num_indices` u16 (triangle list).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_rw_geometry_upload_skin(id: u32, vertices: *const SkinVertex, num_vertices: i32, indices: *const u16, num_indices: i32) -> u32 {
+    let verts = if vertices.is_null() || num_vertices <= 0 { &[][..] } else { unsafe { std::slice::from_raw_parts(vertices, num_vertices as usize) } };
+    let idx = if indices.is_null() || num_indices <= 0 { &[][..] } else { unsafe { std::slice::from_raw_parts(indices, num_indices as usize) } };
+    PRESENTER.with(|pc| {
+        RENDERER.with(|rc| match (pc.borrow().as_ref(), rc.borrow_mut().as_mut()) {
+            (Some(p), Some(r)) => r.upload_skinned_geometry(&p.gpu, id, verts, idx),
+            _ => 0,
+        })
+    })
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_rw_geometry_destroy(id: u32) {
     RENDERER.with(|c| {
@@ -207,17 +223,20 @@ pub extern "C" fn revc_rw_geometry_destroy(id: u32) {
 }
 
 /// # Safety
-/// `state` and `model` (a ModelState) are valid; `view_proj` points at 16 floats.
+/// `state` and `model` (a ModelState) are valid; `view_proj` points at 16 floats; `bones` is null
+/// (unskinned) or holds `num_bones` matrices of 16 floats.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn revc_rw_draw_mesh(state: *const DrawState, geometry: u32, first: u32, count: u32, view_proj: *const f32, model: *const ModelState) {
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn revc_rw_draw_mesh(state: *const DrawState, geometry: u32, first: u32, count: u32, view_proj: *const f32, model: *const ModelState, bones: *const Mat4, num_bones: i32) {
     if state.is_null() || view_proj.is_null() || model.is_null() {
         return;
     }
     let (state, model) = unsafe { (&*state, &*model) };
     let vp: Mat4 = unsafe { *view_proj.cast::<Mat4>() };
+    let bones = (!bones.is_null()).then(|| unsafe { std::slice::from_raw_parts(bones, num_bones.clamp(0, MAX_BONES as i32) as usize) });
     RENDERER.with(|c| {
         if let Some(r) = c.borrow_mut().as_mut() {
-            r.draw_mesh(state, geometry, first, count, &vp, model);
+            r.draw_mesh(state, geometry, first, count, &vp, model, bones);
         }
     });
 }
