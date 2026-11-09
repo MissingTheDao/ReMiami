@@ -8,6 +8,8 @@
 # Needs a display (the game opens a window). Game data: REVC_GAME_DIR or ./game.
 # Scenarios: boot, saveload, savegame (save slot 1's game to slot 2, then load slot 2: own reference), formats, texmods, gamepad, spots (default), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
 # formats: compares what the C++ loaders read with the Rust parsers in rust/revc-formats.
+# oldsave: saveload of tests/saves/other/GTAVCsf1-64bit-gcc.b (slot 1's game as a 64-bit GCC build
+#   saves it) in slot 3: the game converts it (FixSave, keeps a .bak) and loads it; saveload's reference.
 # texmods: saveload with the texture mods in tests/mods installed (own reference screenshot).
 # gamepad: virtual SDL pads: detection, player 1/2 assignment, prompt glyphs per pad (screenshots vs
 #   tests/reference/gamepad/), rumble.
@@ -27,7 +29,7 @@ for a in "$@"; do
     *) SCENARIOS+=("$a") ;;
   esac
 done
-(( ${#SCENARIOS[@]} )) || SCENARIOS=(boot saveload savegame formats texmods gamepad spots)
+(( ${#SCENARIOS[@]} )) || SCENARIOS=(boot saveload savegame oldsave formats texmods gamepad spots)
 
 GAME=${REVC_GAME_DIR:-$ROOT/game}
 [[ -d "$GAME/models" ]] || { echo "game data not found at $GAME (set REVC_GAME_DIR)" >&2; exit 2; }
@@ -74,6 +76,12 @@ for s in "${SCENARIOS[@]}"; do
   cp "$ini" "$T/reVC.ini"
   envs=(REVC_GAME_DIR="$T" REVC_TEST="$s")
   [[ "$s" == texmods ]] && cp -r "$ROOT/tests/mods" "$T/mods"
+  if [[ "$s" == oldsave ]]; then
+    rm -f "$T"/userfiles/GTAVCsf3.b*
+    cp "$ROOT/tests/saves/other/GTAVCsf1-64bit-gcc.b" "$T/userfiles/GTAVCsf3.b"
+    envs=(REVC_GAME_DIR="$T" REVC_TEST=saveload REVC_TEST_SLOT=3 REVC_TEST_SHOT="$OUT/$s.png")
+    (( BLESS == 0 )) && [[ -f "$REF/saveload.png" ]] && envs+=(REVC_TEST_REF="$REF/saveload.png")
+  fi
   if [[ "$s" == spots || "$s" == gamepad ]]; then
     # Screenshots are overwritten on every run.
     mkdir -p "$OUT/$s"
@@ -103,6 +111,13 @@ for s in "${SCENARIOS[@]}"; do
     grep -E '^\[revc-test\] FAIL|^revc:' "$log" | sed 's/^/     /'
     [[ -n "$leaks" ]] && echo "$leaks" | sed 's/^/     leak: /'
     echo "     log: $log"
+  fi
+  if [[ "$s" == oldsave ]] && (( rc == 0 )); then
+    if ls "$T"/userfiles/GTAVCsf3.b.*.bak >/dev/null 2>&1 && ! cmp -s "$T/userfiles/GTAVCsf3.b" "$ROOT/tests/saves/other/GTAVCsf1-64bit-gcc.b"; then
+      echo "     converted: slot 3 rewritten, original kept as .bak"
+    else
+      echo "     FAIL: slot 3 was not converted"; failed=1
+    fi
   fi
   grep -oE '\[revc-test\] (player at|loaded:|image diff|audio|formats:|texmods:|gamepad:|savegame:|spot |[a-z0-9_]+: image diff).*' "$log" | sed 's/^\[revc-test\] /     /'
   # savegame, part 2: load the slot just saved and compare its screenshot.

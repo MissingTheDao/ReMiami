@@ -225,17 +225,40 @@ pub struct SaveImage {
 }
 
 impl SaveImage {
-    fn new() -> SaveImage {
+    pub(crate) fn new() -> SaveImage {
         SaveImage { data: Vec::with_capacity(SIZE_OF_ONE_GAME as usize + 128), checksum: 0, total: 0 }
     }
     /// One chunk: size word, then the bytes padded to 4; the checksum adds every byte of both.
-    fn chunk(&mut self, bytes: &[u8]) {
+    pub(crate) fn chunk(&mut self, bytes: &[u8]) {
         let size = bytes.len() as u32;
         self.data.extend_from_slice(&size.to_le_bytes());
         self.data.extend_from_slice(bytes);
         self.data.resize(self.data.len() + (align4(size) - size) as usize, 0);
         let sum = size.to_le_bytes().iter().chain(bytes.iter()).fold(0i32, |s, &b| s.wrapping_add(b as i32));
         self.checksum = self.checksum.wrapping_add(sum);
+    }
+    /// A chunk that counts towards the game's size (the original's totalSize += size).
+    pub(crate) fn block(&mut self, bytes: &[u8]) {
+        self.chunk(bytes);
+        self.total += align4(bytes.len() as u32);
+    }
+    /// Pads to one game's size with zero chunks as the original computes it (unsigned
+    /// arithmetic, then the int align4bytes, at most work_buff per chunk), then the checksum.
+    pub(crate) fn finish(&mut self) {
+        let zeros = vec![0u8; WORK_BUFF];
+        for _ in 0..4 {
+            let raw = SIZE_OF_ONE_GAME.wrapping_sub(self.total).wrapping_sub(4) as i32;
+            let mut size = (raw.wrapping_add(3) & !3) as u32;
+            if size > WORK_BUFF as u32 {
+                size = WORK_BUFF as u32;
+            }
+            if size > 4 {
+                self.chunk(&zeros[..size as usize]);
+                self.total += size;
+            }
+        }
+        let sum = self.checksum;
+        self.data.extend_from_slice(&sum.to_le_bytes());
     }
 }
 
@@ -257,28 +280,12 @@ pub fn build_save(vars: &SimpleVars, save_block: &mut dyn FnMut(i32, &mut [u8]) 
     let mut img = SaveImage::new();
     let header = vars.to_bytes();
     let first = block_bytes(&header, WORK_BUFF - SIZE_OF_SIMPLE_VARS - 4, &mut |b| save_block(SCRIPTS, b));
-    img.chunk(&first);
-    img.total = first.len() as u32;
+    img.block(&first);
     for i in 0..BLOCK_COUNT {
         let block = block_bytes(&[], WORK_BUFF - 4, &mut |b| save_block(i, b));
-        img.chunk(&block);
-        img.total += block.len() as u32;
+        img.block(&block);
     }
-    // Padding as the original computes it (unsigned arithmetic, then the int align4bytes).
-    let zeros = vec![0u8; WORK_BUFF];
-    for _ in 0..4 {
-        let raw = SIZE_OF_ONE_GAME.wrapping_sub(img.total).wrapping_sub(4) as i32;
-        let mut size = (raw.wrapping_add(3) & !3) as u32;
-        if size > WORK_BUFF as u32 {
-            size = WORK_BUFF as u32;
-        }
-        if size > 4 {
-            img.chunk(&zeros[..size as usize]);
-            img.total += size;
-        }
-    }
-    let sum = img.checksum;
-    img.data.extend_from_slice(&sum.to_le_bytes());
+    img.finish();
     img
 }
 

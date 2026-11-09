@@ -11,6 +11,7 @@ mod math;
 mod messages;
 mod pager;
 mod savefile;
+mod savefix;
 mod savegame;
 mod host;
 mod testdrive;
