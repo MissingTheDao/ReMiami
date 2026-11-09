@@ -201,7 +201,13 @@ pub fn init() -> Result<bool, String> {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(timeout + 30));
         log(format!("FAIL timeout: no result after {}s (hang?)", timeout + 30));
-        std::process::exit(3);
+        // _exit, not exit: exit runs the C atexit handlers, and with the main thread stuck inside
+        // the GL driver (e.g. waiting for a frame callback of a window nobody can see) their
+        // teardown blocks too; the process then hung forever (seen on the N150 with its screen locked).
+        unsafe extern "C" {
+            fn _exit(code: i32) -> !;
+        }
+        unsafe { _exit(3) }
     });
     Ok(true)
 }
