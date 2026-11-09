@@ -49,38 +49,8 @@ pub fn decode(data: &[u8]) -> Result<Image> {
         };
         let (bw, bh) = (width.div_ceil(4) as usize, height.div_ceil(4) as usize);
         let blocks = r.bytes(bw * bh * block_bytes, "dds blocks")?;
-        for (i, block) in blocks.chunks_exact(block_bytes).enumerate() {
-            let texels = match &fourcc {
-                b"DXT1" => colour_block(block, true),
-                b"DXT3" => {
-                    let mut t = colour_block(&block[8..], false);
-                    let a = u64::from_le_bytes(block[..8].try_into().unwrap());
-                    for (p, px) in t.iter_mut().enumerate() {
-                        px[3] = ((a >> (4 * p)) & 0xF) as u8 * 17;
-                    }
-                    t
-                }
-                _ => {
-                    let mut t = colour_block(&block[8..], false);
-                    let alphas = dxt5_alphas(block[0], block[1]);
-                    let mut idx = [0u8; 8];
-                    idx[..6].copy_from_slice(&block[2..8]);
-                    let bits = u64::from_le_bytes(idx);
-                    for (p, px) in t.iter_mut().enumerate() {
-                        px[3] = alphas[((bits >> (3 * p)) & 7) as usize];
-                    }
-                    t
-                }
-            };
-            let (bx, by) = (i % bw, i / bw);
-            for (p, px) in texels.iter().enumerate() {
-                let (x, y) = (bx * 4 + p % 4, by * 4 + p / 4);
-                if x < width as usize && y < height as usize {
-                    let o = (y * width as usize + x) * 4;
-                    rgba[o..o + 4].copy_from_slice(px);
-                }
-            }
-        }
+        let kind = fourcc[3] - b'0';
+        rgba = decode_dxt(kind, width, height, blocks).expect("length checked above");
     } else if pf_flags & DDPF_RGB != 0 && (bits == 24 || bits == 32) {
         let bpp = bits as usize / 8;
         let px = r.bytes(width as usize * height as usize * bpp, "dds pixels")?;
@@ -99,6 +69,48 @@ pub fn decode(data: &[u8]) -> Result<Image> {
         return Err(Error::Invalid(format!("unsupported DDS pixel format (flags {pf_flags:#x}, {bits} bits)")));
     }
     Ok(Image { width, height, rgba })
+}
+
+/// DXT1 (`kind` 1), DXT3 (3) or DXT5 (5) blocks of a `width` x `height` image to RGBA8, top row
+/// first. None if `data` is too short.
+pub(crate) fn decode_dxt(kind: u8, width: u32, height: u32, data: &[u8]) -> Option<Vec<u8>> {
+    let block_bytes = if kind == 1 { 8 } else { 16 };
+    let (bw, bh) = (width.div_ceil(4) as usize, height.div_ceil(4) as usize);
+    let blocks = data.get(..bw * bh * block_bytes)?;
+    let mut rgba = vec![0u8; width as usize * height as usize * 4];
+    for (i, block) in blocks.chunks_exact(block_bytes).enumerate() {
+        let texels = match kind {
+            1 => colour_block(block, true),
+            3 => {
+                let mut t = colour_block(&block[8..], false);
+                let a = u64::from_le_bytes(block[..8].try_into().unwrap());
+                for (p, px) in t.iter_mut().enumerate() {
+                    px[3] = ((a >> (4 * p)) & 0xF) as u8 * 17;
+                }
+                t
+            }
+            _ => {
+                let mut t = colour_block(&block[8..], false);
+                let alphas = dxt5_alphas(block[0], block[1]);
+                let mut idx = [0u8; 8];
+                idx[..6].copy_from_slice(&block[2..8]);
+                let bits = u64::from_le_bytes(idx);
+                for (p, px) in t.iter_mut().enumerate() {
+                    px[3] = alphas[((bits >> (3 * p)) & 7) as usize];
+                }
+                t
+            }
+        };
+        let (bx, by) = (i % bw, i / bw);
+        for (p, px) in texels.iter().enumerate() {
+            let (x, y) = (bx * 4 + p % 4, by * 4 + p / 4);
+            if x < width as usize && y < height as usize {
+                let o = (y * width as usize + x) * 4;
+                rgba[o..o + 4].copy_from_slice(px);
+            }
+        }
+    }
+    Some(rgba)
 }
 
 /// Channel value under `mask`, scaled to 8 bits.

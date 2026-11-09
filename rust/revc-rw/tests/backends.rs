@@ -1,10 +1,10 @@
 //! The same model rendered on Vulkan and on OpenGL must look the same (plan task 12: both
-//! backends selectable). Uses the Infernus body from the game's gta3.img; skipped without a game
-//! install (REVC_GAME_DIR or game/ at the repository root). Images are written to
+//! backends selectable). Uses the whole textured Infernus (all default parts placed by their
+//! frames, infernus.txd) from the game's gta3.img; skipped without a game install (REVC_GAME_DIR or game/ at the repository root). Images are written to
 //! rust/target/test-output/revc-rw-<backend>.png.
 
-use revc_formats::{dff, img};
-use revc_rw::{Backend, Gpu, Mesh, render_offscreen};
+use revc_formats::{dff, img, txd};
+use revc_rw::{Backend, Gpu, Model, render_offscreen};
 use std::path::{Path, PathBuf};
 
 const SIZE: u32 = 256;
@@ -15,10 +15,10 @@ fn game_dir() -> Option<PathBuf> {
     d.join("models/gta3.img").is_file().then_some(d)
 }
 
-fn render(backend: Backend, mesh: &Mesh) -> Vec<u8> {
+fn render(backend: Backend, model: &Model) -> Vec<u8> {
     let gpu = Gpu::headless(backend).unwrap_or_else(|e| panic!("{e}"));
     eprintln!("{backend:?}: {} ({:?}, {})", gpu.info.name, gpu.info.backend, gpu.info.driver);
-    let rgba = render_offscreen(&gpu, std::slice::from_ref(mesh), SIZE);
+    let rgba = render_offscreen(&gpu, model, SIZE);
     let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/test-output");
     std::fs::create_dir_all(&out).unwrap();
     let file = std::fs::File::create(out.join(format!("revc-rw-{backend:?}.png").to_lowercase())).unwrap();
@@ -41,11 +41,13 @@ fn vulkan_and_gl_agree() {
     };
     let a = img::Archive::open(game.join("models/gta3.img")).unwrap();
     let clump = dff::parse(&a.read(a.find("infernus.dff").unwrap()).unwrap()).unwrap();
-    let body = clump.geometries.iter().max_by_key(|g| g.num_vertices).unwrap();
-    let mesh = Mesh::from_geometry(body);
+    let dict = txd::parse(&a.read(a.find("infernus.txd").unwrap()).unwrap()).unwrap();
+    let model = Model::from_clump(&clump, Some(&dict)).unwrap();
+    assert!(!model.images.is_empty(), "no textures bound");
+    eprintln!("{} vertices, {} batches, {} textures", model.vertices.len(), model.batches.len(), model.images.len());
 
-    let vk = render(Backend::Vulkan, &mesh);
-    let gl = render(Backend::Gl, &mesh);
+    let vk = render(Backend::Vulkan, &model);
+    let gl = render(Backend::Gl, &model);
     let total = (SIZE * SIZE) as usize;
     for (name, img) in [("Vulkan", &vk), ("GL", &gl)] {
         let covered = model_pixels(img) as f64 / total as f64;

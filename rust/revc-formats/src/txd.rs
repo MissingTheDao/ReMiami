@@ -47,6 +47,70 @@ impl Texture {
     pub fn pixel_format(&self) -> u32 {
         self.raster_format & raster::MASK
     }
+
+    /// Size of mip `level`.
+    pub fn level_size(&self, level: usize) -> (u32, u32) {
+        ((self.width as u32 >> level).max(1), (self.height as u32 >> level).max(1))
+    }
+
+    /// Mip `level` as RGBA8, top row first. D3D8 layouts: DXT1/3/5; 8/4-bit palettes (RGBA
+    /// entries); 32-bit B,G,R,A; 16-bit 565, 1555, 4444 (little-endian); 8-bit luminance.
+    pub fn rgba(&self, level: usize) -> Result<Vec<u8>> {
+        let (w, h) = self.level_size(level);
+        let data = self.levels.get(level).ok_or_else(|| Error::Invalid(format!("{}: no mip level {level}", self.name)))?;
+        let n = (w * h) as usize;
+        let short = || Error::Invalid(format!("{}: level {level} data too short", self.name));
+        if self.compression != 0 {
+            let kind = match self.compression {
+                1..=5 => self.compression,
+                c => return Err(Error::Invalid(format!("{}: compression {c}", self.name))),
+            };
+            return crate::dds::decode_dxt(if kind == 1 { 1 } else if kind <= 3 { 3 } else { 5 }, w, h, data).ok_or_else(short);
+        }
+        let fmt = self.pixel_format();
+        let opaque = fmt == raster::C888 || fmt == raster::C565 || fmt == raster::C555;
+        let mut out = Vec::with_capacity(n * 4);
+        if self.raster_format & (raster::PAL8 | raster::PAL4) != 0 {
+            let idx = |i: usize| -> Option<usize> {
+                if self.raster_format & raster::PAL8 != 0 {
+                    data.get(i).map(|&b| b as usize)
+                } else {
+                    data.get(i / 2).map(|&b| if i.is_multiple_of(2) { b & 0xF } else { b >> 4 } as usize)
+                }
+            };
+            for i in 0..n {
+                let p = self.palette.get(idx(i).ok_or_else(short)?).copied().unwrap_or([0, 0, 0, 255]);
+                out.extend([p[0], p[1], p[2], if opaque { 255 } else { p[3] }]);
+            }
+            return Ok(out);
+        }
+        let expand = |v: u16, bits: u32| -> u8 { (v as u32 * 255 / ((1 << bits) - 1)) as u8 };
+        match self.depth {
+            32 => {
+                for p in data.get(..n * 4).ok_or_else(short)?.as_chunks::<4>().0 {
+                    out.extend([p[2], p[1], p[0], if opaque { 255 } else { p[3] }]);
+                }
+            }
+            16 => {
+                for p in data.get(..n * 2).ok_or_else(short)?.as_chunks::<2>().0 {
+                    let v = u16::from_le_bytes([p[0], p[1]]);
+                    out.extend(match fmt {
+                        raster::C565 => [expand(v >> 11, 5), expand((v >> 5) & 63, 6), expand(v & 31, 5), 255],
+                        raster::C4444 => [expand((v >> 8) & 15, 4), expand((v >> 4) & 15, 4), expand(v & 15, 4), expand(v >> 12, 4)],
+                        raster::C555 => [expand((v >> 10) & 31, 5), expand((v >> 5) & 31, 5), expand(v & 31, 5), 255],
+                        _ => [expand((v >> 10) & 31, 5), expand((v >> 5) & 31, 5), expand(v & 31, 5), if v & 0x8000 != 0 { 255 } else { 0 }],
+                    });
+                }
+            }
+            8 => {
+                for &l in data.get(..n).ok_or_else(short)? {
+                    out.extend([l, l, l, 255]);
+                }
+            }
+            d => return Err(Error::Invalid(format!("{}: depth {d} format {fmt:#x}", self.name))),
+        }
+        Ok(out)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -224,6 +288,16 @@ pub(crate) mod tests {
         assert_eq!(sign.palette.len(), 256);
         assert_eq!(sign.palette[0], [7, 7, 7, 7]);
         assert_eq!(sign.filter_addressing & 0xFF, 2);
+    }
+
+    #[test]
+    fn decodes_pixels() {
+        let t = parse(&txd(&[native("road", false), native("Sign", true)])).unwrap();
+        // C8888 level is 16 bytes of 9: B=G=R=A=9.
+        assert_eq!(t.textures[0].rgba(0).unwrap(), vec![9u8; 16]);
+        // PAL8: indices 0..3 into a palette of [7,7,7,7].
+        assert_eq!(t.textures[1].rgba(0).unwrap(), vec![7u8; 16]);
+        assert!(t.textures[0].rgba(1).is_err());
     }
 
     #[test]

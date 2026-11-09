@@ -93,7 +93,44 @@ pub struct Clump {
     pub plugins: Plugins,
 }
 
+/// Affine transform as RenderWare stores it: right, up, at (the rotated axes) and position.
+/// A point p maps to right*p.x + up*p.y + at*p.z + pos.
+pub type Transform = [[f32; 3]; 4];
+
+pub const IDENTITY: Transform = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 0.0]];
+
+/// `outer` applied after `inner`.
+pub fn compose(outer: &Transform, inner: &Transform) -> Transform {
+    let rot = |v: [f32; 3]| -> [f32; 3] {
+        std::array::from_fn(|i| outer[0][i] * v[0] + outer[1][i] * v[1] + outer[2][i] * v[2])
+    };
+    let p = rot(inner[3]);
+    [rot(inner[0]), rot(inner[1]), rot(inner[2]), std::array::from_fn(|i| p[i] + outer[3][i])]
+}
+
+pub fn transform_point(t: &Transform, p: [f32; 3]) -> [f32; 3] {
+    std::array::from_fn(|i| t[0][i] * p[0] + t[1][i] * p[1] + t[2][i] * p[2] + t[3][i])
+}
+
+pub fn transform_dir(t: &Transform, d: [f32; 3]) -> [f32; 3] {
+    std::array::from_fn(|i| t[0][i] * d[0] + t[1][i] * d[1] + t[2][i] * d[2])
+}
+
 impl Clump {
+    /// Frame `i` relative to the clump's root (parents applied).
+    pub fn world_transform(&self, i: usize) -> Transform {
+        let f = &self.frames[i];
+        let local = [f.rotation[0], f.rotation[1], f.rotation[2], f.position];
+        if f.parent < 0 { local } else { compose(&self.world_transform(f.parent as usize), &local) }
+    }
+
+    /// Whether a part belongs to the normal, close-up look of the model: vehicles also carry a
+    /// low-detail copy (`_vlo`) and damaged parts (`_dam`) that the game swaps in.
+    pub fn is_default_part(&self, frame: usize) -> bool {
+        let n = self.frames[frame].name.as_deref().unwrap_or("").to_ascii_lowercase();
+        !n.ends_with("_vlo") && !n.ends_with("_dam") && !n.contains("_lo_")
+    }
+
     pub fn frame_by_name(&self, name: &str) -> Option<usize> {
         self.frames.iter().position(|f| {
             f.name
@@ -573,6 +610,16 @@ mod tests {
                 plugins: vec![]
             }
         );
+    }
+
+    #[test]
+    fn composes_frames() {
+        let c = parse(&clump(false)).unwrap();
+        // The root is at z 0, frame 1 one unit above it.
+        assert_eq!(c.world_transform(0)[3], [0.0, 0.0, 0.0]);
+        assert_eq!(c.world_transform(1)[3], [0.0, 0.0, 1.0]);
+        let turn: Transform = [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [5.0, 0.0, 0.0]];
+        assert_eq!(transform_point(&compose(&turn, &IDENTITY), [1.0, 0.0, 0.0]), [5.0, 1.0, 0.0]);
     }
 
     #[test]
