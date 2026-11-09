@@ -22,6 +22,7 @@ mod pedtype;
 mod objectdata;
 mod particlecfg;
 mod timecyc;
+mod directory;
 mod savegame;
 mod host;
 mod testdrive;
