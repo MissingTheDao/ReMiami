@@ -13,3 +13,5 @@ revc-formats = { path = "../revc-formats" }
 
 [dev-dependencies]
 png = "0.18"
+# The window_clear example opens an SDL3 window like the game host does.
+sdl3-sys = "0.7"

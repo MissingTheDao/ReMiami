@@ -754,6 +754,7 @@ dependencies = [
  "png",
  "pollster",
  "revc-formats",
+ "sdl3-sys",
  "wgpu",
 ]
 

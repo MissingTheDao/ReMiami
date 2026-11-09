@@ -12,8 +12,13 @@ a fixed light. `tests/backends.rs` renders the textured Infernus on Vulkan and O
 requires the two images to agree (0.002 % of pixels differ). Texture decoding covers every D3D8
 format in the game files (12391 textures decode).
 
-Known: wgpu's GL backend picked the integrated GPU over the discrete one on the dev machine;
-GL device selection needs handling before the game uses it.
+Presenting to a window works too (`revc_rw::present::Presenter`): an SDL3 window *without* a GL
+context, its native Wayland/X11 handles from SDL's window properties, a wgpu surface on Vulkan or
+OpenGL (the instance gets the display handle, which EGL needs on Wayland), an 8-bit non-sRGB
+swapchain (the game's colours are gamma-space, like GL3's output). Check by hand with
+`cargo run -p revc-rw --example window_clear -- vulkan|gl`: both present on the dev machine's
+RX 9070 XT. Headless GL picked the integrated GPU; with a window the surface decides and both
+backends use the discrete GPU.
 
 ## What the game calls
 
@@ -42,7 +47,10 @@ Rw/Rp/Rt-named call; 56 of those are game functions with RW-style names, e.g. Rp
 These functions all work on librw's object model (`RwTexture`, `RwFrame`, `RpClump` ... are
 librw objects), so they can't be swapped one by one. The port goes in two stages:
 
-1. **A wgpu driver for librw.** librw talks to graphics through a device/driver interface
+1. **A wgpu platform for librw.** (librw's NULL platform can't be the base: its
+   `rasterCreate` is `assert(0 && "not implemented")`, so nothing could even load a texture.
+   The new platform needs real rasters and native-texture conversion, about the size of the GL3
+   driver's raster and device parts.) librw talks to graphics through a device/driver interface
    (`vendor/librw/src/rwengine.h`): camera begin/end update and clear, show raster, render
    states, rasters (create, lock/unlock, from/to image), Im2D/Im3D primitives, plus per-platform
    instancing and render pipelines for atomics, skinned and MatFX geometry. Today that is the GL3

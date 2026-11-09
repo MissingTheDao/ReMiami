@@ -10,6 +10,8 @@
 use revc_formats::{dff, txd};
 use wgpu::util::DeviceExt;
 
+pub mod present;
+
 /// The graphics API to render with (the game's settings will offer both).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Backend {
@@ -27,6 +29,7 @@ impl Backend {
 }
 
 pub struct Gpu {
+    pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub info: wgpu::AdapterInfo,
@@ -36,9 +39,14 @@ impl Gpu {
     /// A device without a window (for tests and offscreen work).
     pub fn headless(backend: Backend) -> Result<Gpu, String> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor { backends: backend.wgpu(), ..wgpu::InstanceDescriptor::new_without_display_handle() });
+        Gpu::create(&instance, backend, None)
+    }
+
+    /// Adapter and device on `instance`, able to present to `surface` if given.
+    pub fn create(instance: &wgpu::Instance, backend: Backend, surface: Option<&wgpu::Surface<'_>>) -> Result<Gpu, String> {
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: None,
+            compatible_surface: surface,
             force_fallback_adapter: false,
             apply_limit_buckets: false,
         }))
@@ -51,7 +59,7 @@ impl Gpu {
             ..Default::default()
         }))
         .map_err(|e| format!("{backend:?} device: {e}"))?;
-        Ok(Gpu { device, queue, info })
+        Ok(Gpu { adapter, device, queue, info })
     }
 }
 
