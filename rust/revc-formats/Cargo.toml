@@ -1,0 +1,9 @@
+[package]
+name = "revc-formats"
+description = "Loaders for Vice City's file formats (IMG, RenderWare TXD/DFF, COL, GXT, IDE/IPL, SCM)"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
