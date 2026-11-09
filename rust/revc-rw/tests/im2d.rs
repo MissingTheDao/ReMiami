@@ -706,3 +706,57 @@ fn msaa_vulkan() {
 fn msaa_gl() {
     msaa(Backend::Gl);
 }
+
+/// Every antialiasing level: inside and outside a triangle stay pure, Off leaves the diagonal
+/// edge hard, every other level softens it (more samples, more in-between pixels).
+fn aa_levels(backend: Backend) {
+    use revc_rw::frame::Antialiasing;
+    let gpu = Gpu::headless(backend).expect("gpu");
+    let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+    let v = |x: f32, y: f32| Vertex2D { x, y, z: 0.0, w: 1.0, r: 255, g: 255, b: 255, a: 255, u: 0.0, v: 0.0 };
+    let mut counts = Vec::new();
+    for (i, (name, aa)) in Antialiasing::LEVELS.iter().enumerate() {
+        r.set_antialiasing(&gpu, Antialiasing::level(i as u32));
+        assert_eq!(r.antialiasing(), *aa, "{backend:?} {name}");
+        r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+        r.draw_2d(&base(), 3, &[v(0.0, 0.0), v(64.0, 0.0), v(0.0, 61.0)], None);
+        let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let mut enc = gpu.device.create_command_encoder(&Default::default());
+        r.encode(&gpu, &mut enc, &target.create_view(&Default::default()), (SIZE, SIZE));
+        r.end_frame();
+        // Screenshots read the shown image (window size whatever the supersampling).
+        let shown = r.scene_texture().unwrap();
+        assert_eq!((shown.width(), shown.height()), (SIZE, SIZE), "{backend:?} {name}: shown image size");
+        let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+        gpu.queue.submit([enc.finish()]);
+        let img = readback_finish(&gpu, rb).expect("readback");
+        assert_eq!(px(&img, 8, 8), [255, 255, 255, 255], "{backend:?} {name}: inside");
+        assert_eq!(px(&img, 56, 56), [0, 0, 0, 255], "{backend:?} {name}: outside");
+        let edge = img.as_chunks::<4>().0.iter().filter(|p| p[0] > 10 && p[0] < 245).count();
+        counts.push((*name, edge));
+    }
+    assert_eq!(counts[0].1, 0, "{backend:?} Off must leave edges hard: {counts:?}");
+    for (name, n) in &counts[1..] {
+        assert!(*n > 20, "{backend:?} {name}: only {n} soft edge pixels ({counts:?})");
+    }
+    eprintln!("{backend:?} soft edge pixels per level: {counts:?}");
+}
+
+#[test]
+fn aa_levels_vulkan() {
+    aa_levels(Backend::Vulkan);
+}
+
+#[test]
+fn aa_levels_gl() {
+    aa_levels(Backend::Gl);
+}

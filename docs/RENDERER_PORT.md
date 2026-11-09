@@ -178,7 +178,34 @@ and the window all see the resolved image; texture targets (env map) stay single
 count is clamped to what the device supports for the scene formats
 (`Renderer::supported_samples`); the log says `revc: MSAA 4x (asked 4x)`. Checked: offscreen
 test (edge pixels only with MSAA) on both backends; in game 4x on Vulkan and GL, visibly smooth
-edges. Next for task 22: post-process AA (FXAA/SMAA), resolution scale, live switching.
+edges.
+
+**Antialiasing suite (plan task 22).** One setting, Display Setup > Antialiasing (wgpu build;
+replaces MultiSampling there; ini `[Graphics] Antialiasing=0..7`), switches live, levels from
+cheapest to most expensive:
+
+| Level | Method | Cost |
+|---|---|---|
+| 0 Off | | none |
+| 1 FXAA | post pass on the final image | one cheap full-screen pass |
+| 2 MSAA 2x | multisampled scene, resolved each pass | 2 samples on geometry edges |
+| 3 MSAA 4x | | 4 samples |
+| 4 MSAA 4x + FXAA | both | |
+| 5 MSAA 8x | | 8 samples |
+| 6 SSAA 2x | scene drawn at 2x width and height, filtered down | 4x the pixels |
+| 7 SSAA 2x + MSAA 4x | both | highest |
+
+`revc_rw::frame::Antialiasing::LEVELS`; the device sends the level to the renderer when it
+changes (`rw::wgpu::antialiasing`, checked in beginUpdate) and again for a new window. After the
+scene, a short chain: supersampled scene filtered down to window size, then FXAA, then shown;
+screenshots read the last image; frame copies (colour filter, droplets) are filtered down too when
+supersampling. MSAA counts other than 1 and 4 need wgpu's adapter-specific format features, now
+requested when available (2x/8x then work on Vulkan; without them the count falls back).
+Checked: offscreen test of all eight levels on both backends (pure inside/outside, Off leaves the
+edge hard, every other level softens it); in game every level applies (log
+`revc: antialiasing ...`). FXAA also softens HUD text a little, as FXAA does. Not in the suite:
+SMAA (needs its lookup textures, MIT, from the SMAA repository: asks first), TAA (no motion
+vectors in this renderer). Temporal upscalers (FSR 3/4, XeSS, DLSS) are a later goal.
 
 ## What the game calls
 

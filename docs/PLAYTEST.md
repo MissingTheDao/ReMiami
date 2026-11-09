@@ -57,6 +57,9 @@ Build: `cd rust && CARGO_TARGET_DIR=target-wgpu cargo build --features wgpu`, ru
       Xbox-style reflections and specular highlights (compare with the normal build), peds a rim
       light, roads a gloss; nothing flickers when turning the camera.
 - [ ] Menus, HUD, text, radar look like the normal build.
+- [ ] Display Setup > Antialiasing: step through all 8 levels in game; the picture changes at once,
+      edges get smoother the higher the level, frame rate drops at SSAA; the level is kept after a
+      restart.
 - [ ] Options > Display Setup > Colour Filter: each of None, Simple, PS2/XBOX, Mobile, PC
       changes the look at once and is kept after a restart (both builds).
 

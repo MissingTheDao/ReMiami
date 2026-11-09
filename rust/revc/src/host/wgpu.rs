@@ -4,7 +4,7 @@
 //! revc_rw::frame::Renderer and drawn when the frame is presented; Im3D and models come next.
 
 use revc_rw::Backend;
-use revc_rw::frame::{DrawState, EnvMap, MAX_BONES, Mat4, MeshExtras, MeshVertex, ModelState, Renderer, SkinVertex, TexData, Vertex2D, Vertex2DUV2, Vertex3D};
+use revc_rw::frame::{Antialiasing, DrawState, EnvMap, MAX_BONES, Mat4, MeshExtras, MeshVertex, ModelState, Renderer, SkinVertex, TexData, Vertex2D, Vertex2DUV2, Vertex3D};
 use revc_rw::present::{NativeWindow, Presenter};
 use sdl3_sys::everything::*;
 use std::cell::{Cell, RefCell};
@@ -261,6 +261,20 @@ pub unsafe extern "C" fn revc_rw_im2d_uv2(state: *const DrawState, prim: u32, ve
         if let Some(r) = c.borrow_mut().as_mut() {
             r.draw_2d_uv2(state, prim, verts, idx, tex1);
         }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_rw_set_antialiasing(level: i32) {
+    PRESENTER.with(|pc| {
+        RENDERER.with(|rc| {
+            if let (Some(p), Some(r)) = (pc.borrow().as_ref(), rc.borrow_mut().as_mut()) {
+                let (name, _) = Antialiasing::LEVELS.get(level.max(0) as usize).copied().unwrap_or(Antialiasing::LEVELS[0]);
+                r.set_antialiasing(&p.gpu, Antialiasing::level(level.max(0) as u32));
+                let aa = r.antialiasing();
+                eprintln!("revc: antialiasing {name} (MSAA {}x, supersampling {}x, FXAA {})", aa.msaa, aa.supersample, if aa.fxaa { "on" } else { "off" });
+            }
+        })
     });
 }
 

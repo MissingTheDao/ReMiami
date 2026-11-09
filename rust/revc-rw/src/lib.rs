@@ -68,7 +68,9 @@ impl Gpu {
             required_limits: wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
             // DXT textures stay compressed where the GPU samples BC formats (both backends on
             // desktop GPUs); otherwise they are decoded on the CPU.
-            required_features: adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC,
+            required_features: adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC
+                // MSAA counts beyond the guaranteed 1 and 4 (2x, 8x) need the adapter's own format features.
+                | adapter.features() & wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
             ..Default::default()
         }))
         .map_err(|e| format!("{backend:?} device: {e}"))?;

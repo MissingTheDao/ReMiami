@@ -284,6 +284,92 @@ enum Op {
 /// output; frame copies (post effects) and screenshots read it.
 pub const SCENE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
+/// Antialiasing as one setting, levels ordered by cost (lowest first): what the game's
+/// Antialiasing option selects.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Antialiasing {
+    /// MSAA samples (1 = off; clamped to what the device does).
+    pub msaa: u32,
+    /// Supersampling: the scene is drawn at this many times the window size per axis, then
+    /// filtered down (1 = off, 2 = 4 samples per pixel).
+    pub supersample: u32,
+    /// FXAA post pass on the final image.
+    pub fxaa: bool,
+}
+
+impl Antialiasing {
+    pub const OFF: Antialiasing = Antialiasing { msaa: 1, supersample: 1, fxaa: false };
+    /// Levels 0.. from cheapest to most expensive.
+    pub const LEVELS: [(&'static str, Antialiasing); 8] = [
+        ("Off", Antialiasing::OFF),
+        ("FXAA", Antialiasing { msaa: 1, supersample: 1, fxaa: true }),
+        ("MSAA 2x", Antialiasing { msaa: 2, supersample: 1, fxaa: false }),
+        ("MSAA 4x", Antialiasing { msaa: 4, supersample: 1, fxaa: false }),
+        ("MSAA 4x + FXAA", Antialiasing { msaa: 4, supersample: 1, fxaa: true }),
+        ("MSAA 8x", Antialiasing { msaa: 8, supersample: 1, fxaa: false }),
+        ("SSAA 2x", Antialiasing { msaa: 1, supersample: 2, fxaa: false }),
+        ("SSAA 2x + MSAA 4x", Antialiasing { msaa: 4, supersample: 2, fxaa: false }),
+    ];
+
+    pub fn level(n: u32) -> Antialiasing {
+        Self::LEVELS.get(n as usize).map_or(Self::OFF, |l| l.1)
+    }
+}
+
+// Filtering passes over a finished image: `down` samples it with linear filtering (2x
+// supersampled -> window size averages 2x2 texels), `fxaa` is FXAA (Timothy Lottes' compact
+// variant: luma edge direction, two- and four-tap blend along it, falls back to two taps when
+// the four-tap result leaves the local luma range).
+const POST_SHADER: &str = r#"
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+
+struct V { @builtin(position) pos: vec4<f32>, @location(0) uv: vec2<f32> };
+
+@vertex
+fn vs(@builtin(vertex_index) i: u32) -> V {
+    let p = vec2<f32>(f32((i << 1u) & 2u), f32(i & 2u)) * 2.0 - 1.0;
+    var o: V;
+    o.pos = vec4<f32>(p, 0.0, 1.0);
+    o.uv = vec2<f32>(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5);
+    return o;
+}
+
+@fragment
+fn down(i: V) -> @location(0) vec4<f32> {
+    return vec4<f32>(textureSample(src, samp, i.uv).rgb, 1.0);
+}
+
+fn luma(c: vec3<f32>) -> f32 {
+    return dot(c, vec3<f32>(0.299, 0.587, 0.114));
+}
+
+@fragment
+fn fxaa(i: V) -> @location(0) vec4<f32> {
+    let px = 1.0 / vec2<f32>(textureDimensions(src));
+    let rgb_nw = textureSample(src, samp, i.uv + vec2<f32>(-1.0, -1.0) * px).rgb;
+    let rgb_ne = textureSample(src, samp, i.uv + vec2<f32>(1.0, -1.0) * px).rgb;
+    let rgb_sw = textureSample(src, samp, i.uv + vec2<f32>(-1.0, 1.0) * px).rgb;
+    let rgb_se = textureSample(src, samp, i.uv + vec2<f32>(1.0, 1.0) * px).rgb;
+    let rgb_m = textureSample(src, samp, i.uv).rgb;
+    let l_nw = luma(rgb_nw);
+    let l_ne = luma(rgb_ne);
+    let l_sw = luma(rgb_sw);
+    let l_se = luma(rgb_se);
+    let l_m = luma(rgb_m);
+    let l_min = min(l_m, min(min(l_nw, l_ne), min(l_sw, l_se)));
+    let l_max = max(l_m, max(max(l_nw, l_ne), max(l_sw, l_se)));
+    var dir = vec2<f32>(-((l_nw + l_ne) - (l_sw + l_se)), (l_nw + l_sw) - (l_ne + l_se));
+    let reduce = max((l_nw + l_ne + l_sw + l_se) * (0.25 / 8.0), 1.0 / 128.0);
+    let rcp_min = 1.0 / (min(abs(dir.x), abs(dir.y)) + reduce);
+    dir = clamp(dir * rcp_min, vec2<f32>(-8.0), vec2<f32>(8.0)) * px;
+    let a = 0.5 * (textureSample(src, samp, i.uv + dir * (1.0 / 3.0 - 0.5)).rgb + textureSample(src, samp, i.uv + dir * (2.0 / 3.0 - 0.5)).rgb);
+    let b = a * 0.5 + 0.25 * (textureSample(src, samp, i.uv - dir * 0.5).rgb + textureSample(src, samp, i.uv + dir * 0.5).rgb);
+    let l_b = luma(b);
+    return vec4<f32>(select(b, a, l_b < l_min || l_b > l_max), 1.0);
+}
+"#;
+
 const BLIT_SHADER: &str = r#"
 @group(0) @binding(0) var scene: texture_2d<f32>;
 
@@ -710,7 +796,19 @@ pub struct Renderer {
     /// MSAA sample count of the scene (1 = off) and its multisampled colour target, resolved
     /// into the scene texture at the end of every pass.
     samples: u32,
-    msaa: Option<(wgpu::Texture, wgpu::TextureView, (u32, u32))>,
+    msaa: Option<(wgpu::Texture, wgpu::TextureView, (u32, u32), u32)>,
+    /// Supersampling factor of the scene and FXAA (Antialiasing).
+    scale: u32,
+    fxaa: bool,
+    post_layout: wgpu::BindGroupLayout,
+    post_sampler: wgpu::Sampler,
+    down_pipeline: wgpu::RenderPipeline,
+    fxaa_pipeline: wgpu::RenderPipeline,
+    /// Window-size images after the scene: downsampled, then FXAA'd.
+    frame_tex: Option<(wgpu::Texture, (u32, u32))>,
+    post_tex: Option<(wgpu::Texture, (u32, u32))>,
+    /// Which image the last frame ended with (0 scene, 1 frame_tex, 2 post_tex).
+    last_output: u8,
     shader: wgpu::ShaderModule,
     texture_layout: wgpu::BindGroupLayout,
     uniform_layout: wgpu::BindGroupLayout,
@@ -886,11 +984,14 @@ impl Renderer {
     pub fn supported_samples(gpu: &Gpu, wanted: u32) -> u32 {
         let colour = gpu.adapter.get_texture_format_features(SCENE_FORMAT).flags;
         let depth = gpu.adapter.get_texture_format_features(DEPTH_FORMAT).flags;
+        // Without the adapter-specific format features only WebGPU's guaranteed 1 and 4 work.
+        let specific = gpu.device.features().contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES);
+        let ok = |n: u32| if specific { colour.sample_count_supported(n) && depth.sample_count_supported(n) } else { n == 1 || n == 4 };
         let mut n = wanted.clamp(1, 16).next_power_of_two();
         if n > wanted.max(1) {
             n /= 2;
         }
-        while n > 1 && !(colour.sample_count_supported(n) && depth.sample_count_supported(n)) {
+        while n > 1 && !ok(n) {
             n /= 2;
         }
         n
@@ -900,6 +1001,41 @@ impl Renderer {
     pub fn with_samples(gpu: &Gpu, output: wgpu::TextureFormat, samples: u32) -> Renderer {
         let samples = Self::supported_samples(gpu, samples);
         let d = &gpu.device;
+        let post_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("post"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
+            ],
+        });
+        let post_shader = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("post"), source: wgpu::ShaderSource::Wgsl(POST_SHADER.into()) });
+        let post_pl = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("post"), bind_group_layouts: &[Some(&post_layout)], immediate_size: 0 });
+        let post_pipeline = |entry: &str| {
+            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(entry),
+                layout: Some(&post_pl),
+                vertex: wgpu::VertexState { module: &post_shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
+                fragment: Some(wgpu::FragmentState { module: &post_shader, entry_point: Some(entry), targets: &[Some(SCENE_FORMAT.into())], compilation_options: Default::default() }),
+                primitive: Default::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let down_pipeline = post_pipeline("down");
+        let fxaa_pipeline = post_pipeline("fxaa");
+        let post_sampler = d.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("post"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
         let format = SCENE_FORMAT;
         let blit_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("blit"),
@@ -1004,6 +1140,15 @@ impl Renderer {
             scene: None,
             samples,
             msaa: None,
+            scale: 1,
+            fxaa: false,
+            post_layout,
+            post_sampler,
+            down_pipeline,
+            fxaa_pipeline,
+            frame_tex: None,
+            post_tex: None,
+            last_output: 0,
             shader,
             texture_layout,
             uniform_layout,
@@ -1517,14 +1662,77 @@ impl Renderer {
         self.ops.push(Op::CopyFrame { texture, x, y });
     }
 
-    /// The last encoded frame (SCENE_FORMAT, COPY_SRC), for screenshots.
+    /// The last encoded frame as shown (SCENE_FORMAT, COPY_SRC, window size), for screenshots.
     pub fn scene_texture(&self) -> Option<&wgpu::Texture> {
-        self.scene.as_ref().map(|s| &s.0)
+        match self.last_output {
+            1 => self.frame_tex.as_ref().map(|t| &t.0),
+            2 => self.post_tex.as_ref().map(|t| &t.0),
+            _ => self.scene.as_ref().map(|s| &s.0),
+        }
+    }
+
+    /// Switches antialiasing; takes effect with the next frame.
+    pub fn set_antialiasing(&mut self, gpu: &Gpu, aa: Antialiasing) {
+        self.samples = Self::supported_samples(gpu, aa.msaa);
+        self.scale = aa.supersample.clamp(1, 2);
+        self.fxaa = aa.fxaa;
+    }
+
+    /// The antialiasing in effect (MSAA after clamping to the device).
+    pub fn antialiasing(&self) -> Antialiasing {
+        Antialiasing { msaa: self.samples, supersample: self.scale, fxaa: self.fxaa }
+    }
+
+    fn window_texture(gpu: &Gpu, slot: &mut Option<(wgpu::Texture, (u32, u32))>, size: (u32, u32), label: &str) {
+        if slot.as_ref().is_none_or(|t| t.1 != size) {
+            let t = gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: SCENE_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            *slot = Some((t, size));
+        }
+    }
+
+    /// One filtering pass: `src` sampled into `dst` (whole texture, or the `viewport`).
+    fn post_pass(&self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, pipeline: &wgpu::RenderPipeline, src: &wgpu::Texture, dst: &wgpu::TextureView, viewport: Option<[f32; 4]>) {
+        let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("post"),
+            layout: &self.post_layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&src.create_view(&Default::default())) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.post_sampler) },
+            ],
+        });
+        let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("post"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: dst,
+                resolve_target: None,
+                depth_slice: None,
+                ops: wgpu::Operations { load: if viewport.is_some() { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(wgpu::Color::BLACK) }, store: wgpu::StoreOp::Store },
+            })],
+            ..Default::default()
+        });
+        if let Some(v) = viewport {
+            pass.set_viewport(v[0], v[1], v[2], v[3], 0.0, 1.0);
+        }
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(0, &bind, &[]);
+        pass.draw(0..3, 0..1);
     }
 
     /// Encodes the recorded frame into the scene texture and shows it on `target` (`size` pixels,
     /// the output format given to `new`). The recording stays until `end_frame`.
     pub fn encode(&mut self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32)) {
+        // The scene is drawn at the supersampling scale; `size` stays the window's.
+        let window = size;
+        let size = (window.0 * self.scale, window.1 * self.scale);
         if self.scene.as_ref().is_none_or(|s| s.2 != size) {
             let t = gpu.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("scene"),
@@ -1583,7 +1791,7 @@ impl Renderer {
         }
 
         // The scene's multisampled colour target.
-        if self.samples > 1 && self.msaa.as_ref().is_none_or(|m| m.2 != size) {
+        if self.samples > 1 && self.msaa.as_ref().is_none_or(|m| m.2 != size || m.3 != self.samples) {
             let t = gpu.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("scene msaa"),
                 size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
@@ -1595,7 +1803,7 @@ impl Renderer {
                 view_formats: &[],
             });
             let v = t.create_view(&Default::default());
-            self.msaa = Some((t, v, size));
+            self.msaa = Some((t, v, size, self.samples));
         }
         // Depth buffers for the scene and every texture target of the frame.
         let mut sizes = vec![(size.0, size.1, self.samples)];
@@ -1747,8 +1955,15 @@ impl Renderer {
                         drop(pass.take());
                     }
                     let Some(t) = self.textures.get(&texture) else { continue };
-                    let (w, h) = (size.0.min(t.width.saturating_sub(x)), size.1.min(t.height.saturating_sub(y)));
+                    let (w, h) = (window.0.min(t.width.saturating_sub(x)), window.1.min(t.height.saturating_sub(y)));
                     if t.format != SCENE_FORMAT || w == 0 || h == 0 {
+                        continue;
+                    }
+                    if self.scale > 1 {
+                        // Supersampled: the copy is the scene filtered down to window pixels.
+                        let dst = t.texture.create_view(&wgpu::TextureViewDescriptor { base_mip_level: 0, mip_level_count: Some(1), ..Default::default() });
+                        let vp = [x as f32, y as f32, window.0 as f32, window.1 as f32];
+                        self.post_pass(gpu, enc, &self.down_pipeline, &self.scene.as_ref().unwrap().0, &dst, Some(vp));
                         continue;
                     }
                     enc.copy_texture_to_texture(
@@ -1822,7 +2037,35 @@ impl Renderer {
         }
         drop(pass);
 
-        // Show the scene on the output.
+        // Antialiasing after the scene: filter a supersampled scene down to the window, then FXAA.
+        let mut last: u8 = 0;
+        if self.scale > 1 {
+            Self::window_texture(gpu, &mut self.frame_tex, window, "frame");
+            let dst = self.frame_tex.as_ref().unwrap().0.create_view(&Default::default());
+            self.post_pass(gpu, enc, &self.down_pipeline, &self.scene.as_ref().unwrap().0, &dst, None);
+            last = 1;
+        }
+        if self.fxaa {
+            Self::window_texture(gpu, &mut self.post_tex, window, "fxaa");
+            let src = if last == 1 { &self.frame_tex.as_ref().unwrap().0 } else { &self.scene.as_ref().unwrap().0 };
+            let dst = self.post_tex.as_ref().unwrap().0.create_view(&Default::default());
+            self.post_pass(gpu, enc, &self.fxaa_pipeline, src, &dst, None);
+            last = 2;
+        }
+        self.last_output = last;
+        let shown_bind = match last {
+            0 => None,
+            _ => {
+                let t = if last == 1 { &self.frame_tex.as_ref().unwrap().0 } else { &self.post_tex.as_ref().unwrap().0 };
+                Some(gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("blit"),
+                    layout: &self.blit_layout,
+                    entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&t.create_view(&Default::default())) }],
+                }))
+            }
+        };
+
+        // Show the result on the output.
         let mut blit = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("blit"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1834,7 +2077,7 @@ impl Renderer {
             ..Default::default()
         });
         blit.set_pipeline(&self.blit_pipeline);
-        blit.set_bind_group(0, &self.scene.as_ref().unwrap().1, &[]);
+        blit.set_bind_group(0, shown_bind.as_ref().unwrap_or(&self.scene.as_ref().unwrap().1), &[]);
         blit.draw(0..3, 0..1);
         drop(blit);
 
