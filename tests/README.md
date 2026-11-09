@@ -13,7 +13,8 @@ saves come from here, so tests never touch your own config or saves.
 
 Scenarios (implemented in `rust/revc/src/testdrive.rs`):
 
-- **boot**: reach the front-end menu and exit cleanly.
+- **boot**: reach the front-end menu, check the Controls page has revc's BUTTON PROMPTS entry,
+  capture that page (for a look only: the menu backdrop animates in real time) and exit cleanly.
 - **saveload**: load slot 1, wait 8 s of game time and for the fade-in to end, check the player position,
   capture the frame and compare it with `reference/saveload.png`.
 - **formats**: load slot 1, then compare what the C++ loaders hold (model info from the IDEs,
@@ -23,8 +24,8 @@ Scenarios (implemented in `rust/revc/src/testdrive.rs`):
   hotel floor are replaced, a broken file must be rejected (original kept); compared with
   `reference/texmods.png`.
 - **gamepad**: plugs in SDL virtual pads (a DualSense, then a Steam Deck): checks the pad kind used
-  for button glyphs, player 1/2 assignment, switching glyph sets with the last-used device, rumble
-  from the game's pad shake, and unplugging. No hardware needed.
+  for button glyphs, player 1/2 assignment, the prompt glyphs per pad and with the Controls-menu
+  override (screenshots vs `reference/gamepad/`), rumble from the game's pad shake, and unplugging. No hardware needed.
 - **spots**: visits fixed places around the map (no peds or traffic, noon, sunny, HUD hidden, fixed
   camera) and compares each frame with `reference/spots/<spot>.png` (plan task 3). Spots are
   scheduled on game time and capture frames use the simulated state (no render interpolation), so

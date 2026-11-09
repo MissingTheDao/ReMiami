@@ -77,7 +77,7 @@ pub fn stats() -> (usize, usize) {
 }
 
 /// RGBA8, top row first.
-fn decode(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
+pub(crate) fn decode(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
     let data = std::fs::read(path).map_err(|e| e.to_string())?;
     let (w, h, rgba) = if data.starts_with(b"DDS ") {
         let img = revc_formats::dds::decode(&data).map_err(|e| e.to_string())?;

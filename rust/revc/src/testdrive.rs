@@ -2,7 +2,9 @@
 //! `host::hostPollEvents`, using the C hooks in cpp/re3-miami/src/skel/host/testhooks.cpp.
 //!
 //! Scenarios:
-//!   REVC_TEST=boot      reach the front-end menu, then quit.
+//!   REVC_TEST=boot      reach the front-end menu, check the Controls page has revc's entries;
+//!                       with REVC_TEST_SHOT, open that page and capture it (the menu backdrop
+//!                       animates in real time, so there is no reference to compare with).
 //!   REVC_TEST=audio     like saveload, then plays a scripted scene with injected keys (walk
 //!                       forward 3 s, cycle weapon, fire 3 times) for the A/B audio comparison.
 //!                       REVC_TEST_WAV=path records the Rust mixer's output for the whole run.
@@ -43,6 +45,8 @@ unsafe extern "C" {
     fn revc_test_player_pos(x: *mut f32, y: *mut f32, z: *mut f32);
     fn revc_test_dump_formats(path: *const std::ffi::c_char) -> i32;
     fn revc_test_clear_help();
+    fn revc_test_show_controls_menu();
+    fn revc_test_check_prompt_menu() -> i32;
     fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
 }
 
@@ -70,6 +74,8 @@ enum Phase {
     Script { t0: u32, step: usize },
     /// Virtual-controller checks (gamepad scenario, padtest.rs).
     Pads,
+    /// Boot: waiting on the Controls menu page before capturing it.
+    MenuShot { frames: u32 },
     /// Fixed-spot screenshots. Spot `idx` is visited at game time `base + idx * SPOT_PERIOD_MS`
     /// and captured SPOT_WAIT_MS later, so wind, waves and the clock are at the same phase in every
     /// run whatever the frame rate (the simulation advances in exact 30 Hz steps).
@@ -128,6 +134,7 @@ struct Driver {
     failures: Vec<String>,
     finished: bool,
     pads: crate::padtest::PadTest,
+    pad_capture_requested: bool,
 }
 
 thread_local! {
@@ -170,6 +177,7 @@ pub fn init() -> Result<bool, String> {
         failures: Vec::new(),
         finished: false,
         pads: Default::default(),
+        pad_capture_requested: false,
     };
     log(format!("scenario {scenario:?} started"));
     if std::env::var_os("REVC_TEST_WAV").is_some() {
@@ -237,7 +245,18 @@ impl Driver {
                 }
                 log(format!("front end reached after {:.1}s", self.started.elapsed().as_secs_f32()));
                 match self.scenario {
-                    Scenario::Boot => return self.finish(),
+                    Scenario::Boot => {
+                        if unsafe { revc_test_check_prompt_menu() } == 0 {
+                            self.fail("Controls menu lacks the BUTTON PROMPTS entry (or its text)".into());
+                        }
+                        if self.shot.is_none() {
+                            return self.finish();
+                        }
+                        // The Controls page (with revc's BUTTON PROMPTS entry) as the boot screenshot.
+                        unsafe { revc_test_show_controls_menu() };
+                        self.phase = Phase::MenuShot { frames: 0 };
+                        return false;
+                    }
                     Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
@@ -354,6 +373,30 @@ impl Driver {
                         }
                     }
                     _ => {}
+                }
+            }
+            Phase::MenuShot { frames } => {
+                if frames < 30 {
+                    self.phase = Phase::MenuShot { frames: frames + 1 };
+                } else {
+                    crate::host::request_capture();
+                    self.phase = Phase::Capturing;
+                }
+            }
+            Phase::Pads if self.pads.capture.is_some() => {
+                let name = self.pads.capture.unwrap();
+                if !self.pad_capture_requested {
+                    crate::host::request_capture();
+                    self.pad_capture_requested = true;
+                } else if let Some((w, h, rgba)) = crate::host::take_capture() {
+                    let dir = |var: &str| std::env::var_os(var).map(|d| PathBuf::from(d).join(format!("{name}.png")));
+                    let reference = dir("REVC_TEST_REF_DIR").filter(|p| p.exists());
+                    if std::env::var_os("REVC_TEST_REF_DIR").is_some() && reference.is_none() {
+                        self.fail(format!("{name}: no reference image (run with --bless)"));
+                    }
+                    self.check_image_at(w, h, &rgba, dir("REVC_TEST_SHOT_DIR"), reference, &format!("{name}: "));
+                    self.pads.capture = None;
+                    self.pad_capture_requested = false;
                 }
             }
             Phase::Pads => match self.pads.tick() {

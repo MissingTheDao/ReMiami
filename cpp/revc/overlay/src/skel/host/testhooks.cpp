@@ -30,6 +30,7 @@
 #include "PlayerPed.h"
 #include "ColStore.h"
 #include "Hud.h"
+#include "Font.h"
 
 #ifdef AUDIO_OAL
 // Audio effects state (sampman_oal.cpp globals).
@@ -168,6 +169,46 @@ revc_test_goto_spot(float x, float y, float z, float dx, float dy, float dz, int
 	TheCamera.SetCamPositionForFixedMode(pos + CVector(dx, dy, dz), CVector(0.0f, 0.0f, 0.0f));
 	TheCamera.TakeControlNoEntity(pedPos, JUMP_CUT, CAMCONTROL_SCRIPT);
 	return pos.z;
+}
+
+// Shows a help box with every controller button token (CFont BUTTON_ICONS order), to check the
+// glyphs of the pad in use (gamepad scenario).
+void
+revc_test_show_buttons(void)
+{
+	static wchar text[128];
+	AsciiToUnicode("~X~ ~O~ ~Q~ ~T~  ~K~ ~M~ ~A~  ~J~ ~V~ ~C~  ~U~ ~D~ ~<~ ~>~  ~H~ ~L~ ~(~ ~)~", text);
+	CHud::SetHelpMessage(text, false, true);	// not "quick": those fade out after 1.5 s
+}
+
+// Controls menu "BUTTON PROMPTS" setting (skel/host/glyphs.cpp), as if chosen in the menu.
+extern int8 gButtonPromptsOverride;
+void
+revc_test_set_prompt_style(int style)
+{
+	gButtonPromptsOverride = style;
+}
+
+// Opens the Controls page of the front-end menu (boot scenario screenshot).
+void
+revc_test_show_controls_menu(void)
+{
+	FrontEndMenuManager.m_nCurrScreen = MENUPAGE_CONTROLLER_PC;
+	FrontEndMenuManager.m_nCurrOption = 0;
+}
+
+// 1 if the Controls page has the BUTTON PROMPTS entry and its label text resolves (boot scenario).
+int
+revc_test_check_prompt_menu(void)
+{
+	bool found = false;
+	for (int i = 0; i < NUM_MENUROWS; i++)
+		if (strcmp(aScreens[MENUPAGE_CONTROLLER_PC].m_aEntries[i].m_EntryName, "RVC_GLY") == 0)
+			found = true;
+	char text[64];
+	strncpy(text, UnicodeToAscii(TheText.Get("RVC_GLY")), sizeof(text) - 1);
+	text[sizeof(text) - 1] = '\0';
+	return found && strcmp(text, "BUTTON PROMPTS") == 0;
 }
 
 // Removes help text (the save's tutorial script keeps posting tips); called every frame at a spot.

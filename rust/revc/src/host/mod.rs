@@ -10,6 +10,7 @@
 mod geometry;
 mod joystick;
 mod keymap;
+mod glyphs;
 mod pads;
 
 pub use pads::PadKind;
@@ -95,6 +96,8 @@ struct Host {
     joysticks: Joysticks,
     /// The input device the player used last; prompts show its glyphs (plan task 9).
     active_kind: PadKind,
+    /// Slot of the pad used last (for its button labels); None until a pad is used.
+    active_pad: Option<i32>,
     /// Windowed-mode geometry, remembered across launches.
     geometry: Geometry,
     geometry_dirty: bool,
@@ -118,6 +121,7 @@ impl Default for Host {
             focused: true,
             joysticks: Joysticks::default(),
             active_kind: PadKind::KeyboardMouse,
+            active_pad: None,
             geometry: Geometry::default(),
             geometry_dirty: false,
             capture_requested: false,
@@ -608,14 +612,16 @@ fn pump(h: &mut Host, out: &mut Vec<Cb>) {
                 let id = unsafe { ev.jbutton.which };
                 if let Some(k) = h.joysticks.kind_of(id) {
                     h.active_kind = k;
+                    h.active_pad = h.joysticks.slot_of(id);
                 }
             }
             SDL_EVENT_JOYSTICK_AXIS_MOTION => {
                 let a = unsafe { ev.jaxis };
-                if a.value.unsigned_abs() > pads::ACTIVE_AXIS_THRESHOLD as u16 {
-                    if let Some(k) = h.joysticks.kind_of(a.which) {
-                        h.active_kind = k;
-                    }
+                if a.value.unsigned_abs() > pads::ACTIVE_AXIS_THRESHOLD as u16
+                    && let Some(k) = h.joysticks.kind_of(a.which)
+                {
+                    h.active_kind = k;
+                    h.active_pad = h.joysticks.slot_of(a.which);
                 }
             }
             SDL_EVENT_JOYSTICK_ADDED => {
@@ -831,6 +837,12 @@ thread_local! {
         RefCell::new((revc_timing::FixedStep::new(30, 4), None));
 }
 
+/// Non-zero while the regression harness waits for this frame to be captured.
+#[unsafe(no_mangle)]
+pub extern "C" fn hostCaptureRequested() -> c_int {
+    with(|h| h.capture_requested) as c_int
+}
+
 /// 30 Hz simulation steps due this frame (see revc_timing::FixedStep); `alpha` gets the
 /// position between the last step and the next one, for render interpolation.
 #[unsafe(no_mangle)]
@@ -861,6 +873,70 @@ pub extern "C" fn hostActiveInputKind() -> c_int {
 
 pub fn active_kind() -> PadKind {
     with(|h| h.active_kind)
+}
+
+/// Controls-menu override of the glyph style (0 = follow the pad in use).
+static GLYPH_OVERRIDE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_glyph_set_override(style: c_int) {
+    GLYPH_OVERRIDE.store(style, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The glyph set prompts should show: the menu override if set, else the pad used last, or
+/// failing that the first connected pad. (kind, face labels); None without pads and override.
+fn glyph_pad() -> Option<(PadKind, glyphs::FaceLabels)> {
+    if let Some(forced) = glyphs::override_style(GLYPH_OVERRIDE.load(std::sync::atomic::Ordering::Relaxed)) {
+        return Some(forced);
+    }
+    with(|h| {
+        let slot = h.active_pad.filter(|&s| h.joysticks.present(s)).or_else(|| (0..16).find(|&s| h.joysticks.present(s)))?;
+        let kind = h.joysticks.kind(slot);
+        Some((kind, h.joysticks.face_labels(slot).unwrap_or(glyphs::XBOX_LABELS)))
+    })
+}
+
+/// Identifies the glyph set prompts need now (pad kind and face-button layout); 0 without pads.
+/// The font code reloads its button sprites when this changes.
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_glyph_set_id() -> c_int {
+    match glyph_pad() {
+        None => 0,
+        Some((kind, labels)) => {
+            let layout = labels.iter().fold(0, |acc, l| acc * 16 + (l.0 as c_int & 15));
+            1 + kind as c_int * 65536 + layout
+        }
+    }
+}
+
+/// Short name of the current glyph set, for logs and tests ("PlayStation5", "none").
+pub fn glyph_set_name() -> String {
+    glyph_pad().map_or("none".into(), |(k, _)| format!("{k:?}"))
+}
+
+/// Button glyph `index` (CFont BUTTON_* order) of the current glyph set as RGBA8, top row first.
+/// Free with revc_texmod_free. 0 if there is no pad or no such glyph in the assets.
+///
+/// # Safety
+/// The out pointers must be valid.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_glyph_rgba(index: c_int, width: *mut c_int, height: *mut c_int, rgba: *mut *mut u8) -> c_int {
+    let Some((kind, labels)) = glyph_pad() else { return 0 };
+    let Some(path) = glyphs::button(index as usize).and_then(|b| glyphs::glyph_path(kind, labels, b)) else { return 0 };
+    match crate::texmods::decode(&path) {
+        Ok((w, h, px)) => {
+            unsafe {
+                *width = w as c_int;
+                *height = h as c_int;
+                *rgba = Box::into_raw(px.into_boxed_slice()) as *mut u8;
+            }
+            1
+        }
+        Err(e) => {
+            eprintln!("glyphs: {}: {e}", path.display());
+            0
+        }
+    }
 }
 
 /// Glyph set of the pad in slot `jid` (KeyboardMouse = 0 if none).

@@ -138,6 +138,26 @@ impl Joysticks {
         self.slots.iter().flatten().find(|s| s.id == id).map(|s| s.kind)
     }
 
+    /// Slot of the device with SDL id `id`.
+    pub fn slot_of(&self, id: SDL_JoystickID) -> Option<i32> {
+        self.slots.iter().position(|s| s.as_ref().is_some_and(|s| s.id == id)).map(|i| i as i32)
+    }
+
+    /// Labels of the face buttons (south, east, west, north) of the pad in `slot`.
+    pub fn face_labels(&self, slot: i32) -> Option<super::glyphs::FaceLabels> {
+        let s = self.get(slot)?;
+        if s.pad.is_null() {
+            return None;
+        }
+        let label = |b| unsafe { SDL_GetGamepadButtonLabel(s.pad, b) };
+        Some([
+            label(SDL_GAMEPAD_BUTTON_SOUTH),
+            label(SDL_GAMEPAD_BUTTON_EAST),
+            label(SDL_GAMEPAD_BUTTON_WEST),
+            label(SDL_GAMEPAD_BUTTON_NORTH),
+        ])
+    }
+
     /// Starts (or with 0/0 stops) vibration; `ms` is how long it lasts unless renewed.
     pub fn rumble(&self, slot: i32, low: u16, high: u16, ms: u32) -> bool {
         match self.get(slot) {

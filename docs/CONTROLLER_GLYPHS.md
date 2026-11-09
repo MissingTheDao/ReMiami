@@ -2,7 +2,26 @@
 
 Goal: every on-screen prompt shows the buttons of the pad in use, switching when another pad is
 used. The glyphs are in `assets/glyphs/kenney-input-prompts/` (see its `SOURCE.md` for version,
-checksum and which sets are included); drawing them in the game's prompts is still to do.
+checksum and which sets are included).
+
+## How it works in the game
+
+- Prompt text uses positional tokens (`~X~` bottom face button, `~K~` left shoulder, `~U~` left
+  stick up ...) that CFont draws with its button sprites (`BUTTON_ICONS`).
+- Each frame `skel/host/glyphs.cpp` asks the host which glyph set is needed (`revc_glyph_set_id`)
+  and, when that changes, rebuilds the sprites from the pack's 128 px PNGs (mipmapped). The host
+  (`rust/revc/src/host/glyphs.rs`) picks the files: the pad used last (or the first connected
+  one), its kind, and the labels SDL reports for its face buttons, so a Switch pad's bottom
+  button shows B and a DualSense's shows the cross.
+- Keyboard and mouse use keeps the last pad's set (prompts then show key names anyway).
+- Controls menu **BUTTON PROMPTS** (`[Controller] ButtonPrompts` in reVC.ini): AUTO (default)
+  follows the pad; XBOX, PLAYSTATION, NINTENDO, STEAM DECK or STEAM CONTROLLER force a style, also
+  with no pad connected. The menu texts for revc's own entries are built in (`CText::GetRevcText`,
+  English); the game's GXT files are not modified.
+- Without the assets folder (`REVC_ASSETS_DIR`, next to the executable, or the repository
+  checkout) the game's own `x360btns` / `ps3btns` / `nswbtns` TXDs are used per pad family.
+- Tested by `scripts/test.sh gamepad` (virtual DualSense and Steam Deck, the override, screenshots
+  in `tests/reference/gamepad/`) and `boot` (menu entry present).
 
 ## Recommended asset pack: Kenney "Input Prompts"
 
