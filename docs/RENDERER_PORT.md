@@ -32,6 +32,23 @@ possible yet: the camera raster can't be read). The game's PC-host input code, g
 `RW_GL3`, now also builds for `RW_WGPU`; the GL3/D3D9-only extras (colour filter, custom
 pipelines, droplets, new renderer) are compiled out for WGPU until the renderer can do them.
 
+**Stage 1, step 2 done: textures and Im2D, so the whole front end and the HUD draw.**
+`revc_rw::frame::Renderer` records each frame (camera clears, Im2D primitives) and encodes it into
+render passes on present; texture rasters are uploaded from the device's RGBA8 copies after every
+write lock (`uploadRaster`, host mip generation for AUTOMIPMAP). The device keeps a GL3-equivalent
+render-state cache and passes one `DrawState` per draw; the shader mirrors gl3's im2d.vert and
+simple.frag (fog, [low, high) alpha test), blending follows glBlendFunc (same factors for alpha),
+and draws with equal state are merged. Screenshots work: the swapchain is copied (Vulkan) or the
+frame is drawn once more offscreen (GL, whose swapchain can't be copied).
+Checked: `tests/im2d.rs` (offscreen, both backends: orientation, nearest filtering, blending,
+alpha test, mid-frame depth clear); boot on Vulkan and GL shows the menu like GL3; saveload shows
+HUD, radar, zone name, sky gradient and corona sprites (no world yet). Known difference: on the
+menu text about 0.7 % of text-area pixels (single columns at glyph edges, up to 55 levels) differ
+from GL3. Not a rounding tie (moving x by 0.01 px changes nothing) and not mip or filter choice;
+GL3 keeps DXT textures compressed on the GPU (`d3d_to_gl3`) while WGPU decodes them on the CPU,
+so the next texture step (BC formats on the GPU) is the first thing to check. The boot screen
+can't be compared automatically: the menu background animates (two GL3 runs differ by 4.7 %).
+
 ## What the game calls
 
 The game reaches librw only through the RenderWare-style API in `cpp/re3-miami/src/fakerw`
@@ -113,8 +130,8 @@ struct EngineOpenParams;
    calls librw any more it is deleted, together with the C++ shim.
 
 Order inside stage 1, smallest testable steps first: device + camera clear + show raster (a
-blank game frame) -> rasters and textures (2D: menus, HUD, fonts) -> Im2D (whole front end) ->
-render states -> Im3D (effects) -> default atomic pipeline (world, cars) -> skin -> MatFX.
+blank game frame, done) -> rasters and textures + Im2D + render states (whole front end, done) ->
+DXT kept compressed (BC) -> Im3D (effects) -> default atomic pipeline (world, cars) -> skin -> MatFX.
 The front-end and HUD come first because the boot scenario and every in-game screenshot show
 them.
 

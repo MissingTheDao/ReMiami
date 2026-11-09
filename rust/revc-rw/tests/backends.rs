@@ -53,7 +53,7 @@ fn vulkan_and_gl_agree() {
         let covered = model_pixels(img) as f64 / total as f64;
         assert!(covered > 0.10, "{name}: model covers only {:.1}% of the image", covered * 100.0);
     }
-    let differing = vk.as_chunks::<4>().0.iter().zip(gl.chunks_exact(4)).filter(|(p, q)| (0..3).any(|c| p[c].abs_diff(q[c]) > 32)).count();
+    let differing = vk.as_chunks::<4>().0.iter().zip(gl.as_chunks::<4>().0.iter()).filter(|(p, q)| (0..3).any(|c| p[c].abs_diff(q[c]) > 32)).count();
     let frac = differing as f64 / total as f64;
     eprintln!("Vulkan vs GL: {:.3}% of pixels differ", frac * 100.0);
     assert!(frac < 0.01, "Vulkan and GL images differ in {:.2}% of pixels", frac * 100.0);

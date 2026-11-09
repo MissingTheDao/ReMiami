@@ -6,11 +6,16 @@
 //! hierarchy, per-material textures with mipmaps and material colours, a fixed directional
 //! light and RW-style alpha test. Used to compare the backends before anything is wired into the
 //! game.
+//!
+//! In the game (librw's WGPU platform): `present` shows frames in the SDL window and `frame`
+//! records and draws what the device sends (camera clears, textures, Im2D).
 
 use revc_formats::{dff, txd};
 use wgpu::util::DeviceExt;
 
+pub mod frame;
 pub mod present;
+mod prim;
 
 /// The graphics API to render with (the game's settings will offer both).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

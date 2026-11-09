@@ -99,15 +99,37 @@ void registerPlatformPlugins(void);
 
 extern Device renderdevice;
 
-// Raster data kept in memory as RGBA8 (top row first) for every mip level; uploading to the GPU
-// comes with the texture step of the port.
+// Raster data kept in memory as RGBA8 (top row first) for every mip level and uploaded to a GPU
+// texture in the Rust host before it is drawn with (after every write lock).
 struct WgpuRaster
 {
 	int32 numLevels;
 	uint8 *levels[16];
 	bool32 hasAlpha;
 	int32 baseWidth, baseHeight;
+	uint32 texId;		// host texture, 0 = not uploaded yet
+	bool32 dirty;		// written since the last upload
+	bool32 autogenMipmap;	// MIPMAP|AUTOMIPMAP: one level here, the host builds the chain
 };
+
+// One draw's device state, as the Rust host reads it (revc_rw::frame::DrawState).
+struct DrawState
+{
+	uint32 texture;
+	uint32 filter, addressU, addressV;
+	uint32 blend, srcBlend, dstBlend;
+	uint32 zTest, zWrite;
+	uint32 cull;
+	uint32 alphaFunc;
+	float32 alphaRef;
+	uint32 fog;
+	float32 fogStart, fogEnd;
+	uint32 fogColor;
+	float32 xform[4];
+};
+
+// Uploads the raster if it changed; returns its host texture (0 if it has no pixels).
+uint32 uploadRaster(Raster *raster);
 
 extern int32 nativeRasterOffset;
 #define GETWGPURASTEREXT(raster) PLUGINOFFSET(rw::wgpu::WgpuRaster, raster, rw::wgpu::nativeRasterOffset)
