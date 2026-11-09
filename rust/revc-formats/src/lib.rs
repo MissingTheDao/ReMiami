@@ -6,6 +6,7 @@
 
 pub mod bytes;
 pub mod col;
+pub mod dds;
 pub mod dff;
 pub mod gxt;
 pub mod img;

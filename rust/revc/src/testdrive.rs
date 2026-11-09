@@ -11,6 +11,8 @@
 //!                       is no longer fading, check the player position, optionally capture a
 //!                       screenshot and compare it with a reference. Waiting on game time
 //!                       rather than frames keeps the captured moment independent of fps.
+//!   REVC_TEST=texmods   like saveload with the texture mods in tests/mods installed: checks
+//!                       they were applied (and the broken one rejected) and the screenshot.
 //!   REVC_TEST=formats   like saveload, then dumps what the C++ loaders hold and compares it
 //!                       with revc-formats (formatcheck.rs).
 //! Options:
@@ -46,6 +48,7 @@ enum Scenario {
     SaveLoad,
     Audio,
     Formats,
+    TexMods,
 }
 
 #[derive(Debug)]
@@ -110,7 +113,8 @@ pub fn init() -> Result<bool, String> {
         "saveload" => Scenario::SaveLoad,
         "audio" => Scenario::Audio,
         "formats" => Scenario::Formats,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats)")),
+        "texmods" => Scenario::TexMods,
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -192,7 +196,7 @@ impl Driver {
                 log(format!("front end reached after {:.1}s", self.started.elapsed().as_secs_f32()));
                 match self.scenario {
                     Scenario::Boot => return self.finish(),
-                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -235,6 +239,9 @@ impl Driver {
                 log(format!("captured after {elapsed} ms game time, {frames} frames"));
                 self.check_audio();
                 self.check_player();
+                if self.scenario == Scenario::TexMods {
+                    self.check_texmods();
+                }
                 if self.shot.is_some() || self.reference.is_some() {
                     crate::host::request_capture();
                     self.phase = Phase::Capturing;
@@ -267,6 +274,19 @@ impl Driver {
             Phase::Done => {}
         }
         false
+    }
+
+    /// tests/mods: the valid overrides (PNG HUD icon, DDS radar icon, PNG floor) must have been applied and the broken file
+    /// rejected once (the original kept); the screenshot shows the replaced weapon icon.
+    fn check_texmods(&mut self) {
+        let (applied, failed) = crate::texmods::stats();
+        log(format!("texmods: {applied} textures replaced, {failed} files rejected"));
+        if applied < 3 {
+            self.fail(format!("texmods: only {applied} textures replaced (expected fist, radar_save, hotel_floortile2_64)"));
+        }
+        if failed != 1 {
+            self.fail(format!("texmods: {failed} files rejected (expected siterocket.png only)"));
+        }
     }
 
     /// Dumps what the C++ loaders hold and compares it with revc-formats (formatcheck.rs).

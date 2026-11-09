@@ -62,7 +62,7 @@ Inputs that are pinned: Rust toolchain, `Cargo.lock`, librw (vendored), system p
 ## Tests
 
 ```bash
-scripts/test.sh            # boot + saveload; prints PASS/FAIL, exit code 0 when all pass
+scripts/test.sh            # boot, saveload, formats, texmods; PASS/FAIL, exit code 0 when all pass
 scripts/test.sh --bless    # accept the current screenshots as the new references
 ```
 
