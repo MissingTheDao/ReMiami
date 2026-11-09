@@ -6,7 +6,7 @@
 #   --wgpu   test the wgpu renderer build (cargo feature wgpu, rust/target-wgpu) against its own
 #            references in tests/reference-wgpu/; REVC_RENDERER_BACKEND=vulkan|gl picks the backend
 # Needs a display (the game opens a window). Game data: REVC_GAME_DIR or ./game.
-# Scenarios: boot, saveload, formats, texmods, gamepad, spots (default), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
+# Scenarios: boot, saveload, savegame (save slot 1's game to slot 2, then load slot 2: own reference), formats, texmods, gamepad, spots (default), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
 # formats: compares what the C++ loaders read with the Rust parsers in rust/revc-formats.
 # texmods: saveload with the texture mods in tests/mods installed (own reference screenshot).
 # gamepad: virtual SDL pads: detection, player 1/2 assignment, prompt glyphs per pad (screenshots vs
@@ -27,7 +27,7 @@ for a in "$@"; do
     *) SCENARIOS+=("$a") ;;
   esac
 done
-(( ${#SCENARIOS[@]} )) || SCENARIOS=(boot saveload formats texmods gamepad spots)
+(( ${#SCENARIOS[@]} )) || SCENARIOS=(boot saveload savegame formats texmods gamepad spots)
 
 GAME=${REVC_GAME_DIR:-$ROOT/game}
 [[ -d "$GAME/models" ]] || { echo "game data not found at $GAME (set REVC_GAME_DIR)" >&2; exit 2; }
@@ -104,7 +104,17 @@ for s in "${SCENARIOS[@]}"; do
     [[ -n "$leaks" ]] && echo "$leaks" | sed 's/^/     leak: /'
     echo "     log: $log"
   fi
-  grep -oE '\[revc-test\] (player at|image diff|audio|formats:|texmods:|gamepad:|spot |[a-z0-9_]+: image diff).*' "$log" | sed 's/^\[revc-test\] /     /'
+  grep -oE '\[revc-test\] (player at|loaded:|image diff|audio|formats:|texmods:|gamepad:|savegame:|spot |[a-z0-9_]+: image diff).*' "$log" | sed 's/^\[revc-test\] /     /'
+  # savegame, part 2: load the slot just saved and compare its screenshot.
+  if [[ "$s" == savegame ]] && (( rc == 0 )); then
+    log2=$OUT/savegame-load.log
+    envs=(REVC_GAME_DIR="$T" REVC_TEST=saveload REVC_TEST_SLOT=2 REVC_TEST_SHOT="$OUT/savegame.png")
+    (( BLESS == 0 )) && [[ -f "$REF/savegame.png" ]] && envs+=(REVC_TEST_REF="$REF/savegame.png")
+    printf '== %-10s ' "(load it)"
+    if env "${envs[@]}" "$BIN" > "$log2" 2>&1; then echo PASS; else echo "FAIL"; failed=1; grep -E '^\[revc-test\] FAIL' "$log2" | sed 's/^/     /'; fi
+    grep -oE '\[revc-test\] (player at|loaded:|image diff).*' "$log2" | sed 's/^\[revc-test\] /     /'
+    (( BLESS )) && [[ -f "$OUT/savegame.png" ]] && cp "$OUT/savegame.png" "$REF/savegame.png" && echo "     blessed ${REF#$ROOT/}/savegame.png"
+  fi
   if (( BLESS )) && [[ "$s" == spots || "$s" == gamepad ]]; then
     mkdir -p "$REF/$s"
     for f in "$OUT/$s"/*.png; do [[ "$f" == *.diff.png ]] || cp "$f" "$REF/$s/"; done

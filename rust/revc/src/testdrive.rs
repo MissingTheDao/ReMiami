@@ -22,6 +22,9 @@
 //!                       writing REVC_TEST_SHOT_DIR/<spot>.png (plan task 3). Logs the frame
 //!                       times at each spot (`perf <spot>: ...`, the last 3 s before the
 //!                       capture; plan task 2 baselines, run with VSync and FrameLimiter off).
+//!   REVC_TEST=savegame  like saveload, then saves to slot REVC_TEST_SAVE_SLOT (default 2) as
+//!                       the pause menu does and checks the slot list (name, date) and the file
+//!                       (the game's own check). scripts/test.sh then loads that slot.
 //!   REVC_TEST=formats   like saveload, then dumps what the C++ loaders hold and compares it
 //!                       with revc-formats (formatcheck.rs).
 //! Options:
@@ -49,6 +52,7 @@ unsafe extern "C" {
     fn revc_test_clear_help();
     fn revc_test_show_controls_menu();
     fn revc_test_check_prompt_menu() -> i32;
+    fn revc_test_save_slot(slot: i32, state: *mut i32, name: *mut u16, date: *mut u16) -> i32;
     fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
 }
 
@@ -67,6 +71,7 @@ enum Scenario {
     TexMods,
     Gamepad,
     Spots,
+    SaveGame,
 }
 
 #[derive(Debug)]
@@ -174,7 +179,8 @@ pub fn init() -> Result<bool, String> {
         "texmods" => Scenario::TexMods,
         "gamepad" => Scenario::Gamepad,
         "spots" => Scenario::Spots,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots)")),
+        "savegame" => Scenario::SaveGame,
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -281,7 +287,7 @@ impl Driver {
                         self.phase = Phase::MenuShot { frames: 0 };
                         return false;
                     }
-                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -297,6 +303,7 @@ impl Driver {
                     crate::audio::take_stats(); // count sound effects and streams from here on
                     crate::audio::take_stream_frames();
                     crate::audio::take_nonzero_sends();
+                    self.check_loaded();
                     self.phase = Phase::Playing { start_ms: unsafe { revc_test_game_ms() }, start_frame: unsafe { revc_test_frame() } };
                 }
             }
@@ -319,6 +326,10 @@ impl Driver {
                 }
                 if self.scenario == Scenario::Formats {
                     self.check_formats();
+                    return self.finish();
+                }
+                if self.scenario == Scenario::SaveGame {
+                    self.save_game();
                     return self.finish();
                 }
                 if self.scenario == Scenario::Gamepad {
@@ -554,6 +565,44 @@ impl Driver {
                 }
             }
             None => log("audio: no stream sources created"),
+        }
+    }
+
+    /// The save really loaded: the game timer continues from the one in the file (a failed
+    /// GenericLoad restarts the game with the timer at 0, which screenshots of a save made at the
+    /// start position don't show).
+    fn check_loaded(&mut self) {
+        let dir = std::env::var_os("REVC_GAME_DIR").map(PathBuf::from).unwrap_or_default();
+        let path = dir.join("userfiles").join(format!("GTAVCsf{}.b", self.slot + 1));
+        let saved = std::fs::read(&path).ok().and_then(|d| crate::savegame::SimpleVars::from_bytes(d.get(4..)?)).map(|v| v.time_ms);
+        let now = unsafe { revc_test_game_ms() };
+        match saved {
+            Some(t) if now >= t => log(format!("loaded: game timer {now} ms (saved at {t} ms)")),
+            Some(t) => self.fail(format!("the save did not load: game timer {now} ms, the file has {t} ms")),
+            None => self.fail(format!("cannot read the header of {}", path.display())),
+        }
+    }
+
+    /// Saves to REVC_TEST_SAVE_SLOT and checks what the menu would show and the file itself.
+    fn save_game(&mut self) {
+        let slot: i32 = env("REVC_TEST_SAVE_SLOT", 2i32) - 1;
+        let (mut state, mut name, mut date) = (0i32, [0u16; 260], [0u16; 70]);
+        let r = unsafe { revc_test_save_slot(slot, &mut state, name.as_mut_ptr(), date.as_mut_ptr()) };
+        let text = |w: &[u16]| String::from_utf16_lossy(&w[..w.iter().position(|&c| c == 0).unwrap_or(w.len())]);
+        let (name, date) = (text(&name), text(&date));
+        log(format!("savegame: slot {} saved (result {r}), listed as state {state}, \"{name}\", \"{date}\"", slot + 1));
+        if r != 0 || state != 0 {
+            self.fail(format!("save to slot {} failed: SaveSlot {r}, slot state {state}", slot + 1));
+        }
+        if name.is_empty() || date.len() < 19 {
+            self.fail(format!("slot {} lists no name or date (\"{name}\", \"{date}\")", slot + 1));
+        }
+        let dir = std::env::var_os("REVC_GAME_DIR").map(PathBuf::from).unwrap_or_default();
+        let path = dir.join("userfiles").join(format!("GTAVCsf{}.b", slot + 1));
+        match std::fs::read(&path) {
+            Ok(d) if revc_formats::save::check(&d).is_some() => log(format!("savegame: {} passes the save check ({} bytes)", path.display(), d.len())),
+            Ok(d) => self.fail(format!("{} fails the save check ({} bytes)", path.display(), d.len())),
+            Err(e) => self.fail(format!("cannot read {}: {e}", path.display())),
         }
     }
 

@@ -13,6 +13,7 @@
 #include "Camera.h"
 #include "PlayerInfo.h"
 #include "GenericGameStorage.h"
+#include "Script.h"
 #include "ModelInfo.h"
 #include "SimpleModelInfo.h"
 #include "TimeModelInfo.h"
@@ -31,6 +32,7 @@
 #include "ColStore.h"
 #include "Hud.h"
 #include "Font.h"
+#include "GenericGameStorage.h"
 
 #ifdef AUDIO_OAL
 // Audio effects state (sampman_oal.cpp globals).
@@ -85,6 +87,19 @@ void
 revc_test_touch_input(void)
 {
 	CPad::GetPad(0)->LastTimeTouched = CTimer::GetTimeInMilliseconds();
+}
+
+// Saves to slot (0-based) like the pause menu's Save Game, then rebuilds the slot list. Returns
+// SaveSlot's result (0 = saved); state = Slots[slot], name/date = the slot's lines (260/70 units).
+int
+revc_test_save_slot(int slot, int *state, wchar *name, wchar *date)
+{
+	int r = PcSaveHelper.SaveSlot(slot);
+	PcSaveHelper.PopulateSlotInfo();
+	*state = Slots[slot];
+	memcpy(name, SlotFileName[slot], sizeof(SlotFileName[slot]));
+	memcpy(date, SlotSaveDate[slot], sizeof(SlotSaveDate[slot]));
+	return r;
 }
 
 // Non-zero while the screen is fading or faded (e.g. the fade-in after loading a save).
