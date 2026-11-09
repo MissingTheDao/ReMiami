@@ -92,6 +92,52 @@ fn textures_match(g: &dff::Geometry, cpp: &[&str]) -> bool {
     cpp.next().is_none()
 }
 
+unsafe extern "C" {
+    fn revc_test_mission_text(table: *const std::ffi::c_char, key: *const std::ffi::c_char) -> *const u16;
+    fn revc_test_restore_mission_text(previous: *const std::ffi::c_char);
+    fn revc_test_current_mission_text(out8: *mut std::ffi::c_char);
+}
+
+fn wide(p: *const u16) -> Vec<u16> {
+    let mut v = Vec::new();
+    if !p.is_null() {
+        for i in 0.. {
+            let u = unsafe { *p.add(i) };
+            if u == 0 {
+                break;
+            }
+            v.push(u);
+        }
+    }
+    v
+}
+
+/// Every mission table, loaded the way the LOAD_MISSION_TEXT script command does: its first and
+/// last key must give the file's strings, from the table the game's prefix rule picks (the first
+/// table whose name starts the requested one).
+fn check_mission_text(base: &Path, r: &mut Report) -> Result<(), String> {
+    let p = find_ci(base, "TEXT/american.gxt").ok_or("TEXT/american.gxt missing")?;
+    let g = gxt::Gxt::parse(&std::fs::read(p).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    let mut previous = [0 as std::ffi::c_char; 16];
+    unsafe { revc_test_current_mission_text(previous.as_mut_ptr()) };
+    for t in g.tables.iter().filter(|t| t.name != "MAIN") {
+        let chosen = g.tables.iter().find(|c| t.name.starts_with(&c.name)).unwrap_or(t);
+        for (key, _) in [t.entries.first(), t.entries.last()].into_iter().flatten() {
+            let ctable = std::ffi::CString::new(t.name.as_str()).unwrap();
+            let ckey = std::ffi::CString::new(key.as_str()).unwrap();
+            let got = wide(unsafe { revc_test_mission_text(ctable.as_ptr(), ckey.as_ptr()) });
+            // MAIN is searched first, so a key in both resolves to MAIN's string.
+            let want = g.main().and_then(|m| m.get(key)).or_else(|| chosen.get(key));
+            match want {
+                Some(w) if w == got.as_slice() => r.ok("mission text keys"),
+                _ => r.fail(format!("mission text {}/{key}: C++ {:?}, file {:?}", t.name, gxt::to_lossy_string(&got), want.map(gxt::to_lossy_string))),
+            }
+        }
+    }
+    unsafe { revc_test_restore_mission_text(previous.as_ptr()) };
+    Ok(())
+}
+
 /// Compares the dump at `dump` with revc-formats' view of the game in the current directory.
 /// Returns a summary line and the list of differences.
 pub fn check(dump: &Path) -> Result<(String, Vec<String>), String> {
@@ -270,7 +316,8 @@ pub fn check(dump: &Path) -> Result<(String, Vec<String>), String> {
     {
         r.fail(format!("C++ has {gxt_keys} MAIN text keys, file has {}", main.entries.len()));
     }
-    for what in ["model infos", "collision (COLFILE)", "geometries", "textures", "text keys"] {
+    check_mission_text(base, &mut r)?;
+    for what in ["model infos", "collision (COLFILE)", "geometries", "textures", "text keys", "mission text keys"] {
         if r.checked.get(what).copied().unwrap_or(0) == 0 {
             r.fail(format!("nothing compared for {what}"));
         }

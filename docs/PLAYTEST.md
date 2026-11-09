@@ -49,6 +49,12 @@ Controller):
 
 - [ ] Change the screen resolution in the in-game Display Setup menu (not only at start-up).
 
+## Task 15: game text now held in Rust
+
+- [ ] Options > Language: switch through the languages; menus and in-game text change and look
+      right (accents in French/German/Spanish/Italian), then switch back.
+- [ ] Start a mission (mission text loads): objectives and subtitles show, no "... missing".
+
 ## Task 2: N150 frame times (needs the N150 box)
 
 - [ ] Record frame times at the fixed spots (the `spots` test places are a good set).

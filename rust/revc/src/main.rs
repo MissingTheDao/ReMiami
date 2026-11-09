@@ -5,6 +5,7 @@ mod audio;
 mod formatcheck;
 mod padtest;
 mod texmods;
+mod text;
 mod host;
 mod testdrive;
 

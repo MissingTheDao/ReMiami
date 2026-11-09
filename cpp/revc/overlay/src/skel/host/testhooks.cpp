@@ -211,6 +211,33 @@ revc_test_check_prompt_menu(void)
 	return found && strcmp(text, "BUTTON PROMPTS") == 0;
 }
 
+// Loads mission text `table` like the LOAD_MISSION_TEXT script command and returns the string for
+// `key` (formats scenario); `restore` reloads the mission text that was loaded before.
+const wchar *
+revc_test_mission_text(const char *table, const char *key)
+{
+	char name[8];
+	strncpy(name, table, sizeof(name));
+	TheText.LoadMissionText(name);
+	return TheText.Get(key);
+}
+
+void
+revc_test_restore_mission_text(const char *previous)
+{
+	if (previous[0]) {
+		char name[8];
+		strncpy(name, previous, sizeof(name));
+		TheText.LoadMissionText(name);
+	}
+}
+
+void
+revc_test_current_mission_text(char *out8)
+{
+	TheText.GetNameOfLoadedMissionText(out8);
+}
+
 // Removes help text (the save's tutorial script keeps posting tips); called every frame at a spot.
 void
 revc_test_clear_help(void)
