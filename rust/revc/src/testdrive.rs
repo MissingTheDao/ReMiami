@@ -11,6 +11,8 @@
 //!                       is no longer fading, check the player position, optionally capture a
 //!                       screenshot and compare it with a reference. Waiting on game time
 //!                       rather than frames keeps the captured moment independent of fps.
+//!   REVC_TEST=formats   like saveload, then dumps what the C++ loaders hold and compares it
+//!                       with revc-formats (formatcheck.rs).
 //! Options:
 //!   REVC_TEST_SHOT=path.png   write the final frame here
 //!   REVC_TEST_REF=path.png    compare against this; writes path.png.diff.png on failure
@@ -32,6 +34,7 @@ unsafe extern "C" {
     fn revc_test_quit();
     fn revc_test_load_slot(slot: i32) -> i32;
     fn revc_test_player_pos(x: *mut f32, y: *mut f32, z: *mut f32);
+    fn revc_test_dump_formats(path: *const std::ffi::c_char) -> i32;
 }
 
 const STATE_FRONTEND: i32 = 1;
@@ -42,6 +45,7 @@ enum Scenario {
     Boot,
     SaveLoad,
     Audio,
+    Formats,
 }
 
 #[derive(Debug)]
@@ -105,7 +109,8 @@ pub fn init() -> Result<bool, String> {
         "boot" => Scenario::Boot,
         "saveload" => Scenario::SaveLoad,
         "audio" => Scenario::Audio,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio)")),
+        "formats" => Scenario::Formats,
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -187,7 +192,7 @@ impl Driver {
                 log(format!("front end reached after {:.1}s", self.started.elapsed().as_secs_f32()));
                 match self.scenario {
                     Scenario::Boot => return self.finish(),
-                    Scenario::SaveLoad | Scenario::Audio => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -222,6 +227,10 @@ impl Driver {
                     crate::audio::take_nonzero_sends();
                     self.phase = Phase::Script { t0: unsafe { revc_test_game_ms() }, step: 0 };
                     return false;
+                }
+                if self.scenario == Scenario::Formats {
+                    self.check_formats();
+                    return self.finish();
                 }
                 log(format!("captured after {elapsed} ms game time, {frames} frames"));
                 self.check_audio();
@@ -258,6 +267,33 @@ impl Driver {
             Phase::Done => {}
         }
         false
+    }
+
+    /// Dumps what the C++ loaders hold and compares it with revc-formats (formatcheck.rs).
+    fn check_formats(&mut self) {
+        let path = std::env::temp_dir().join(format!("revc-formats-{}.txt", std::process::id()));
+        let cpath = std::ffi::CString::new(path.to_string_lossy().as_bytes()).unwrap();
+        if unsafe { revc_test_dump_formats(cpath.as_ptr()) } == 0 {
+            self.fail(format!("can't write {}", path.display()));
+            return;
+        }
+        match crate::formatcheck::check(&path) {
+            Ok((summary, failures)) => {
+                log(summary);
+                let n = failures.len();
+                for f in &failures {
+                    log(format!("formats diff: {f}"));
+                }
+                for f in failures.into_iter().take(10) {
+                    self.fail(f);
+                }
+                if n > 10 {
+                    self.fail(format!("... {} more differences (all are in the log as 'formats diff')", n - 10));
+                }
+            }
+            Err(e) => self.fail(e),
+        }
+        let _ = std::fs::remove_file(&path);
     }
 
     /// The game must have driven the Rust mixer (sound effects started). Volume is 0 in the

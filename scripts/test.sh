@@ -4,7 +4,8 @@
 #   --bless  accept the current screenshots as the new references (tests/reference/)
 #   --keep   keep the temporary game folder
 # Needs a display (the game opens a window). Game data: REVC_GAME_DIR or ./game.
-# Scenarios: boot, saveload (default), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
+# Scenarios: boot, saveload, formats (default), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
+# formats: compares what the C++ loaders read with the Rust parsers in rust/revc-formats.
 # A scenario uses tests/config/<scenario>.ini if present, else tests/config/reVC.ini.
 # REVC_TEST_BIN=path runs that binary instead of building rust/.
 # Output and logs: rust/target/test-output/
@@ -19,7 +20,7 @@ for a in "$@"; do
     *) SCENARIOS+=("$a") ;;
   esac
 done
-(( ${#SCENARIOS[@]} )) || SCENARIOS=(boot saveload)
+(( ${#SCENARIOS[@]} )) || SCENARIOS=(boot saveload formats)
 
 GAME=${REVC_GAME_DIR:-$ROOT/game}
 [[ -d "$GAME/models" ]] || { echo "game data not found at $GAME (set REVC_GAME_DIR)" >&2; exit 2; }
@@ -68,7 +69,7 @@ for s in "${SCENARIOS[@]}"; do
     [[ -n "$leaks" ]] && echo "$leaks" | sed 's/^/     leak: /'
     echo "     log: $log"
   fi
-  grep -E '^\[revc-test\] (player at|image diff|audio)' "$log" | sed 's/^\[revc-test\] /     /'
+  grep -oE '\[revc-test\] (player at|image diff|audio|formats:).*' "$log" | sed 's/^\[revc-test\] /     /'
   if (( BLESS )) && [[ -f "$OUT/$s.png" ]]; then
     cp "$OUT/$s.png" "$ROOT/tests/reference/$s.png" && echo "     blessed tests/reference/$s.png"
   fi

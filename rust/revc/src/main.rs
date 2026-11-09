@@ -2,6 +2,7 @@
 //! (see `host`); each loop iteration runs one step of the C++ game (src/skel/host/host.cpp).
 
 mod audio;
+mod formatcheck;
 mod host;
 mod testdrive;
 

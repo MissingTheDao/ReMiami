@@ -13,6 +13,13 @@
 #include "Camera.h"
 #include "PlayerInfo.h"
 #include "GenericGameStorage.h"
+#include "ModelInfo.h"
+#include "SimpleModelInfo.h"
+#include "TimeModelInfo.h"
+#include "ClumpModelInfo.h"
+#include "TxdStore.h"
+#include "Text.h"
+#include "ColModel.h"
 
 #ifdef AUDIO_OAL
 // Audio effects state (sampman_oal.cpp globals).
@@ -96,6 +103,106 @@ revc_test_player_pos(float *x, float *y, float *z)
 	*x = v.x;
 	*y = v.y;
 	*z = v.z;
+}
+
+// Writes what the C++ loaders hold after loading (model info from IDE, collision, GXT, geometry of
+// loaded models, texture sizes of loaded TXDs) as tab-separated lines (names may contain spaces), for the Rust formats check
+// (rust/revc/src/formatcheck.rs) to compare against revc-formats. Returns 0 if the file can't be
+// written.
+static void
+DumpGeometry(FILE *f, const char *model, RpAtomic *atomic)
+{
+	RpGeometry *geo = RpAtomicGetGeometry(atomic);
+	if (geo == nil)
+		return;
+	int numMats = geo->matList.numMaterials; // fakerw declares RpGeometryGetNumMaterials but has no body
+	fprintf(f, "GEO\t%s\t%d\t%d\t%d\t", model, RpGeometryGetNumVertices(geo), RpGeometryGetNumTriangles(geo), numMats);
+	bool any = false;
+	for (int i = 0; i < numMats; i++) {
+		RwTexture *tex = RpMaterialGetTexture(RpGeometryGetMaterial(geo, i));
+		if (tex) {
+			fprintf(f, "%s%s", any ? "|" : "", RwTextureGetName(tex));
+			any = true;
+		}
+	}
+	fprintf(f, "%s\n", any ? "" : "-");
+}
+
+struct DumpCtx { FILE *f; const char *name; };
+
+static RpAtomic *
+DumpClumpAtomic(RpAtomic *atomic, void *data)
+{
+	DumpCtx *ctx = (DumpCtx*)data;
+	DumpGeometry(ctx->f, ctx->name, atomic);
+	return atomic;
+}
+
+static RwTexture *
+DumpTexture(RwTexture *tex, void *data)
+{
+	DumpCtx *ctx = (DumpCtx*)data;
+	RwRaster *ras = RwTextureGetRaster(tex);
+	fprintf(ctx->f, "TEX\t%s\t%s\t%d\t%d\n", ctx->name, RwTextureGetName(tex),
+	        ras ? RwRasterGetWidth(ras) : 0, ras ? RwRasterGetHeight(ras) : 0);
+	return tex;
+}
+
+int
+revc_test_dump_formats(const char *path)
+{
+	FILE *f = fopen(path, "w");
+	if (f == nil)
+		return 0;
+	for (int id = 0; id < MODELINFOSIZE; id++) {
+		CBaseModelInfo *mi = CModelInfo::GetModelInfo(id);
+		if (mi == nil)
+			continue;
+		int type = mi->GetModelType();
+		int slot = mi->GetTxdSlot();
+		const char *txd = slot >= 0 && CTxdStore::GetSlot(slot) ? CTxdStore::GetTxdName(slot) : "-";
+		fprintf(f, "MI\t%d\t%d\t%s\t%s", id, type, mi->GetModelName(), txd);
+		if (type == MITYPE_SIMPLE || type == MITYPE_TIME) {
+			CSimpleModelInfo *smi = (CSimpleModelInfo*)mi;
+			fprintf(f, "\t%d\t%.9g\t%.9g\t%.9g", smi->m_numAtomics, smi->m_lodDistances[0],
+			        smi->m_lodDistances[1], smi->m_lodDistances[2]);
+			if (type == MITYPE_TIME)
+				fprintf(f, "\t%d\t%d", ((CTimeModelInfo*)mi)->GetTimeOn(), ((CTimeModelInfo*)mi)->GetTimeOff());
+		}
+		fprintf(f, "\n");
+
+		CColModel *col = mi->GetColModel();
+		if (col && mi->DoesOwnColModel())
+			fprintf(f, "COL\t%s\t%d\t%d\t%d\t%d\t%.9g\t%d\n", mi->GetModelName(), col->level, col->numSpheres,
+			        col->numBoxes, col->numTriangles, col->boundingSphere.radius, type);
+
+		if (mi->IsSimple()) {
+			CSimpleModelInfo *smi = (CSimpleModelInfo*)mi;
+			// m_atomics[2] doubles as the related-LOD model / weapon id, so only 0 and 1 are dumped.
+			for (int i = 0; i < smi->m_numAtomics && i < 2; i++)
+				if (smi->m_atomics[i])
+					DumpGeometry(f, mi->GetModelName(), smi->m_atomics[i]);
+		} else if (mi->IsClump() && mi->GetRwObject()) {
+			DumpCtx ctx = { f, mi->GetModelName() };
+			RpClumpForAllAtomics((RpClump*)mi->GetRwObject(), DumpClumpAtomic, &ctx);
+		}
+	}
+	for (int slot = 0; slot < CTxdStore::GetNumSlots(); slot++) {
+		TxdDef *def = CTxdStore::GetSlot(slot);
+		if (def == nil || def->texDict == nil)
+			continue;
+		DumpCtx ctx = { f, def->name };
+		RwTexDictionaryForAllTextures(def->texDict, DumpTexture, &ctx);
+	}
+	for (int i = 0; i < TheText.GetNumKeys(); i++) {
+		const char *key = TheText.GetKeyName(i);
+		fprintf(f, "GXT\t%.8s", key);
+		for (wchar *c = TheText.Get(key); *c; c++)
+			fprintf(f, "\t%x", *c);
+		fprintf(f, "\n");
+	}
+	fclose(f);
+	return 1;
 }
 
 }
