@@ -160,7 +160,15 @@ Neo-on minus Neo-off delta matches between the renderers (saveload, where Neo ch
 pixels: 98 % of those agree; elsewhere the mismatches are at most 0.12 % of pixels). Offscreen
 tests: render to texture and the world lightmap formula, both backends. Cars with the Neo vehicle
 shader still need a look in person (no car in the test shots). Still compiled out on WGPU:
-SCREEN_DROPLETS, NEW_RENDERER.
+NEW_RENDERER.
+
+**Screen droplets (stage 1, step 10).** `SCREEN_DROPLETS` works on WGPU: the device draws
+re3's two-coordinate Im2D (`im2DRenderIndexedPrimitiveUV2`) and revc-rw has the droplet shader
+(drop mask times the frame copy at the second coordinates, no perspective) in its own small
+WGSL module. Checking aid: `REVC_TEST_DROPLETS=n` puts n drops on each captured frame (after
+the capture reseed, so both renderers place them the same); with 60 drops on the spots, the
+pixels the drops change agree 71-89 % between GL3 and wgpu (rest: filtering). Offscreen test of
+the droplet shader on both backends. Not part of the regression set (no rain there).
 
 ## What the game calls
 

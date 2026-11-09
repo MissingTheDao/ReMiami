@@ -4,7 +4,7 @@
 //! revc_rw::frame::Renderer and drawn when the frame is presented; Im3D and models come next.
 
 use revc_rw::Backend;
-use revc_rw::frame::{DrawState, EnvMap, MAX_BONES, Mat4, MeshExtras, MeshVertex, ModelState, Renderer, SkinVertex, TexData, Vertex2D, Vertex3D};
+use revc_rw::frame::{DrawState, EnvMap, MAX_BONES, Mat4, MeshExtras, MeshVertex, ModelState, Renderer, SkinVertex, TexData, Vertex2D, Vertex2DUV2, Vertex3D};
 use revc_rw::present::{NativeWindow, Presenter};
 use sdl3_sys::everything::*;
 use std::cell::{Cell, RefCell};
@@ -238,6 +238,23 @@ pub unsafe extern "C" fn revc_rw_draw_mesh(state: *const DrawState, geometry: u3
     RENDERER.with(|c| {
         if let Some(r) = c.borrow_mut().as_mut() {
             r.draw_mesh(state, geometry, first, count, &vp, model, &MeshExtras { bones, env });
+        }
+    });
+}
+
+/// # Safety
+/// As `revc_rw_im2d`, with Im2DVertex + u2/v2 vertices; `tex1` points at an EnvMap.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_rw_im2d_uv2(state: *const DrawState, prim: u32, vertices: *const Vertex2DUV2, num_vertices: i32, indices: *const u16, num_indices: i32, tex1: *const EnvMap) {
+    if state.is_null() || vertices.is_null() || num_vertices <= 0 || tex1.is_null() {
+        return;
+    }
+    let (state, tex1) = unsafe { (&*state, &*tex1) };
+    let verts = unsafe { std::slice::from_raw_parts(vertices, num_vertices as usize) };
+    let idx = (!indices.is_null() && num_indices > 0).then(|| unsafe { std::slice::from_raw_parts(indices, num_indices as usize) });
+    RENDERER.with(|c| {
+        if let Some(r) = c.borrow_mut().as_mut() {
+            r.draw_2d_uv2(state, prim, verts, idx, tex1);
         }
     });
 }

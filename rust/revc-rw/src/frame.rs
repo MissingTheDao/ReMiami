@@ -35,6 +35,16 @@ pub struct Vertex2D {
 }
 const _: () = assert!(std::mem::size_of::<Vertex2D>() == 28);
 
+/// An Im2D vertex with a second texture coordinate set (re3's screen droplets, Im2DVertexUV2).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Vertex2DUV2 {
+    pub base: Vertex2D,
+    pub u2: f32,
+    pub v2: f32,
+}
+const _: () = assert!(std::mem::size_of::<Vertex2DUV2>() == 36);
+
 /// librw `wgpu::Im3DVertex` (same layout as gl3's).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -216,6 +226,8 @@ enum Kind {
     Mesh,
     Skin,
     MeshEnv,
+    /// Im2D with two texture coordinate sets and a second texture (screen droplets).
+    Im2DUV2,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -738,6 +750,10 @@ pub struct Renderer {
     ops: Vec<Op>,
     verts: Vec<Vertex2D>,
     verts3: Vec<Vertex3D>,
+    verts_uv2: Vec<Vertex2DUV2>,
+    vertex_uv2_buf: wgpu::Buffer,
+    shader_uv2: wgpu::ShaderModule,
+    uv2_layout: wgpu::PipelineLayout,
     uniforms: Vec<Uniforms>,
     scratch_in: Vec<u32>,
     scratch_out: Vec<u32>,
@@ -746,6 +762,41 @@ pub struct Renderer {
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const ATTRS_2D: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x4, 1 => Unorm8x4, 2 => Float32x2];
 const ATTRS_3D: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Unorm8x4, 2 => Float32x2];
+const ATTRS_2D_UV2: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => Float32x4, 1 => Unorm8x4, 2 => Float32x2, 3 => Float32x2];
+
+// re3 im2d_UV2.vert + screenDroplet.frag: the droplet mask (tex) times the frame copy (tex1) at
+// the second coordinates, times the vertex colour; no perspective (w = 1), no fog, no alpha test.
+const UV2_SHADER: &str = r#"
+struct U { xform: vec4<f32>, alpha: vec4<f32>, fog: vec4<f32>, fog_color: vec4<f32>, mvp: mat4x4<f32>, p0: vec4<f32>, p1: vec4<f32> };
+@group(0) @binding(0) var<uniform> u: U;
+@group(1) @binding(0) var tex: texture_2d<f32>;
+@group(1) @binding(1) var samp: sampler;
+@group(2) @binding(0) var tex1: texture_2d<f32>;
+@group(2) @binding(1) var samp1: sampler;
+
+struct Out {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) color: vec4<f32>,
+    @location(1) uv: vec2<f32>,
+    @location(2) uv1: vec2<f32>,
+};
+
+@vertex
+fn vs(@location(0) pos: vec4<f32>, @location(1) color: vec4<f32>, @location(2) uv: vec2<f32>, @location(3) uv2: vec2<f32>) -> Out {
+    var o: Out;
+    o.pos = vec4<f32>(pos.xy * u.xform.xy + u.xform.zw, pos.z, 1.0);
+    o.color = color;
+    o.uv = uv;
+    o.uv1 = uv2;
+    return o;
+}
+
+@fragment
+fn fs(i: Out) -> @location(0) vec4<f32> {
+    return i.color * textureSample(tex, samp, i.uv) * textureSample(tex1, samp1, i.uv1);
+}
+"#;
+
 const ATTRS_MESH: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x2, 4 => Float32x2];
 const ATTRS_SKIN: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x2, 4 => Float32x2, 5 => Float32x4, 6 => Uint8x4];
 
@@ -912,6 +963,13 @@ impl Renderer {
         write_levels(gpu, &white, &[&[255, 255, 255, 255]]);
         let vertex_buf = Self::make_vertices(gpu, 4096 * std::mem::size_of::<Vertex2D>());
         let vertex3_buf = Self::make_vertices(gpu, 4096 * std::mem::size_of::<Vertex3D>());
+        let vertex_uv2_buf = Self::make_vertices(gpu, 1024 * std::mem::size_of::<Vertex2DUV2>());
+        let shader_uv2 = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("im2d uv2"), source: wgpu::ShaderSource::Wgsl(UV2_SHADER.into()) });
+        let uv2_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("im2d uv2"),
+            bind_group_layouts: &[Some(&uniform_layout), Some(&texture_layout), Some(&texture_layout)],
+            immediate_size: 0,
+        });
         Renderer {
             format,
             blit_pipeline,
@@ -958,6 +1016,10 @@ impl Renderer {
             ops: Vec::new(),
             verts: Vec::new(),
             verts3: Vec::new(),
+            verts_uv2: Vec::new(),
+            vertex_uv2_buf,
+            shader_uv2,
+            uv2_layout,
             uniforms: Vec::new(),
             scratch_in: Vec::new(),
             scratch_out: Vec::new(),
@@ -1136,6 +1198,18 @@ impl Renderer {
         self.record(state, prim, Kind::Im3D, first, count, mvp, None);
     }
 
+    /// An Im2D primitive with two coordinate sets, textured with the bound raster and `tex1`
+    /// (re3's screen droplets: drop mask times the frame copy).
+    pub fn draw_2d_uv2(&mut self, state: &DrawState, prim: u32, verts: &[Vertex2DUV2], indices: Option<&[u16]>, tex1: &EnvMap) {
+        self.expand(prim, verts.len(), indices);
+        let first = self.verts_uv2.len() as u32;
+        self.verts_uv2.extend(self.scratch_out.iter().filter_map(|&i| verts.get(i as usize)));
+        let count = self.verts_uv2.len() as u32 - first;
+        let t = if self.textures.contains_key(&tex1.texture) { tex1.texture } else { 0 };
+        let env = Some((t, SamplerKey { filter: tex1.filter, address_u: tex1.address_u, address_v: tex1.address_v, anisotropy: 1 }));
+        self.record(state, prim, Kind::Im2DUV2, first, count, &[0.0; 16], Some(MeshDraw { geometry: 0, model: 0, bones: 0, env }));
+    }
+
     /// Triangles `first..first + count` of the index list of a stored geometry, lit with
     /// `model`; `view_proj` = projection * view. A skinned geometry gets its bones (at most
     /// MAX_BONES; missing ones are identity); a MatFX material its environment map.
@@ -1281,21 +1355,24 @@ impl Renderer {
                 Kind::Mesh => "mesh",
                 Kind::Skin => "skin",
                 Kind::MeshEnv => "mesh env",
+                Kind::Im2DUV2 => "im2d uv2",
             }),
             layout: Some(match key.kind {
                 Kind::Mesh => &self.mesh_layout,
                 Kind::Skin => &self.skin_layout,
                 Kind::MeshEnv => &self.env_layout,
+                Kind::Im2DUV2 => &self.uv2_layout,
                 _ => &self.pipeline_layout,
             }),
             vertex: wgpu::VertexState {
-                module: &self.shader,
+                module: if key.kind == Kind::Im2DUV2 { &self.shader_uv2 } else { &self.shader },
                 entry_point: Some(match key.kind {
                     Kind::Im2D => "vs_2d",
                     Kind::Im3D => "vs_3d",
                     Kind::Mesh => "vs_mesh",
                     Kind::Skin => "vs_skin",
                     Kind::MeshEnv => "vs_env",
+                    Kind::Im2DUV2 => "vs",
                 })
                 .map(|e| match (key.kind, key.shader) {
                     (Kind::MeshEnv, MESH_NEO_VEHICLE) => "vs_neo_vehicle",
@@ -1308,18 +1385,20 @@ impl Renderer {
                 buffers: &[Some(match key.kind {
                     Kind::Im2D => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex2D>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_2D },
                     Kind::Im3D => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex3D>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_3D },
+                    Kind::Im2DUV2 => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex2DUV2>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_2D_UV2 },
                     Kind::Mesh | Kind::MeshEnv => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<MeshVertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_MESH },
                     Kind::Skin => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<SkinVertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_SKIN },
                 })],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
-                module: &self.shader,
+                module: if key.kind == Kind::Im2DUV2 { &self.shader_uv2 } else { &self.shader },
                 entry_point: Some(match (key.kind, key.shader) {
                     (Kind::MeshEnv, MESH_NEO_VEHICLE) => "fs_neo_vehicle",
                     (Kind::MeshEnv, MESH_NEO_WORLD) => "fs_neo_world",
                     (Kind::Mesh, MESH_NEO_GLOSS) => "fs_neo_gloss",
                     (Kind::MeshEnv, _) => "fs_env",
+                    (Kind::Im2DUV2, _) => "fs",
                     (Kind::Im2D, 1) => "fs_colourfilter",
                     (Kind::Im2D, 2) => "fs_contrast",
                     _ => "fs_simple",
@@ -1438,6 +1517,7 @@ impl Renderer {
         let ops = std::mem::take(&mut self.ops);
         let verts = std::mem::take(&mut self.verts);
         let verts3 = std::mem::take(&mut self.verts3);
+        let verts_uv2 = std::mem::take(&mut self.verts_uv2);
         let uniforms = std::mem::take(&mut self.uniforms);
         let models = std::mem::take(&mut self.models);
         if models.len() > self.model_capacity {
@@ -1523,6 +1603,14 @@ impl Renderer {
         }
         if !bytes2.is_empty() {
             gpu.queue.write_buffer(&self.vertex_buf, 0, bytes2);
+        }
+        // SAFETY: Vertex2DUV2 is repr(C) plain data without padding (36 bytes, asserted above).
+        let bytes_uv2 = unsafe { std::slice::from_raw_parts(verts_uv2.as_ptr().cast::<u8>(), std::mem::size_of_val(verts_uv2.as_slice())) };
+        if bytes_uv2.len() > self.vertex_uv2_buf.size() as usize {
+            self.vertex_uv2_buf = Self::make_vertices(gpu, bytes_uv2.len().next_power_of_two());
+        }
+        if !bytes_uv2.is_empty() {
+            gpu.queue.write_buffer(&self.vertex_uv2_buf, 0, bytes_uv2);
         }
         if !bytes3.is_empty() {
             gpu.queue.write_buffer(&self.vertex3_buf, 0, bytes3);
@@ -1640,6 +1728,17 @@ impl Renderer {
                     p.set_pipeline(&self.pipelines[&pipe]);
                     p.set_bind_group(0, &self.uniform_bind, &[(uniform as u64 * self.uniform_stride) as u32]);
                     p.set_bind_group(1, &self.bind_groups[&(texture, sampler)], &[]);
+                    if pipe.kind == Kind::Im2DUV2 {
+                        if let Some(MeshDraw { env: Some(e), .. }) = mesh {
+                            p.set_bind_group(2, &self.bind_groups[&e], &[]);
+                        }
+                        if bound != Some(pipe.kind) {
+                            p.set_vertex_buffer(0, self.vertex_uv2_buf.slice(..));
+                            bound = Some(pipe.kind);
+                        }
+                        p.draw(first..first + count, 0..1);
+                        continue;
+                    }
                     match mesh {
                         Some(MeshDraw { geometry, model, bones, env }) => {
                             let Some(g) = self.geometries.get(&geometry) else { continue };
@@ -1691,6 +1790,7 @@ impl Renderer {
         self.ops = ops;
         self.verts = verts;
         self.verts3 = verts3;
+        self.verts_uv2 = verts_uv2;
         self.uniforms = uniforms;
         self.models = models;
         self.bones = bones;
@@ -1701,6 +1801,7 @@ impl Renderer {
         self.ops.clear();
         self.verts.clear();
         self.verts3.clear();
+        self.verts_uv2.clear();
         self.uniforms.clear();
         self.models.clear();
         self.bones.clear();

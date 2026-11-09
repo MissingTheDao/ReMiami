@@ -617,3 +617,48 @@ fn neo_world_vulkan() {
 fn neo_world_gl() {
     neo_world(Backend::Gl);
 }
+
+/// Screen droplets (re3 screenDroplet.frag): vertex colour * mask * second texture at the second
+/// coordinates, without perspective.
+fn droplet(backend: Backend) {
+    use revc_rw::frame::{EnvMap, Vertex2DUV2};
+    let gpu = Gpu::headless(backend).expect("gpu");
+    let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+    let mask = r.upload_texture(&gpu, 0, 1, 1, TexData::Rgba8, &[&[255, 255, 255, 255]], false);
+    // Second texture: left texel red, right texel green; the quad samples the right one.
+    let screen = r.upload_texture(&gpu, 0, 2, 1, TexData::Rgba8, &[&[255, 0, 0, 255, 0, 200, 0, 255]], false);
+    let q = quad(0.0, 0.0, 64.0, 64.0, [255, 255, 255, 128]);
+    let verts: Vec<Vertex2DUV2> = q.iter().map(|v| Vertex2DUV2 { base: *v, u2: 0.75, v2: 0.5 }).collect();
+    let state = DrawState { texture: mask, blend: 1, alpha_func: 0, ..base() };
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.draw_2d_uv2(&state, 5, &verts, None, &EnvMap { texture: screen, filter: 1, address_u: 3, address_v: 3 });
+    let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    r.encode(&gpu, &mut enc, &target.create_view(&Default::default()), (SIZE, SIZE));
+    r.end_frame();
+    let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+    gpu.queue.submit([enc.finish()]);
+    let img = readback_finish(&gpu, rb).expect("readback");
+    // green 200 * alpha 128/255 over black.
+    let got = px(&img, 32, 32);
+    assert!(near(got, [0, 100, 0, 255]), "{backend:?} droplet: got {got:?}");
+}
+
+#[test]
+fn droplet_vulkan() {
+    droplet(Backend::Vulkan);
+}
+
+#[test]
+fn droplet_gl() {
+    droplet(Backend::Gl);
+}

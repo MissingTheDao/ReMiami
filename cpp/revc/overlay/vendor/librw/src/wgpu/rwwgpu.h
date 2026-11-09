@@ -135,6 +135,11 @@ struct DrawState
 	uint32 maxAnisotropy;
 };
 
+// Im2D vertices with a second coordinate set (re3 screen droplets: Im2DVertex + u2, v2), drawn
+// with the bound raster times `tex1` (nil = white) at the second coordinates.
+void im2DRenderIndexedPrimitiveUV2(PrimitiveType primType, void *vertices, int32 numVertices,
+	void *indices, int32 numIndices, Texture *tex1);
+
 // Like gl3::im2dOverrideShader: Im2D draws use this shader until it is reset to 0.
 void setIm2DOverride(uint32 shader, const float32 *params);
 
