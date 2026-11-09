@@ -20,6 +20,16 @@
 #include "TxdStore.h"
 #include "Text.h"
 #include "ColModel.h"
+#include "Pad.h"
+#include "Game.h"
+#include "Streaming.h"
+#include "Clock.h"
+#include "Weather.h"
+#include "Population.h"
+#include "CarCtrl.h"
+#include "PlayerPed.h"
+#include "ColStore.h"
+#include "Hud.h"
 
 #ifdef AUDIO_OAL
 // Audio effects state (sampman_oal.cpp globals).
@@ -103,6 +113,68 @@ revc_test_player_pos(float *x, float *y, float *z)
 	*x = v.x;
 	*y = v.y;
 	*z = v.z;
+}
+
+// Pads the game uses as player 1 / player 2 (host joystick slots, -1 = none).
+void
+revc_test_joy_ids(int *joy1, int *joy2)
+{
+	*joy1 = PSGLOBAL(joy1id);
+	*joy2 = PSGLOBAL(joy2id);
+}
+
+// Shakes pad 0 like the game does (CPad::StartShake), with vibration enabled in the settings.
+void
+revc_test_shake(int durationMs, int freq)
+{
+	FrontEndMenuManager.m_PrefsUseVibration = true;
+	CPad::GetPad(0)->StartShake(durationMs, freq);
+}
+
+// Fixed-spot screenshots (plan task 3): puts the player at (x, y) on the main map (on the ground
+// when z <= -100) with nothing random around (no peds or traffic, fixed time and weather) and
+// points a fixed camera from player + (dx, dy, dz) at the player, with the HUD hidden, like the mission scripts do
+// (SET_AREA_VISIBLE, LOAD_SCENE, SET_PLAYER_COORDINATES, SET_FIXED_CAMERA_POSITION,
+// POINT_CAMERA_AT_POINT). Returns the ground z used.
+float
+revc_test_goto_spot(float x, float y, float z, float dx, float dy, float dz, int hour, int minute)
+{
+	CPopulation::PedDensityMultiplier = 0.0f;
+	CCarCtrl::CarDensityMultiplier = 0.0f;
+	CGame::currArea = AREA_MAIN_MAP;
+	CStreaming::RemoveBuildingsNotInArea(AREA_MAIN_MAP);
+	CClock::SetGameClock(hour, minute);
+	CWeather::ForceWeatherNow(WEATHER_SUNNY);
+
+	CVector pos(x, y, z <= -100.0f ? 20.0f : z);
+	CTimer::Suspend();
+	CStreaming::LoadScene(pos);
+	CTimer::Resume();
+	if (z <= -100.0f) {
+		CColStore::EnsureCollisionIsInMemory(CVector2D(x, y));
+		pos.z = CWorld::FindGroundZForCoord(x, y);
+	}
+	// World only: no HUD, radar, help boxes or zone names (they depend on timing).
+	CHud::m_Wants_To_Draw_Hud = false;
+	CHud::m_HideRadar = true;
+	CHud::SetHelpMessage(nil, true);
+
+	CPlayerPed *ped = FindPlayerPed();
+	CVector pedPos = pos;
+	pedPos.z += ped->GetDistanceFromCentreOfMassToBaseOfModel();
+	ped->Teleport(pedPos);
+	CWorld::ClearExcitingStuffFromArea(pedPos, 120.0f, true);
+
+	TheCamera.SetCamPositionForFixedMode(pos + CVector(dx, dy, dz), CVector(0.0f, 0.0f, 0.0f));
+	TheCamera.TakeControlNoEntity(pedPos, JUMP_CUT, CAMCONTROL_SCRIPT);
+	return pos.z;
+}
+
+// Removes help text (the save's tutorial script keeps posting tips); called every frame at a spot.
+void
+revc_test_clear_help(void)
+{
+	CHud::SetHelpMessage(nil, true);
 }
 
 // Writes what the C++ loaders hold after loading (model info from IDE, collision, GXT, geometry of

@@ -4,9 +4,11 @@
 #   --bless  accept the current screenshots as the new references (tests/reference/)
 #   --keep   keep the temporary game folder
 # Needs a display (the game opens a window). Game data: REVC_GAME_DIR or ./game.
-# Scenarios: boot, saveload, formats, texmods (default), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
+# Scenarios: boot, saveload, formats, texmods, gamepad, spots (default), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
 # formats: compares what the C++ loaders read with the Rust parsers in rust/revc-formats.
 # texmods: saveload with the texture mods in tests/mods installed (own reference screenshot).
+# gamepad: virtual SDL pads: detection, player 1/2 assignment, glyph-set switching, rumble.
+# spots: screenshots at fixed places on the map (no peds/traffic, noon, sunny) vs tests/reference/spots/.
 # A scenario uses tests/config/<scenario>.ini if present, else tests/config/reVC.ini.
 # REVC_TEST_BIN=path runs that binary instead of building rust/.
 # Output and logs: rust/target/test-output/
@@ -21,7 +23,7 @@ for a in "$@"; do
     *) SCENARIOS+=("$a") ;;
   esac
 done
-(( ${#SCENARIOS[@]} )) || SCENARIOS=(boot saveload formats texmods)
+(( ${#SCENARIOS[@]} )) || SCENARIOS=(boot saveload formats texmods gamepad spots)
 
 GAME=${REVC_GAME_DIR:-$ROOT/game}
 [[ -d "$GAME/models" ]] || { echo "game data not found at $GAME (set REVC_GAME_DIR)" >&2; exit 2; }
@@ -53,6 +55,11 @@ for s in "${SCENARIOS[@]}"; do
   cp "$ini" "$T/reVC.ini"
   envs=(REVC_GAME_DIR="$T" REVC_TEST="$s")
   [[ "$s" == texmods ]] && cp -r "$ROOT/tests/mods" "$T/mods"
+  if [[ "$s" == spots ]]; then
+    rm -rf "$OUT/spots"; mkdir -p "$OUT/spots"
+    envs+=(REVC_TEST_SHOT_DIR="$OUT/spots")
+    (( BLESS == 0 )) && envs+=(REVC_TEST_REF_DIR="$ROOT/tests/reference/spots")
+  fi
   if [[ "$s" == saveload || "$s" == texmods ]]; then
     envs+=(REVC_TEST_SHOT="$OUT/$s.png")
     ref=$ROOT/tests/reference/$s.png
@@ -72,7 +79,10 @@ for s in "${SCENARIOS[@]}"; do
     [[ -n "$leaks" ]] && echo "$leaks" | sed 's/^/     leak: /'
     echo "     log: $log"
   fi
-  grep -oE '\[revc-test\] (player at|image diff|audio|formats:|texmods:).*' "$log" | sed 's/^\[revc-test\] /     /'
+  grep -oE '\[revc-test\] (player at|image diff|audio|formats:|texmods:|gamepad:|spot |[a-z_]+: image diff).*' "$log" | sed 's/^\[revc-test\] /     /'
+  if (( BLESS )) && [[ "$s" == spots ]]; then
+    mkdir -p "$ROOT/tests/reference/spots" && cp "$OUT"/spots/*.png "$ROOT/tests/reference/spots/" && echo "     blessed tests/reference/spots/"
+  fi
   if (( BLESS )) && [[ -f "$OUT/$s.png" ]]; then
     cp "$OUT/$s.png" "$ROOT/tests/reference/$s.png" && echo "     blessed tests/reference/$s.png"
   fi

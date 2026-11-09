@@ -3,6 +3,7 @@
 
 mod audio;
 mod formatcheck;
+mod padtest;
 mod texmods;
 mod host;
 mod testdrive;

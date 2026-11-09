@@ -13,6 +13,11 @@
 //!                       rather than frames keeps the captured moment independent of fps.
 //!   REVC_TEST=texmods   like saveload with the texture mods in tests/mods installed: checks
 //!                       they were applied (and the broken one rejected) and the screenshot.
+//!   REVC_TEST=gamepad   like saveload, then plugs in SDL virtual pads (DualSense, Steam Deck)
+//!                       and checks pad detection, glyph-set switching and rumble (padtest.rs).
+//!   REVC_TEST=spots     like saveload, then visits SPOTS (no peds/traffic, noon, sunny, fixed
+//!                       camera) and compares each frame with REVC_TEST_REF_DIR/<spot>.png,
+//!                       writing REVC_TEST_SHOT_DIR/<spot>.png (plan task 3).
 //!   REVC_TEST=formats   like saveload, then dumps what the C++ loaders hold and compares it
 //!                       with revc-formats (formatcheck.rs).
 //! Options:
@@ -37,6 +42,8 @@ unsafe extern "C" {
     fn revc_test_load_slot(slot: i32) -> i32;
     fn revc_test_player_pos(x: *mut f32, y: *mut f32, z: *mut f32);
     fn revc_test_dump_formats(path: *const std::ffi::c_char) -> i32;
+    fn revc_test_clear_help();
+    fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
 }
 
 const STATE_FRONTEND: i32 = 1;
@@ -49,6 +56,8 @@ enum Scenario {
     Audio,
     Formats,
     TexMods,
+    Gamepad,
+    Spots,
 }
 
 #[derive(Debug)]
@@ -59,7 +68,36 @@ enum Phase {
     Capturing,
     /// Scripted input (audio scenario); `t0` is the game time it started.
     Script { t0: u32, step: usize },
+    /// Virtual-controller checks (gamepad scenario, padtest.rs).
+    Pads,
+    /// Fixed-spot screenshots. Spot `idx` is visited at game time `base + idx * SPOT_PERIOD_MS`
+    /// and captured SPOT_WAIT_MS later, so wind, waves and the clock are at the same phase in every
+    /// run whatever the frame rate (the simulation advances in exact 30 Hz steps).
+    Spot { idx: usize, base: u32, stage: SpotStage },
     Done,
+}
+
+/// Fixed screenshot spots: (name, x, y, camera offset dx, dy, dz). The player stands on the ground
+/// at (x, y); the camera looks at the player from the offset. Chosen to cover the map's districts
+/// and typical content (streets, water, foliage, big buildings, interiors' exteriors).
+const SPOTS: &[(&str, f32, f32, f32, f32, f32)] = &[
+    ("ocean_drive", 285.0, -1200.0, 24.0, 18.0, 14.0),
+    ("washington_beach", 400.0, -470.0, 24.0, -18.0, 16.0),
+    ("vice_point", 470.0, 1150.0, -30.0, 12.0, 26.0),
+    ("downtown", -720.0, 1150.0, 24.0, -20.0, 24.0),
+    ("little_haiti", -950.0, 100.0, 22.0, 22.0, 14.0),
+    ("little_havana", -1050.0, -500.0, -22.0, 22.0, 14.0),
+    ("starfish_island", -380.0, -560.0, 26.0, 26.0, 20.0),
+    ("airport", -1450.0, -900.0, 0.0, -40.0, 26.0),
+];
+const SPOT_WAIT_MS: u32 = 4000;
+const SPOT_PERIOD_MS: u32 = 6000;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum SpotStage {
+    Travel,
+    Settle,
+    Capturing,
 }
 
 /// (game ms after the script starts, RsKeyCodes key, down). Bindings from tests/config/*.ini:
@@ -89,6 +127,7 @@ struct Driver {
     started: Instant,
     failures: Vec<String>,
     finished: bool,
+    pads: crate::padtest::PadTest,
 }
 
 thread_local! {
@@ -114,7 +153,9 @@ pub fn init() -> Result<bool, String> {
         "audio" => Scenario::Audio,
         "formats" => Scenario::Formats,
         "texmods" => Scenario::TexMods,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods)")),
+        "gamepad" => Scenario::Gamepad,
+        "spots" => Scenario::Spots,
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -128,6 +169,7 @@ pub fn init() -> Result<bool, String> {
         started: Instant::now(),
         failures: Vec::new(),
         finished: false,
+        pads: Default::default(),
     };
     log(format!("scenario {scenario:?} started"));
     if std::env::var_os("REVC_TEST_WAV").is_some() {
@@ -196,7 +238,7 @@ impl Driver {
                 log(format!("front end reached after {:.1}s", self.started.elapsed().as_secs_f32()));
                 match self.scenario {
                     Scenario::Boot => return self.finish(),
-                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -236,6 +278,16 @@ impl Driver {
                     self.check_formats();
                     return self.finish();
                 }
+                if self.scenario == Scenario::Gamepad {
+                    self.phase = Phase::Pads;
+                    return false;
+                }
+                if self.scenario == Scenario::Spots {
+                    // A round start time; the save always loads at the same game time.
+                    let base = (unsafe { revc_test_game_ms() } / 1000 + 1) * 1000;
+                    self.phase = Phase::Spot { idx: 0, base, stage: SpotStage::Travel };
+                    return false;
+                }
                 log(format!("captured after {elapsed} ms game time, {frames} frames"));
                 self.check_audio();
                 self.check_player();
@@ -271,6 +323,56 @@ impl Driver {
                     return self.finish();
                 }
             }
+            Phase::Spot { idx, base, stage } => {
+                unsafe { revc_test_clear_help() };
+                let now = unsafe { revc_test_game_ms() };
+                let visit = base + idx as u32 * SPOT_PERIOD_MS;
+                match stage {
+                    SpotStage::Travel if now >= visit => {
+                        self.goto_spot(idx);
+                        self.phase = Phase::Spot { idx, base, stage: SpotStage::Settle };
+                    }
+                    SpotStage::Settle if now >= visit + SPOT_WAIT_MS && unsafe { revc_test_fading() } == 0 => {
+                        log(format!("{}: captured at game time {now}", SPOTS[idx].0));
+                        crate::host::request_capture();
+                        self.phase = Phase::Spot { idx, base, stage: SpotStage::Capturing };
+                    }
+                    SpotStage::Capturing => {
+                        if let Some((w, h, rgba)) = crate::host::take_capture() {
+                            let name = SPOTS[idx].0;
+                            let dir = |var: &str| std::env::var_os(var).map(|d| PathBuf::from(d).join(format!("{name}.png")));
+                            let reference = dir("REVC_TEST_REF_DIR").filter(|p| p.exists());
+                            if std::env::var_os("REVC_TEST_REF_DIR").is_some() && reference.is_none() {
+                                self.fail(format!("{name}: no reference image (run with --bless)"));
+                            }
+                            self.check_image_at(w, h, &rgba, dir("REVC_TEST_SHOT_DIR"), reference, &format!("{name}: "));
+                            if idx + 1 < SPOTS.len() {
+                                self.phase = Phase::Spot { idx: idx + 1, base, stage: SpotStage::Travel };
+                            } else {
+                                return self.finish();
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Phase::Pads => match self.pads.tick() {
+                Ok(done) => {
+                    for line in self.pads.log.drain(..) {
+                        log(format!("gamepad: {line}"));
+                    }
+                    if done {
+                        return self.finish();
+                    }
+                }
+                Err(e) => {
+                    for line in self.pads.log.drain(..) {
+                        log(format!("gamepad: {line}"));
+                    }
+                    self.fail(format!("gamepad: {e}"));
+                    return self.finish();
+                }
+            },
             Phase::Done => {}
         }
         false
@@ -287,6 +389,12 @@ impl Driver {
         if failed != 1 {
             self.fail(format!("texmods: {failed} files rejected (expected siterocket.png only)"));
         }
+    }
+
+    fn goto_spot(&mut self, idx: usize) {
+        let (name, x, y, dx, dy, dz) = SPOTS[idx];
+        let z = unsafe { revc_test_goto_spot(x, y, -100.0, dx, dy, dz, 12, 0) };
+        log(format!("spot {name}: ({x}, {y}, {z:.2})"));
     }
 
     /// Dumps what the C++ loaders hold and compares it with revc-formats (formatcheck.rs).
@@ -366,13 +474,19 @@ impl Driver {
     }
 
     fn check_image(&mut self, w: u32, h: u32, rgba: &[u8]) {
-        if let Some(path) = self.shot.clone() {
+        self.check_image_at(w, h, rgba, self.shot.clone(), self.reference.clone(), "");
+    }
+
+    /// Writes the frame to `shot` and compares it with `reference` (both optional); `label`
+    /// prefixes the log lines when several images are checked in one run.
+    fn check_image_at(&mut self, w: u32, h: u32, rgba: &[u8], shot: Option<PathBuf>, reference: Option<PathBuf>, label: &str) {
+        if let Some(path) = shot.clone() {
             match write_png(&path, w, h, rgba) {
                 Ok(()) => log(format!("screenshot {}x{} -> {}", w, h, path.display())),
                 Err(e) => self.fail(format!("cannot write {}: {e}", path.display())),
             }
         }
-        let Some(reference) = self.reference.clone() else { return };
+        let Some(reference) = reference else { return };
         let (rw, rh, rref) = match read_png(&reference) {
             Ok(v) => v,
             Err(e) => {
@@ -401,13 +515,13 @@ impl Driver {
             }
         }
         let frac = differing as f64 / (w as f64 * h as f64);
-        log(format!("image diff: {:.3}% of pixels differ (limit {:.3}%)", frac * 100.0, self.max_diff * 100.0));
+        log(format!("{label}image diff: {:.3}% of pixels differ (limit {:.3}%)", frac * 100.0, self.max_diff * 100.0));
         if frac > self.max_diff {
-            let mut p = self.shot.clone().unwrap_or_else(|| std::env::temp_dir().join("revc-test.png")).into_os_string();
+            let mut p = shot.clone().unwrap_or_else(|| std::env::temp_dir().join("revc-test.png")).into_os_string();
             p.push(".diff.png");
             let p = PathBuf::from(p);
             let _ = write_png(&p, w, h, &diff_img);
-            self.fail(format!("screenshot differs from reference (diff image {})", p.display()));
+            self.fail(format!("{label}screenshot differs from reference (diff image {})", p.display()));
         }
     }
 

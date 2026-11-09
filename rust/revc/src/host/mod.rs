@@ -10,6 +10,9 @@
 mod geometry;
 mod joystick;
 mod keymap;
+mod pads;
+
+pub use pads::PadKind;
 
 use geometry::Geometry;
 use joystick::{HostGamepadState, Joysticks};
@@ -90,6 +93,8 @@ struct Host {
     mouse_buttons: [bool; 5],
     focused: bool,
     joysticks: Joysticks,
+    /// The input device the player used last; prompts show its glyphs (plan task 9).
+    active_kind: PadKind,
     /// Windowed-mode geometry, remembered across launches.
     geometry: Geometry,
     geometry_dirty: bool,
@@ -112,6 +117,7 @@ impl Default for Host {
             mouse_buttons: [false; 5],
             focused: true,
             joysticks: Joysticks::default(),
+            active_kind: PadKind::KeyboardMouse,
             geometry: Geometry::default(),
             geometry_dirty: false,
             capture_requested: false,
@@ -527,6 +533,9 @@ fn pump(h: &mut Host, out: &mut Vec<Cb>) {
 
             SDL_EVENT_KEY_DOWN | SDL_EVENT_KEY_UP => {
                 let k = unsafe { ev.key };
+                if k.down {
+                    h.active_kind = PadKind::KeyboardMouse;
+                }
                 let enter = k.scancode == SDL_SCANCODE_RETURN || k.scancode == SDL_SCANCODE_KP_ENTER;
                 if enter && (k.r#mod.0 & SDL_KMOD_ALT.0) != 0 {
                     // Alt+Enter toggles fullscreen; the Enter itself is swallowed so it
@@ -551,12 +560,16 @@ fn pump(h: &mut Host, out: &mut Vec<Cb>) {
             }
             SDL_EVENT_MOUSE_BUTTON_DOWN | SDL_EVENT_MOUSE_BUTTON_UP => {
                 let b = unsafe { ev.button };
+                if b.down {
+                    h.active_kind = PadKind::KeyboardMouse;
+                }
                 if let Some(i) = mouse_index(b.button) {
                     h.mouse_buttons[i] = b.down;
                 }
             }
             SDL_EVENT_MOUSE_WHEEL => {
                 let w = unsafe { ev.wheel };
+                h.active_kind = PadKind::KeyboardMouse;
                 out.push(Cb::Scroll(w.x as f64, w.y as f64));
             }
 
@@ -590,6 +603,21 @@ fn pump(h: &mut Host, out: &mut Vec<Cb>) {
                 out.push(Cb::Iconify(false));
             }
 
+            SDL_EVENT_JOYSTICK_BUTTON_DOWN | SDL_EVENT_JOYSTICK_HAT_MOTION => {
+                // jbutton/jhat both start with the device id.
+                let id = unsafe { ev.jbutton.which };
+                if let Some(k) = h.joysticks.kind_of(id) {
+                    h.active_kind = k;
+                }
+            }
+            SDL_EVENT_JOYSTICK_AXIS_MOTION => {
+                let a = unsafe { ev.jaxis };
+                if a.value.unsigned_abs() > pads::ACTIVE_AXIS_THRESHOLD as u16 {
+                    if let Some(k) = h.joysticks.kind_of(a.which) {
+                        h.active_kind = k;
+                    }
+                }
+            }
             SDL_EVENT_JOYSTICK_ADDED => {
                 let id = unsafe { ev.jdevice.which };
                 if let Some(slot) = h.joysticks.add(id) {
@@ -814,6 +842,9 @@ pub unsafe extern "C" fn hostSimStepsDue(alpha: *mut f32) -> c_int {
         c.1 = Some(now);
         c.0.advance(elapsed)
     });
+    // A frame captured by the regression harness shows the simulated state itself (alpha 1),
+    // not a blend that depends on wall-clock timing, so screenshots are repeatable.
+    let a = if with(|h| h.capture_requested) { 1.0 } else { a };
     if !alpha.is_null() {
         unsafe { *alpha = a };
     }
@@ -821,6 +852,29 @@ pub unsafe extern "C" fn hostSimStepsDue(alpha: *mut f32) -> c_int {
 }
 
 // ---------------------------------------------------------------- joysticks
+
+/// Glyph set of the input device used last (a PadKind value, see host/pads.rs).
+#[unsafe(no_mangle)]
+pub extern "C" fn hostActiveInputKind() -> c_int {
+    active_kind() as c_int
+}
+
+pub fn active_kind() -> PadKind {
+    with(|h| h.active_kind)
+}
+
+/// Glyph set of the pad in slot `jid` (KeyboardMouse = 0 if none).
+#[unsafe(no_mangle)]
+pub extern "C" fn hostJoystickKind(jid: c_int) -> c_int {
+    with(|h| h.joysticks.kind(jid) as c_int)
+}
+
+/// Vibration for `ms` milliseconds (low/high-frequency motor strength 0..65535; 0/0 stops).
+/// Returns 0 if the pad has no rumble.
+#[unsafe(no_mangle)]
+pub extern "C" fn hostGamepadRumble(jid: c_int, low: u16, high: u16, ms: u32) -> c_int {
+    with(|h| h.joysticks.rumble(jid, low, high, ms) as c_int)
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn hostJoystickPresent(jid: c_int) -> c_int {

@@ -1,6 +1,7 @@
 //! Joystick/gamepad slots for the host API, with GLFW semantics (slot ids 0..15,
 //! raw buttons + hat buttons, gamepad state in GLFW layout). First draft by the local model.
 
+use super::pads::{self, PadKind};
 use sdl3_sys::everything::*;
 use std::ffi::{CStr, CString, c_char};
 
@@ -18,6 +19,7 @@ struct Slot {
     joy: *mut SDL_Joystick,
     pad: *mut SDL_Gamepad,
     name: CString,
+    kind: PadKind,
     buttons: Vec<u8>,
     axes: Vec<f32>,
 }
@@ -82,11 +84,13 @@ impl Joysticks {
         let mut axes = Vec::new();
         refresh_joystick_state(joy, &mut buttons, &mut axes);
 
+        let kind = classify(joy, pad);
         let slot = Slot {
             id,
             joy,
             pad,
             name,
+            kind,
             buttons,
             axes,
         };
@@ -119,8 +123,35 @@ impl Joysticks {
         for s in self.slots.iter_mut().flatten() {
             if s.pad.is_null() && unsafe { SDL_IsGamepad(s.id) } {
                 s.pad = unsafe { SDL_OpenGamepad(s.id) };
+                s.kind = classify(s.joy, s.pad);
             }
         }
+    }
+
+    /// Glyph set for the pad in `slot` (KeyboardMouse if the slot is empty).
+    pub fn kind(&self, slot: i32) -> PadKind {
+        self.get(slot).map_or(PadKind::KeyboardMouse, |s| s.kind)
+    }
+
+    /// Glyph set for the device with SDL id `id`.
+    pub fn kind_of(&self, id: SDL_JoystickID) -> Option<PadKind> {
+        self.slots.iter().flatten().find(|s| s.id == id).map(|s| s.kind)
+    }
+
+    /// Starts (or with 0/0 stops) vibration; `ms` is how long it lasts unless renewed.
+    pub fn rumble(&self, slot: i32, low: u16, high: u16, ms: u32) -> bool {
+        match self.get(slot) {
+            Some(s) if !s.pad.is_null() => unsafe { SDL_RumbleGamepad(s.pad, low, high, ms) },
+            Some(s) => unsafe { SDL_RumbleJoystick(s.joy, low, high, ms) },
+            None => false,
+        }
+    }
+
+    fn get(&self, slot: i32) -> Option<&Slot> {
+        if slot < 0 || slot as usize >= MAX_SLOTS {
+            return None;
+        }
+        self.slots[slot as usize].as_ref()
     }
 
     pub fn present(&self, slot: i32) -> bool {
@@ -247,6 +278,12 @@ impl Drop for Joysticks {
             }
         }
     }
+}
+
+fn classify(joy: *mut SDL_Joystick, pad: *mut SDL_Gamepad) -> PadKind {
+    let (vendor, product) = unsafe { (SDL_GetJoystickVendor(joy), SDL_GetJoystickProduct(joy)) };
+    let ty = if pad.is_null() { SDL_GAMEPAD_TYPE_UNKNOWN } else { unsafe { SDL_GetGamepadType(pad) } };
+    pads::classify(!pad.is_null(), ty, vendor, product)
 }
 
 fn refresh_joystick_state(joy: *mut SDL_Joystick, buttons: &mut Vec<u8>, axes: &mut Vec<f32>) {
