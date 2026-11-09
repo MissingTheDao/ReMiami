@@ -6,6 +6,7 @@ mod formatcheck;
 mod padtest;
 mod texmods;
 mod text;
+mod textutil;
 mod host;
 mod testdrive;
 
