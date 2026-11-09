@@ -51,6 +51,36 @@ pub struct Vertex3D {
 }
 const _: () = assert!(std::mem::size_of::<Vertex3D>() == 24);
 
+/// A model vertex as the device instances geometry (gl3 defaultInstanceCB attributes; missing
+/// ones are filled with GL's defaults: normal 0, colour (0, 0, 0, 1), texcoords 0).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MeshVertex {
+    pub pos: [f32; 3],
+    pub normal: [f32; 3],
+    pub color: [u8; 4],
+    pub uv: [f32; 2],
+}
+const _: () = assert!(std::mem::size_of::<MeshVertex>() == 36);
+
+/// Per-draw model data for the lit pipeline (gl3 Object uniforms + material).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ModelState {
+    /// Column-major world matrix.
+    pub world: [f32; 16],
+    /// Material colour (white unless the geometry modulates), 0..1.
+    pub mat_color: [f32; 4],
+    /// Ambient, specular, diffuse, extra.
+    pub surf_props: [f32; 4],
+    /// Sum of ambient lights, 0..1.
+    pub ambient: [f32; 4],
+    /// 8 lights x (params: type 0 end / 1 directional / 2 point / 3 spot, radius, minusCosAngle,
+    /// hardSpot; position; direction; colour).
+    pub lights: [[f32; 4]; 32],
+}
+const MODEL_FLOATS: usize = std::mem::size_of::<ModelState>() / 4;
+
 /// Column-major 4x4 matrix (RW RawMatrix / GL layout: right, up, at, pos columns).
 pub type Mat4 = [f32; 16];
 
@@ -97,8 +127,15 @@ pub struct DrawState {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Kind {
+    Im2D,
+    Im3D,
+    Mesh,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct PipeKey {
-    im3d: bool,
+    kind: Kind,
     lines: bool,
     blend: Option<(u32, u32)>,
     z_test: bool,
@@ -119,7 +156,14 @@ type Uniforms = [f32; 32];
 #[derive(Clone, Copy, Debug)]
 enum Op {
     Clear { color: Option<[f64; 4]>, depth: bool },
-    Draw { pipe: PipeKey, texture: u32, sampler: SamplerKey, uniform: u32, first: u32, count: u32 },
+    /// Immediate geometry (first/count vertices) or, with `mesh` = (geometry, model uniform), an
+    /// index range of a stored geometry.
+    Draw { pipe: PipeKey, texture: u32, sampler: SamplerKey, uniform: u32, first: u32, count: u32, mesh: Option<(u32, u32)> },
+}
+
+struct Geom {
+    vertices: wgpu::Buffer,
+    indices: wgpu::Buffer,
 }
 
 struct Tex {
@@ -206,6 +250,63 @@ fn vs_3d(@location(0) pos: vec3<f32>, @location(1) color: vec4<f32>, @location(2
     return o;
 }
 
+// gl3 default.vert: prelit colour + ambient * surfAmbient + dynamic lights * surfDiffuse,
+// clamped, times the material colour. Normals are transformed by the world matrix unnormalised.
+struct M { world: mat4x4<f32>, mat_color: vec4<f32>, surf: vec4<f32>, ambient: vec4<f32>, lights: array<vec4<f32>, 32> };
+@group(2) @binding(0) var<uniform> m: M;
+
+fn dynamic_light(v: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    var color = vec3<f32>(0.0);
+    for (var i = 0; i < 8; i++) {
+        let params = m.lights[i * 4];
+        let pos = m.lights[i * 4 + 1].xyz;
+        let dir = m.lights[i * 4 + 2].xyz;
+        let col = m.lights[i * 4 + 3].rgb;
+        if (params.x == 0.0) {
+            break;
+        }
+        if (params.x == 1.0) {
+            color += max(0.0, dot(n, -dir)) * col;
+        } else if (params.x == 2.0) {
+            let d = v - pos;
+            let dist = length(d);
+            let atten = max(0.0, 1.0 - dist / params.y);
+            color += max(0.0, dot(n, -normalize(d))) * col * atten;
+        } else if (params.x == 3.0) {
+            let d = v - pos;
+            let dist = length(d);
+            let atten = max(0.0, 1.0 - dist / params.y);
+            let dn = d / dist;
+            var l = max(0.0, dot(n, -dn));
+            let pcos = dot(dn, dir);
+            let ccos = -params.z;
+            let falloff = (pcos - ccos) / (1.0 - ccos);
+            if (falloff < 0.0) {
+                l = 0.0;
+            }
+            l *= max(falloff, params.w);
+            // gl3 returns here (dropping the other lights); D3D adds spots up like the rest.
+            color += l * col * atten;
+        }
+    }
+    return color;
+}
+
+@vertex
+fn vs_mesh(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>) -> Out {
+    var o: Out;
+    let v = m.world * vec4<f32>(pos, 1.0);
+    o.pos = u.mvp * v;
+    let n = (m.world * vec4<f32>(normal, 0.0)).xyz;
+    var c = color;
+    c = vec4<f32>(c.rgb + m.ambient.rgb * m.surf.x, c.a);
+    c = vec4<f32>(c.rgb + dynamic_light(v.xyz, n) * m.surf.z, c.a);
+    o.color = clamp(c, vec4<f32>(0.0), vec4<f32>(1.0)) * m.mat_color;
+    o.uv = uv;
+    o.fog = clamp((o.pos.w - u.fog.y) * u.fog.z, u.fog.w, 1.0);
+    return o;
+}
+
 @fragment
 fn fs_simple(i: Out) -> @location(0) vec4<f32> {
     var c = i.color * textureSample(tex, samp, i.uv);
@@ -223,6 +324,19 @@ pub struct Renderer {
     texture_layout: wgpu::BindGroupLayout,
     uniform_layout: wgpu::BindGroupLayout,
     pipeline_layout: wgpu::PipelineLayout,
+    mesh_layout: wgpu::PipelineLayout,
+    model_layout: wgpu::BindGroupLayout,
+    model_stride: u64,
+    model_buf: wgpu::Buffer,
+    model_capacity: usize,
+    model_bind: wgpu::BindGroup,
+    models: Vec<ModelState>,
+    geometries: HashMap<u32, Geom>,
+    next_geometry: u32,
+    /// Textures and geometries destroyed while a recorded frame may still use them.
+    dead_textures: Vec<u32>,
+    dead_geometries: Vec<u32>,
+    retired: Vec<Geom>,
     pipelines: HashMap<PipeKey, wgpu::RenderPipeline>,
     samplers: HashMap<SamplerKey, wgpu::Sampler>,
     textures: HashMap<u32, Tex>,
@@ -247,6 +361,7 @@ pub struct Renderer {
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const ATTRS_2D: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x4, 1 => Unorm8x4, 2 => Float32x2];
 const ATTRS_3D: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Unorm8x4, 2 => Float32x2];
+const ATTRS_MESH: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x2];
 
 fn blend_factor(f: u32) -> wgpu::BlendFactor {
     use wgpu::BlendFactor as B;
@@ -339,6 +454,23 @@ impl Renderer {
             ],
         });
         let pipeline_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("im2d"), bind_group_layouts: &[Some(&uniform_layout), Some(&texture_layout)], immediate_size: 0 });
+        let model_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("model uniforms"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: true, min_binding_size: None },
+                count: None,
+            }],
+        });
+        let mesh_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("mesh"),
+            bind_group_layouts: &[Some(&uniform_layout), Some(&texture_layout), Some(&model_layout)],
+            immediate_size: 0,
+        });
+        let align = d.limits().min_uniform_buffer_offset_alignment as u64;
+        let model_stride = (std::mem::size_of::<ModelState>() as u64).next_multiple_of(align);
+        let (model_buf, model_bind) = Self::make_model_uniforms(gpu, &model_layout, model_stride, 64);
         let uniform_stride = (d.limits().min_uniform_buffer_offset_alignment as u64).max(std::mem::size_of::<Uniforms>() as u64);
         let (uniform_buf, uniform_bind) = Self::make_uniforms(gpu, &uniform_layout, uniform_stride, 256);
         let white = new_texture(gpu, wgpu::TextureFormat::Rgba8Unorm, 1, 1, 1);
@@ -351,6 +483,18 @@ impl Renderer {
             texture_layout,
             uniform_layout,
             pipeline_layout,
+            mesh_layout,
+            model_layout,
+            model_stride,
+            model_buf,
+            model_capacity: 64,
+            model_bind,
+            models: Vec::new(),
+            geometries: HashMap::new(),
+            next_geometry: 1,
+            dead_textures: Vec::new(),
+            dead_geometries: Vec::new(),
+            retired: Vec::new(),
             pipelines: HashMap::new(),
             samplers: HashMap::new(),
             textures: HashMap::new(),
@@ -389,6 +533,57 @@ impl Renderer {
             }],
         });
         (buf, bind)
+    }
+
+    fn make_model_uniforms(gpu: &Gpu, layout: &wgpu::BindGroupLayout, stride: u64, capacity: usize) -> (wgpu::Buffer, wgpu::BindGroup) {
+        let buf = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("model uniforms"),
+            size: stride * capacity as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("model uniforms"),
+            layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &buf, offset: 0, size: wgpu::BufferSize::new(std::mem::size_of::<ModelState>() as u64) }),
+            }],
+        });
+        (buf, bind)
+    }
+
+    /// Creates or replaces a geometry (vertices + triangle-list indices); returns its id.
+    pub fn upload_geometry(&mut self, gpu: &Gpu, id: u32, vertices: &[MeshVertex], indices: &[u16]) -> u32 {
+        let id = if id != 0 && self.geometries.contains_key(&id) {
+            id
+        } else {
+            let id = self.next_geometry;
+            self.next_geometry += 1;
+            id
+        };
+        // SAFETY: MeshVertex is repr(C) plain data without padding (36 bytes, asserted above).
+        let vbytes = unsafe { std::slice::from_raw_parts(vertices.as_ptr().cast::<u8>(), std::mem::size_of_val(vertices)) };
+        let mut ibytes: Vec<u8> = indices.iter().flat_map(|i| i.to_le_bytes()).collect();
+        // Buffer copies come in multiples of 4 bytes.
+        ibytes.resize(ibytes.len().next_multiple_of(4).max(4), 0);
+        let mut vb = vbytes.to_vec();
+        vb.resize(vb.len().next_multiple_of(4).max(4), 0);
+        use wgpu::util::DeviceExt;
+        let geom = Geom {
+            vertices: gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("geometry vertices"), contents: &vb, usage: wgpu::BufferUsages::VERTEX }),
+            indices: gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("geometry indices"), contents: &ibytes, usage: wgpu::BufferUsages::INDEX }),
+        };
+        // A replaced geometry may still be drawn by the frame being recorded: keep the old
+        // buffers alive until the frame is done.
+        if let Some(old) = self.geometries.insert(id, geom) {
+            self.retired.push(old);
+        }
+        id
+    }
+
+    pub fn destroy_geometry(&mut self, id: u32) {
+        self.dead_geometries.push(id);
     }
 
     fn make_vertices(gpu: &Gpu, bytes: usize) -> wgpu::Buffer {
@@ -448,8 +643,7 @@ impl Renderer {
     }
 
     pub fn destroy_texture(&mut self, id: u32) {
-        self.textures.remove(&id);
-        self.bind_groups.retain(|k, _| k.0 != id);
+        self.dead_textures.push(id);
     }
 
     /// Camera clear: colour (when given) and/or depth.
@@ -473,7 +667,7 @@ impl Renderer {
         let first = self.verts.len() as u32;
         self.verts.extend(self.scratch_out.iter().filter_map(|&i| verts.get(i as usize)));
         let count = self.verts.len() as u32 - first;
-        self.record(state, prim, false, first, count, &[0.0; 16]);
+        self.record(state, prim, Kind::Im2D, first, count, &[0.0; 16], None);
     }
 
     /// An Im3D primitive: `mvp` = projection * view * world (column-major).
@@ -482,10 +676,24 @@ impl Renderer {
         let first = self.verts3.len() as u32;
         self.verts3.extend(self.scratch_out.iter().filter_map(|&i| verts.get(i as usize)));
         let count = self.verts3.len() as u32 - first;
-        self.record(state, prim, true, first, count, mvp);
+        self.record(state, prim, Kind::Im3D, first, count, mvp, None);
     }
 
-    fn record(&mut self, state: &DrawState, prim: u32, im3d: bool, first: u32, count: u32, mvp: &Mat4) {
+    /// Triangles `first..first + count` of the index list of a stored geometry, lit with
+    /// `model`; `view_proj` = projection * view.
+    pub fn draw_mesh(&mut self, state: &DrawState, geometry: u32, first: u32, count: u32, view_proj: &Mat4, model: &ModelState) {
+        if !self.geometries.contains_key(&geometry) {
+            return;
+        }
+        if self.models.last() != Some(model) {
+            self.models.push(*model);
+        }
+        let mi = self.models.len() as u32 - 1;
+        self.record(state, 3, Kind::Mesh, first, count, view_proj, Some((geometry, mi)));
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn record(&mut self, state: &DrawState, prim: u32, kind: Kind, first: u32, count: u32, mvp: &Mat4, mesh: Option<(u32, u32)>) {
         if count == 0 {
             return;
         }
@@ -542,7 +750,7 @@ impl Renderer {
         let uniform = self.uniforms.len() as u32 - 1;
 
         let pipe = PipeKey {
-            im3d,
+            kind,
             lines: is_line_primitive(prim),
             blend: (state.blend != 0).then_some((state.src_blend, state.dst_blend)),
             z_test: state.z_test != 0,
@@ -551,7 +759,8 @@ impl Renderer {
         };
         let texture = if self.textures.contains_key(&state.texture) { state.texture } else { 0 };
         let sampler = SamplerKey { filter: state.filter, address_u: state.address_u, address_v: state.address_v };
-        if let Some(Op::Draw { pipe: p, texture: t, sampler: s, uniform: un, first: f, count: n }) = self.ops.last_mut()
+        if let Some(Op::Draw { pipe: p, texture: t, sampler: s, uniform: un, first: f, count: n, mesh: me }) = self.ops.last_mut()
+            && *me == mesh
             && *p == pipe
             && *t == texture
             && *s == sampler
@@ -561,7 +770,7 @@ impl Renderer {
             *n += count;
             return;
         }
-        self.ops.push(Op::Draw { pipe, texture, sampler, uniform, first, count });
+        self.ops.push(Op::Draw { pipe, texture, sampler, uniform, first, count, mesh });
     }
 
     fn ensure_pipeline(&mut self, gpu: &Gpu, key: PipeKey) {
@@ -573,15 +782,23 @@ impl Renderer {
             wgpu::BlendState { color: c, alpha: c }
         });
         let p = gpu.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(if key.im3d { "im3d" } else { "im2d" }),
-            layout: Some(&self.pipeline_layout),
+            label: Some(match key.kind {
+                Kind::Im2D => "im2d",
+                Kind::Im3D => "im3d",
+                Kind::Mesh => "mesh",
+            }),
+            layout: Some(if key.kind == Kind::Mesh { &self.mesh_layout } else { &self.pipeline_layout }),
             vertex: wgpu::VertexState {
                 module: &self.shader,
-                entry_point: Some(if key.im3d { "vs_3d" } else { "vs_2d" }),
-                buffers: &[Some(if key.im3d {
-                    wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex3D>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_3D }
-                } else {
-                    wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex2D>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_2D }
+                entry_point: Some(match key.kind {
+                    Kind::Im2D => "vs_2d",
+                    Kind::Im3D => "vs_3d",
+                    Kind::Mesh => "vs_mesh",
+                }),
+                buffers: &[Some(match key.kind {
+                    Kind::Im2D => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex2D>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_2D },
+                    Kind::Im3D => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex3D>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_3D },
+                    Kind::Mesh => wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<MeshVertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &ATTRS_MESH },
                 })],
                 compilation_options: Default::default(),
             },
@@ -658,6 +875,21 @@ impl Renderer {
         let verts = std::mem::take(&mut self.verts);
         let verts3 = std::mem::take(&mut self.verts3);
         let uniforms = std::mem::take(&mut self.uniforms);
+        let models = std::mem::take(&mut self.models);
+        if models.len() > self.model_capacity {
+            let cap = models.len().next_power_of_two();
+            (self.model_buf, self.model_bind) = Self::make_model_uniforms(gpu, &self.model_layout, self.model_stride, cap);
+            self.model_capacity = cap;
+        }
+        if !models.is_empty() {
+            let mut bytes = vec![0u8; models.len() * self.model_stride as usize];
+            for (i, mdl) in models.iter().enumerate() {
+                // SAFETY: ModelState is repr(C) f32 data.
+                let src = unsafe { std::slice::from_raw_parts((mdl as *const ModelState).cast::<u8>(), MODEL_FLOATS * 4) };
+                bytes[i * self.model_stride as usize..][..src.len()].copy_from_slice(src);
+            }
+            gpu.queue.write_buffer(&self.model_buf, 0, &bytes);
+        }
 
         if self.depth.as_ref().is_none_or(|d| d.2 != size) {
             let t = gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -737,8 +969,9 @@ impl Renderer {
         };
 
         let mut pass: Option<wgpu::RenderPass<'static>> = None;
-        // Which vertex buffer the pass has bound (None after starting a pass).
-        let mut bound: Option<bool> = None;
+        // Which immediate vertex buffer the pass has bound (None after starting a pass or after a
+        // geometry's buffers).
+        let mut bound: Option<Kind> = None;
         let mut started = false;
         for op in &ops {
             match *op {
@@ -748,21 +981,33 @@ impl Renderer {
                     started = true;
                     bound = None;
                 }
-                Op::Draw { pipe, texture, sampler, uniform, first, count } => {
+                Op::Draw { pipe, texture, sampler, uniform, first, count, mesh } => {
                     if pass.is_none() {
                         pass = Some(begin(enc, !started, None, false));
                         started = true;
                         bound = None;
                     }
                     let p = pass.as_mut().unwrap();
-                    if bound != Some(pipe.im3d) {
-                        p.set_vertex_buffer(0, if pipe.im3d { self.vertex3_buf.slice(..) } else { self.vertex_buf.slice(..) });
-                        bound = Some(pipe.im3d);
-                    }
                     p.set_pipeline(&self.pipelines[&pipe]);
                     p.set_bind_group(0, &self.uniform_bind, &[(uniform as u64 * self.uniform_stride) as u32]);
                     p.set_bind_group(1, &self.bind_groups[&(texture, sampler)], &[]);
-                    p.draw(first..first + count, 0..1);
+                    match mesh {
+                        Some((geometry, model)) => {
+                            let Some(g) = self.geometries.get(&geometry) else { continue };
+                            p.set_bind_group(2, &self.model_bind, &[(model as u64 * self.model_stride) as u32]);
+                            p.set_vertex_buffer(0, g.vertices.slice(..));
+                            p.set_index_buffer(g.indices.slice(..), wgpu::IndexFormat::Uint16);
+                            bound = None;
+                            p.draw_indexed(first..first + count, 0, 0..1);
+                        }
+                        None => {
+                            if bound != Some(pipe.kind) {
+                                p.set_vertex_buffer(0, if pipe.kind == Kind::Im3D { self.vertex3_buf.slice(..) } else { self.vertex_buf.slice(..) });
+                                bound = Some(pipe.kind);
+                            }
+                            p.draw(first..first + count, 0..1);
+                        }
+                    }
                 }
             }
         }
@@ -775,6 +1020,7 @@ impl Renderer {
         self.verts = verts;
         self.verts3 = verts3;
         self.uniforms = uniforms;
+        self.models = models;
     }
 
     /// Drops the recorded frame (keeping the allocations) to start recording the next one.
@@ -783,6 +1029,15 @@ impl Renderer {
         self.verts.clear();
         self.verts3.clear();
         self.uniforms.clear();
+        self.models.clear();
+        self.retired.clear();
+        for id in std::mem::take(&mut self.dead_textures) {
+            self.textures.remove(&id);
+            self.bind_groups.retain(|k, _| k.0 != id);
+        }
+        for id in std::mem::take(&mut self.dead_geometries) {
+            self.geometries.remove(&id);
+        }
     }
 }
 

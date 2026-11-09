@@ -69,6 +69,23 @@ can't be compared automatically: the menu background animates (two GL3 runs diff
   sea at the horizon, the player's shadow, car lights. Tested offscreen: projection and depth
   order against draw order, on both backends.
 
+**Stage 1, step 4 done: the default atomic pipeline, so the world draws.** `wgpu/wgpupipe.cpp`
+instances each geometry once into a host vertex/index buffer (positions, normals, prelit
+colours, first UV set; GL's defaults for missing attributes; strips turned into lists), rebuilt
+when the mesh changes or data was locked, freed with the geometry (geoplg.cpp). Every mesh is
+drawn with gl3's default-pipeline maths: prelit + ambient * surfAmbient + directional / point /
+spot lights * surfDiffuse, clamped, times the material colour (white unless MODULATE), with the
+lights gathered like gl3 `lightingCB`, textures set like gl3 `setTexture` (texture's filter and
+addressing), vertex alpha per mesh, and the PS2 GS alpha-test emulation. The host keeps
+geometries by id; destroyed textures and geometries live until the frame that may still use them
+is drawn. MatFX atomics (cars) use the default pipeline for now (no environment-map pass).
+Checked: `tests/im2d.rs` lit-mesh case on both backends; in game the saveload lobby and all spot
+screenshots show the same geometry and lighting as GL3. Still different: no colour filter / post
+effects (GL3's warmer grading; needs the frame as a texture), skinned models (peds, the player)
+aren't drawn yet (librw gives platforms without a skin pipeline a do-nothing placeholder), no
+car reflections. One GL3 bug not copied: its spot light code returns early and drops the other
+lights.
+
 ## What the game calls
 
 The game reaches librw only through the RenderWare-style API in `cpp/re3-miami/src/fakerw`
@@ -151,7 +168,8 @@ struct EngineOpenParams;
 
 Order inside stage 1, smallest testable steps first: device + camera clear + show raster (a
 blank game frame, done) -> rasters and textures + Im2D + render states (whole front end, done) ->
-DXT kept compressed (BC, done) -> Im3D (effects, done) -> default atomic pipeline (world, cars) -> skin -> MatFX.
+DXT kept compressed (BC, done) -> Im3D (effects, done) -> default atomic pipeline (world, cars,
+done) -> skin -> MatFX -> post effects (colour filter: frame as a texture).
 The front-end and HUD come first because the boot scenario and every in-game screenshot show
 them.
 

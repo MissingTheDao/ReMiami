@@ -137,6 +137,17 @@ uint32 uploadRaster(Raster *raster);
 void allocateDXT(Raster *raster, int32 dxt, int32 numLevels, bool32 hasAlpha);
 int32 dxtLevelSize(int32 dxt, int32 width, int32 height);
 
+// Device state for the next draw (uploads the bound raster if needed) and the camera's
+// projection * view (column-major), as set up by the last beginUpdate.
+void currentDrawState(DrawState *s);
+const float32 *viewProjMatrix(void);
+
+// Default atomic pipeline (wgpupipe.cpp) and freeing of its instance data with the geometry.
+ObjPipeline *makeDefaultPipeline(void);
+// MatFX atomics (cars, ...): the default pipeline for now (no environment map pass yet).
+void initMatFX(void);
+void *destroyNativeData(void *object, int32, int32);
+
 extern int32 nativeRasterOffset;
 #define GETWGPURASTEREXT(raster) PLUGINOFFSET(rw::wgpu::WgpuRaster, raster, rw::wgpu::nativeRasterOffset)
 

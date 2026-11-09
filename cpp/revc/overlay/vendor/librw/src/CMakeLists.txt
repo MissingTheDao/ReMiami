@@ -84,6 +84,7 @@ add_library(librw
 
     wgpu/rwwgpu.h
     wgpu/wgpudevice.cpp
+    wgpu/wgpupipe.cpp
     wgpu/wgpuraster.cpp
 
     lodepng/lodepng.h

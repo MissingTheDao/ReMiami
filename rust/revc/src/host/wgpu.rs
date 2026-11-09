@@ -4,7 +4,7 @@
 //! revc_rw::frame::Renderer and drawn when the frame is presented; Im3D and models come next.
 
 use revc_rw::Backend;
-use revc_rw::frame::{DrawState, Mat4, Renderer, TexData, Vertex2D, Vertex3D};
+use revc_rw::frame::{DrawState, Mat4, MeshVertex, ModelState, Renderer, TexData, Vertex2D, Vertex3D};
 use revc_rw::present::{NativeWindow, Presenter};
 use sdl3_sys::everything::*;
 use std::cell::{Cell, RefCell};
@@ -177,6 +177,47 @@ pub unsafe extern "C" fn revc_rw_im3d(state: *const DrawState, prim: u32, vertic
     RENDERER.with(|c| {
         if let Some(r) = c.borrow_mut().as_mut() {
             r.draw_3d(state, prim, verts, idx, &mvp);
+        }
+    });
+}
+
+/// Creates (id 0) or replaces a model geometry; returns its id, 0 without a window.
+///
+/// # Safety
+/// `vertices` holds `num_vertices` MeshVertex, `indices` `num_indices` u16 (triangle list).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_rw_geometry_upload(id: u32, vertices: *const MeshVertex, num_vertices: i32, indices: *const u16, num_indices: i32) -> u32 {
+    let verts = if vertices.is_null() || num_vertices <= 0 { &[][..] } else { unsafe { std::slice::from_raw_parts(vertices, num_vertices as usize) } };
+    let idx = if indices.is_null() || num_indices <= 0 { &[][..] } else { unsafe { std::slice::from_raw_parts(indices, num_indices as usize) } };
+    PRESENTER.with(|pc| {
+        RENDERER.with(|rc| match (pc.borrow().as_ref(), rc.borrow_mut().as_mut()) {
+            (Some(p), Some(r)) => r.upload_geometry(&p.gpu, id, verts, idx),
+            _ => 0,
+        })
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_rw_geometry_destroy(id: u32) {
+    RENDERER.with(|c| {
+        if let Some(r) = c.borrow_mut().as_mut() {
+            r.destroy_geometry(id);
+        }
+    });
+}
+
+/// # Safety
+/// `state` and `model` (a ModelState) are valid; `view_proj` points at 16 floats.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_rw_draw_mesh(state: *const DrawState, geometry: u32, first: u32, count: u32, view_proj: *const f32, model: *const ModelState) {
+    if state.is_null() || view_proj.is_null() || model.is_null() {
+        return;
+    }
+    let (state, model) = unsafe { (&*state, &*model) };
+    let vp: Mat4 = unsafe { *view_proj.cast::<Mat4>() };
+    RENDERER.with(|c| {
+        if let Some(r) = c.borrow_mut().as_mut() {
+            r.draw_mesh(state, geometry, first, count, &vp, model);
         }
     });
 }

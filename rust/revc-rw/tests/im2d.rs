@@ -225,3 +225,63 @@ fn im3d_vulkan() {
 fn im3d_gl() {
     im3d(Backend::Gl);
 }
+
+/// Lit geometry (gl3 default pipeline maths): prelit black + ambient * surfAmbient + directional
+/// * surfDiffuse, clamped, times the material colour; two meshes as index ranges of one geometry.
+fn mesh(backend: Backend) {
+    use revc_rw::frame::{Mat4, MeshVertex, ModelState};
+    let gpu = Gpu::headless(backend).expect("gpu");
+    let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+    let (n, f) = (1.0f32, 100.0f32);
+    let proj: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, f / (f - n), 1.0, 0.0, 0.0, -n * f / (f - n), 0.0];
+    // Two quads facing the camera (normal -z) at z = 10, left and right of the centre.
+    let v = |x: f32, y: f32| MeshVertex { pos: [x, y, 0.0], normal: [0.0, 0.0, -1.0], color: [0, 0, 0, 255], uv: [0.0, 0.0] };
+    let verts = [v(-5.0, -5.0), v(0.0, -5.0), v(0.0, 5.0), v(-5.0, 5.0), v(0.0, -5.0), v(5.0, -5.0), v(5.0, 5.0), v(0.0, 5.0)];
+    let indices = [0u16, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
+    let geo = r.upload_geometry(&gpu, 0, &verts, &indices);
+    let mut lights = [[0.0f32; 4]; 32];
+    lights[0] = [1.0, 0.0, 0.0, 0.0]; // directional
+    lights[2] = [0.0, 0.0, 1.0, 0.0]; // shining along +z, at the camera-facing quads
+    lights[3] = [0.5, 0.0, 0.0, 1.0];
+    let mut world = [0.0f32; 16];
+    world[0] = 1.0;
+    world[5] = 1.0;
+    world[10] = 1.0;
+    world[14] = 10.0;
+    world[15] = 1.0;
+    let model = ModelState { world, mat_color: [1.0; 4], surf_props: [1.0, 0.0, 1.0, 0.0], ambient: [0.2, 0.2, 0.2, 1.0], lights };
+    let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, ..base() };
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.draw_mesh(&state, geo, 0, 6, &proj, &model);
+    r.draw_mesh(&state, geo, 6, 6, &proj, &ModelState { mat_color: [0.5, 0.5, 0.5, 1.0], ..model });
+    let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    r.encode(&gpu, &mut enc, &target.create_view(&Default::default()), (SIZE, SIZE));
+    r.end_frame();
+    let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+    gpu.queue.submit([enc.finish()]);
+    let img = readback_finish(&gpu, rb).expect("readback");
+    // 0.2 + 0.5 = 0.7 red, 0.2 green/blue; right quad halved.
+    for ((x, y), want) in [((20, 32), [179, 51, 51, 255]), ((44, 32), [89, 26, 26, 255]), ((2, 2), [0, 0, 0, 255])] {
+        assert!(near(px(&img, x, y), want), "{backend:?} mesh pixel ({x},{y}): got {:?}, want {want:?}", px(&img, x, y));
+    }
+}
+
+#[test]
+fn mesh_vulkan() {
+    mesh(Backend::Vulkan);
+}
+
+#[test]
+fn mesh_gl() {
+    mesh(Backend::Gl);
+}
