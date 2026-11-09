@@ -114,6 +114,19 @@ run yet; the user likes the unfiltered look, so the filter will get an off switc
   the game code and D3D semantics, so the GL3 references are close guides here, not pixel truth;
   the wgpu build will need its own reference set when it becomes the default.
 
+**Colour filter options (stage 1, step 7).** The wgpu build now has re3's colour filter options
+too (`EXTENDED_COLOURFILTER`): the WGPU device has an Im2D override shader like gl3's
+`im2dOverrideShader`, with re3's colourfilterVC (PS2/Xbox filter) and contrast (mobile) shaders
+ported to WGSL (`tests/im2d.rs` checks both against the formulas). Display Setup > Colour Filter
+offers None, Simple, PS2/Xbox (re3's "Normal", the default), Mobile and the new PC mode (the
+original PC filter, CMBlur, with trails per the Trails setting; value 4 so saved settings keep
+their meaning). This explained the earlier gap: the GL3 references use PS2/Xbox, the wgpu build
+had been running the PC filter. With the same filter the wgpu build passes saveload against the
+GL3 reference (0.31 %); five spots are 0.31-0.37 %, three 0.6-1.0 %.
+References: no screenshots of the real PS2 or Xbox versions were found to compare with. The
+re3/SkyGfx documentation describes the filter as shared by PS2 and Xbox ("the original PS2/XBOX
+filter"), so there is one mode for both.
+
 ## What the game calls
 
 The game reaches librw only through the RenderWare-style API in `cpp/re3-miami/src/fakerw`

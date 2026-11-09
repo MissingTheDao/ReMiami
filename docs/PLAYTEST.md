@@ -54,6 +54,8 @@ Build: `cd rust && CARGO_TARGET_DIR=target-wgpu cargo build --features wgpu`, ru
       backends; nothing looks inside out or too bright.
 - [ ] Peds walk and animate normally (skinning); no stretched limbs.
 - [ ] Menus, HUD, text, radar look like the normal build.
+- [ ] Options > Display Setup > Colour Filter: each of None, Simple, PS2/XBOX, Mobile, PC
+      changes the look at once and is kept after a restart (both builds).
 
 ## Task 7 leftovers
 

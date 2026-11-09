@@ -183,6 +183,10 @@ pub struct DrawState {
     pub fog_color: u32,
     /// Screen pixels to clip space: x * xform[0] + xform[2], y * xform[1] + xform[3].
     pub xform: [f32; 4],
+    /// Im2D override shader (re3 CPostFX): 0 none, 1 PS2/Xbox colour filter (params[0..4] blur
+    /// colour), 2 mobile contrast (params[0..3] multiply, params[4..7] add).
+    pub shader: u32,
+    pub shader_params: [f32; 8],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -207,6 +211,8 @@ struct MeshDraw {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct PipeKey {
     kind: Kind,
+    /// Im2D override shader (DrawState::shader).
+    shader: u32,
     lines: bool,
     blend: Option<(u32, u32)>,
     z_test: bool,
@@ -221,8 +227,9 @@ struct SamplerKey {
     address_v: u32,
 }
 
-/// xform, alpha window, fog, fog colour, then the Im3D model-view-projection matrix.
-type Uniforms = [f32; 32];
+/// xform, alpha window, fog, fog colour, the Im3D model-view-projection matrix, then the
+/// override shader's parameters.
+type Uniforms = [f32; 40];
 
 #[derive(Clone, Copy, Debug)]
 enum Op {
@@ -308,7 +315,7 @@ impl TexData {
 }
 
 const SHADER: &str = r#"
-struct U { xform: vec4<f32>, alpha: vec4<f32>, fog: vec4<f32>, fog_color: vec4<f32>, mvp: mat4x4<f32> };
+struct U { xform: vec4<f32>, alpha: vec4<f32>, fog: vec4<f32>, fog_color: vec4<f32>, mvp: mat4x4<f32>, p0: vec4<f32>, p1: vec4<f32> };
 @group(0) @binding(0) var<uniform> u: U;
 @group(1) @binding(0) var tex: texture_2d<f32>;
 @group(1) @binding(1) var samp: sampler;
@@ -474,6 +481,30 @@ fn fs_env(i: OutEnv) -> @location(0) vec4<f32> {
         discard;
     }
     return c;
+}
+
+// re3 colourfilterVC.frag (PS2/Xbox colour filter) and contrast.frag (mobile), on the copy of
+// the frame; no fog or alpha test, opaque.
+@fragment
+fn fs_colourfilter(i: Out) -> @location(0) vec4<f32> {
+    let blur = u.p0;
+    let a = blur.a;
+    let doublec = clamp(blur * 2.0, vec4<f32>(0.0), vec4<f32>(1.0));
+    let dst = textureSample(tex, samp, i.uv);
+    var prev = dst;
+    for (var k = 0; k < 5; k++) {
+        var tmp = dst * (1.0 - a) + prev * doublec * a;
+        tmp += prev * blur;
+        tmp += prev * blur;
+        prev = clamp(tmp, vec4<f32>(0.0), vec4<f32>(1.0));
+    }
+    return vec4<f32>(prev.rgb, 1.0);
+}
+
+@fragment
+fn fs_contrast(i: Out) -> @location(0) vec4<f32> {
+    let dst = textureSample(tex, samp, i.uv);
+    return vec4<f32>(dst.rgb * u.p0.rgb + u.p1.rgb, 1.0);
 }
 
 @fragment
@@ -1009,13 +1040,24 @@ impl Renderer {
             0.0,
             0.0,
             0.0,
-        ];
+                    0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+];
         // GL3 computes the range unguarded; keep the uniform finite either way.
         let mut u = u;
         if !u[10].is_finite() {
             u[10] = 0.0;
         }
-        u[16..].copy_from_slice(mvp);
+        u[16..32].copy_from_slice(mvp);
+        if kind == Kind::Im2D {
+            u[32..40].copy_from_slice(&state.shader_params);
+        }
         if self.uniforms.last() != Some(&u) {
             self.uniforms.push(u);
         }
@@ -1023,6 +1065,7 @@ impl Renderer {
 
         let pipe = PipeKey {
             kind,
+            shader: if kind == Kind::Im2D { state.shader } else { 0 },
             lines: is_line_primitive(prim),
             blend: (state.blend != 0).then_some((state.src_blend, state.dst_blend)),
             z_test: state.z_test != 0,
@@ -1086,7 +1129,12 @@ impl Renderer {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &self.shader,
-                entry_point: Some(if key.kind == Kind::MeshEnv { "fs_env" } else { "fs_simple" }),
+                entry_point: Some(match (key.kind, key.shader) {
+                    (Kind::MeshEnv, _) => "fs_env",
+                    (Kind::Im2D, 1) => "fs_colourfilter",
+                    (Kind::Im2D, 2) => "fs_contrast",
+                    _ => "fs_simple",
+                }),
                 // The frame has no alpha channel (D3D's X8R8G8B8 back buffer, GL3's window): alpha
                 // stays 1, so destination alpha and copies of the frame read opaque.
                 targets: &[Some(wgpu::ColorTargetState { format: self.format, blend, write_mask: wgpu::ColorWrites::COLOR })],

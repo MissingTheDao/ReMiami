@@ -127,7 +127,14 @@ struct DrawState
 	float32 fogStart, fogEnd;
 	uint32 fogColor;
 	float32 xform[4];
+	// Im2D override shader (re3 CPostFX colour filters): 0 none, 1 PS2/Xbox colour filter
+	// (params[0..3] blur colour), 2 mobile contrast (params[0..2] mult, [4..6] add).
+	uint32 shader;
+	float32 shaderParams[8];
 };
+
+// Like gl3::im2dOverrideShader: Im2D draws use this shader until it is reset to 0.
+void setIm2DOverride(uint32 shader, const float32 *params);
 
 // Uploads the raster if it changed; returns its host texture (0 if it has no pixels).
 uint32 uploadRaster(Raster *raster);

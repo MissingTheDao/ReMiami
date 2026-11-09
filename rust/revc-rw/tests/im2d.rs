@@ -451,3 +451,58 @@ fn copy_frame_vulkan() {
 fn copy_frame_gl() {
     copy_frame(Backend::Gl);
 }
+
+/// re3's PS2/Xbox colour filter (colourfilterVC) and mobile contrast shaders against the same
+/// formulas on the CPU.
+fn colour_filter(backend: Backend) {
+    let gpu = Gpu::headless(backend).expect("gpu");
+    let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+    let src = [200u8, 120, 40, 255];
+    let texels: Vec<u8> = src.repeat(4);
+    let tex = r.upload_texture(&gpu, 0, 2, 2, TexData::Rgba8, &[&texels], false);
+    let blur = [0.4f32, 0.3, 0.5, 30.0 / 255.0];
+    let mut p = [0.0f32; 8];
+    p[..4].copy_from_slice(&blur);
+    let contrast = [1.2f32, 1.1, 1.3, 0.0, 0.02, -0.01, 0.03, 0.0];
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.draw_2d(&DrawState { texture: tex, shader: 1, shader_params: p, ..base() }, 5, &quad(0.0, 0.0, 32.0, 64.0, [255; 4]), None);
+    r.draw_2d(&DrawState { texture: tex, shader: 2, shader_params: contrast, ..base() }, 5, &quad(32.0, 0.0, 64.0, 64.0, [255; 4]), None);
+    let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    r.encode(&gpu, &mut enc, &target.create_view(&Default::default()), (SIZE, SIZE));
+    r.end_frame();
+    let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+    gpu.queue.submit([enc.finish()]);
+    let img = readback_finish(&gpu, rb).expect("readback");
+    // CPU versions.
+    let dst: Vec<f32> = src.iter().map(|&c| c as f32 / 255.0).collect();
+    let a = blur[3];
+    let mut prev = dst.clone();
+    for _ in 0..5 {
+        prev = (0..4).map(|c| (dst[c] * (1.0 - a) + prev[c] * (blur[c] * 2.0).clamp(0.0, 1.0) * a + 2.0 * prev[c] * blur[c]).clamp(0.0, 1.0)).collect();
+    }
+    let to8 = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let want_vc = [to8(prev[0]), to8(prev[1]), to8(prev[2]), 255];
+    let want_ct = [to8(dst[0] * contrast[0] + contrast[4]), to8(dst[1] * contrast[1] + contrast[5]), to8(dst[2] * contrast[2] + contrast[6]), 255];
+    assert!(near(px(&img, 16, 32), want_vc), "{backend:?} colourfilterVC: got {:?}, want {want_vc:?}", px(&img, 16, 32));
+    assert!(near(px(&img, 48, 32), want_ct), "{backend:?} contrast: got {:?}, want {want_ct:?}", px(&img, 48, 32));
+}
+
+#[test]
+fn colour_filter_vulkan() {
+    colour_filter(Backend::Vulkan);
+}
+
+#[test]
+fn colour_filter_gl() {
+    colour_filter(Backend::Gl);
+}
