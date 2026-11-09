@@ -19,6 +19,7 @@ mod tempcolmodels;
 mod handling;
 mod weaponinfo;
 mod pedtype;
+mod objectdata;
 mod savegame;
 mod host;
 mod testdrive;
