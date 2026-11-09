@@ -187,6 +187,8 @@ pub struct DrawState {
     /// colour), 2 mobile contrast (params[0..3] multiply, params[4..7] add).
     pub shader: u32,
     pub shader_params: [f32; 8],
+    /// Anisotropic filtering (1 = off), used with trilinear filtering.
+    pub max_anisotropy: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -225,6 +227,7 @@ struct SamplerKey {
     filter: u32,
     address_u: u32,
     address_v: u32,
+    anisotropy: u16,
 }
 
 /// xform, alpha window, fog, fog colour, the Im3D model-view-projection matrix, then the
@@ -988,7 +991,7 @@ impl Renderer {
         };
         let env = extras.env.map(|e| {
             let t = if self.textures.contains_key(&e.texture) { e.texture } else { 0 };
-            (t, SamplerKey { filter: e.filter, address_u: e.address_u, address_v: e.address_v })
+            (t, SamplerKey { filter: e.filter, address_u: e.address_u, address_v: e.address_v, anisotropy: 1 })
         });
         // Skinned atomics never take the MatFX path (as in gl3, whose skin pipeline has no env pass).
         let kind = if env.is_some() && kind == Kind::Mesh { Kind::MeshEnv } else { kind };
@@ -1073,7 +1076,7 @@ impl Renderer {
             cull: state.cull,
         };
         let texture = if self.textures.contains_key(&state.texture) { state.texture } else { 0 };
-        let sampler = SamplerKey { filter: state.filter, address_u: state.address_u, address_v: state.address_v };
+        let sampler = SamplerKey { filter: state.filter, address_u: state.address_u, address_v: state.address_v, anisotropy: state.max_anisotropy.clamp(1, 16) as u16 };
         if let Some(Op::Draw { pipe: p, texture: t, sampler: s, uniform: un, first: f, count: n, mesh: me }) = self.ops.last_mut()
             && *me == mesh
             && *p == pipe
@@ -1180,6 +1183,10 @@ impl Renderer {
                 6 => (L, L, M::Linear, true),
                 _ => (L, L, M::Nearest, false),
             };
+            // Anisotropic filtering needs all-linear filtering in wgpu; GL applies it to any
+            // mipmapped linear filter, so those become trilinear while it is on.
+            let aniso = if mips && min == L && key.anisotropy > 1 { key.anisotropy } else { 1 };
+            let mip = if aniso > 1 { M::Linear } else { mip };
             gpu.device.create_sampler(&wgpu::SamplerDescriptor {
                 label: Some("raster"),
                 address_mode_u: address_mode(key.address_u),
@@ -1188,6 +1195,7 @@ impl Renderer {
                 min_filter: min,
                 mipmap_filter: mip,
                 lod_max_clamp: if mips { 32.0 } else { 0.0 },
+                anisotropy_clamp: aniso,
                 ..Default::default()
             })
         });

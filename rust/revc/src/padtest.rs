@@ -95,6 +95,9 @@ pub struct PadTest {
     frames: u32,
     /// Game time the current step started (for waits).
     t0: u32,
+    /// Game time the scenario started: screenshots are taken at fixed times after it, so animated
+    /// things in the scene (pickups, zone names) look the same whatever the frame pacing.
+    start: Option<u32>,
     ps5: Option<SDL_JoystickID>,
     deck: Option<SDL_JoystickID>,
     pub log: Vec<String>,
@@ -106,6 +109,9 @@ pub struct PadTest {
 const STEP_LIMIT: u32 = 120;
 /// Help box fade-in before a glyph screenshot.
 const HELP_SETTLE_MS: u32 = 1500;
+/// Game time after the scenario start of the three glyph screenshots (each step needs well under
+/// a second plus HELP_SETTLE_MS; the log shows the margin).
+const CAPTURE_AT_MS: [u32; 3] = [4000, 9000, 14000];
 
 impl PadTest {
     fn next(&mut self) {
@@ -135,7 +141,18 @@ impl PadTest {
         }
         self.frames += 1;
         let waited_too_long = self.frames > STEP_LIMIT;
-        let settled = unsafe { revc_test_game_ms() }.wrapping_sub(self.t0) >= HELP_SETTLE_MS;
+        let now = unsafe { revc_test_game_ms() };
+        let start = *self.start.get_or_insert(now);
+        let help_shown = now.wrapping_sub(self.t0) >= HELP_SETTLE_MS;
+        let capture_index = match self.step {
+            4 => 0,
+            9 => 1,
+            _ => 2,
+        };
+        let settled = help_shown && now.wrapping_sub(start) >= CAPTURE_AT_MS[capture_index];
+        if settled && matches!(self.step, 4 | 9 | 12) {
+            self.log.push(format!("capture at +{} ms (help box up since +{} ms)", now.wrapping_sub(start), self.t0.wrapping_add(HELP_SETTLE_MS).wrapping_sub(start)));
+        }
         match self.step {
             0 => {
                 RUMBLE.lock().unwrap().clear();

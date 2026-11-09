@@ -111,6 +111,7 @@ struct WgpuRaster
 	uint32 texId;		// host texture, 0 = not uploaded yet
 	bool32 dirty;		// written since the last upload
 	bool32 autogenMipmap;	// MIPMAP|AUTOMIPMAP: one level here, the host builds the chain
+	int32 maxAnisotropy;	// as last set by a texture using the raster (gl3 natras->maxAnisotropy)
 };
 
 // One draw's device state, as the Rust host reads it (revc_rw::frame::DrawState).
@@ -131,6 +132,7 @@ struct DrawState
 	// (params[0..3] blur colour), 2 mobile contrast (params[0..2] mult, [4..6] add).
 	uint32 shader;
 	float32 shaderParams[8];
+	uint32 maxAnisotropy;
 };
 
 // Like gl3::im2dOverrideShader: Im2D draws use this shader until it is reset to 0.

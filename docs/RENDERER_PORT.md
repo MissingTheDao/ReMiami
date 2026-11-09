@@ -127,6 +127,22 @@ References: no screenshots of the real PS2 or Xbox versions were found to compar
 re3/SkyGfx documentation describes the filter as shared by PS2 and Xbox ("the original PS2/XBOX
 filter"), so there is one mode for both.
 
+**Own regression references for the wgpu build (stage 1, step 8).** `scripts/test.sh --wgpu`
+builds the wgpu variant (rust/target-wgpu) and compares it with `tests/reference-wgpu/` (made on
+Vulkan); `REVC_RENDERER_BACKEND=gl` runs the same against the GL backend, with a 1.5 % screenshot
+limit because the drivers' anisotropic filtering differs on high-frequency textures (Starfish
+Island water and fences: 1.0 %; 0.008 % with anisotropy off). All scenarios pass on GL3, wgpu
+Vulkan and wgpu GL.
+- Anisotropic filtering: re3's ANISOTROPIC_FILTERING gives every texture the device's maximum;
+  WGPU now reports 16 and samples trilinear textures anisotropically. GL3 applies a texture's
+  anisotropy only when the stage's filter mode changes (`setFilterMode`), so there it is on for a
+  scattering of textures only; WGPU follows the option's intent (crisper distant roofs/roads).
+- The gamepad scenario takes its screenshots at fixed game times after its start (4, 9, 14 s)
+  instead of 1.5 s after each step, so animated things in the shot (save pickup, zone name) no
+  longer depend on frame pacing; references re-blessed for both renderers.
+- test.sh: blessing saveload/texmods creates the reference folder (it silently failed before),
+  and a missing saveload/texmods reference is reported instead of silently skipping the check.
+
 ## What the game calls
 
 The game reaches librw only through the RenderWare-style API in `cpp/re3-miami/src/fakerw`

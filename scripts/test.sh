@@ -3,6 +3,8 @@
 # usage: scripts/test.sh [--bless] [--keep] [scenario ...]     (default scenarios: boot saveload)
 #   --bless  accept the current screenshots as the new references (tests/reference/)
 #   --keep   keep the temporary game folder
+#   --wgpu   test the wgpu renderer build (cargo feature wgpu, rust/target-wgpu) against its own
+#            references in tests/reference-wgpu/; REVC_RENDERER_BACKEND=vulkan|gl picks the backend
 # Needs a display (the game opens a window). Game data: REVC_GAME_DIR or ./game.
 # Scenarios: boot, saveload, formats, texmods, gamepad, spots (default), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
 # formats: compares what the C++ loaders read with the Rust parsers in rust/revc-formats.
@@ -15,11 +17,12 @@
 # Output and logs: rust/target/test-output/
 set -uo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-BLESS=0; KEEP=0; SCENARIOS=()
+BLESS=0; KEEP=0; WGPU=0; SCENARIOS=()
 for a in "$@"; do
   case "$a" in
     --bless) BLESS=1 ;;
     --keep) KEEP=1 ;;
+    --wgpu) WGPU=1 ;;
     -*) echo "unknown option $a" >&2; exit 2 ;;
     *) SCENARIOS+=("$a") ;;
   esac
@@ -30,13 +33,27 @@ GAME=${REVC_GAME_DIR:-$ROOT/game}
 [[ -d "$GAME/models" ]] || { echo "game data not found at $GAME (set REVC_GAME_DIR)" >&2; exit 2; }
 OUT=$ROOT/rust/target/test-output
 mkdir -p "$OUT"
+REF=$ROOT/tests/reference
+(( WGPU )) && REF=$ROOT/tests/reference-wgpu
+# The wgpu references come from Vulkan. The GL backend matches them within 0.01 % except where
+# anisotropic filtering samples high-frequency textures at grazing angles (water sparkles, fences),
+# which the two drivers do slightly differently (up to ~1 %): allow 1.5 % there.
+if (( WGPU )) && [[ "${REVC_RENDERER_BACKEND:-vulkan}" == gl* ]] && [[ -z "${REVC_TEST_MAXDIFF:-}" ]]; then
+  export REVC_TEST_MAXDIFF=0.015
+  echo "(wgpu on GL: screenshot limit 1.5 %, see scripts/test.sh)"
+fi
 
 if [[ -n "${REVC_TEST_BIN:-}" ]]; then
   BIN=$REVC_TEST_BIN
 else
   echo "== build"
-  (cd "$ROOT/rust" && cargo build --locked -q) || { echo "build failed"; exit 1; }
-  BIN=$ROOT/rust/target/debug/revc
+  if (( WGPU )); then
+    (cd "$ROOT/rust" && CARGO_TARGET_DIR=target-wgpu cargo build --locked -q --features wgpu) || { echo "build failed"; exit 1; }
+    BIN=$ROOT/rust/target-wgpu/debug/revc
+  else
+    (cd "$ROOT/rust" && cargo build --locked -q) || { echo "build failed"; exit 1; }
+    BIN=$ROOT/rust/target/debug/revc
+  fi
 fi
 
 # Isolated game folder: symlink the game files, but use the test settings and saves.
@@ -60,13 +77,14 @@ for s in "${SCENARIOS[@]}"; do
     # Screenshots are overwritten on every run.
     mkdir -p "$OUT/$s"
     envs+=(REVC_TEST_SHOT_DIR="$OUT/$s")
-    (( BLESS == 0 )) && envs+=(REVC_TEST_REF_DIR="$ROOT/tests/reference/$s")
+    (( BLESS == 0 )) && envs+=(REVC_TEST_REF_DIR="$REF/$s")
   fi
   [[ "$s" == boot ]] && envs+=(REVC_TEST_SHOT="$OUT/$s.png")
   if [[ "$s" == saveload || "$s" == texmods ]]; then
     envs+=(REVC_TEST_SHOT="$OUT/$s.png")
-    ref=$ROOT/tests/reference/$s.png
+    ref=$REF/$s.png
     (( BLESS == 0 )) && [[ -f "$ref" ]] && envs+=(REVC_TEST_REF="$ref")
+    (( BLESS == 0 )) && [[ ! -f "$ref" ]] && echo "     (no reference ${ref#$ROOT/}: screenshot not compared; --bless makes one)"
   fi
   printf '== %-10s ' "$s"
   env "${envs[@]}" "$BIN" > "$log" 2>&1
@@ -84,12 +102,12 @@ for s in "${SCENARIOS[@]}"; do
   fi
   grep -oE '\[revc-test\] (player at|image diff|audio|formats:|texmods:|gamepad:|spot |[a-z0-9_]+: image diff).*' "$log" | sed 's/^\[revc-test\] /     /'
   if (( BLESS )) && [[ "$s" == spots || "$s" == gamepad ]]; then
-    mkdir -p "$ROOT/tests/reference/$s"
-    for f in "$OUT/$s"/*.png; do [[ "$f" == *.diff.png ]] || cp "$f" "$ROOT/tests/reference/$s/"; done
-    echo "     blessed tests/reference/$s/"
+    mkdir -p "$REF/$s"
+    for f in "$OUT/$s"/*.png; do [[ "$f" == *.diff.png ]] || cp "$f" "$REF/$s/"; done
+    echo "     blessed ${REF#$ROOT/}/$s/"
   fi
-  if (( BLESS )) && [[ -f "$OUT/$s.png" ]]; then
-    cp "$OUT/$s.png" "$ROOT/tests/reference/$s.png" && echo "     blessed tests/reference/$s.png"
+  if (( BLESS )) && [[ "$s" == saveload || "$s" == texmods ]] && [[ -f "$OUT/$s.png" ]]; then
+    mkdir -p "$REF" && cp "$OUT/$s.png" "$REF/$s.png" && echo "     blessed ${REF#$ROOT/}/$s.png"
   fi
 done
 exit $failed
