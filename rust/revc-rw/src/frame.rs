@@ -278,6 +278,9 @@ enum Op {
     /// Following clears and draws go to this texture (a camera rendering into a texture, like
     /// the Neo env map camera), or to the scene with 0.
     Target { texture: u32 },
+    /// The 3D scene is finished; what follows (HUD, menus) is drawn at window resolution on top
+    /// of the scaled and antialiased scene.
+    Overlay,
 }
 
 /// The frame is drawn into an offscreen texture of this format, then shown (blitted) on the
@@ -802,6 +805,11 @@ pub struct Renderer {
     msaa: Option<(wgpu::Texture, wgpu::TextureView, (u32, u32), u32)>,
     /// Supersampling factor of the scene and FXAA (Antialiasing).
     scale: u32,
+    /// Render resolution of the 3D scene in percent of the window (per axis); applies to frames
+    /// with an overlay marker, the HUD and menus stay at window resolution.
+    render_scale: u32,
+    /// Recording past the overlay marker.
+    recording_overlay: bool,
     fxaa: bool,
     smaa: bool,
     smaa_layout: wgpu::BindGroupLayout,
@@ -1211,6 +1219,8 @@ impl Renderer {
             samples,
             msaa: None,
             scale: 1,
+            render_scale: 100,
+            recording_overlay: false,
             fxaa: false,
             smaa: false,
             smaa_layout,
@@ -1569,7 +1579,8 @@ impl Renderer {
         let uniform = self.uniforms.len() as u32 - 1;
 
         let pipe = PipeKey {
-            samples: if self.recording_target == 0 { self.samples } else { 1 },
+            // Past the overlay marker the scene is finished and the HUD draws single-sampled.
+            samples: if self.recording_target == 0 && !(self.recording_overlay && self.overlay_split()) { self.samples } else { 1 },
             kind,
             shader: if kind == Kind::Im3D { 0 } else { state.shader },
             lines: is_line_primitive(prim),
@@ -1736,6 +1747,37 @@ impl Renderer {
         }
     }
 
+    /// Marks the end of the 3D scene: following draws (HUD, menus) go on top of the scaled and
+    /// antialiased scene at window resolution. Once per frame; frames without it are drawn
+    /// whole at the antialiasing scale (no render scale).
+    pub fn begin_overlay(&mut self) {
+        if !self.recording_overlay {
+            self.ops.push(Op::Overlay);
+            self.recording_overlay = true;
+        }
+    }
+
+    /// Whether the overlay is drawn separately from the scene (the scene gets filtered).
+    fn overlay_split(&self) -> bool {
+        self.scale > 1 || self.render_scale != 100 || self.fxaa || self.smaa
+    }
+
+    /// Render resolution of the 3D scene, percent of the window per axis (25..=100); takes
+    /// effect with the next frame.
+    pub fn set_render_scale(&mut self, percent: u32) {
+        self.render_scale = percent.clamp(25, 100);
+    }
+
+    pub fn render_scale(&self) -> u32 {
+        self.render_scale
+    }
+
+    /// The scene's size for a `window`: supersampling times, with an overlay, the render scale.
+    pub fn scene_size(&self, window: (u32, u32), overlay: bool) -> (u32, u32) {
+        let f = self.scale as f64 * if overlay { self.render_scale as f64 / 100.0 } else { 1.0 };
+        (((window.0 as f64 * f).round() as u32).max(1), ((window.1 as f64 * f).round() as u32).max(1))
+    }
+
     /// The frame so far, copied into texture `texture` at (x, y) when the frame is drawn.
     pub fn copy_frame(&mut self, texture: u32, x: u32, y: u32) {
         self.ops.push(Op::CopyFrame { texture, x, y });
@@ -1779,9 +1821,8 @@ impl Renderer {
         }
     }
 
-    /// The three SMAA passes: `src` (window size) antialiased into `dst`.
-    fn smaa_passes(&mut self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, src: &wgpu::Texture, dst: &wgpu::TextureView) {
-        let size = (src.width(), src.height());
+    /// Window-size SMAA intermediates.
+    fn ensure_smaa_textures(&mut self, gpu: &Gpu, size: (u32, u32)) {
         if self.smaa_tex.as_ref().is_none_or(|t| t.2 != size) {
             let make = |label: &str, format: wgpu::TextureFormat| {
                 gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -1797,6 +1838,11 @@ impl Renderer {
             };
             self.smaa_tex = Some((make("smaa edges", wgpu::TextureFormat::Rg8Unorm), make("smaa weights", wgpu::TextureFormat::Rgba8Unorm), size));
         }
+    }
+
+    /// The three SMAA passes: `src` (window size) antialiased into `dst` (ensure_smaa_textures
+    /// first).
+    fn smaa_passes(&self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, src: &wgpu::Texture, dst: &wgpu::TextureView) {
         let (edges, weights, _) = self.smaa_tex.as_ref().unwrap();
         let view = |t: &wgpu::Texture| t.create_view(&Default::default());
         let (src_v, edges_v, weights_v, area_v, search_v) = (view(src), view(edges), view(weights), view(&self.smaa_area), view(&self.smaa_search));
@@ -1862,12 +1908,49 @@ impl Renderer {
         pass.draw(0..3, 0..1);
     }
 
+    /// After the scene: a scaled scene filtered to the window size (`scaled`), then FXAA or SMAA.
+    /// Returns where the result is (0 scene, 1 frame_tex, 2 post_tex); the window textures must
+    /// exist (encode creates them).
+    fn post_chain(&self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, scaled: bool) -> u8 {
+        let scene = &self.scene.as_ref().unwrap().0;
+        let mut last: u8 = 0;
+        if scaled {
+            let dst = self.frame_tex.as_ref().unwrap().0.create_view(&Default::default());
+            self.post_pass(gpu, enc, &self.down_pipeline, scene, &dst, None);
+            last = 1;
+        }
+        if self.smaa || self.fxaa {
+            let src = if last == 1 { &self.frame_tex.as_ref().unwrap().0 } else { scene };
+            let dst = self.post_tex.as_ref().unwrap().0.create_view(&Default::default());
+            if self.smaa {
+                self.smaa_passes(gpu, enc, src, &dst);
+            } else {
+                self.post_pass(gpu, enc, &self.fxaa_pipeline, src, &dst, None);
+            }
+            last = 2;
+        }
+        last
+    }
+
     /// Encodes the recorded frame into the scene texture and shows it on `target` (`size` pixels,
     /// the output format given to `new`). The recording stays until `end_frame`.
     pub fn encode(&mut self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32)) {
-        // The scene is drawn at the supersampling scale; `size` stays the window's.
+        // The scene is drawn at the supersampling scale times, in frames with an overlay marker,
+        // the render scale; `window` is the output's size.
         let window = size;
-        let size = (window.0 * self.scale, window.1 * self.scale);
+        let has_overlay = self.ops.iter().any(|op| matches!(op, Op::Overlay));
+        let split = has_overlay && self.overlay_split();
+        let size = self.scene_size(window, has_overlay);
+        let scaled = size != window;
+        if scaled {
+            Self::window_texture(gpu, &mut self.frame_tex, window, "frame");
+        }
+        if self.smaa || self.fxaa {
+            Self::window_texture(gpu, &mut self.post_tex, window, "post aa");
+        }
+        if self.smaa {
+            self.ensure_smaa_textures(gpu, window);
+        }
         if self.scene.as_ref().is_none_or(|s| s.2 != size) {
             let t = gpu.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("scene"),
@@ -1942,6 +2025,9 @@ impl Renderer {
         }
         // Depth buffers for the scene and every texture target of the frame.
         let mut sizes = vec![(size.0, size.1, self.samples)];
+        if split {
+            sizes.push((window.0, window.1, 1));
+        }
         for op in &ops {
             if let Op::Target { texture } = *op
                 && let Some(t) = self.textures.get(&texture)
@@ -2030,10 +2116,12 @@ impl Renderer {
         let msaa_view = self.msaa.as_ref().filter(|_| self.samples > 1).map(|m| &m.1);
         let scene_depth = (size.0, size.1, self.samples);
         // `target` 0 is the scene; `first` is the scene's first pass of the frame.
-        let begin = |enc: &mut wgpu::CommandEncoder, to: u32, first: bool, color: Option<[f64; 4]>, depth: bool| {
+        // `ov`: the overlay image the scene's draws go to past the overlay marker.
+        let begin = |enc: &mut wgpu::CommandEncoder, to: u32, first: bool, color: Option<[f64; 4]>, depth: bool, ov: Option<&wgpu::TextureView>| {
             // The scene with MSAA draws into the multisampled target and resolves into the scene.
             let (view, resolve, depth_view) = match target_views.get(&to) {
                 Some((v, sz)) => (v, None, &depths[&(sz.0, sz.1, 1)].1),
+                None if ov.is_some() => (ov.unwrap(), None, &depths[&(window.0, window.1, 1)].1),
                 None => match msaa_view {
                     Some(m) => (m, Some(&scene_view), &depths[&scene_depth].1),
                     None => (&scene_view, None, &depths[&scene_depth].1),
@@ -2072,8 +2160,29 @@ impl Renderer {
         // compressed target texture swallows its draws).
         let mut cur_target = 0u32;
         let mut target_ok = true;
+        // Past the overlay marker (split frames): the finished scene image (window size) that the
+        // HUD is drawn on, its view, and whether its depth still needs clearing.
+        let mut last: u8 = 0;
+        let mut overlay: Option<(wgpu::Texture, wgpu::TextureView)> = None;
+        let mut overlay_fresh = false;
         for op in &ops {
             match *op {
+                Op::Overlay => {
+                    if !split {
+                        continue;
+                    }
+                    drop(pass.take());
+                    bound = None;
+                    if !started {
+                        pass = Some(begin(enc, 0, true, None, false, None));
+                        started = true;
+                        drop(pass.take());
+                    }
+                    last = self.post_chain(gpu, enc, scaled);
+                    let t = if last == 1 { &self.frame_tex.as_ref().unwrap().0 } else { &self.post_tex.as_ref().unwrap().0 };
+                    overlay = Some((t.clone(), t.create_view(&Default::default())));
+                    overlay_fresh = true;
+                }
                 Op::Target { texture } => {
                     drop(pass.take());
                     bound = None;
@@ -2085,7 +2194,7 @@ impl Renderer {
                     bound = None;
                     if !started {
                         // Nothing drawn yet: the scene is still last frame's.
-                        pass = Some(begin(enc, 0, true, None, false));
+                        pass = Some(begin(enc, 0, true, None, false, None));
                         started = true;
                         drop(pass.take());
                     }
@@ -2094,15 +2203,16 @@ impl Renderer {
                     if t.format != SCENE_FORMAT || w == 0 || h == 0 {
                         continue;
                     }
-                    if self.scale > 1 {
-                        // Supersampled: the copy is the scene filtered down to window pixels.
+                    let src = overlay.as_ref().map_or(&self.scene.as_ref().unwrap().0, |o| &o.0);
+                    if overlay.is_none() && scaled {
+                        // Scaled scene: the copy is the scene filtered to window pixels.
                         let dst = t.texture.create_view(&wgpu::TextureViewDescriptor { base_mip_level: 0, mip_level_count: Some(1), ..Default::default() });
                         let vp = [x as f32, y as f32, window.0 as f32, window.1 as f32];
                         self.post_pass(gpu, enc, &self.down_pipeline, &self.scene.as_ref().unwrap().0, &dst, Some(vp));
                         continue;
                     }
                     enc.copy_texture_to_texture(
-                        wgpu::TexelCopyTextureInfo { texture: &self.scene.as_ref().unwrap().0, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+                        wgpu::TexelCopyTextureInfo { texture: src, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
                         wgpu::TexelCopyTextureInfo { texture: &t.texture, mip_level: 0, origin: wgpu::Origin3d { x, y, z: 0 }, aspect: wgpu::TextureAspect::All },
                         wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
                     );
@@ -2112,7 +2222,9 @@ impl Renderer {
                         continue;
                     }
                     drop(pass.take());
-                    pass = Some(begin(enc, cur_target, cur_target == 0 && !started, color, depth));
+                    let ov = overlay.as_ref().filter(|_| cur_target == 0).map(|o| &o.1);
+                    pass = Some(begin(enc, cur_target, cur_target == 0 && !started, color, depth || (ov.is_some() && overlay_fresh), ov));
+                    overlay_fresh &= ov.is_none();
                     started |= cur_target == 0;
                     bound = None;
                 }
@@ -2121,7 +2233,9 @@ impl Renderer {
                         continue;
                     }
                     if pass.is_none() {
-                        pass = Some(begin(enc, cur_target, cur_target == 0 && !started, None, false));
+                        let ov = overlay.as_ref().filter(|_| cur_target == 0).map(|o| &o.1);
+                        pass = Some(begin(enc, cur_target, cur_target == 0 && !started, None, ov.is_some() && overlay_fresh, ov));
+                        overlay_fresh &= ov.is_none();
                         started |= cur_target == 0;
                         bound = None;
                     }
@@ -2168,28 +2282,14 @@ impl Renderer {
         }
         drop(pass.take());
         if !started {
-            pass = Some(begin(enc, 0, true, None, false));
+            pass = Some(begin(enc, 0, true, None, false, None));
         }
         drop(pass);
+        drop(overlay);
 
-        // Antialiasing after the scene: filter a supersampled scene down to the window, then FXAA.
-        let mut last: u8 = 0;
-        if self.scale > 1 {
-            Self::window_texture(gpu, &mut self.frame_tex, window, "frame");
-            let dst = self.frame_tex.as_ref().unwrap().0.create_view(&Default::default());
-            self.post_pass(gpu, enc, &self.down_pipeline, &self.scene.as_ref().unwrap().0, &dst, None);
-            last = 1;
-        }
-        if self.smaa || self.fxaa {
-            Self::window_texture(gpu, &mut self.post_tex, window, "post aa");
-            let src = if last == 1 { self.frame_tex.as_ref().unwrap().0.clone() } else { self.scene.as_ref().unwrap().0.clone() };
-            let dst = self.post_tex.as_ref().unwrap().0.create_view(&Default::default());
-            if self.smaa {
-                self.smaa_passes(gpu, enc, &src, &dst);
-            } else {
-                self.post_pass(gpu, enc, &self.fxaa_pipeline, &src, &dst, None);
-            }
-            last = 2;
+        // Antialiasing after the scene (unless done at the overlay marker).
+        if !split {
+            last = self.post_chain(gpu, enc, scaled);
         }
         self.last_output = last;
         let shown_bind = match last {
@@ -2240,6 +2340,7 @@ impl Renderer {
         self.bones.clear();
         self.retired.clear();
         self.recording_target = 0;
+        self.recording_overlay = false;
         for id in std::mem::take(&mut self.dead_textures) {
             self.textures.remove(&id);
             self.bind_groups.retain(|k, _| k.0 != id);

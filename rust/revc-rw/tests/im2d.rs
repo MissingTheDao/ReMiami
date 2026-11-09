@@ -771,3 +771,63 @@ fn aa_levels_vulkan() {
 fn aa_levels_gl() {
     aa_levels(Backend::Gl);
 }
+
+// Render scale and the overlay: past `begin_overlay` the HUD draws at window resolution on top of
+// the scaled, antialiased scene, so its edges stay hard whatever the scene gets.
+fn overlay(backend: Backend) {
+    use revc_rw::frame::Antialiasing;
+    let gpu = Gpu::headless(backend).expect("gpu");
+    let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+    let v = |x: f32, y: f32| Vertex2D { x, y, z: 0.0, w: 1.0, r: 255, g: 255, b: 255, a: 255, u: 0.0, v: 0.0 };
+    let hud = quad(44.0, 44.0, 46.0, 60.0, [255, 0, 0, 255]);
+    // (antialiasing level, render scale %, overlay marker)
+    for (level, scale, marker) in [(0, 100, true), (0, 50, true), (0, 67, true), (1, 100, true), (2, 100, true), (4, 100, true), (7, 75, true), (0, 50, false)] {
+        r.set_antialiasing(&gpu, Antialiasing::level(level));
+        r.set_render_scale(scale);
+        r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+        r.draw_2d(&base(), 3, &[v(0.0, 0.0), v(64.0, 0.0), v(0.0, 61.0)], None);
+        if marker {
+            r.begin_overlay();
+        }
+        r.draw_2d(&base(), 4, &hud, Some(&[0, 1, 2, 0, 2, 3]));
+        let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let mut enc = gpu.device.create_command_encoder(&Default::default());
+        r.encode(&gpu, &mut enc, &target.create_view(&Default::default()), (SIZE, SIZE));
+        r.end_frame();
+        let shown = r.scene_texture().unwrap();
+        assert_eq!((shown.width(), shown.height()), (SIZE, SIZE));
+        let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+        gpu.queue.submit([enc.finish()]);
+        let img = readback_finish(&gpu, rb).expect("readback");
+        let what = format!("{backend:?} level {level} scale {scale} marker {marker}");
+        for y in [45, 52, 59] {
+            assert_eq!(px(&img, 44, y), [255, 0, 0, 255], "{what}: HUD");
+            assert_eq!(px(&img, 45, y), [255, 0, 0, 255], "{what}: HUD");
+            assert_eq!(px(&img, 43, y), [0, 0, 0, 255], "{what}: HUD left edge hard");
+            assert_eq!(px(&img, 46, y), [0, 0, 0, 255], "{what}: HUD right edge hard");
+        }
+        assert_eq!(px(&img, 8, 8), [255, 255, 255, 255], "{what}: scene inside");
+        let edge = img.as_chunks::<4>().0.iter().filter(|p| p[0] > 10 && p[0] < 245 && p[1] > 10).count();
+        let soft = level != 0 || (marker && scale != 100);
+        assert_eq!(edge > 0, soft, "{what}: scene edge soft only when scaled or antialiased ({edge} pixels)");
+    }
+}
+
+#[test]
+fn overlay_vulkan() {
+    overlay(Backend::Vulkan);
+}
+
+#[test]
+fn overlay_gl() {
+    overlay(Backend::Gl);
+}

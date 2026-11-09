@@ -212,6 +212,20 @@ difference). The levels were renumbered when SMAA came in: an ini saved before n
 next cheaper level. Not in the suite: TAA (no motion
 vectors in this renderer). Temporal upscalers (FSR 3/4, XeSS, DLSS) are a later goal.
 
+**Render scale and the HUD overlay (plan task 22).** Display Setup > Render Scale (wgpu build;
+ini `[Graphics] RenderScale=0..4` for 100, 85, 75, 67, 50 %) sets the 3D scene's resolution per
+axis; it switches live. The game marks the end of the 3D scene (`rw::wgpu::beginOverlay()` in
+`main.cpp` right before `Render2dStuff`): the renderer then finishes the scene (scaled to the
+window with linear filtering, then FXAA or SMAA) and draws the HUD on top at window resolution,
+single-sampled. So the HUD stays sharp at any render scale, and FXAA/SMAA/SSAA no longer touch
+it. Frames without the marker (front-end menus, loading screens) are drawn whole at window size
+times the supersampling, as before. Everything up to the marker (colour filter, motion blur,
+droplets) works on the scaled scene. Checked: offscreen test (`overlay_*`: the HUD's edges stay
+hard at every scale and antialiasing level, the scene's soften only when scaled or antialiased)
+on both backends; in game, saveload at 50 %: world at half resolution, HUD identical to 100 %.
+The upscale is plain bilinear; a sharper spatial upscaler (FSR 1 EASU/RCAS, MIT) and the temporal
+ones (FSR 3/4, XeSS, DLSS) would slot in at the same point.
+
 ## What the game calls
 
 The game reaches librw only through the RenderWare-style API in `cpp/re3-miami/src/fakerw`

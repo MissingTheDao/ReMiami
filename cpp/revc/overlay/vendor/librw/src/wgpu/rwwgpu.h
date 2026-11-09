@@ -140,10 +140,19 @@ struct DrawState
 void im2DRenderIndexedPrimitiveUV2(PrimitiveType primType, void *vertices, int32 numVertices,
 	void *indices, int32 numIndices, Texture *tex1);
 
-// Antialiasing level (revc_rw::frame::Antialiasing::LEVELS, cheapest first: off, FXAA, MSAA
-// 2x/4x, MSAA 4x + FXAA, MSAA 8x, SSAA 2x, SSAA 2x + MSAA 4x). The game's menu and ini set it;
-// the device applies changes with the next frame.
+// Antialiasing level (revc_rw::frame::Antialiasing::LEVELS, cheapest first: off, FXAA, SMAA,
+// MSAA 2x/4x, MSAA 4x + SMAA, MSAA 8x, SSAA 2x, SSAA 2x + MSAA 4x). The game's menu and ini set
+// it; the device applies changes with the next frame.
 extern int8 antialiasing;
+
+// Render scale of the 3D scene: index into renderScalePercent (100, 85, 75, 67, 50 % of the
+// window per axis); the HUD and menus stay at window resolution. Applied like antialiasing.
+extern int8 renderScale;
+extern const int32 renderScalePercent[5];
+
+// The 3D scene of this frame is finished: what follows (HUD, menus) is drawn at window
+// resolution on top of the scaled and antialiased scene.
+void beginOverlay(void);
 
 // Like gl3::im2dOverrideShader: Im2D draws use this shader until it is reset to 0.
 void setIm2DOverride(uint32 shader, const float32 *params);

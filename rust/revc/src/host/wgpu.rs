@@ -279,6 +279,25 @@ pub extern "C" fn revc_rw_set_antialiasing(level: i32) {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn revc_rw_set_render_scale(percent: i32) {
+    RENDERER.with(|c| {
+        if let Some(r) = c.borrow_mut().as_mut() {
+            r.set_render_scale(percent.max(0) as u32);
+            eprintln!("revc: render scale {}%", r.render_scale());
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_rw_begin_overlay() {
+    RENDERER.with(|c| {
+        if let Some(r) = c.borrow_mut().as_mut() {
+            r.begin_overlay();
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn revc_rw_set_target(texture: u32) {
     RENDERER.with(|c| {
         if let Some(r) = c.borrow_mut().as_mut() {
