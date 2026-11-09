@@ -25,6 +25,7 @@ mod timecyc;
 mod directory;
 mod zones;
 mod clock;
+mod wanted;
 mod savegame;
 mod host;
 mod testdrive;
