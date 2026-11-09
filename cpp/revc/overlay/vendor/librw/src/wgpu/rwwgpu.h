@@ -145,11 +145,6 @@ void im2DRenderIndexedPrimitiveUV2(PrimitiveType primType, void *vertices, int32
 // it; the device applies changes with the next frame.
 extern int8 antialiasing;
 
-// Render scale of the 3D scene: index into renderScalePercent (100, 85, 75, 67, 50 % of the
-// window per axis); the HUD and menus stay at window resolution. Applied like antialiasing.
-extern int8 renderScale;
-extern const int32 renderScalePercent[5];
-
 // The 3D scene of this frame is finished: what follows (HUD, menus) is drawn at window
 // resolution on top of the scaled and antialiased scene.
 void beginOverlay(void);
