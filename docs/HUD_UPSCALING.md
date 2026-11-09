@@ -1,6 +1,6 @@
 # HUD and menu upscaling with local AI: feasibility (2026-11-09)
 
-Result of a study for the user; nothing is implemented yet. Upscaled game assets are made by
+Study done 2026-11-09; the pipeline is `scripts/upscale_hud.py` (see "Running it" below). Upscaled game assets are made by
 the user from their own copy of the game and live in `game/mods/`; they are never committed or
 shipped.
 
@@ -65,3 +65,32 @@ filter is not a concern (2D is drawn after it).
 About a day of scripting plus one or two days of tuning and checking in game (fonts above all).
 Needs the user's go-ahead for: downloading an upscaler release (about 50 MB with models from
 GitHub), the choice of models (licences), and whether blips and fonts get hand fixes.
+
+## Running it
+
+```
+scripts/upscale_hud.py                 # all sets: hud, fonts, frontend1, frontend2, radar
+scripts/upscale_hud.py --only fonts    # one set
+scripts/upscale_hud.py --clean         # remove what it wrote
+```
+
+It builds the exporter (`cargo run -p revc-formats --example txdexport -- <txd> <outdir>`),
+reads your game files, and writes `game/mods/textures/<slot>/<texture>.png` plus
+`upscaled.json` (the list `--clean` uses). Mods it did not write are never overwritten unless
+`--force`. The image helpers (colour bleed into transparent pixels, alpha smoothstep) were
+drafted by the local model; review found and fixed two bugs in the bleed (neighbour slices that
+pointed at the pixel itself, a misused walrus assignment).
+
+First run (2026-11-09, RX 9070 XT): 101 textures in 24 s: 10 HUD textures (16-pixel blips left
+alone), 2 font sheets at 2x, 3 + 24 menu textures (the 3x3 menu map stitched), 64 radar tiles
+(stitched as one 8x8 map, so no seams). In game (texmods: 101 overrides) at 1280x720 the radar is
+much sharper, HUD text and icons cleaner; the menu background gets thin outlines in its pattern
+(a model artefact; `--only frontend1` with another model, or leaving that texture out, are
+options). The regression tests never see `game/mods` (scripts/test.sh skips it).
+
+Notes:
+- `fonts` mods also replace the Russian font sheets (same slot, fonts_r.txd).
+- The controller diagrams (frontend_controller) are not included: one slot, a different file per
+  controller type, same texture names.
+- Later (user, 2026-11-09): texture mods in their own archive format instead of loose files
+  (plan task 11).

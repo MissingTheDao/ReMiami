@@ -60,6 +60,12 @@ Build: `cd rust && CARGO_TARGET_DIR=target-wgpu cargo build --features wgpu`, ru
 - [ ] Options > Display Setup > Colour Filter: each of None, Simple, PS2/XBOX, Mobile, PC
       changes the look at once and is kept after a restart (both builds).
 
+## HUD/menu upscaling (docs/HUD_UPSCALING.md)
+
+- [ ] After `scripts/upscale_hud.py`, play at your monitor's resolution (1440p/4K): HUD text,
+      radar, menus and the map screen look sharper; no halos around letters, no seams between
+      radar tiles, nothing upside down; menu background acceptable (or `--clean` and compare).
+
 ## Task 7 leftovers
 
 - [ ] Change the screen resolution in the in-game Display Setup menu (not only at start-up).

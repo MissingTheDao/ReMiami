@@ -59,7 +59,8 @@ fi
 # Isolated game folder: symlink the game files, but use the test settings and saves.
 TMP=$(mktemp -d); T=$TMP/game; mkdir -p "$T/userfiles"
 for f in "$GAME"/* ; do
-  case "$(basename "$f")" in reVC.ini|userfiles) ;; *) ln -s "$f" "$T/" ;; esac
+  # The user's own mods (game/mods) never take part: texmods installs tests/mods itself.
+  case "$(basename "$f")" in reVC.ini|userfiles|mods) ;; *) ln -s "$f" "$T/" ;; esac
 done
 cp "$ROOT"/tests/saves/*.b "$T/userfiles/"
 printf 'width=1280\nheight=720\nmaximized=0\n' > "$T/userfiles/revc_window.ini"
