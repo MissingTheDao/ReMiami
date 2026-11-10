@@ -172,7 +172,8 @@ revc_test_goto_spot(float x, float y, float z, float dx, float dy, float dz, int
 	CGame::currArea = AREA_MAIN_MAP;
 	CStreaming::RemoveBuildingsNotInArea(AREA_MAIN_MAP);
 	CClock::SetGameClock(hour, minute);
-	CWeather::ForceWeatherNow(WEATHER_SUNNY);
+	// REVC_TEST_RAIN=1 (not in the regression set): rain at the spots, for the screen droplet check
+	CWeather::ForceWeatherNow(getenv("REVC_TEST_RAIN") ? WEATHER_RAINY : WEATHER_SUNNY);
 
 	CVector pos(x, y, z <= -100.0f ? 20.0f : z);
 	CTimer::Suspend();
@@ -194,7 +195,9 @@ revc_test_goto_spot(float x, float y, float z, float dx, float dy, float dz, int
 	CWorld::ClearExcitingStuffFromArea(pedPos, 120.0f, true);
 
 	TheCamera.SetCamPositionForFixedMode(pos + CVector(dx, dy, dz), CVector(0.0f, 0.0f, 0.0f));
-	TheCamera.TakeControlNoEntity(pedPos, JUMP_CUT, CAMCONTROL_SCRIPT);
+	// With REVC_TEST_RAIN the camera looks up into the rain (the game only sprays screen drops
+	// when the camera looks level or up), at a point high above the player.
+	TheCamera.TakeControlNoEntity(getenv("REVC_TEST_RAIN") ? pedPos + CVector(0.0f, 0.0f, 80.0f) : pedPos, JUMP_CUT, CAMCONTROL_SCRIPT);
 	return pos.z;
 }
 
