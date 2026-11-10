@@ -547,6 +547,12 @@ impl Driver {
         if failed != 1 {
             self.fail(format!("texmods: {failed} files rejected (expected siterocket.png only)"));
         }
+        // radar_save.dds (DXT1, HUD texture without mips) stays a BC texture.
+        let compressed = crate::texmods::compressed();
+        log(format!("texmods: {compressed} replacements kept compressed (DXT)"));
+        if compressed < 1 {
+            self.fail("texmods: radar_save.dds was decoded instead of kept as DXT blocks".to_string());
+        }
     }
 
     /// Logs the frame times collected at a spot: mean, median, 99th percentile, worst, fps.

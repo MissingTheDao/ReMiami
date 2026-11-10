@@ -1,5 +1,6 @@
-//! DDS images (top mip level) decoded to RGBA8, for texture mods: DXT1/3/5 and uncompressed
-//! 24/32-bit RGB(A) with channel masks.
+//! DDS images for texture mods: DXT1/3/5 blocks as they are (`blocks`, uploaded as BC textures),
+//! or the top mip level decoded to RGBA8 (`decode`: DXT1/3/5 and uncompressed 24/32-bit RGB(A)
+//! with channel masks).
 
 use crate::bytes::Reader;
 use crate::{Error, Result};
@@ -69,6 +70,70 @@ pub fn decode(data: &[u8]) -> Result<Image> {
         return Err(Error::Invalid(format!("unsupported DDS pixel format (flags {pf_flags:#x}, {bits} bits)")));
     }
     Ok(Image { width, height, rgba })
+}
+
+const DDSD_MIPMAPCOUNT: u32 = 0x20000;
+
+/// The compressed blocks of a DXT1/3/5 DDS, for uploading as a BC texture as they are.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Blocks<'a> {
+    pub width: u32,
+    pub height: u32,
+    /// 1, 3 or 5.
+    pub kind: u8,
+    /// Mip levels, largest first (as many as the file holds, at least one).
+    pub levels: Vec<&'a [u8]>,
+    /// DXT3/5, or DXT1 using its transparent texel somewhere.
+    pub has_alpha: bool,
+}
+
+/// The DXT blocks of a DDS file; `Ok(None)` for a DDS that isn't DXT1/3/5 (decode it instead).
+pub fn blocks(data: &[u8]) -> Result<Option<Blocks<'_>>> {
+    let mut r = Reader::new(data);
+    if r.bytes(4, "dds magic")? != b"DDS " {
+        return Err(Error::Invalid("not a DDS file".into()));
+    }
+    if r.u32("dds header size")? != 124 {
+        return Err(Error::Invalid("bad DDS header size".into()));
+    }
+    let flags = r.u32("dds flags")?;
+    let height = r.u32("dds height")?;
+    let width = r.u32("dds width")?;
+    r.skip(4 * 2)?; // pitch, depth
+    let mips = r.u32("dds mip count")?;
+    r.skip(4 * 11)?;
+    if r.u32("dds pixel format size")? != 32 {
+        return Err(Error::Invalid("bad DDS pixel format size".into()));
+    }
+    let pf_flags = r.u32("dds pixel format flags")?;
+    let fourcc: [u8; 4] = r.bytes(4, "dds fourcc")?.try_into().unwrap();
+    r.skip(4 * 5 + 20)?; // bit count, masks, caps
+    let kind = match (pf_flags & DDPF_FOURCC != 0, &fourcc) {
+        (true, b"DXT1") => 1,
+        (true, b"DXT3") => 3,
+        (true, b"DXT5") => 5,
+        _ => return Ok(None),
+    };
+    if !(1..=MAX_SIZE).contains(&width) || !(1..=MAX_SIZE).contains(&height) {
+        return Err(Error::Invalid(format!("DDS size {width}x{height} out of range")));
+    }
+    let block_bytes = if kind == 1 { 8 } else { 16 };
+    let full_chain = 32 - width.max(height).leading_zeros();
+    let count = if flags & DDSD_MIPMAPCOUNT != 0 && mips > 1 { mips.min(full_chain) } else { 1 };
+    let mut levels = Vec::with_capacity(count as usize);
+    for i in 0..count {
+        let (w, h) = ((width >> i).max(1), (height >> i).max(1));
+        levels.push(r.bytes(w.div_ceil(4) as usize * h.div_ceil(4) as usize * block_bytes, "dds blocks")?);
+    }
+    let has_alpha = kind != 1 || levels[0].chunks_exact(8).any(dxt1_transparent);
+    Ok(Some(Blocks { width, height, kind, levels, has_alpha }))
+}
+
+/// Whether a DXT1 block uses its transparent texel (3-colour mode, index 3).
+fn dxt1_transparent(block: &[u8]) -> bool {
+    let (c0, c1) = (u16::from_le_bytes([block[0], block[1]]), u16::from_le_bytes([block[2], block[3]]));
+    let idx = u32::from_le_bytes(block[4..8].try_into().unwrap());
+    c0 <= c1 && (0..16).any(|p| (idx >> (2 * p)) & 3 == 3)
 }
 
 /// DXT1 (`kind` 1), DXT3 (3) or DXT5 (5) blocks of a `width` x `height` image to RGBA8, top row
@@ -194,6 +259,38 @@ mod tests {
     fn px(img: &Image, x: usize, y: usize) -> [u8; 4] {
         let o = (y * img.width as usize + x) * 4;
         img.rgba[o..o + 4].try_into().unwrap()
+    }
+
+    #[test]
+    fn blocks_single_level_and_mip_chain() {
+        // 8x8 DXT1, one level: 4 blocks of opaque red.
+        let mut d = header(8, 8, DDPF_FOURCC, b"DXT1", 0, [0; 4]);
+        for _ in 0..4 {
+            d.extend(colour(0xF800, 0x0000, 0));
+        }
+        let b = blocks(&d).unwrap().unwrap();
+        assert_eq!((b.width, b.height, b.kind, b.levels.len(), b.has_alpha), (8, 8, 1, 1, false));
+        assert_eq!(b.levels[0].len(), 32);
+
+        // Same with a full chain (8x8, 4x4, 2x2, 1x1) and a transparent texel in the last block.
+        let mut d = header(8, 8, DDPF_FOURCC, b"DXT1", 0, [0; 4]);
+        d[8..12].copy_from_slice(&(0x1007u32 | DDSD_MIPMAPCOUNT).to_le_bytes());
+        d[28..32].copy_from_slice(&4u32.to_le_bytes());
+        for _ in 0..3 {
+            d.extend(colour(0xF800, 0x0000, 0));
+        }
+        d.extend(colour(0x0000, 0xF800, 3));
+        for _ in 0..3 {
+            d.extend(colour(0xF800, 0x0000, 0));
+        }
+        let b = blocks(&d).unwrap().unwrap();
+        assert_eq!((b.levels.len(), b.has_alpha), (4, true));
+        assert!(b.levels.iter().skip(1).all(|l| l.len() == 8));
+
+        // Truncated mip data is an error, an uncompressed DDS is not DXT.
+        assert!(blocks(&d[..d.len() - 1]).is_err());
+        let rgb = header(1, 1, DDPF_RGB, b"\0\0\0\0", 32, [0xFF0000, 0xFF00, 0xFF, 0]);
+        assert_eq!(blocks(&rgb).unwrap(), None);
     }
 
     #[test]

@@ -15,6 +15,10 @@ mods/textures/<texture>.png                 replaces <texture> wherever it appea
 - **Size:** any size up to 8192x8192, independent of the original. Higher-resolution
   replacements are the point; non-square images are allowed. Mipmaps are generated
   automatically where the original texture used them.
+- **DXT DDS stays compressed** on the GPU (4-8x less video memory than a PNG of the same size)
+  when its width and height are multiples of 4 and, for textures the game draws with mipmaps
+  (world, cars), the file contains its mip levels. Otherwise it is decoded like a PNG and the
+  mipmaps are generated.
 - **Names** are case-insensitive. `<texture>` is the texture's name inside the dictionary
   (without extension). `<dictionary>` is:
   - for models, the TXD named in the IDE files (e.g. `infernus` for the Infernus, `hotelroomint`);

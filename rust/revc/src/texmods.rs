@@ -22,6 +22,7 @@ const MAX_SIZE: u32 = 8192;
 static INDEX: OnceLock<HashMap<(String, String), PathBuf>> = OnceLock::new();
 static APPLIED: AtomicUsize = AtomicUsize::new(0);
 static FAILED: AtomicUsize = AtomicUsize::new(0);
+static COMPRESSED: AtomicUsize = AtomicUsize::new(0);
 /// Files already reported as bad (each is reported once, though it may be asked for again when
 /// its dictionary is streamed in again).
 static REPORTED: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
@@ -76,6 +77,30 @@ pub fn stats() -> (usize, usize) {
     (APPLIED.load(Ordering::Relaxed), FAILED.load(Ordering::Relaxed))
 }
 
+/// Replacements served as DXT blocks (BC textures on the GPU) rather than decoded to RGBA8.
+pub fn compressed() -> usize {
+    COMPRESSED.load(Ordering::Relaxed)
+}
+
+/// A DXT1/3/5 DDS that can be uploaded as it is: size a multiple of 4 (BC textures are whole
+/// blocks), and mip levels in the file when the texture is sampled with mips (otherwise the
+/// RGBA8 path keeps it mipmapped by generating them).
+fn dds_blocks(path: &Path, want_mips: bool) -> Option<(u32, u32, u8, bool, Vec<Vec<u8>>)> {
+    let data = std::fs::read(path).ok()?;
+    if !data.starts_with(b"DDS ") {
+        return None;
+    }
+    let b = revc_formats::dds::blocks(&data).ok()??;
+    if b.width % 4 != 0 || b.height % 4 != 0 || b.width > MAX_SIZE || b.height > MAX_SIZE {
+        return None;
+    }
+    if want_mips && b.levels.len() < 2 {
+        return None;
+    }
+    let levels = if want_mips { b.levels.iter().map(|l| l.to_vec()).collect() } else { vec![b.levels[0].to_vec()] };
+    Some((b.width, b.height, b.kind, b.has_alpha, levels))
+}
+
 /// RGBA8, top row first.
 pub(crate) fn decode(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
     let data = std::fs::read(path).map_err(|e| e.to_string())?;
@@ -116,6 +141,53 @@ fn lookup(txd: &str, tex: &str) -> Option<&'static PathBuf> {
     let idx = index();
     idx.get(&(txd.to_ascii_lowercase(), tex.to_ascii_lowercase()))
         .or_else(|| idx.get(&(String::new(), tex.to_ascii_lowercase())))
+}
+
+/// # Safety
+/// `txd` and `texture` must be NUL-terminated strings; the out pointers must be valid.
+/// If the override for txd/texture is a DXT DDS that can stay compressed, returns 1 with its
+/// blocks: `levels` mip levels one after the other (largest first, each whole 4x4 blocks), `size`
+/// bytes in all, freed with revc_texmod_free_blocks. `want_mips`: the texture samples mip levels.
+/// Returns 0 otherwise (then revc_texmod_find decodes it to RGBA8).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_texmod_find_dxt(
+    txd: *const c_char,
+    texture: *const c_char,
+    want_mips: c_int,
+    width: *mut c_int,
+    height: *mut c_int,
+    kind: *mut c_int,
+    levels: *mut c_int,
+    has_alpha: *mut c_int,
+    blocks: *mut *mut c_uchar,
+    size: *mut usize,
+) -> c_int {
+    let (txd, tex) = unsafe { (CStr::from_ptr(txd).to_string_lossy(), CStr::from_ptr(texture).to_string_lossy()) };
+    let Some(path) = lookup(&txd, &tex) else { return 0 };
+    let Some((w, h, k, alpha, lv)) = dds_blocks(path, want_mips != 0) else { return 0 };
+    let n = lv.len();
+    let data = lv.concat().into_boxed_slice();
+    unsafe {
+        *width = w as c_int;
+        *height = h as c_int;
+        *kind = k as c_int;
+        *levels = n as c_int;
+        *has_alpha = alpha as c_int;
+        *size = data.len();
+        *blocks = Box::into_raw(data) as *mut c_uchar;
+    }
+    APPLIED.fetch_add(1, Ordering::Relaxed);
+    COMPRESSED.fetch_add(1, Ordering::Relaxed);
+    1
+}
+
+/// # Safety
+/// `blocks` and `size` must come from revc_texmod_find_dxt, freed once.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_texmod_free_blocks(blocks: *mut c_uchar, size: usize) {
+    if !blocks.is_null() {
+        drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(blocks, size)) });
+    }
 }
 
 #[unsafe(no_mangle)]

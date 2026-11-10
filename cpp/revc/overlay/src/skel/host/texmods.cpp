@@ -1,5 +1,6 @@
 // Texture mods, C++ half: swap rasters of loaded textures for images supplied by the Rust host
-// (rust/revc/src/texmods.rs indexes mods/textures and decodes PNG/DDS to RGBA8).
+// (rust/revc/src/texmods.rs indexes mods/textures; DXT DDS files stay compressed, the rest is
+// decoded to RGBA8).
 #if defined LIBRW_HOST
 
 #include "common.h"
@@ -13,6 +14,43 @@ int revc_texmod_active(void);
 // (librw's image convention; checked by the texmods test). Free it with revc_texmod_free.
 int revc_texmod_find(const char *txd, const char *texture, int *width, int *height, unsigned char **rgba);
 void revc_texmod_free(unsigned char *rgba, int width, int height);
+// A DXT DDS override as its blocks (all levels one after the other), when it can stay
+// compressed; free with revc_texmod_free_blocks. See rust/revc/src/texmods.rs.
+int revc_texmod_find_dxt(const char *txd, const char *texture, int want_mips, int *width, int *height,
+	int *kind, int *levels, int *has_alpha, unsigned char **blocks, size_t *size);
+void revc_texmod_free_blocks(unsigned char *blocks, size_t size);
+}
+
+// A raster holding the DXT blocks as they are (a BC texture on the GPU, like the game's own DXT
+// textures after Raster::convertTexToCurrentPlatform). nil if it can't be made.
+static rw::Raster *
+DxtRaster(int w, int h, int kind, int levels, bool hasAlpha, const unsigned char *blocks, size_t size)
+{
+	// The 16-bit format D3D reports for such a texture (alpha from it, as for the originals).
+	int32 format = kind == 1 ? (hasAlpha ? rw::Raster::C1555 : rw::Raster::C565) : rw::Raster::C4444;
+	if (levels > 1)
+		format |= rw::Raster::MIPMAP;
+	rw::Raster *ras = rw::Raster::create(w, h, 16, format | rw::Raster::TEXTURE | rw::Raster::DONTALLOCATE);
+	if (ras == nil)
+		return nil;
+	ras->format = format;	// rasterCreate stored RGBA8
+	rw::wgpu::allocateDXT(ras, kind, levels, hasAlpha);
+	size_t off = 0;
+	for (int i = 0; i < ras->getNumLevels(); i++) {
+		int32 lw = w >> i, lh = h >> i;
+		size_t n = rw::wgpu::dxtLevelSize(kind, lw < 1 ? 1 : lw, lh < 1 ? 1 : lh);
+		uint8 *dst = ras->lock(i, rw::Raster::LOCKWRITE | rw::Raster::LOCKNOFETCH);
+		if (dst == nil || off + n > size) {
+			if (dst)
+				ras->unlock(i);
+			ras->destroy();
+			return nil;
+		}
+		memcpy(dst, blocks + off, n);
+		off += n;
+		ras->unlock(i);
+	}
+	return ras;
 }
 
 static rw::Texture *
@@ -21,15 +59,29 @@ ApplyOne(rw::Texture *tex, void *data)
 	const char *txdName = (const char*)data;
 	int w, h;
 	unsigned char *px;
-	if (!revc_texmod_find(txdName, tex->name, &w, &h, &px))
-		return tex;
-
 	rw::Raster *old = tex->raster;
 	bool mipmapped = (old && (old->format & rw::Raster::MIPMAP)) ||
 	                 tex->getFilter() >= rw::Texture::MIPNEAREST;
 	int32 format = rw::Raster::C8888 | rw::Raster::TEXTURE;
 	if (mipmapped)
 		format |= rw::Raster::MIPMAP | rw::Raster::AUTOMIPMAP;
+
+	int kind, levels, hasAlpha;
+	unsigned char *blocks;
+	size_t size;
+	if (revc_texmod_find_dxt(txdName, tex->name, mipmapped, &w, &h, &kind, &levels, &hasAlpha, &blocks, &size)) {
+		rw::Raster *ras = DxtRaster(w, h, kind, levels, hasAlpha != 0, blocks, size);
+		revc_texmod_free_blocks(blocks, size);
+		if (ras) {
+			if (old)
+				old->destroy();
+			tex->raster = ras;
+			return tex;
+		}
+		debug("texmods: couldn't create a %dx%d DXT raster for %s/%s, decoding it instead\n", w, h, txdName, tex->name);
+	}
+	if (!revc_texmod_find(txdName, tex->name, &w, &h, &px))
+		return tex;
 
 	rw::Image *img = rw::Image::create(w, h, 32);
 	img->pixels = px;	// not owned by the image (flags stay 0), freed by Rust below
