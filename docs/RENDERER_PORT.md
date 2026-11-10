@@ -486,7 +486,11 @@ the original C++ as in step 3.
   `tests/golden/recorders/rwcamera`).
 - **4b. HAnim and the animation interpolator.** hanim.cpp's updateMatrices (the bone matrix
   stack), the keyframe interpolate/apply callbacks, and anim.cpp's AnimInterpolator
-  (setCurrentAnim, addTime).
+  (setCurrentAnim, addTime). **Done 2026-11-10:** `rust/revc/src/rwhanim.rs`, with base.cpp's
+  Quat mult/lerp/slerp; hanimOpen registers the Rust callbacks. Checked by
+  `tests/golden/rwhanim.txt` (3,000 quaternion cases; 400 random hierarchies of up to 64 nodes
+  with random PUSH/POP trees and animations, 16,400 time steps, the full interpolator state and
+  every bone matrix hashed per step; `tests/golden/recorders/rwhanim`).
 - **4c. Geometry and atomic math.** Bounding spheres (MorphTarget, Atomic's world sphere),
   generateTriangles, buildMeshes, correctTristripWinding, removeUnusedMaterials.
 
