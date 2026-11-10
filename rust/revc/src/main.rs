@@ -15,6 +15,7 @@ mod rwframe;
 mod rwcamera;
 mod rwhanim;
 mod rwgeometry;
+mod rwtexture;
 mod messages;
 mod pager;
 mod savefile;

@@ -503,6 +503,30 @@ the original C++ as in step 3.
   `tests/golden/recorders/rwgeometry`). generateTriangles, correctTristripWinding and
   removeUnusedMaterials have no callers in the game; they stay in C++ and go with librw.
 
+### Stage 2, step 5: textures, images and rasters (plan, 2026-11-10)
+
+What the game does with librw's texture side at run time: 80-odd RwTextureRead and
+RwTextureDestroy sites, texture dictionaries (create, add, find, set current, for all), images
+for the HUD/font masks and texture mods, and rasters. Each part moves into Rust on librw's
+layouts and is checked against a recording of the original, as in steps 3 and 4.
+
+- **5a. Textures and dictionaries.** texture.cpp's object model: Texture create/destroy with
+  reference counts, the global texture list, TexDictionary create/destroy/add/addFront/remove/
+  find (case-insensitive, 32 characters) and the current dictionary, and Texture::read's
+  find-then-load-then-dummy logic (the find and read callbacks stay overridable; custompipes
+  sets its own). Rust allocates both; plugin data stays in C++ through hooks, as for frames.
+  **Done 2026-11-10:** `rust/revc/src/rwtexture.rs`; texture.cpp forwards (the default read
+  callback, which loads image files, stays C++ until 5b). Checked by
+  `tests/golden/rwtexture.txt` (3,675 random operations: dictionaries, textures, references,
+  adds, removes, case-insensitive finds, reads with loading and dummies switched on and off,
+  every plugin and raster call in order; `tests/golden/recorders/rwtexture`).
+- **5b. Images.** The parts of image.cpp the game reaches (create/allocate/free, unpalettize,
+  convertTo32, hasAlpha, removeMask, readMasked's search path and file formats) in Rust. The
+  rest has no callers in the game or the wgpu driver (DXT decompress and flip, palettize and
+  ColorQuant, compressPalette, makeMask/applyMask/extractMask) and is deleted instead.
+- **5c. Rasters.** raster.cpp's bookkeeping (create/destroy, subrasters, createFromImage,
+  format helpers) and the wgpu driver's imageFindRasterFormat/rasterFromImage/rasterToImage.
+
 ## Appendix: every RW function the game calls
 
 | Function | Call sites | Area |

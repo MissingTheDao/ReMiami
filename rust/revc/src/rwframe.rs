@@ -67,7 +67,7 @@ pub const SYNCOBJ: u8 = HIERARCHYSYNCOBJ | SUBTREESYNCOBJ;
 
 // ---------------------------------------------------------------- intrusive lists (rwbase.h)
 
-unsafe fn list_add(list: *mut LinkList, link: *mut LLLink) {
+pub(crate) unsafe fn list_add(list: *mut LinkList, link: *mut LLLink) {
     unsafe {
         (*link).next = (*list).link.next;
         (*link).prev = &mut (*list).link;
@@ -76,14 +76,14 @@ unsafe fn list_add(list: *mut LinkList, link: *mut LLLink) {
     }
 }
 
-unsafe fn link_remove(link: *mut LLLink) {
+pub(crate) unsafe fn link_remove(link: *mut LLLink) {
     unsafe {
         (*(*link).prev).next = (*link).next;
         (*(*link).next).prev = (*link).prev;
     }
 }
 
-unsafe fn list_init(list: *mut LinkList) {
+pub(crate) unsafe fn list_init(list: *mut LinkList) {
     unsafe {
         (*list).link.next = &mut (*list).link;
         (*list).link.prev = &mut (*list).link;
