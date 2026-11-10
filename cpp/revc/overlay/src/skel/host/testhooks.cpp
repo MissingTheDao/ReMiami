@@ -216,8 +216,10 @@ revc_test_set_prompt_style(int style)
 void
 revc_test_show_controls_menu(void)
 {
-	FrontEndMenuManager.m_nCurrScreen = MENUPAGE_CONTROLLER_PC;
-	FrontEndMenuManager.m_nCurrOption = 0;
+	// REVC_TEST_MENU_PAGE=n / REVC_TEST_MENU_OPTION=k: another page/entry (checking menu layouts).
+	const char *page = getenv("REVC_TEST_MENU_PAGE"), *option = getenv("REVC_TEST_MENU_OPTION");
+	FrontEndMenuManager.m_nCurrScreen = page ? atoi(page) : MENUPAGE_CONTROLLER_PC;
+	FrontEndMenuManager.m_nCurrOption = option ? atoi(option) : 0;
 }
 
 // 1 if the Controls page has the BUTTON PROMPTS entry and its label text resolves (boot scenario).

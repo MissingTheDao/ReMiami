@@ -24,6 +24,15 @@ pub enum PadKind {
     SteamController = 10,
 }
 
+impl PadKind {
+    pub fn from_i32(v: i32) -> Option<PadKind> {
+        use PadKind::*;
+        [KeyboardMouse, Generic, Xbox360, XboxSeries, PlayStation3, PlayStation4, PlayStation5, Switch, GameCube, SteamDeck, SteamController]
+            .into_iter()
+            .find(|k| *k as i32 == v)
+    }
+}
+
 pub const VALVE_VENDOR: u16 = 0x28DE;
 pub const STEAM_DECK_PRODUCT: u16 = 0x1205;
 /// Original Steam Controller: wired, wireless dongle, Bluetooth LE.

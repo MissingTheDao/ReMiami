@@ -933,6 +933,16 @@ pub extern "C" fn hostActiveInputKind() -> c_int {
 }
 
 pub fn active_kind() -> PadKind {
+    // REVC_TEST_INPUT_KIND=n (tests only): pretend a PadKind is the input in use, to capture
+    // menus and prompts as a controller player sees them.
+    static FORCED: std::sync::OnceLock<Option<i32>> = std::sync::OnceLock::new();
+    let forced = *FORCED.get_or_init(|| {
+        std::env::var_os("REVC_TEST")?;
+        std::env::var("REVC_TEST_INPUT_KIND").ok()?.parse().ok()
+    });
+    if let Some(k) = forced.and_then(PadKind::from_i32) {
+        return k;
+    }
     with(|h| h.active_kind)
 }
 
