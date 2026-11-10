@@ -434,6 +434,25 @@ RpClumpGtaStreamRead1/2 (core/FileLoader.cpp, rw/ClumpRead.cpp, renderer/PlayerS
   (4,621); librw's Clump/FrameList/Geometry/MaterialList/Material/Texture/Atomic/Light stream
   readers and those plugin readers are deleted, with re3's split-read helpers on top of them.
 
+
+### Stage 2, step 3: frames and matrices (plan, 2026-11-10)
+
+Goal: librw's object model starts moving into Rust, beginning with the parts everything else
+hangs on: matrices and the frame hierarchy.
+
+- **3a. rw::Matrix in Rust.** librw's matrix functions (base.cpp: optimize, mult, invert,
+  transpose, rotate/translate/scale/transform, getRotation, lookAt, makeRotation, the error
+  measures) become forwarders to `rust/revc/src/rwmatrix.rs`, bit-identical including aliased
+  calls (dst == src). Checked by `tests/golden/rwmatrix.txt`: 6,000 cases recorded from the
+  original C++ (`tests/golden/recorders/rwmatrix`, clang++ -O2), replayed by `cargo test`.
+- **3b. Frame logic in Rust.** The hierarchy operations (frame.cpp: add/remove child, transform,
+  rotate, translate, scale, getLTM, syncHierarchyLTM, the dirty list, updateObjects) in Rust on
+  the existing C++ objects, recorded the same way (a recorder that builds random hierarchies and
+  logs every LTM and flag after each operation).
+- **3c. Frames owned by Rust.** Frame storage moves to Rust (an arena with stable handles); the
+  C++ rw::Frame becomes a thin handle the game keeps using through the fakerw API. Needs the
+  plugin data (NodeName, HAnim, the game's frame plugins) to live with it.
+
 ## Appendix: every RW function the game calls
 
 | Function | Call sites | Area |

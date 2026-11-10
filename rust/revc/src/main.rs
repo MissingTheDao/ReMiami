@@ -10,6 +10,7 @@ mod dffload;
 mod text;
 mod textutil;
 mod math;
+mod rwmatrix;
 mod messages;
 mod pager;
 mod savefile;
