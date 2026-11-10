@@ -8,6 +8,12 @@
 #include "Object.h"
 #include "RwHelper.h"
 #include <vector>
+#include "Coronas.h"
+#include "SpecialFX.h"
+
+void *gLightOwner;
+void *gCoronaOwner[NUMCORONAS];
+void *gBrightLightOwner[NUMBRIGHTLIGHTS];
 
 // Render interpolation (task 8). Only what is drawn changes: the simulation always sees its real
 // transforms (ApplyForRender is undone by RestoreAfterRender right after the frame is drawn).
@@ -285,6 +291,98 @@ BeginStep(void)
 static float gMotionSample[6];
 static void RecordMotion(void);
 
+// Coronas and bright lights (car head/tail lights, ...) are registered during PreRender at the
+// owner's simulation transform; while the owner is drawn interpolated they are moved with it
+// (same offset), else they sit up to a step ahead of the drawn car and flicker in and out of its
+// body. Owners are only compared with the snapshot's entities, never dereferenced.
+static CVector gCoronaSaved[NUMCORONAS];
+static bool gCoronaMoved[NUMCORONAS];
+struct LightSave { CVector pos, up, side, front; };
+static LightSave gBrightSaved[NUMBRIGHTLIGHTS];
+static int gBrightMovedCount;
+static bool gBrightMoved[NUMBRIGHTLIGHTS];
+
+// The applied slot of an owner (interpolated this frame), else nil.
+static Slot*
+AppliedSlot(void *owner)
+{
+	if (owner == nil)
+		return nil;
+	PoolSnap *snaps[3] = { &gVehicles, &gPeds, &gObjects };
+	for (PoolSnap *s : snaps)
+		for (int i = 0; s->slots && i < s->size; i++)
+			if (s->slots[i].entity == owner)
+				return s->slots[i].applied ? &s->slots[i] : nil;
+	return nil;
+}
+
+// p at the simulation transform `sim` -> the same point at the drawn transform of `e`.
+static CVector
+MovePoint(const CVector &p, const Xform &sim, const CMatrix &drawn)
+{
+	CVector d = p - sim.pos;
+	float x = DotProduct(d, sim.right) / sim.right.MagnitudeSqr();
+	float y = DotProduct(d, sim.forward) / sim.forward.MagnitudeSqr();
+	float z = DotProduct(d, sim.up) / sim.up.MagnitudeSqr();
+	return drawn.GetPosition() + drawn.GetRight() * x + drawn.GetForward() * y + drawn.GetUp() * z;
+}
+
+static CVector
+MoveDir(const CVector &v, const Xform &sim, const CMatrix &drawn)
+{
+	float x = DotProduct(v, sim.right) / sim.right.MagnitudeSqr();
+	float y = DotProduct(v, sim.forward) / sim.forward.MagnitudeSqr();
+	float z = DotProduct(v, sim.up) / sim.up.MagnitudeSqr();
+	return drawn.GetRight() * x + drawn.GetForward() * y + drawn.GetUp() * z;
+}
+
+static void
+MoveOwnedLights(void)
+{
+	for (int i = 0; i < NUMCORONAS; i++) {
+		gCoronaMoved[i] = false;
+		Slot *s = CCoronas::GetCorona(i).id ? AppliedSlot(gCoronaOwner[i]) : nil;
+		if (s == nil)
+			continue;
+		gCoronaSaved[i] = CCoronas::GetCorona(i).coors;
+		CCoronas::GetCorona(i).coors = MovePoint(gCoronaSaved[i], s->current, s->entity->GetMatrix());
+		gCoronaMoved[i] = true;
+	}
+	gBrightMovedCount = CBrightLights::GetNum();
+	for (int i = 0; i < gBrightMovedCount; i++) {
+		gBrightMoved[i] = false;
+		Slot *s = AppliedSlot(gBrightLightOwner[i]);
+		if (s == nil)
+			continue;
+		CBrightLight &l = CBrightLights::Get(i);
+		gBrightSaved[i] = { l.m_pos, l.m_up, l.m_side, l.m_front };
+		const CMatrix &m = s->entity->GetMatrix();
+		l.m_pos = MovePoint(l.m_pos, s->current, m);
+		l.m_up = MoveDir(l.m_up, s->current, m);
+		l.m_side = MoveDir(l.m_side, s->current, m);
+		l.m_front = MoveDir(l.m_front, s->current, m);
+		gBrightMoved[i] = true;
+	}
+}
+
+static void
+RestoreOwnedLights(void)
+{
+	for (int i = 0; i < NUMCORONAS; i++)
+		if (gCoronaMoved[i]) {
+			CCoronas::GetCorona(i).coors = gCoronaSaved[i];
+			gCoronaMoved[i] = false;
+		}
+	for (int i = 0; i < gBrightMovedCount && i < CBrightLights::GetNum(); i++)
+		if (gBrightMoved[i]) {
+			CBrightLight &l = CBrightLights::Get(i);
+			l.m_pos = gBrightSaved[i].pos; l.m_up = gBrightSaved[i].up;
+			l.m_side = gBrightSaved[i].side; l.m_front = gBrightSaved[i].front;
+			gBrightMoved[i] = false;
+		}
+	gBrightMovedCount = 0;
+}
+
 void
 ApplyForRender(float alpha)
 {
@@ -308,6 +406,7 @@ ApplyForRender(float alpha)
 	ApplyBones(alpha);
 	Apply(CPools::GetVehiclePool(), gVehicles, alpha);
 	Apply(CPools::GetObjectPool(), gObjects, alpha);
+	MoveOwnedLights();
 	RecordMotion();
 }
 
@@ -338,6 +437,7 @@ RecordMotion(void)
 void
 RestoreAfterRender(void)
 {
+	RestoreOwnedLights();
 	RestoreBones();
 	Restore(CPools::GetPedPool(), gPeds);
 	Restore(CPools::GetVehiclePool(), gVehicles);

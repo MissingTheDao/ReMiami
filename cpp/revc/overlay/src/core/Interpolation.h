@@ -16,3 +16,9 @@ namespace Interpolation
 	// Runtime switch (also for testing); on by default.
 	extern bool bEnabled;
 }
+
+// The entity whose PreRender is running (renderer/Renderer.cpp), and the owner of each corona and
+// bright light it registers: drawn where the owner is drawn (Interpolation.cpp MoveOwnedLights).
+extern void *gLightOwner;
+extern void *gCoronaOwner[];
+extern void *gBrightLightOwner[];
