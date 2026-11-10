@@ -19,6 +19,7 @@ png = "0.18"
 revc-audio = { path = "../revc-audio" }
 revc-timing = { path = "../revc-timing" }
 revc-formats = { path = "../revc-formats" }
+revc-import = { path = "../revc-import" }
 # Renderer on wgpu (plan task 12), only with the `wgpu` feature.
 revc-rw = { path = "../revc-rw", optional = true }
 

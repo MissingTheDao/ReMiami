@@ -732,6 +732,7 @@ dependencies = [
  "png",
  "revc-audio",
  "revc-formats",
+ "revc-import",
  "revc-rw",
  "revc-timing",
  "sdl3-sys",
@@ -747,6 +748,10 @@ version = "0.1.0"
 dependencies = [
  "png",
 ]
+
+[[package]]
+name = "revc-import"
+version = "0.1.0"
 
 [[package]]
 name = "revc-rw"

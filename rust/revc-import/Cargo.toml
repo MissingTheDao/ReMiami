@@ -1,0 +1,9 @@
+[package]
+name = "revc-import"
+description = "Imports assets from the player's own PS2/Xbox discs (ISO images) into a local cache"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]

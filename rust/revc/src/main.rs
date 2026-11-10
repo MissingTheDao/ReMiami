@@ -28,6 +28,7 @@ mod clock;
 mod wanted;
 mod stats;
 mod restart;
+mod discimport;
 mod savegame;
 mod host;
 mod testdrive;
@@ -63,6 +64,19 @@ fn game_dir() -> Option<PathBuf> {
 }
 
 fn main() -> ExitCode {
+    // `revc --import <disc image>`: import assets from the player's own Xbox/PS2 disc into the
+    // game folder's userfiles/import, then exit (the menu's CONSOLE DISCS does the same).
+    let args: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    let import = match args.get(1).and_then(|a| a.to_str()) {
+        Some("--import") => match args.get(2) {
+            Some(p) => Some(std::path::absolute(p).unwrap_or_else(|_| PathBuf::from(p))),
+            None => {
+                eprintln!("usage: revc --import <Xbox or PS2 disc image>");
+                return ExitCode::FAILURE;
+            }
+        },
+        _ => None,
+    };
     let Some(dir) = game_dir() else {
         eprintln!("revc: no game folder found; set REVC_GAME_DIR to your Vice City data folder");
         return ExitCode::FAILURE;
@@ -71,6 +85,19 @@ fn main() -> ExitCode {
         eprintln!("revc: cannot enter game directory {}: {e}", dir.display());
         eprintln!("revc: set REVC_GAME_DIR to your Vice City data folder");
         return ExitCode::FAILURE;
+    }
+
+    if let Some(image) = import {
+        return match discimport::import_image(&image) {
+            Ok(msg) => {
+                println!("{msg} into {}", dir.join(discimport::cache_dir()).display());
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("revc: import failed: {e}");
+                ExitCode::FAILURE
+            }
+        };
     }
 
     let testing = match testdrive::init() {
