@@ -18,11 +18,26 @@ pub struct Ext {
     pub len: u32,
 }
 
+/// HAnim plugin (0x11E) of a frame, version 0x100 only (else nil: librw's reader).
+#[repr(C)]
+pub struct DffHAnim {
+    pub id: i32,
+    pub num_nodes: i32,
+    pub flags: i32,
+    pub max_key_size: i32,
+    pub node_ids: *const i32,
+    pub node_flags: *const i32,
+}
+
 #[repr(C)]
 pub struct DffFrame {
     /// right, up, at, pos
     pub m: [f32; 12],
     pub parent: i32,
+    /// the game's NodeName plugin (0x253F2FE): name bytes as stored (not terminated), nil if none
+    pub name: *const u8,
+    pub name_len: u32,
+    pub hanim: *const DffHAnim,
     pub ext: Ext,
 }
 
@@ -35,6 +50,27 @@ pub struct DffTexture {
     pub ext: Ext,
 }
 
+/// One MatFX effect slot (librw readMaterialMatFX): type 1 bump (tex1 bumped, tex2 base), 2 env
+/// (tex1), 4 dual (tex1); 0 none.
+#[repr(C)]
+pub struct DffFxSlot {
+    pub kind: u32,
+    pub coefficient: f32,
+    pub fb_alpha: i32,
+    pub src_blend: i32,
+    pub dst_blend: i32,
+    pub has_tex1: i32,
+    pub has_tex2: i32,
+    pub tex1: DffTexture,
+    pub tex2: DffTexture,
+}
+
+#[repr(C)]
+pub struct DffMatFx {
+    pub effects: u32,
+    pub slots: [DffFxSlot; 2],
+}
+
 #[repr(C)]
 pub struct DffMaterial {
     pub color: [u8; 4],
@@ -44,6 +80,11 @@ pub struct DffMaterial {
     pub default_surface: i32,
     pub textured: i32,
     pub texture: DffTexture,
+    /// MatFX plugin (0x120), nil if none
+    pub matfx: *const DffMatFx,
+    /// right-to-render plugin (0x1F): `has_rights` and the two words
+    pub has_rights: i32,
+    pub rights: [u32; 2],
     pub ext: Ext,
 }
 
@@ -54,6 +95,42 @@ pub struct DffMorph {
     pub has_normals: i32,
     pub vertices: *const f32,
     pub normals: *const f32,
+}
+
+/// BinMesh plugin (0x50E): the geometry's triangles as index lists per material.
+#[repr(C)]
+pub struct DffMesh {
+    pub num_indices: u32,
+    pub mat_index: u32,
+    /// already truncated to 16 bits, as librw's readMesh stores them
+    pub indices: *const u16,
+}
+
+#[repr(C)]
+pub struct DffBinMesh {
+    pub flags: u32,
+    pub num_meshes: u32,
+    pub total_indices: u32,
+    pub meshes: *const DffMesh,
+}
+
+/// Skin plugin (0x116), as librw's readSkin reads it: raw arrays.
+#[repr(C)]
+pub struct DffSkin {
+    /// numBones, numUsedBones (0: old format), numWeights, unused
+    pub header: [u8; 4],
+    pub used_bones: *const u8,
+    /// 4 bytes per vertex
+    pub indices: *const u8,
+    /// 4 floats per vertex (raw little-endian bytes)
+    pub weights: *const u8,
+    /// numBones matrices of 64 bytes, contiguous (old format: the 0xdeaddead markers removed)
+    pub inverse_matrices: *const u8,
+    /// split data (new format): bone limit, mesh count, RLE size, then numBones + 2*(meshes+rle) bytes
+    pub bone_limit: i32,
+    pub num_meshes: i32,
+    pub rle_size: i32,
+    pub split: *const u8,
 }
 
 #[repr(C)]
@@ -77,6 +154,9 @@ pub struct DffGeometry {
     pub num_mat_entries: i32,
     pub mat_indices: *const i32,
     pub materials: *const DffMaterial,
+    /// parsed BinMesh plugin (nil: none, or NATIVE geometry: librw's reader handles it)
+    pub binmesh: *const DffBinMesh,
+    pub skin: *const DffSkin,
     pub ext: Ext,
 }
 
@@ -85,6 +165,10 @@ pub struct DffAtomic {
     pub frame: i32,
     pub geometry: i32,
     pub flags: i32,
+    /// MatFX plugin (0x120): -1 none, else the stored value (non-zero enables effects)
+    pub matfx: i32,
+    pub has_rights: i32,
+    pub rights: [u32; 2],
     pub ext: Ext,
 }
 
@@ -125,6 +209,26 @@ struct Owned {
     _floats: Vec<Vec<f32>>,
     _words: Vec<Vec<u32>>,
     _bytes: Vec<Vec<u8>>,
+    _binmeshes: Vec<Box<DffBinMesh>>,
+    _meshes: Vec<Vec<DffMesh>>,
+    _u16s: Vec<Vec<u16>>,
+    _hanims: Vec<Box<DffHAnim>>,
+    _i32s: Vec<Vec<i32>>,
+    _skins: Vec<Box<DffSkin>>,
+    _matfx: Vec<Box<DffMatFx>>,
+}
+
+const NO_TEXTURE: DffTexture = DffTexture { name: [0; 128], mask: [0; 128], filter_addressing: 0, ext: Ext { data: std::ptr::null(), len: 0 } };
+
+fn empty_slot() -> DffFxSlot {
+    DffFxSlot { kind: 0, coefficient: 0.0, fb_alpha: 0, src_blend: 0, dst_blend: 0, has_tex1: 0, has_tex2: 0, tex1: NO_TEXTURE, tex2: NO_TEXTURE }
+}
+
+/// Right-to-render (0x1F) words of an object, if it has the plugin.
+fn rights_of(parent: &Chunk) -> Option<[u32; 2]> {
+    let p = plugin_chunks(parent).into_iter().find(|p| p.id == 0x1F)?;
+    let mut r = p.reader();
+    Some([r.u32("rights").ok()?, r.u32("rights").ok()?])
 }
 
 const NO_EXT: Ext = Ext { data: std::ptr::null(), len: 0 };
@@ -148,6 +252,14 @@ fn ext_of(parent: &Chunk, all: &[u8]) -> Ext {
 
 fn floats(r: &mut Reader, n: usize, what: &'static str) -> Result<Vec<f32>, String> {
     (0..n).map(|_| r.f32(what).map_err(|e| e.to_string())).collect()
+}
+
+/// The plugin chunks inside an object's EXTENSION chunk.
+fn plugin_chunks<'a>(parent: &Chunk<'a>) -> Vec<Chunk<'a>> {
+    match parent.child(ID_EXTENSION) {
+        Ok(e) => e.children().filter_map(|c| c.ok()).collect(),
+        Err(_) => Vec::new(),
+    }
 }
 
 fn read_string(c: &Chunk, out: &mut [u8; 128]) {
@@ -189,9 +301,53 @@ impl<'a> Builder<'a> {
         let texture = if textured != 0 {
             self.texture(&c.child(ID_TEXTURE).map_err(|e| e.to_string())?)?
         } else {
-            DffTexture { name: [0; 128], mask: [0; 128], filter_addressing: 0, ext: NO_EXT }
+            NO_TEXTURE
         };
-        Ok(DffMaterial { color: [col[0], col[1], col[2], col[3]], surface, default_surface, textured, texture, ext: ext_of(c, self.all) })
+        let mut matfx = std::ptr::null();
+        if let Some(p) = plugin_chunks(c).into_iter().find(|p| p.id == 0x120) {
+            let mut r = p.reader();
+            let mut fx = Box::new(DffMatFx { effects: r.u32("matfx effects").map_err(e)?, slots: [empty_slot(), empty_slot()] });
+            for slot in fx.slots.iter_mut() {
+                slot.kind = r.u32("matfx type").map_err(e)?;
+                // a nested TEXTURE chunk where the flag says so
+                let mut next_texture = |r: &mut Reader<'a>, this: &mut Builder<'a>| -> Result<(i32, DffTexture), String> {
+                    if r.i32("matfx has texture").map_err(e)? == 0 {
+                        return Ok((0, NO_TEXTURE));
+                    }
+                    loop {
+                        let k = rw::read_chunk(r).map_err(e)?;
+                        if k.id == ID_TEXTURE {
+                            return Ok((1, this.texture(&k)?));
+                        }
+                    }
+                };
+                match slot.kind {
+                    1 => {
+                        slot.coefficient = r.f32("bump coefficient").map_err(e)?;
+                        (slot.has_tex1, slot.tex1) = next_texture(&mut r, self)?;
+                        (slot.has_tex2, slot.tex2) = next_texture(&mut r, self)?;
+                    }
+                    2 => {
+                        slot.coefficient = r.f32("env coefficient").map_err(e)?;
+                        slot.fb_alpha = r.i32("env fb alpha").map_err(e)?;
+                        (slot.has_tex1, slot.tex1) = next_texture(&mut r, self)?;
+                    }
+                    4 => {
+                        slot.src_blend = r.i32("dual src").map_err(e)?;
+                        slot.dst_blend = r.i32("dual dst").map_err(e)?;
+                        (slot.has_tex1, slot.tex1) = next_texture(&mut r, self)?;
+                    }
+                    _ => {}
+                }
+            }
+            matfx = &*fx as *const DffMatFx;
+            self.o._matfx.push(fx);
+        }
+        let (has_rights, rights) = match rights_of(c) {
+            Some(w) => (1, w),
+            None => (0, [0; 2]),
+        };
+        Ok(DffMaterial { color: [col[0], col[1], col[2], col[3]], surface, default_surface, textured, texture, matfx, has_rights, rights, ext: ext_of(c, self.all) })
     }
 
     fn geometry(&mut self, c: &Chunk<'a>) -> Result<DffGeometry, String> {
@@ -270,6 +426,70 @@ impl<'a> Builder<'a> {
             };
             mats.push(self.material(&m)?);
         }
+        let mut binmesh = std::ptr::null();
+        if !native {
+            if let Some(bm) = plugin_chunks(c).into_iter().find(|p| p.id == 0x50E) {
+                let mut r = bm.reader();
+                let bflags = r.u32("binmesh flags").map_err(e)?;
+                let num_meshes = r.u32("binmesh meshes").map_err(e)?;
+                let total_indices = r.u32("binmesh indices").map_err(e)?;
+                let mut meshes = Vec::with_capacity(num_meshes as usize);
+                let mut all = Vec::with_capacity(total_indices as usize);
+                let mut starts = Vec::new();
+                for _ in 0..num_meshes {
+                    let ni = r.u32("mesh indices").map_err(e)?;
+                    let mat_index = r.u32("mesh material").map_err(e)?;
+                    if mat_index as usize >= n {
+                        return Err(err(format!("mesh material {mat_index} of {n}")));
+                    }
+                    starts.push(all.len());
+                    for _ in 0..ni {
+                        all.push(r.u32("mesh index").map_err(e)? as u16);
+                    }
+                    meshes.push(DffMesh { num_indices: ni, mat_index, indices: std::ptr::null() });
+                }
+                for (m, s) in meshes.iter_mut().zip(starts) {
+                    m.indices = all[s..].as_ptr();
+                }
+                let b = Box::new(DffBinMesh { flags: bflags, num_meshes, total_indices, meshes: meshes.as_ptr() });
+                binmesh = &*b as *const DffBinMesh;
+                self.o._u16s.push(all);
+                self.o._meshes.push(meshes);
+                self.o._binmeshes.push(b);
+            }
+        }
+        let mut skin = std::ptr::null();
+        if let Some(sk) = plugin_chunks(c).into_iter().find(|p| p.id == 0x116) {
+            let mut r = sk.reader();
+            let h = r.bytes(4, "skin header").map_err(e)?;
+            let header = [h[0], h[1], h[2], h[3]];
+            let old = header[1] == 0;
+            let nb = header[0] as usize;
+            let used = if old { std::ptr::null() } else { r.bytes(header[1] as usize, "used bones").map_err(e)?.as_ptr() };
+            let indices = r.bytes(4 * nv, "skin indices").map_err(e)?.as_ptr();
+            let weights = r.bytes(16 * nv, "skin weights").map_err(e)?.as_ptr();
+            let mut mats = Vec::with_capacity(64 * nb);
+            for _ in 0..nb {
+                if old {
+                    r.skip(4).map_err(e)?;
+                }
+                mats.extend_from_slice(r.bytes(64, "inverse matrix").map_err(e)?);
+            }
+            let (mut bone_limit, mut num_meshes, mut rle_size, mut split) = (0, 0, 0, std::ptr::null());
+            if !old {
+                bone_limit = r.i32("bone limit").map_err(e)?;
+                num_meshes = r.i32("skin meshes").map_err(e)?;
+                rle_size = r.i32("rle size").map_err(e)?;
+                if num_meshes != 0 {
+                    let sz = nb + 2 * (num_meshes.max(0) as usize + rle_size.max(0) as usize);
+                    split = r.bytes(sz, "skin split data").map_err(e)?.as_ptr();
+                }
+            }
+            let s = Box::new(DffSkin { header, used_bones: used, indices, weights, inverse_matrices: mats.as_ptr(), bone_limit, num_meshes, rle_size, split });
+            skin = &*s as *const DffSkin;
+            self.o._bytes.push(mats);
+            self.o._skins.push(s);
+        }
         let g = DffGeometry {
             flags,
             num_triangles,
@@ -285,6 +505,8 @@ impl<'a> Builder<'a> {
             num_mat_entries: n as i32,
             mat_indices: indices.as_ptr(),
             materials: mats.as_ptr(),
+            binmesh,
+            skin,
             ext: ext_of(c, self.all),
         };
         self.o._morphs.push(morphs);
@@ -348,13 +570,46 @@ impl<'a> Builder<'a> {
                         r.skip(4).map_err(e)?; // matrix flags
                         let mut mm = [0.0; 12];
                         mm.copy_from_slice(&m);
-                        frames.push(DffFrame { m: mm, parent, ext: NO_EXT });
+                        frames.push(DffFrame { m: mm, parent, name: std::ptr::null(), name_len: 0, hanim: std::ptr::null(), ext: NO_EXT });
                     }
                     // one extension per frame, in order, after the struct
                     let exts: Vec<Chunk> = k.children().filter_map(|x| x.ok()).filter(|x| x.id == ID_EXTENSION).collect();
                     for (f, x) in frames.iter_mut().zip(exts) {
                         let start = x.data.as_ptr() as usize - self.all.as_ptr() as usize - 12;
                         f.ext = Ext { data: self.all[start..].as_ptr(), len: (x.data.len() + 12) as u32 };
+                        for p in x.children().filter_map(|c| c.ok()) {
+                            match p.id {
+                                0x253F2FE if p.data.len() <= 23 => {
+                                    f.name = p.data.as_ptr();
+                                    f.name_len = p.data.len() as u32;
+                                }
+                                0x11E => {
+                                    let mut r = p.reader();
+                                    if r.i32("hanim version").map_err(e)? != 0x100 {
+                                        continue;
+                                    }
+                                    let id = r.i32("hanim id").map_err(e)?;
+                                    let num_nodes = r.i32("hanim nodes").map_err(e)?;
+                                    let (mut flags, mut max_key_size) = (0, 0);
+                                    let (mut ids, mut nflags) = (Vec::new(), Vec::new());
+                                    if num_nodes != 0 {
+                                        flags = r.i32("hanim flags").map_err(e)?;
+                                        max_key_size = r.i32("hanim key size").map_err(e)?;
+                                        for _ in 0..num_nodes.max(0) {
+                                            ids.push(r.i32("node id").map_err(e)?);
+                                            r.skip(4).map_err(e)?; // index, unused
+                                            nflags.push(r.i32("node flags").map_err(e)?);
+                                        }
+                                    }
+                                    let h = Box::new(DffHAnim { id, num_nodes, flags, max_key_size, node_ids: ids.as_ptr(), node_flags: nflags.as_ptr() });
+                                    f.hanim = &*h as *const DffHAnim;
+                                    self.o._i32s.push(ids);
+                                    self.o._i32s.push(nflags);
+                                    self.o._hanims.push(h);
+                                }
+                                _ => {}
+                            }
+                        }
                     }
                 }
                 ID_GEOMETRYLIST => {
@@ -374,7 +629,15 @@ impl<'a> Builder<'a> {
                     if frame < 0 || frame as usize >= frames.len() || geometry < 0 || geometry as usize >= geometries.len() {
                         return Err(err("atomic frame/geometry out of range"));
                     }
-                    atomics.push(DffAtomic { frame, geometry, flags, ext: ext_of(&k, self.all) });
+                    let matfx = match plugin_chunks(&k).into_iter().find(|p| p.id == 0x120) {
+                        Some(p) => p.reader().i32("atomic matfx").map_err(e)?,
+                        None => -1,
+                    };
+                    let (has_rights, rights) = match rights_of(&k) {
+                        Some(w) => (1, w),
+                        None => (0, [0; 2]),
+                    };
+                    atomics.push(DffAtomic { frame, geometry, flags, matfx, has_rights, rights, ext: ext_of(&k, self.all) });
                 }
                 // a light: STRUCT with its frame index, then the LIGHT chunk
                 ID_STRUCT => light_frame = k.reader().i32("light frame").map_err(e)?,
@@ -434,6 +697,13 @@ fn read(data: &[u8]) -> Result<Box<Owned>, String> {
             _floats: Vec::new(),
             _words: Vec::new(),
             _bytes: Vec::new(),
+            _binmeshes: Vec::new(),
+            _meshes: Vec::new(),
+            _u16s: Vec::new(),
+            _hanims: Vec::new(),
+            _i32s: Vec::new(),
+            _skins: Vec::new(),
+            _matfx: Vec::new(),
         },
     };
     b.clump(&c).map(Box::new)

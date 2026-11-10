@@ -74,8 +74,8 @@ for s in "${SCENARIOS[@]}"; do
   [[ "$s" == texmods ]] && cp -r "$ROOT/tests/mods" "$T/mods"
   # formats also loads every game texture and checks it against librw's recorded result.
   [[ "$s" == formats ]] && envs+=(REVC_TXD_GOLDEN="$ROOT/tests/golden/textures.txt")
-  # ... and every model read by librw and by the Rust reader, compared (stage 2 step 2a).
-  [[ "$s" == formats ]] && envs+=(REVC_DFF_CHECK=1)
+  # ... and every model, checked against librw's recorded result (stage 2 step 2).
+  [[ "$s" == formats ]] && envs+=(REVC_DFF_GOLDEN="$ROOT/tests/golden/models.txt")
   # pedhit: a car hits peds; at a high display rate (many drawn frames per 30 Hz step) the peds
   # must be drawn where the physics has them.
   [[ "$s" == pedhit ]] && envs+=(REVC_FIXED_FPS=320 REVC_TEST_PEDHIT_KMH=50)

@@ -65,6 +65,8 @@ unsafe extern "C" {
     fn revc_test_read_txd(data: *const u8, len: usize) -> i32;
     fn revc_test_check_dff(data: *const u8, len: usize, name: *const std::ffi::c_char) -> i32;
     fn revc_dff_check_counts(checked: *mut i32, differing: *mut i32);
+    fn revc_dff_plugin_counts(rust: *mut i32, librw: *mut i32);
+    fn revc_test_hash_dff(data: *const u8, len: usize) -> u64;
     fn revc_test_clear_help();
     fn revc_test_show_controls_menu();
     fn revc_test_check_prompt_menu() -> i32;
@@ -670,35 +672,52 @@ impl Driver {
         // Rust reader (rw/DffRead.cpp), the two clumps compared (stage 2 step 2a).
         if std::env::var_os("REVC_DFF_CHECK").is_some() {
             let (mut files, mut unreadable) = (0, 0);
-            let mut check = |data: &[u8], name: &str| {
+            for (name, data) in all_dffs() {
                 let cname = std::ffi::CString::new(name).unwrap_or_default();
                 match unsafe { revc_test_check_dff(data.as_ptr(), data.len(), cname.as_ptr()) } {
                     -1 => unreadable += 1,
                     _ => files += 1,
                 }
-            };
-            if let Ok(arc) = revc_formats::img::Archive::open("models/gta3.img") {
-                for e in arc.entries.iter().filter(|e| e.extension() == "dff") {
-                    if let Ok(data) = arc.read(e) {
-                        check(&data, &e.name);
-                    }
-                }
-            }
-            for dir in ["models", "models/generic", "models/Generic"] {
-                let Ok(rd) = std::fs::read_dir(dir) else { continue };
-                for p in rd.flatten().map(|e| e.path()) {
-                    if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("dff")) {
-                        if let Ok(data) = std::fs::read(&p) {
-                            check(&data, &p.to_string_lossy());
-                        }
-                    }
-                }
             }
             let (mut checked, mut differing) = (0, 0);
             unsafe { revc_dff_check_counts(&mut checked, &mut differing) };
-            log(format!("models: {files} DFFs compared ({unreadable} librw couldn't read); {checked} clumps, {differing} differ"));
+            let (mut pr, mut pl) = (0, 0);
+            unsafe { revc_dff_plugin_counts(&mut pr, &mut pl) };
+            log(format!("models: {files} DFFs compared ({unreadable} librw couldn't read); {checked} clumps, {differing} differ; plugin chunks read in Rust {pr}, by librw {pl}"));
             if differing != 0 || checked < 1000 {
                 self.fail(format!("models: {differing} of {checked} clumps differ between librw and the Rust reader (see [revc-dff] lines)"));
+            }
+        }
+        // REVC_DFF_GOLDEN=tests/golden/models.txt (scripts/test.sh): every model built from the Rust
+        // reader must hash as librw's readers built it when the file was recorded.
+        if let Some(golden) = std::env::var_os("REVC_DFF_GOLDEN") {
+            match std::fs::read_to_string(&golden) {
+                Ok(text) => {
+                    let want: std::collections::HashMap<&str, &str> = text
+                        .lines()
+                        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                        .filter_map(|l| l.rsplit_once(' '))
+                        .collect();
+                    let (mut ok, mut bad) = (0, Vec::new());
+                    let mut seen = 0;
+                    for (name, data) in all_dffs() {
+                        seen += 1;
+                        let h = format!("{:016x}", unsafe { revc_test_hash_dff(data.as_ptr(), data.len()) });
+                        match want.get(name.as_str()) {
+                            Some(w) if *w == h => ok += 1,
+                            Some(w) => bad.push(format!("{name}: {h} (golden {w})")),
+                            None => bad.push(format!("{name}: {h} (not in the golden file)")),
+                        }
+                    }
+                    log(format!("models: {ok} of {seen} DFFs match {} ({} golden entries)", golden.to_string_lossy(), want.len()));
+                    for b in bad.iter().take(5) {
+                        log(format!("models: {b}"));
+                    }
+                    if !bad.is_empty() || ok != want.len() {
+                        self.fail(format!("models: {} differ from the golden hashes, {} golden entries not seen", bad.len(), want.len().saturating_sub(ok)));
+                    }
+                }
+                Err(e) => self.fail(format!("models: {}: {e}", golden.to_string_lossy())),
             }
         }
         // REVC_TXD_GOLDEN=tests/golden/textures.txt (scripts/test.sh): the Rust reader's textures
@@ -1018,4 +1037,35 @@ fn check_txd_dir(dir: &std::path::Path) -> (usize, usize, usize) {
         }
     }
     (files, textures, failed)
+}
+
+/// Every DFF of the game: the entries of models/gta3.img and the loose ones in models/ and
+/// models/generic (name as the golden files use it, bytes).
+fn all_dffs() -> Vec<(String, Vec<u8>)> {
+    let mut out = Vec::new();
+    if let Ok(arc) = revc_formats::img::Archive::open("models/gta3.img") {
+        // a few names occur twice in gta3.img (different models): the second is "name#2"
+        let mut count: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        for e in arc.entries.iter().filter(|e| e.extension() == "dff") {
+            if let Ok(data) = arc.read(e) {
+                let n = count.entry(e.name.to_ascii_lowercase()).or_default();
+                *n += 1;
+                let name = if *n == 1 { e.name.clone() } else { format!("{}#{n}", e.name) };
+                out.push((name, data));
+            }
+        }
+    }
+    for dir in ["models", "models/generic", "models/Generic"] {
+        let Ok(rd) = std::fs::read_dir(dir) else { continue };
+        let mut paths: Vec<_> = rd.flatten().map(|e| e.path()).collect();
+        paths.sort();
+        for p in paths {
+            if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("dff")) {
+                if let Ok(data) = std::fs::read(&p) {
+                    out.push((p.to_string_lossy().into_owned(), data));
+                }
+            }
+        }
+    }
+    out
 }
