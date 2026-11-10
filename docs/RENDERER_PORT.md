@@ -473,6 +473,23 @@ of a frame that was a dirty root carries HIERARCHYSYNC without being in the dirt
 Reparenting such a frame then unlinks a stale link (the original crashes). The game scenarios don't hit
 this; the recorder skips those operations, and the port keeps librw's behaviour.
 
+### Stage 2, step 4: what hangs on frames (plan, 2026-11-10)
+
+The math that reads frame LTMs every frame moves next, each part checked against a recording of
+the original C++ as in step 3.
+
+- **4a. Camera.** camera.cpp's view matrix, frustum corners, planes and bounding box
+  (cameraSync, buildClipPersp/Parallel, buildPlanes), frustumTestSphere, calczShiftScale and
+  setFOV's view window, in `rust/revc/src/rwcamera.rs`. rw::Camera stays a C++ object and
+  passes its fields. **Done 2026-11-10:** checked by `tests/golden/rwcamera.txt` (3,000 camera
+  syncs with 12,000 sphere tests, 3,000 depth ranges and 3,000 FOVs;
+  `tests/golden/recorders/rwcamera`).
+- **4b. HAnim and the animation interpolator.** hanim.cpp's updateMatrices (the bone matrix
+  stack), the keyframe interpolate/apply callbacks, and anim.cpp's AnimInterpolator
+  (setCurrentAnim, addTime).
+- **4c. Geometry and atomic math.** Bounding spheres (MorphTarget, Atomic's world sphere),
+  generateTriangles, buildMeshes, correctTristripWinding, removeUnusedMaterials.
+
 ## Appendix: every RW function the game calls
 
 | Function | Call sites | Area |

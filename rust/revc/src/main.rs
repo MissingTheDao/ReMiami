@@ -12,6 +12,7 @@ mod textutil;
 mod math;
 mod rwmatrix;
 mod rwframe;
+mod rwcamera;
 mod messages;
 mod pager;
 mod savefile;
