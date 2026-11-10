@@ -12,6 +12,8 @@
 #                            frame times at the fixed spots; saves logs/n150/perf-<time>.txt and
 #                            compares it with tests/perf/n150-baseline.txt (slower by more than
 #                            REVC_PERF_TOLERANCE, default 10 %, at any spot: exit 1)
+#                            The box is fanless: every run waits until the CPU package is at or below
+#                            N150_COOL_C (55) C, and the backend order alternates between runs.
 #   wait <job>               collect a perf/soak job (they run detached on the box and survive
 #                            this machine going away; perf and soak wait for theirs themselves)
 #   baseline [FILE]          make a perf result (default: the latest) the new baseline
@@ -155,7 +157,7 @@ case "$cmd" in
     ;;
   perf)
     check_screen
-    RUNS=1 SIZES="1280x720 1920x1080" BACKENDS="vulkan gl"
+    RUNS=1 SIZES="1280x720 1920x1080" BACKENDS="vulkan gl" COOL=${N150_COOL_C:-55}
     while (( $# )); do
       case "$1" in
         --runs) RUNS=$2; shift ;;
@@ -170,10 +172,21 @@ case "$cmd" in
 # The TV's state matters: compositing a visible 4K desktop costs the game ~1.9 ms a frame here.
 tv=off; for c in /sys/class/drm/card*-*; do [[ \$(cat \$c/status) == connected && \$(cat \$c/dpms) == On ]] && tv=on; done
 echo \"# \$(cat COMMIT) runs $RUNS display \$tv\" > results/$NAME.txt
-for s in $SIZES; do for b in $BACKENDS; do
-  timeout -k 10 $((RUNS * 300)) scripts/perf.sh --backend \$b --size \$s --runs $RUNS --out results/$NAME.txt --logs results/failed |
-    grep -E '^==|all spots|failed' || echo \"   \$b \$s: no result (hung or crashed; killed after the timeout)\"
-done; done"
+# The box has no fan: under load it reaches ~95 C and throttles. Each run starts cooled down to
+# $COOL C (at most 10 min of waiting), runs are one at a time and the backend order alternates, so
+# no backend always measures on a hotter chip. The start temperature is logged as a comment.
+z=\$(grep -l x86_pkg_temp /sys/class/thermal/thermal_zone*/type | head -1); z=\${z%/type}/temp
+cool() { local i=0; while (( \$(cat \$z) / 1000 > $COOL && i < 120 )); do sleep 5; i=\$((i + 1)); done; echo \$(( \$(cat \$z) / 1000 )); }
+order=\"$BACKENDS\"
+for r in \$(seq $RUNS); do
+  for s in $SIZES; do for b in \$order; do
+    c=\$(cool); echo \"# run \$r \$b \$s start \$c C\" >> results/$NAME.txt
+    echo \"== run \$r \$b \$s (start \$c C)\"
+    timeout -k 10 300 scripts/perf.sh --backend \$b --size \$s --runs 1 --out results/$NAME.txt --logs results/failed |
+      grep -E 'all spots|failed' || echo \"   \$b \$s: no result (hung or crashed; killed after the timeout)\"
+  done; done
+  order=\$(echo \$order | tr ' ' '\\n' | tac | tr '\\n' ' ')
+done"
     wait_job "$NAME"
     ;;
   wait)
