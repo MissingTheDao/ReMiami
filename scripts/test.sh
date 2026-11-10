@@ -72,8 +72,8 @@ for s in "${SCENARIOS[@]}"; do
   cp "$ini" "$T/reVC.ini"
   envs=(REVC_GAME_DIR="$T" REVC_TEST="$s")
   [[ "$s" == texmods ]] && cp -r "$ROOT/tests/mods" "$T/mods"
-  # formats also compares every game texture as librw and the Rust reader load it.
-  [[ "$s" == formats ]] && envs+=(REVC_TXD=check)
+  # formats also loads every game texture and checks it against librw's recorded result.
+  [[ "$s" == formats ]] && envs+=(REVC_TXD_GOLDEN="$ROOT/tests/golden/textures.txt")
   if [[ "$s" == oldsave ]]; then
     rm -f "$T"/userfiles/GTAVCsf3.b*
     cp "$ROOT/tests/saves/other/GTAVCsf1-64bit-gcc.b" "$T/userfiles/GTAVCsf3.b"

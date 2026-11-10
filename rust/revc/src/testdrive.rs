@@ -623,6 +623,28 @@ impl Driver {
             let loaded = unsafe { revc_test_load_all_txds() };
             log(format!("textures: {loaded} TXDs loaded by the {txd_mode} reader in {:.0} ms", t0.elapsed().as_secs_f64() * 1000.0));
         }
+        // REVC_TXD_GOLDEN=tests/golden/textures.txt: the Rust reader's textures (every TXD loaded)
+        // must hash as librw's did when the file was recorded (REVC_TXD=check REVC_TXD_RECORD=...).
+        if let Some(golden) = std::env::var_os("REVC_TXD_GOLDEN").filter(|_| txd_mode != "check") {
+            if txd_mode.is_empty() {
+                unsafe { revc_test_load_all_txds() };
+            }
+            match crate::txdload::golden_check(std::path::Path::new(&golden)) {
+                Ok((seen, missing, extra)) => {
+                    log(format!("textures: {seen} distinct textures, {} missing from / {} not in {}", missing.len(), extra.len(), golden.to_string_lossy()));
+                    for l in missing.iter().take(5) {
+                        log(format!("textures: expected {l}"));
+                    }
+                    for l in extra.iter().take(5) {
+                        log(format!("textures: got {l}"));
+                    }
+                    if !missing.is_empty() || !extra.is_empty() || seen < 1000 {
+                        self.fail(format!("textures: {} expected and {} unexpected texture hashes", missing.len(), extra.len()));
+                    }
+                }
+                Err(e) => self.fail(format!("textures: {e}")),
+            }
+        }
         if txd_mode == "check" {
             let loaded = unsafe { revc_test_load_all_txds() };
             let (mut checked, mut differing) = (0, 0);

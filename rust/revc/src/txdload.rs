@@ -110,3 +110,29 @@ pub unsafe extern "C" fn revc_txd_free(tex: *mut NativeTex) {
         t.size = 0;
     }
 }
+
+/// Texture hashes reported by the C++ reader while REVC_TXD_GOLDEN is set (rw/TexRead.cpp
+/// `TxdHash`), as "name hash" lines like tests/golden/textures.txt.
+static GOLDEN: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// # Safety
+/// `name` must be a NUL-terminated string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_txd_golden_line(name: *const c_char, hash: u64) {
+    let name = unsafe { std::ffi::CStr::from_ptr(name) }.to_string_lossy();
+    GOLDEN.lock().unwrap().push(format!("{name} {hash:016x}"));
+}
+
+/// Compares the reported textures with the golden file (as sets of lines: the same texture may be
+/// loaded more than once). Returns (distinct textures seen, lines only in the file, lines only
+/// seen).
+pub fn golden_check(path: &std::path::Path) -> Result<(usize, Vec<String>, Vec<String>), String> {
+    use std::collections::BTreeSet;
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let want: BTreeSet<&str> = text.lines().filter(|l| !l.is_empty() && !l.starts_with('#')).collect();
+    let seen = GOLDEN.lock().unwrap();
+    let got: BTreeSet<&str> = seen.iter().map(|s| s.as_str()).collect();
+    let missing = want.difference(&got).map(|s| s.to_string()).collect();
+    let extra = got.difference(&want).map(|s| s.to_string()).collect();
+    Ok((got.len(), missing, extra))
+}
