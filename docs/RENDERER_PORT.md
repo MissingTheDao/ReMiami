@@ -453,6 +453,26 @@ hangs on: matrices and the frame hierarchy.
   C++ rw::Frame becomes a thin handle the game keeps using through the fakerw API. Needs the
   plugin data (NodeName, HAnim, the game's frame plugins) to live with it.
 
+**3b done 2026-11-10:** `rust/revc/src/rwframe.rs` holds the frame hierarchy logic on librw's
+own memory layout (repr(C) Frame, Object, LLLink): addChild, removeChild, count, the transform
+ops, getLTM, syncHierarchyLTM, syncDirty, updateObjects and the dirty list. frame.cpp keeps
+thin forwarders. Checked by `tests/golden/rwframe.txt` (60 random scenarios, 3,060 lines with
+every LTM, flag and object sync callback after each operation).
+
+**3c done 2026-11-10, in a smaller form than planned:** frame create, destroy,
+destroyHierarchy, cloneAndLink and purgeClone run in Rust, and Rust allocates the frames. The
+plugin data stays in C++: frame.cpp registers its plugin construct/destruct/copy calls as
+hooks (`revc_frame_set_hooks`), so NodeName, HAnim and the game's frame plugins work
+unchanged. The frames keep raw pointers, not arena handles: the game reaches into rw::Frame
+directly in too many places for handles to pay off yet. Checked by
+`tests/golden/rwframe-life.txt` (3,000 random operations with every plugin call in order;
+the frame state per line is a hash, as the full dump would be ~500 MB).
+
+Note on that recording: librw's cloneRecurse copies a frame's private flags, so an inner clone
+of a frame that was a dirty root carries HIERARCHYSYNC without being in the dirty list.
+Reparenting such a frame then unlinks a stale link (the original crashes). The game scenarios don't hit
+this; the recorder skips those operations, and the port keeps librw's behaviour.
+
 ## Appendix: every RW function the game calls
 
 | Function | Call sites | Area |
