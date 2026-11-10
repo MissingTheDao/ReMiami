@@ -397,6 +397,33 @@ no longer used for game data and can leave the game binary (they stay in the imp
   `tests/golden/textures-xbox.txt` (plus the Xbox release's, with `REVC_TXD_CHECK_DIR`).
 
 
+
+### Stage 2, step 2: models (plan, 2026-11-10)
+
+Goal: DFF models (clumps, and the loose atomics/geometries the game streams) are read in Rust, so
+librw's stream readers for frames, geometry, materials, atomics and their plugins leave the game
+binary. The librw objects themselves (RpClump, RwFrame, RpGeometry ...) stay for now: the C++
+side builds them from what Rust read, as TexRead.cpp does for textures. Replacing the objects
+is the step after (frames and matrices first).
+
+What a DFF read through librw reads today (everything else, e.g. Rockstar's 2dfx and night vertex
+colours, is skipped already): frame list (+ HAnim hierarchy, the game's NodeName, user data),
+geometry list (vertices, normals, UVs, prelight, morph targets, triangles, materials; + BinMesh,
+Skin, user data; native data is skipped since 1c), materials (colour, surface properties,
+texture name/mask/filter; + MatFX, UV animation, rights, user data), textures (+ anisotropy),
+atomics (frame, geometry; + rights, MatFX, skin pipeline). Entry points: RpClumpStreamRead and
+RpClumpGtaStreamRead1/2 (core/FileLoader.cpp, rw/ClumpRead.cpp, renderer/PlayerSkin.cpp).
+
+- **2a. Rust reader + builder + check mode.** revc-formats::dff gets the plugins it keeps as raw
+  bytes today (HAnim, NodeName, Skin, MatFX, BinMesh, UV animation, user data, anisotropy). The
+  game's clump readers hand the chunk to Rust; C++ builds the librw objects from the result
+  (`REVC_DFF=rust|librw|check`, like REVC_TXD). Check mode compares the two object graphs field by
+  field and byte by byte (frames: matrices, names, hierarchy, HAnim; geometry: flags, every
+  vertex array, triangles, meshes, skin weights/indices/inverse matrices; materials; atomics), for
+  every model in gta3.img (a test hook loads them all, as for TXDs).
+- **2b. Golden + removal.** Per-model hashes recorded from librw (tests/golden/models.txt), then
+  librw's clump/geometry/frame stream readers and plugin stream callbacks are deleted.
+
 ## Appendix: every RW function the game calls
 
 | Function | Call sites | Area |
