@@ -159,8 +159,7 @@ Checked against GL3 with all four effects on (scratch config, not a committed te
 Neo-on minus Neo-off delta matches between the renderers (saveload, where Neo changes 5.7 % of
 pixels: 98 % of those agree; elsewhere the mismatches are at most 0.12 % of pixels). Offscreen
 tests: render to texture and the world lightmap formula, both backends. Cars with the Neo vehicle
-shader still need a look in person (no car in the test shots). Still compiled out on WGPU:
-NEW_RENDERER.
+shader still need a look in person (no car in the test shots).
 
 **Screen droplets (stage 1, step 10).** `SCREEN_DROPLETS` works on WGPU: the device draws
 re3's two-coordinate Im2D (`im2DRenderIndexedPrimitiveUV2`) and revc-rw has the droplet shader
@@ -169,6 +168,20 @@ WGSL module. Checking aid: `REVC_TEST_DROPLETS=n` puts n drops on each captured 
 the capture reseed, so both renderers place them the same); with 60 drops on the spots, the
 pixels the drops change agree 71-89 % between GL3 and wgpu (rest: filtering). Offscreen test of
 the droplet shader on both backends. Not part of the regression set (no rain there).
+
+**Leeds-style world renderer (NEW_RENDERER).** re3's optional world renderer (ini `[Rendering]
+NewRenderer=1`, debug menu Render > New Renderer; off by default) now builds on WGPU too, so no
+render extra is compiled out any more. `WorldRender` in custompipes_wgpu.cpp is custompipes_gl.cpp's
+on the device's model API: buildings lit by the ambient light only, opaque meshes in the first
+pass, atomics with blended meshes deferred to the no-z/additive/blend passes, fading by the
+building's alpha. Checked with NewRenderer=1 in both builds (scratch ini): where the new renderer
+changes the picture noticeably (Washington Beach, 1 % of pixels), the change agrees between GL3
+and wgpu on 82 % of those pixels; elsewhere it changes under 0.5 % and the shots stay within the
+usual GL3/wgpu difference. One visible effect explained: water sets only its raster and draws
+with the filter the last draw left (D3D semantics, which WGPU follows). In the default renderer
+that is the last building's trilinear filter, so wgpu water is smooth; with the new renderer the
+last mesh leaves plain linear, which is also the water texture's own mode, giving the same sparkly water as
+GL3, which always draws water with the texture's own filter.
 
 **MSAA (plan task 22, first antialiasing option).** The game's own MultiSampling setting
 (Display Setup, 2x/4x/8x; applied by recreating the window, as in GL3) now reaches the wgpu

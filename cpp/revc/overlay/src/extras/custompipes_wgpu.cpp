@@ -332,4 +332,127 @@ DestroyRimLightPipes(void)
 }
 
 #endif
+
+#ifdef NEW_RENDERER
+// re3's leeds-like world rendering (Rendering > NewRenderer): custompipes_gl.cpp's WorldRender
+// on the WGPU model API. Buildings are lit by the ambient light only (no directionals); opaque
+// meshes draw in the first pass, atomics with blended meshes are deferred to RenderBlendPass.
+namespace WorldRender
+{
+
+typedef rw::wgpu::InstanceDataHeader WgpuHeader;
+typedef rw::wgpu::InstanceData WgpuInst;
+
+struct BuildingInst
+{
+	rw::Matrix matrix;
+	WgpuHeader *instHeader;
+	uint8 fadeAlpha;
+	bool lighting;
+};
+BuildingInst blendInsts[3][2000];
+int numBlendInsts[3];
+
+static bool
+IsTextureTransparent(RwTexture *tex)
+{
+	if(tex == nil || tex->raster == nil)
+		return false;
+	return !!GETWGPURASTEREXT(tex->raster)->hasAlpha;
+}
+
+// gl3 setWorldMatrix + setLights with one ambient (pAmbient or black) and no other lights.
+static void
+buildingModel(BuildingInst *building, rw::wgpu::ModelState *model)
+{
+	memset(model, 0, sizeof(*model));
+	rw::Matrix *m = &building->matrix;
+	rw::float32 *w = model->world;
+	w[0] = m->right.x; w[1] = m->right.y; w[2] = m->right.z; w[3] = 0.0f;
+	w[4] = m->up.x;    w[5] = m->up.y;    w[6] = m->up.z;    w[7] = 0.0f;
+	w[8] = m->at.x;    w[9] = m->at.y;    w[10] = m->at.z;   w[11] = 0.0f;
+	w[12] = m->pos.x;  w[13] = m->pos.y;  w[14] = m->pos.z;  w[15] = 1.0f;
+	if(building->lighting){
+		model->ambient[0] = pAmbient->color.red;
+		model->ambient[1] = pAmbient->color.green;
+		model->ambient[2] = pAmbient->color.blue;
+		model->ambient[3] = pAmbient->color.alpha;
+	}
+}
+
+static WgpuHeader*
+instanceBuilding(RpAtomic *atomic, BuildingInst *building)
+{
+	WgpuHeader *header = rw::wgpu::instanceAtomic(atomic->getPipeline(), atomic);
+	building->instHeader = header;
+	building->lighting = !!(atomic->geometry->flags & rw::Geometry::LIGHT);
+	building->matrix = *atomic->getFrame()->getLTM();
+	return header;
+}
+
+// Render all opaque meshes and put atomics that need blending into the deferred list.
+void
+AtomicFirstPass(RpAtomic *atomic, int pass)
+{
+	BuildingInst *building = &blendInsts[pass][numBlendInsts[pass]];
+	WgpuHeader *header = instanceBuilding(atomic, building);
+	if(header == nil)
+		return;
+	building->fadeAlpha = 255;
+	rw::uint32 flags = atomic->geometry->flags;
+
+	rw::wgpu::ModelState model;
+	buildingModel(building, &model);
+	static rw::RGBA white = { 255, 255, 255, 255 };
+	bool defer = false;
+	WgpuInst *inst = header->inst;
+	for(rw::int32 i = 0; i < header->numMeshes; i++, inst++){
+		rw::Material *m = inst->material;
+		if(inst->vertexAlpha || m->color.alpha != 255 || IsTextureTransparent(m->texture)){
+			defer = true;
+			continue;
+		}
+		rw::wgpu::setModelMaterial(&model, flags & rw::Geometry::MODULATE ? m->color : white, m->surfaceProps);
+		rw::wgpu::setTexture(m->texture);
+		rw::wgpu::drawMesh(header, inst, &model, 0, FALSE, nil);
+	}
+	if(defer)
+		numBlendInsts[pass]++;
+}
+
+void
+AtomicFullyTransparent(RpAtomic *atomic, int pass, int fadeAlpha)
+{
+	BuildingInst *building = &blendInsts[pass][numBlendInsts[pass]];
+	if(instanceBuilding(atomic, building) == nil)
+		return;
+	building->fadeAlpha = fadeAlpha;
+	numBlendInsts[pass]++;
+}
+
+void
+RenderBlendPass(int pass)
+{
+	for(int i = 0; i < numBlendInsts[pass]; i++){
+		BuildingInst *building = &blendInsts[pass][i];
+		WgpuHeader *header = building->instHeader;
+		rw::wgpu::ModelState model;
+		buildingModel(building, &model);
+		WgpuInst *inst = header->inst;
+		for(rw::int32 j = 0; j < header->numMeshes; j++, inst++){
+			rw::Material *m = inst->material;
+			if(!inst->vertexAlpha && m->color.alpha == 255 && !IsTextureTransparent(m->texture) && building->fadeAlpha == 255)
+				continue;	// already done this one
+			rw::RGBA color = m->color;
+			color.alpha = (color.alpha * building->fadeAlpha)/255;
+			rw::wgpu::setModelMaterial(&model, color, m->surfaceProps);	// always modulate here
+			rw::wgpu::setTexture(m->texture);
+			rw::wgpu::drawMesh(header, inst, &model, 0, FALSE, nil);
+		}
+	}
+}
+
+}
+#endif
+
 #endif
