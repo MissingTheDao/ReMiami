@@ -881,6 +881,17 @@ thread_local! {
         RefCell::new((revc_timing::FixedStep::new(30, 4), None));
 }
 
+/// Motion captures (REVC_TEST=motion) keep the render interpolation of the captured frame.
+pub static CAPTURE_KEEPS_ALPHA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn fixed_frame_time() -> Option<std::time::Duration> {
+    static FT: std::sync::OnceLock<Option<std::time::Duration>> = std::sync::OnceLock::new();
+    *FT.get_or_init(|| {
+        let fps: f64 = std::env::var("REVC_FIXED_FPS").ok()?.parse().ok()?;
+        (fps >= 1.0).then(|| std::time::Duration::from_secs_f64(1.0 / fps))
+    })
+}
+
 /// Non-zero while the regression harness waits for this frame to be captured.
 #[unsafe(no_mangle)]
 pub extern "C" fn hostCaptureRequested() -> c_int {
@@ -894,13 +905,19 @@ pub unsafe extern "C" fn hostSimStepsDue(alpha: *mut f32) -> c_int {
     let (steps, a) = SIM_CLOCK.with(|c| {
         let mut c = c.borrow_mut();
         let now = std::time::Instant::now();
-        let elapsed = c.1.map_or(std::time::Duration::ZERO, |t| now - t);
+        let elapsed = match fixed_frame_time() {
+            // REVC_FIXED_FPS=N (tests): every frame is exactly 1/N s, whatever the wall clock, so
+            // which frames fall between which simulation steps is the same in every run.
+            Some(dt) => dt,
+            None => c.1.map_or(std::time::Duration::ZERO, |t| now - t),
+        };
         c.1 = Some(now);
         c.0.advance(elapsed)
     });
     // A frame captured by the regression harness shows the simulated state itself (alpha 1),
-    // not a blend that depends on wall-clock timing, so screenshots are repeatable.
-    let a = if with(|h| h.capture_requested) { 1.0 } else { a };
+    // not a blend that depends on wall-clock timing, so screenshots are repeatable; motion
+    // captures (videos) keep the blend.
+    let a = if with(|h| h.capture_requested) && !CAPTURE_KEEPS_ALPHA.load(std::sync::atomic::Ordering::Relaxed) { 1.0 } else { a };
     if !alpha.is_null() {
         unsafe { *alpha = a };
     }

@@ -14,6 +14,8 @@
 # gamepad: virtual SDL pads: detection, player 1/2 assignment, prompt glyphs per pad (screenshots vs
 #   tests/reference/gamepad/), rumble.
 # spots: screenshots at fixed places on the map (no peds/traffic, noon, sunny) vs tests/reference/spots/.
+# motion: walks and turns at a fixed 144 fps with render interpolation, checks the player moves
+#   smoothly (jitter of body and bones), and makes rust/target/test-output/motion.mp4 to watch.
 # A scenario uses tests/config/<scenario>.ini if present, else tests/config/reVC.ini.
 # REVC_TEST_BIN=path runs that binary instead of building rust/.
 # Output and logs: rust/target/test-output/
@@ -29,7 +31,7 @@ for a in "$@"; do
     *) SCENARIOS+=("$a") ;;
   esac
 done
-(( ${#SCENARIOS[@]} )) || SCENARIOS=(boot saveload savegame oldsave formats texmods gamepad spots)
+(( ${#SCENARIOS[@]} )) || SCENARIOS=(boot saveload savegame oldsave formats texmods gamepad spots motion)
 
 GAME=${REVC_GAME_DIR:-$ROOT/game}
 [[ -d "$GAME/models" ]] || { echo "game data not found at $GAME (set REVC_GAME_DIR)" >&2; exit 2; }
@@ -92,6 +94,10 @@ for s in "${SCENARIOS[@]}"; do
   # pad except the virtual ones' models (DualSense, Steam Deck).
   [[ "$s" == gamepad ]] && envs+=(SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x054c/0x0ce6,0x28de/0x1205)
   [[ "$s" == boot ]] && envs+=(REVC_TEST_SHOT="$OUT/$s.png")
+  if [[ "$s" == motion ]]; then
+    rm -rf "$OUT/motion-frames"; mkdir -p "$OUT/motion-frames"
+    envs+=(REVC_FIXED_FPS=144 REVC_TEST_VIDEO_DIR="$OUT/motion-frames")
+  fi
   if [[ "$s" == saveload || "$s" == texmods ]]; then
     envs+=(REVC_TEST_SHOT="$OUT/$s.png")
     ref=$REF/$s.png
@@ -119,7 +125,16 @@ for s in "${SCENARIOS[@]}"; do
       echo "     FAIL: slot 3 was not converted"; failed=1
     fi
   fi
-  grep -oE '\[revc-test\] (player at|loaded:|image diff|audio|formats:|texmods:|gamepad:|savegame:|spot |[a-z0-9_]+: image diff).*' "$log" | sed 's/^\[revc-test\] /     /'
+  grep -oE '\[revc-test\] (player at|loaded:|image diff|audio|formats:|texmods:|gamepad:|savegame:|motion:|spot |[a-z0-9_]+: image diff).*' "$log" | sed 's/^\[revc-test\] /     /'
+  # The captured frames as a video (144 fps, as rendered) to watch the motion.
+  if [[ "$s" == motion ]] && ls "$OUT/motion-frames"/frame_*.png >/dev/null 2>&1; then
+    if command -v ffmpeg >/dev/null; then
+      ffmpeg -loglevel error -y -framerate 144 -i "$OUT/motion-frames/frame_%04d.png" -c:v libx264 -pix_fmt yuv420p -crf 20 "$OUT/motion.mp4" \
+        && echo "     video: ${OUT#$ROOT/}/motion.mp4"
+    else
+      echo "     (ffmpeg not found: frames are in ${OUT#$ROOT/}/motion-frames/)"
+    fi
+  fi
   # savegame, part 2: load the slot just saved and compare its screenshot.
   if [[ "$s" == savegame ]] && (( rc == 0 )); then
     log2=$OUT/savegame-load.log

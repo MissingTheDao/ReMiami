@@ -27,6 +27,13 @@
 //!                       (the game's own check). scripts/test.sh then loads that slot.
 //!   REVC_TEST=formats   like saveload, then dumps what the C++ loaders hold and compares it
 //!                       with revc-formats (formatcheck.rs).
+//!   REVC_TEST=motion    like saveload, then walks the player forward and turns (injected keys)
+//!                       while capturing every frame with its render interpolation (run with
+//!                       REVC_FIXED_FPS, e.g. 144). Writes the frames to REVC_TEST_VIDEO_DIR
+//!                       (frame_0000.png ...; scripts/test.sh makes motion.mp4) and checks that
+//!                       the player's body and a bone move smoothly from frame to frame: jitter =
+//!                       mean |second difference| / mean |first difference| of their rendered
+//!                       positions, at most REVC_TEST_MAX_JITTER (default 0.5).
 //! Options:
 //!   REVC_TEST_SHOT=path.png   write the final frame here
 //!   REVC_TEST_REF=path.png    compare against this; writes path.png.diff.png on failure
@@ -53,6 +60,7 @@ unsafe extern "C" {
     fn revc_test_show_controls_menu();
     fn revc_test_check_prompt_menu() -> i32;
     fn revc_test_save_slot(slot: i32, state: *mut i32, name: *mut u16, date: *mut u16) -> i32;
+    fn revc_test_motion_sample(out: *mut f32);
     fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
 }
 
@@ -72,6 +80,7 @@ enum Scenario {
     Gamepad,
     Spots,
     SaveGame,
+    Motion,
 }
 
 #[derive(Debug)]
@@ -90,6 +99,8 @@ enum Phase {
     /// and captured SPOT_WAIT_MS later, so wind, waves and the clock are at the same phase in every
     /// run whatever the frame rate (the simulation advances in exact 30 Hz steps).
     Spot { idx: usize, base: u32, stage: SpotStage },
+    /// Motion capture: scripted walk since game time `t0`, `step` into MOTION_SCRIPT.
+    Motion { t0: u32, step: usize },
     Done,
 }
 
@@ -134,6 +145,17 @@ const AUDIO_SCRIPT: &[(u32, i32, bool)] = &[
     (8000, 0, false),    // end (let tails ring out)
 ];
 
+/// Motion scenario: (game ms since the start, key, down). Walk forward, then turn left while
+/// walking; frames are captured until MOTION_FRAMES have been taken.
+const MOTION_SCRIPT: &[(u32, i32, bool)] = &[
+    (0, 1019, true),     // rsUP: walk forward
+    (1500, 1021, true),  // rsLEFT: turn while walking
+    (2300, 1021, false),
+];
+const MOTION_FRAMES: usize = 360;
+/// Frames before measuring (the walk has to get going).
+const MOTION_SKIP: usize = 30;
+
 struct Driver {
     scenario: Scenario,
     slot: i32,
@@ -152,6 +174,9 @@ struct Driver {
     frame_ms: Vec<f32>,
     /// Per spot: (name, mean ms, p99 ms) for the summary.
     perf: Vec<(&'static str, f32, f32)>,
+    /// Motion scenario: the player's rendered body and bone positions per captured frame.
+    motion: Vec<[f32; 6]>,
+    video_dir: Option<PathBuf>,
 }
 
 thread_local! {
@@ -180,7 +205,8 @@ pub fn init() -> Result<bool, String> {
         "gamepad" => Scenario::Gamepad,
         "spots" => Scenario::Spots,
         "savegame" => Scenario::SaveGame,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame)")),
+        "motion" => Scenario::Motion,
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -199,6 +225,8 @@ pub fn init() -> Result<bool, String> {
         last_tick: None,
         frame_ms: Vec::new(),
         perf: Vec::new(),
+        motion: Vec::new(),
+        video_dir: std::env::var_os("REVC_TEST_VIDEO_DIR").map(PathBuf::from),
     };
     log(format!("scenario {scenario:?} started"));
     if std::env::var_os("REVC_TEST_WAV").is_some() {
@@ -287,7 +315,7 @@ impl Driver {
                         self.phase = Phase::MenuShot { frames: 0 };
                         return false;
                     }
-                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -322,6 +350,13 @@ impl Driver {
                     crate::audio::take_stats();
                     crate::audio::take_nonzero_sends();
                     self.phase = Phase::Script { t0: unsafe { revc_test_game_ms() }, step: 0 };
+                    return false;
+                }
+                if self.scenario == Scenario::Motion {
+                    log(format!("motion capture starts after {elapsed} ms game time"));
+                    crate::host::CAPTURE_KEEPS_ALPHA.store(true, Ordering::Relaxed);
+                    crate::host::request_capture();
+                    self.phase = Phase::Motion { t0: unsafe { revc_test_game_ms() }, step: 0 };
                     return false;
                 }
                 if self.scenario == Scenario::Formats {
@@ -370,6 +405,38 @@ impl Driver {
                     step += 1;
                 }
                 self.phase = Phase::Script { t0, step };
+            }
+            Phase::Motion { t0, step } => {
+                let t = unsafe { revc_test_game_ms() }.wrapping_sub(t0);
+                let mut step = step;
+                while let Some(&(at, key, down)) = MOTION_SCRIPT.get(step) {
+                    if t < at {
+                        break;
+                    }
+                    crate::host::inject_key(key, down);
+                    step += 1;
+                }
+                self.phase = Phase::Motion { t0, step };
+                if let Some((w, h, rgba)) = crate::host::take_capture() {
+                    let mut sample = [0.0f32; 6];
+                    unsafe { revc_test_motion_sample(sample.as_mut_ptr()) };
+                    let n = self.motion.len();
+                    self.motion.push(sample);
+                    if let Some(dir) = &self.video_dir {
+                        let path = dir.join(format!("frame_{n:04}.png"));
+                        if let Err(e) = write_png(&path, w, h, &rgba) {
+                            self.fail(format!("writing {}: {e}", path.display()));
+                            return self.finish();
+                        }
+                    }
+                    if self.motion.len() >= MOTION_FRAMES {
+                        crate::host::inject_key(1019, false);
+                        crate::host::inject_key(1021, false);
+                        self.check_motion();
+                        return self.finish();
+                    }
+                    crate::host::request_capture();
+                }
             }
             Phase::Capturing => {
                 if let Some((w, h, rgba)) = crate::host::take_capture() {
@@ -689,6 +756,38 @@ impl Driver {
             let p = PathBuf::from(p);
             let _ = write_png(&p, w, h, &diff_img);
             self.fail(format!("{label}screenshot differs from reference (diff image {})", p.display()));
+        }
+    }
+
+    /// Smoothness of the player's rendered motion over the captured frames (see the motion
+    /// scenario above). A body or bone that is drawn at the simulation's 30 Hz positions while the
+    /// rest moves at the display rate shows up as large second differences.
+    fn check_motion(&mut self) {
+        let limit: f64 = env("REVC_TEST_MAX_JITTER", 0.5);
+        let frames = &self.motion[MOTION_SKIP.min(self.motion.len())..];
+        let series = |f: &dyn Fn(&[f32; 6]) -> [f64; 3]| -> f64 {
+            let p: Vec<[f64; 3]> = frames.iter().map(f).collect();
+            let len = |v: [f64; 3]| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+            let mut d1 = 0.0;
+            let mut d2 = 0.0;
+            for w in p.windows(3) {
+                d1 += len([w[2][0] - w[1][0], w[2][1] - w[1][1], w[2][2] - w[1][2]]);
+                d2 += len([w[2][0] - 2.0 * w[1][0] + w[0][0], w[2][1] - 2.0 * w[1][1] + w[0][1], w[2][2] - 2.0 * w[1][2] + w[0][2]]);
+            }
+            if d1 > 1e-9 { d2 / d1 } else { 0.0 }
+        };
+        let body = series(&|s| [s[0] as f64, s[1] as f64, s[2] as f64]);
+        let bone = series(&|s| [s[3] as f64, s[4] as f64, s[5] as f64]);
+        let rel = series(&|s| [(s[3] - s[0]) as f64, (s[4] - s[1]) as f64, (s[5] - s[2]) as f64]);
+        let first = frames.first().copied().unwrap_or_default();
+        let last = frames.last().copied().unwrap_or_default();
+        let dist = ((last[0] - first[0]).powi(2) + (last[1] - first[1]).powi(2)).sqrt();
+        log(format!("motion: {} frames, walked {dist:.2} m, jitter body {body:.3} bone {bone:.3} bone-vs-body {rel:.3} (limit {limit})", frames.len()));
+        if dist < 1.0 {
+            self.fail(format!("motion: the player barely moved ({dist:.2} m)"));
+        }
+        if body > limit || bone > limit {
+            self.fail(format!("motion: jerky movement (body {body:.3}, bone {bone:.3}, limit {limit})"));
         }
     }
 

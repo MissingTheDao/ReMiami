@@ -6,6 +6,8 @@
 #include "Ped.h"
 #include "Vehicle.h"
 #include "Object.h"
+#include "RwHelper.h"
+#include <vector>
 
 // Render interpolation (task 8). Only what is drawn changes: the simulation always sees its real
 // transforms (ApplyForRender is undone by RestoreAfterRender right after the frame is drawn).
@@ -73,6 +75,106 @@ struct PoolSnap
 };
 
 static PoolSnap gPeds, gVehicles, gObjects;
+
+// Skinned peds: their bone matrices come from the step's animation update; drawn with the
+// interpolated body frame they would lag or lead it (the body jitters against its skeleton)
+// and limbs would move at 30 Hz. So the bones are blended between the steps like the body.
+struct BoneSnap
+{
+	RpHAnimHierarchy *hier;      // the ped's hierarchy at BeginStep (nil: none)
+	std::vector<Xform> prev, current;
+	bool applied;
+};
+static std::vector<BoneSnap> gPedBones;
+
+static void
+GetRw(Xform &x, const RwMatrix *m)
+{
+	x.right = CVector(m->right.x, m->right.y, m->right.z);
+	x.forward = CVector(m->up.x, m->up.y, m->up.z);
+	x.up = CVector(m->at.x, m->at.y, m->at.z);
+	x.pos = CVector(m->pos.x, m->pos.y, m->pos.z);
+}
+
+static void
+PutRw(const Xform &x, RwMatrix *m)
+{
+	m->right.x = x.right.x; m->right.y = x.right.y; m->right.z = x.right.z;
+	m->up.x = x.forward.x; m->up.y = x.forward.y; m->up.z = x.forward.z;
+	m->at.x = x.up.x; m->at.y = x.up.y; m->at.z = x.up.z;
+	m->pos.x = x.pos.x; m->pos.y = x.pos.y; m->pos.z = x.pos.z;
+}
+
+static RpHAnimHierarchy*
+PedHierarchy(CEntity *e)
+{
+	if (e == nil || e->m_rwObject == nil || RwObjectGetType(e->m_rwObject) != rpCLUMP)
+		return nil;
+	RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump((RpClump*)e->m_rwObject);
+	return hier && hier->matrices && hier->numNodes > 0 ? hier : nil;
+}
+
+static void
+SnapshotBones(void)
+{
+	CPedPool *pool = CPools::GetPedPool();
+	if (pool == nil)
+		return;
+	gPedBones.resize(pool->GetSize());
+	for (int i = 0; i < pool->GetSize(); i++) {
+		BoneSnap &b = gPedBones[i];
+		b.applied = false;
+		b.hier = PedHierarchy(pool->GetSlot(i));
+		if (b.hier == nil)
+			continue;
+		b.prev.resize(b.hier->numNodes);
+		for (int n = 0; n < b.hier->numNodes; n++)
+			GetRw(b.prev[n], &b.hier->matrices[n]);
+	}
+}
+
+// After Apply(peds): only for peds whose body was blended (same slot, continuous).
+static void
+ApplyBones(float alpha)
+{
+	static int off = -1;
+	if (off < 0)
+		off = getenv("REVC_NO_BONE_INTERP") != nil;
+	if (off)
+		return;
+	CPedPool *pool = CPools::GetPedPool();
+	if (pool == nil || (int)gPedBones.size() != pool->GetSize() || gPeds.slots == nil)
+		return;
+	for (int i = 0; i < pool->GetSize(); i++) {
+		BoneSnap &b = gPedBones[i];
+		if (!gPeds.slots[i].applied || b.hier == nil || PedHierarchy(pool->GetSlot(i)) != b.hier ||
+		    (int)b.prev.size() != b.hier->numNodes)
+			continue;
+		b.current.resize(b.hier->numNodes);
+		for (int n = 0; n < b.hier->numNodes; n++) {
+			RwMatrix *m = &b.hier->matrices[n];
+			GetRw(b.current[n], m);
+			PutRw(Blend(b.prev[n], b.current[n], alpha), m);
+		}
+		b.applied = true;
+	}
+}
+
+static void
+RestoreBones(void)
+{
+	CPedPool *pool = CPools::GetPedPool();
+	for (size_t i = 0; i < gPedBones.size(); i++) {
+		BoneSnap &b = gPedBones[i];
+		if (!b.applied)
+			continue;
+		b.applied = false;
+		if (pool == nil || (int)i >= pool->GetSize() || PedHierarchy(pool->GetSlot(i)) != b.hier)
+			continue;
+		for (int n = 0; n < b.hier->numNodes; n++)
+			PutRw(b.current[n], &b.hier->matrices[n]);
+	}
+}
 static bool gHavePrev;
 static Xform gCamPrev, gCamCurrent;
 static CVector gCamPosCurrent;
@@ -162,18 +264,26 @@ void
 BeginStep(void)
 {
 	Snapshot(CPools::GetPedPool(), gPeds);
+	SnapshotBones();
 	Snapshot(CPools::GetVehiclePool(), gVehicles);
 	Snapshot(CPools::GetObjectPool(), gObjects);
 	gCamPrev.Get(TheCamera.GetMatrix());
 	gHavePrev = true;
 }
 
+// Regression harness (REVC_TEST=motion): the player's body and one bone as this frame draws
+// them, in world space, so the test can measure how smoothly they move from frame to frame.
+static float gMotionSample[6];
+static void RecordMotion(void);
+
 void
 ApplyForRender(float alpha)
 {
 	gCamApplied = false;
-	if (!bEnabled || !gHavePrev || alpha <= 0.0f || alpha >= 1.0f)
+	if (!bEnabled || !gHavePrev || alpha <= 0.0f || alpha >= 1.0f) {
+		RecordMotion();
 		return;
+	}
 	if (TheCamera.m_pRwCamera) {
 		gCamCurrent.Get(TheCamera.GetMatrix());
 		gCamPosCurrent = TheCamera.m_vecGameCamPos;
@@ -186,13 +296,40 @@ ApplyForRender(float alpha)
 		}
 	}
 	Apply(CPools::GetPedPool(), gPeds, alpha);
+	ApplyBones(alpha);
 	Apply(CPools::GetVehiclePool(), gVehicles, alpha);
 	Apply(CPools::GetObjectPool(), gObjects, alpha);
+	RecordMotion();
+}
+
+static void
+RecordMotion(void)
+{
+	CPed *ped = FindPlayerPed();
+	if (ped == nil)
+		return;
+	CVector body = ped->GetPosition();
+	CVector bone = body;
+	RpHAnimHierarchy *hier = PedHierarchy(ped);
+	if (hier) {
+		// A bone away from the root (the skeleton's middle node), as the skin shader places it.
+		RwMatrix *m = &hier->matrices[hier->numNodes / 2];
+		bone = CVector(m->pos.x, m->pos.y, m->pos.z);
+		if (hier->flags & rpHANIMHIERARCHYLOCALSPACEMATRICES) {
+			RwMatrix *ltm = RwFrameGetLTM(RpClumpGetFrame((RpClump*)ped->m_rwObject));
+			bone = CVector(ltm->right.x * m->pos.x + ltm->up.x * m->pos.y + ltm->at.x * m->pos.z + ltm->pos.x,
+			               ltm->right.y * m->pos.x + ltm->up.y * m->pos.y + ltm->at.y * m->pos.z + ltm->pos.y,
+			               ltm->right.z * m->pos.x + ltm->up.z * m->pos.y + ltm->at.z * m->pos.z + ltm->pos.z);
+		}
+	}
+	gMotionSample[0] = body.x; gMotionSample[1] = body.y; gMotionSample[2] = body.z;
+	gMotionSample[3] = bone.x; gMotionSample[4] = bone.y; gMotionSample[5] = bone.z;
 }
 
 void
 RestoreAfterRender(void)
 {
+	RestoreBones();
 	Restore(CPools::GetPedPool(), gPeds);
 	Restore(CPools::GetVehiclePool(), gVehicles);
 	Restore(CPools::GetObjectPool(), gObjects);
@@ -209,4 +346,12 @@ Reset(void)
 {
 	gHavePrev = false;
 }
+}
+
+// REVC_NO_BONE_INTERP=1 turns the bone blending off (to check that the motion test notices).
+extern "C" void
+revc_test_motion_sample(float *out)
+{
+	for (int i = 0; i < 6; i++)
+		out[i] = Interpolation::gMotionSample[i];
 }

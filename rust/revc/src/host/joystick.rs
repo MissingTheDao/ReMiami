@@ -58,6 +58,12 @@ impl Joysticks {
 
         let slot_idx = slot_idx?;
 
+        // Regression tests (REVC_TEST) only see SDL's virtual pads: a real controller in use on
+        // the desktop (someone playing meanwhile) would otherwise drive the test's player.
+        if std::env::var_os("REVC_TEST").is_some() && !unsafe { SDL_IsJoystickVirtual(id) } {
+            return None;
+        }
+
         // Open joystick
         let joy = unsafe { SDL_OpenJoystick(id) };
         if joy.is_null() {
