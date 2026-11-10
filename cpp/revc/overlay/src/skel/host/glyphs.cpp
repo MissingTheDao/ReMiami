@@ -27,6 +27,7 @@ static const char *ButtonTexNames[MAX_BUTTON_ICONS] = {
 	"cross", "circle", "square", "triangle",
 	"l1", "l2", "l3", "r1", "r2", "r3",
 	"thumbryu", "thumbryd", "thumbrxl", "thumbrxr",
+	"dpadu", "dpadr", "dpadd", "dpadl", "select", "start",
 };
 
 static rw::Texture *

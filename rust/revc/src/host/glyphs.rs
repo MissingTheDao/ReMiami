@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 /// CFont's BUTTON_* order (renderer/Font.h).
-pub const BUTTON_COUNT: usize = 18;
+pub const BUTTON_COUNT: usize = 24;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
 pub enum Button {
@@ -34,6 +34,12 @@ pub enum Button {
     RStickDown,
     RStickLeft,
     RStickRight,
+    DpadUp,
+    DpadRight,
+    DpadDown,
+    DpadLeft,
+    Select, // Back / View / Share / Create / Minus
+    Start,  // Start / Menu / Options / Plus
 }
 
 const ALL: [Button; BUTTON_COUNT] = [
@@ -55,6 +61,12 @@ const ALL: [Button; BUTTON_COUNT] = [
     Button::RStickDown,
     Button::RStickLeft,
     Button::RStickRight,
+    Button::DpadUp,
+    Button::DpadRight,
+    Button::DpadDown,
+    Button::DpadLeft,
+    Button::Select,
+    Button::Start,
 ];
 
 /// Face-button labels of a pad in South, East, West, North order (SDL_GetGamepadButtonLabel).
@@ -154,6 +166,32 @@ pub fn glyph_file(kind: PadKind, labels: FaceLabels, b: Button) -> Option<(&'sta
                 _ => format!("{p}_{}{}", if l { 'l' } else { 'r' }, if one { 'b' } else { 't' }),
             }
         }
+        DpadUp => format!("{p}_dpad_up"),
+        DpadRight => format!("{p}_dpad_right"),
+        DpadDown => format!("{p}_dpad_down"),
+        DpadLeft => format!("{p}_dpad_left"),
+        Select => match kind {
+            PadKind::Xbox360 => "xbox_button_back".into(),
+            PadKind::PlayStation3 => "playstation3_button_select".into(),
+            PadKind::PlayStation4 => "playstation4_button_share".into(),
+            PadKind::PlayStation5 => "playstation5_button_create".into(),
+            PadKind::Switch => "switch_button_minus".into(),
+            PadKind::GameCube => return None, // no such button
+            PadKind::SteamDeck => "steamdeck_button_view".into(),
+            PadKind::SteamController => "steam_button_back_icon".into(),
+            _ => "xbox_button_view".into(),
+        },
+        Start => match kind {
+            PadKind::Xbox360 => "xbox_button_start".into(),
+            PadKind::PlayStation3 => "playstation3_button_start".into(),
+            PadKind::PlayStation4 => "playstation4_button_options".into(),
+            PadKind::PlayStation5 => "playstation5_button_options".into(),
+            PadKind::Switch => "switch_button_plus".into(),
+            PadKind::GameCube => "gamecube_button_start".into(),
+            PadKind::SteamDeck => "steamdeck_button_options".into(),
+            PadKind::SteamController => "steam_button_start_icon".into(),
+            _ => "xbox_button_menu".into(),
+        },
         L3 | R3 => match kind {
             PadKind::SteamController if b == L3 => "steam_stick_l_press".into(),
             PadKind::SteamController => "steam_pad_center".into(),
