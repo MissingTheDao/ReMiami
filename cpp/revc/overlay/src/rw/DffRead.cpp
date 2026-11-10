@@ -3,7 +3,8 @@
 // Geometry::streamRead, MaterialList::streamRead, Material::streamRead, Texture::streamRead and
 // Atomic::streamReadClump line by line. Extension chunks still go through librw's plugin readers
 // (memory stream over the raw chunk), until those move to Rust too.
-// Checked against librw by revc_test_check_dff (every DFF of the game, scenario formats).
+// Checked against hashes recorded from librw's readers before they were removed
+// (tests/golden/models.txt, revc_test_hash_dff, scenario formats).
 #if defined LIBRW_HOST
 
 #include "common.h"
@@ -519,18 +520,6 @@ RevcClumpRead(const uint8 *data, size_t len)
 	return clump;
 }
 
-// REVC_DFF=librw keeps librw's readers (for comparisons); the default is the Rust reader.
-bool
-RevcDffUseRust(void)
-{
-	static int rust = -1;
-	if(rust < 0){
-		const char *e = getenv("REVC_DFF");
-		rust = !(e && strcmp(e, "librw") == 0);
-	}
-	return rust != 0;
-}
-
 // The CLUMP chunk the stream is in (just after RwStreamFindChunk(rwID_CLUMP)): its 12-byte header
 // and body, copied out, plus an EXTENSION chunk right after it: older files (RW 3.1, e.g.
 // models/generic/air_vlo.dff) keep the clump's extension outside the CLUMP chunk, where librw's
@@ -606,239 +595,11 @@ RevcClumpGtaCancel(void)
 	pendingClump = nil;
 }
 
-// ---------------------------------------------------------------- comparison with librw
-
-static char cmpWhat[512];
-
-#define DIFF(...) do { if(cmpWhat[0] == 0) snprintf(cmpWhat, sizeof(cmpWhat), __VA_ARGS__); return false; } while(0)
-
-static bool
-SameBytes(const void *a, const void *b, size_t n, const char *what)
-{
-	if((a == nil) != (b == nil))
-		DIFF("%s allocated %d vs %d", what, a != nil, b != nil);
-	if(a && n && memcmp(a, b, n))
-		DIFF("%s differs", what);
-	return true;
-}
-
-static bool
-SameMatrix(const Matrix &a, const Matrix &b, const char *what)
-{
-	if(memcmp(&a.right, &b.right, 12) || memcmp(&a.up, &b.up, 12) || memcmp(&a.at, &b.at, 12) ||
-	   memcmp(&a.pos, &b.pos, 12) || a.flags != b.flags)
-		DIFF("%s matrix", what);
-	return true;
-}
-
-static bool
-SameFrames(Frame *a, Frame *b, const char *path)
-{
-	char p[256];
-	if((a == nil) != (b == nil))
-		DIFF("frame %s missing on one side", path);
-	if(a == nil)
-		return true;
-	if(!SameMatrix(a->matrix, b->matrix, path))
-		return false;
-	if(strcmp(GetFrameNodeName(a), GetFrameNodeName(b)))
-		DIFF("frame %s name '%s' vs '%s'", path, GetFrameNodeName(a), GetFrameNodeName(b));
-	HAnimData *ha = HAnimData::get(a), *hb = HAnimData::get(b);
-	if(ha->id != hb->id || (ha->hierarchy == nil) != (hb->hierarchy == nil))
-		DIFF("frame %s hanim id %d/%d hierarchy %d/%d", path, ha->id, hb->id, ha->hierarchy != nil, hb->hierarchy != nil);
-	if(ha->hierarchy){
-		HAnimHierarchy *xa = ha->hierarchy, *xb = hb->hierarchy;
-		if(xa->numNodes != xb->numNodes || xa->flags != xb->flags)
-			DIFF("frame %s hierarchy nodes %d/%d flags %x/%x", path, xa->numNodes, xb->numNodes, xa->flags, xb->flags);
-		for(int32 n = 0; n < xa->numNodes; n++)
-			if(xa->nodeInfo[n].id != xb->nodeInfo[n].id || xa->nodeInfo[n].index != xb->nodeInfo[n].index ||
-			   xa->nodeInfo[n].flags != xb->nodeInfo[n].flags)
-				DIFF("frame %s hierarchy node %d", path, n);
-	}
-	// plugin data (HAnim, NodeName, user data): compare the frames' plugin blocks byte by byte,
-	// pointers inside excepted (HAnim hierarchies are compared below by content)
-	int32 i = 0;
-	Frame *ca = a->child, *cb = b->child;
-	for(; ca || cb; ca = ca ? ca->next : nil, cb = cb ? cb->next : nil, i++){
-		snprintf(p, sizeof(p), "%s/%d", path, i);
-		if(!SameFrames(ca, cb, p))
-			return false;
-	}
-	return true;
-}
-
-static bool
-SameTexture(Texture *a, Texture *b, const char *what)
-{
-	if((a == nil) != (b == nil))
-		DIFF("%s texture present %d vs %d", what, a != nil, b != nil);
-	if(a == nil)
-		return true;
-	// In the game both readers find the same texture object in the current dictionary; without
-	// one (the test sweep) each read makes its own dummy, so compare what was asked for.
-	if(a != b && (strncmp(a->name, b->name, 32) || strncmp(a->mask, b->mask, 32) ||
-	              a->filterAddressing != b->filterAddressing || a->refCount != b->refCount))
-		DIFF("%s texture '%.32s'/'%.32s' %x vs '%.32s'/'%.32s' %x", what, a->name, a->mask, a->filterAddressing,
-			b->name, b->mask, b->filterAddressing);
-	return true;
-}
-
-static bool
-SameMaterial(Material *a, Material *b, const char *what)
-{
-	if(memcmp(&a->color, &b->color, 4) || memcmp(&a->surfaceProps, &b->surfaceProps, sizeof(a->surfaceProps)))
-		DIFF("%s colour/surface", what);
-	if(!SameTexture(a->texture, b->texture, what))
-		return false;
-	if(a->refCount != b->refCount)
-		DIFF("%s refcount %d vs %d", what, a->refCount, b->refCount);
-	MatFX *fa = MatFX::get(a), *fb = MatFX::get(b);
-	if((fa == nil) != (fb == nil))
-		DIFF("%s matfx present %d vs %d", what, fa != nil, fb != nil);
-	if(fa){
-		if(fa->type != fb->type)
-			DIFF("%s matfx type %d vs %d", what, fa->type, fb->type);
-		for(int i = 0; i < 2; i++){
-			if(fa->fx[i].type != fb->fx[i].type)
-				DIFF("%s matfx slot %d type", what, i);
-			switch(fa->fx[i].type){
-			case MatFX::BUMPMAP:
-				if(fa->fx[i].bump.coefficient != fb->fx[i].bump.coefficient ||
-				   !SameTexture(fa->fx[i].bump.bumpedTex, fb->fx[i].bump.bumpedTex, what) ||
-				   !SameTexture(fa->fx[i].bump.tex, fb->fx[i].bump.tex, what))
-					DIFF("%s matfx bump", what);
-				break;
-			case MatFX::ENVMAP:
-				if(fa->fx[i].env.coefficient != fb->fx[i].env.coefficient || fa->fx[i].env.fbAlpha != fb->fx[i].env.fbAlpha ||
-				   !SameTexture(fa->fx[i].env.tex, fb->fx[i].env.tex, what))
-					DIFF("%s matfx env", what);
-				break;
-			case MatFX::DUAL:
-				if(fa->fx[i].dual.srcBlend != fb->fx[i].dual.srcBlend || fa->fx[i].dual.dstBlend != fb->fx[i].dual.dstBlend ||
-				   !SameTexture(fa->fx[i].dual.tex, fb->fx[i].dual.tex, what))
-					DIFF("%s matfx dual", what);
-				break;
-			}
-		}
-	}
-	if(a->pipeline != b->pipeline)
-		DIFF("%s pipeline", what);
-	return true;
-}
-
-static bool
-SameGeometry(Geometry *a, Geometry *b, const char *what)
-{
-	if(a->flags != b->flags || a->numTriangles != b->numTriangles || a->numVertices != b->numVertices ||
-	   a->numMorphTargets != b->numMorphTargets || a->numTexCoordSets != b->numTexCoordSets)
-		DIFF("%s header: flags %x/%x tris %d/%d verts %d/%d morphs %d/%d sets %d/%d", what,
-			a->flags, b->flags, a->numTriangles, b->numTriangles, a->numVertices, b->numVertices,
-			a->numMorphTargets, b->numMorphTargets, a->numTexCoordSets, b->numTexCoordSets);
-	char w[256];
-	snprintf(w, sizeof(w), "%s colours", what);
-	if(!SameBytes(a->colors, b->colors, 4*a->numVertices, w)) return false;
-	for(int32 i = 0; i < a->numTexCoordSets; i++){
-		snprintf(w, sizeof(w), "%s uv set %d", what, i);
-		if(!SameBytes(a->texCoords[i], b->texCoords[i], 8*a->numVertices, w)) return false;
-	}
-	snprintf(w, sizeof(w), "%s triangles", what);
-	if(!SameBytes(a->triangles, b->triangles, sizeof(Triangle)*a->numTriangles, w)) return false;
-	for(int32 i = 0; i < a->numMorphTargets; i++){
-		MorphTarget *ma = &a->morphTargets[i], *mb = &b->morphTargets[i];
-		snprintf(w, sizeof(w), "%s morph %d sphere", what, i);
-		if(!SameBytes(&ma->boundingSphere, &mb->boundingSphere, sizeof(Sphere), w)) return false;
-		snprintf(w, sizeof(w), "%s morph %d vertices", what, i);
-		if(!SameBytes(ma->vertices, mb->vertices, 12*a->numVertices, w)) return false;
-		snprintf(w, sizeof(w), "%s morph %d normals", what, i);
-		if(!SameBytes(ma->normals, mb->normals, 12*a->numVertices, w)) return false;
-	}
-	if(a->matList.numMaterials != b->matList.numMaterials)
-		DIFF("%s materials %d vs %d", what, a->matList.numMaterials, b->matList.numMaterials);
-	for(int32 i = 0; i < a->matList.numMaterials; i++){
-		snprintf(w, sizeof(w), "%s material %d", what, i);
-		// shared entries: the same index on both sides
-		for(int32 j = 0; j < i; j++)
-			if((a->matList.materials[i] == a->matList.materials[j]) != (b->matList.materials[i] == b->matList.materials[j]))
-				DIFF("%s material %d sharing", what, i);
-		if(!SameMaterial(a->matList.materials[i], b->matList.materials[i], w))
-			return false;
-	}
-	// skin
-	Skin *sa = Skin::get(a), *sb = Skin::get(b);
-	if((sa == nil) != (sb == nil))
-		DIFF("%s skin present %d vs %d", what, sa != nil, sb != nil);
-	if(sa){
-		if(sa->numBones != sb->numBones || sa->numUsedBones != sb->numUsedBones || sa->numWeights != sb->numWeights ||
-		   sa->boneLimit != sb->boneLimit || sa->numMeshes != sb->numMeshes || sa->rleSize != sb->rleSize)
-			DIFF("%s skin header", what);
-		snprintf(w, sizeof(w), "%s skin used bones", what);
-		if(!SameBytes(sa->usedBones, sb->usedBones, sa->numUsedBones, w)) return false;
-		snprintf(w, sizeof(w), "%s skin indices", what);
-		if(!SameBytes(sa->indices, sb->indices, 4*a->numVertices, w)) return false;
-		snprintf(w, sizeof(w), "%s skin weights", what);
-		if(!SameBytes(sa->weights, sb->weights, 16*a->numVertices, w)) return false;
-		snprintf(w, sizeof(w), "%s skin matrices", what);
-		if(!SameBytes(sa->inverseMatrices, sb->inverseMatrices, 64*sa->numBones, w)) return false;
-		if(sa->numMeshes){
-			snprintf(w, sizeof(w), "%s skin split data", what);
-			if(!SameBytes(sa->remapIndices, sb->remapIndices, sa->numBones + 2*(sa->numMeshes+sa->rleSize), w)) return false;
-		}
-	}
-	// mesh header (BinMesh plugin)
-	MeshHeader *ha = a->meshHeader, *hb = b->meshHeader;
-	if((ha == nil) != (hb == nil))
-		DIFF("%s mesh header present %d vs %d", what, ha != nil, hb != nil);
-	if(ha){
-		if(ha->flags != hb->flags || ha->numMeshes != hb->numMeshes || ha->totalIndices != hb->totalIndices)
-			DIFF("%s mesh header", what);
-		for(uint32 i = 0; i < ha->numMeshes; i++){
-			Mesh *ma = &ha->getMeshes()[i], *mb = &hb->getMeshes()[i];
-			snprintf(w, sizeof(w), "%s mesh %d", what, i);
-			if(ma->numIndices != mb->numIndices) DIFF("%s index count", w);
-			if(!SameBytes(ma->indices, mb->indices, 2*ma->numIndices, w)) return false;
-			int32 ia = a->matList.findIndex(ma->material), ib = b->matList.findIndex(mb->material);
-			if(ia != ib) DIFF("%s material %d vs %d", w, ia, ib);
-		}
-	}
-	return true;
-}
-
-static bool
-SameClump(Clump *a, Clump *b)
-{
-	if(!SameFrames(a->getFrame(), b->getFrame(), "root"))
-		return false;
-	if(a->countAtomics() != b->countAtomics())
-		DIFF("atomics %d vs %d", a->countAtomics(), b->countAtomics());
-	LLLink *la = a->atomics.link.next, *lb = b->atomics.link.next;
-	for(int32 i = 0; la != a->atomics.end(); la = la->next, lb = lb->next, i++){
-		Atomic *aa = Atomic::fromClump(la), *ab = Atomic::fromClump(lb);
-		char w[64];
-		snprintf(w, sizeof(w), "atomic %d", i);
-		if(aa->object.object.flags != ab->object.object.flags)
-			DIFF("%s flags %x vs %x", w, aa->object.object.flags, ab->object.object.flags);
-		if(aa->pipeline != ab->pipeline)
-			DIFF("%s pipeline", w);
-		if(!SameGeometry(aa->geometry, ab->geometry, w))
-			return false;
-	}
-	if(a->countLights() != b->countLights())
-		DIFF("lights %d vs %d", a->countLights(), b->countLights());
-	la = a->lights.link.next, lb = b->lights.link.next;
-	for(int32 i = 0; la != a->lights.end(); la = la->next, lb = lb->next, i++){
-		Light *xa = Light::fromClump(la), *xb = Light::fromClump(lb);
-		if(xa->radius != xb->radius || memcmp(&xa->color, &xb->color, sizeof(xa->color)) ||
-		   xa->minusCosAngle != xb->minusCosAngle || xa->object.object.flags != xb->object.object.flags ||
-		   xa->getType() != xb->getType())
-			DIFF("light %d", i);
-	}
-	return true;
-}
-
 // ---------------------------------------------------------------- golden hashes
 
-// FNV-1a 64 over everything SameClump compares, for tests/golden/models.txt (recorded from
-// librw's readers before they were removed, checked by the formats test with REVC_DFF_GOLDEN).
+// FNV-1a 64 over everything the readers build (frames, names, HAnim, geometry arrays, materials
+// and sharing, textures, MatFX, skin, meshes, atomics, lights), for tests/golden/models.txt
+// (recorded from librw's readers before they were removed; checked with REVC_DFF_GOLDEN).
 struct Fnv {
 	uint64 h = 0xcbf29ce484222325ull;
 	void mix(const void *p, size_t n) { const uint8 *b = (const uint8*)p; for(size_t i = 0; i < n; i++){ h ^= b[i]; h *= 0x100000001b3ull; } }
@@ -965,12 +726,6 @@ HashClump(Clump *c)
 	return f.h;
 }
 
-static FILE *dffRecord = (FILE*)-1;
-
-static int dffChecked, dffDiffering;
-
-extern "C" void revc_dff_check_counts(int *checked, int *differing) { *checked = dffChecked; *differing = dffDiffering; }
-
 // Test hook: the Rust reader's clump for one DFF, hashed (tests/golden/models.txt). 0 on failure.
 extern "C" unsigned long long
 revc_test_hash_dff(const unsigned char *data, size_t len)
@@ -981,37 +736,6 @@ revc_test_hash_dff(const unsigned char *data, size_t len)
 	unsigned long long h = HashClump(c);
 	c->destroy();
 	return h;
-}
-
-// Test hook: reads one DFF (CLUMP chunk at `data`) with librw and with the Rust reader and
-// compares the two clumps. Returns 1 if they match, 0 if not (logged), -1 if librw can't read it.
-extern "C" int
-revc_test_check_dff(const unsigned char *data, size_t len, const char *name)
-{
-	StreamMemory ms;
-	ms.open((uint8*)data, len);
-	Clump *lc = nil;
-	if(findChunk(&ms, ID_CLUMP, nil, nil))
-		lc = Clump::streamRead(&ms);
-	ms.close();
-	if(lc == nil)
-		return -1;
-	Clump *rc = RevcClumpRead(data, len);
-	dffChecked++;
-	cmpWhat[0] = 0;
-	bool same = rc && SameClump(lc, rc);
-	if(dffRecord == (FILE*)-1){
-		const char *p = getenv("REVC_DFF_RECORD");
-		dffRecord = p ? fopen(p, "w") : nil;
-	}
-	if(dffRecord)
-		fprintf(dffRecord, "%s %016llx\n", name, (unsigned long long)HashClump(lc));
-	if(!same && dffDiffering++ < 40)
-		printf("[revc-dff] %s: librw vs rust: %s\n", name, rc ? cmpWhat : "rust reader failed");
-	lc->destroy();
-	if(rc)
-		rc->destroy();
-	return same;
 }
 
 #endif

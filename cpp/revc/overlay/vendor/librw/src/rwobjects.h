@@ -93,7 +93,6 @@ struct FrameList_
 	int32 numFrames;
 	Frame **frames;
 
-	FrameList_ *streamRead(Stream *stream);
 	void streamWrite(Stream *stream);
 	static uint32 streamGetSize(Frame *f);
 };
@@ -387,7 +386,6 @@ struct Texture
 	Addressing getAddressV(void) { return (Addressing)((filterAddressing >> 12) & 0xF); }
 	void setAddressU(Addressing u) { filterAddressing = (filterAddressing & ~0xF00) | u<<8; }
 	void setAddressV(Addressing v) { filterAddressing = (filterAddressing & ~0xF000) | v<<12; }
-	static Texture *streamRead(Stream *stream);
 	bool streamWrite(Stream *stream);
 	uint32 streamGetSize(void);
 	static Texture *read(const char *name, const char *mask);
@@ -440,7 +438,6 @@ struct Material
 	Material *clone(void);
 	void destroy(void);
 	void setTexture(Texture *tex);
-	static Material *streamRead(Stream *stream);
 	bool streamWrite(Stream *stream);
 	uint32 streamGetSize(void);
 };
@@ -504,7 +501,6 @@ struct MaterialList
 	void deinit(void);
 	int32 appendMaterial(Material *mat);
 	int32 findIndex(Material *mat);
-	static MaterialList *streamRead(Stream *stream, MaterialList *matlist);
 	bool streamWrite(Stream *stream);
 	uint32 streamGetSize(void);
 };
@@ -550,7 +546,6 @@ struct Geometry
 	void buildTristrips(void);	// private, used by buildMeshes
 	void correctTristripWinding(void);
 	void removeUnusedMaterials(void);
-	static Geometry *streamRead(Stream *stream);
 	bool streamWrite(Stream *stream);
 	uint32 streamGetSize(void);
 
@@ -656,8 +651,6 @@ struct Atomic
 	};
 	void setFlags(uint32 flags) { this->object.object.flags = flags; }
 	uint32 getFlags(void) const { return this->object.object.flags; }
-	static Atomic *streamReadClump(Stream *stream,
-		FrameList_ *frameList, Geometry **geometryList);
 	bool streamWriteClump(Stream *stream, FrameList_ *frmlst);
 	uint32 streamGetSize(void);
 
@@ -700,7 +693,6 @@ struct Light
 	int32 getType(void){ return this->object.object.subType; }
 	void setFlags(uint32 flags) { this->object.object.flags = flags; }
 	uint32 getFlags(void) { return this->object.object.flags; }
-	static Light *streamRead(Stream *stream);
 	bool streamWrite(Stream *stream);
 	uint32 streamGetSize(void);
 
@@ -831,7 +823,6 @@ struct Clump
 		this->object.parent = f; }
 	Frame *getFrame(void) const {
 		return (Frame*)this->object.parent; }
-	static Clump *streamRead(Stream *stream);
 	bool streamWrite(Stream *stream);
 	uint32 streamGetSize(void);
 	void render(void);

@@ -63,8 +63,6 @@ unsafe extern "C" {
     fn revc_test_dump_formats(path: *const std::ffi::c_char) -> i32;
     fn revc_test_load_all_txds() -> i32;
     fn revc_test_read_txd(data: *const u8, len: usize) -> i32;
-    fn revc_test_check_dff(data: *const u8, len: usize, name: *const std::ffi::c_char) -> i32;
-    fn revc_dff_check_counts(checked: *mut i32, differing: *mut i32);
     fn revc_dff_plugin_counts(rust: *mut i32, librw: *mut i32);
     fn revc_test_hash_dff(data: *const u8, len: usize) -> u64;
     fn revc_test_clear_help();
@@ -666,28 +664,6 @@ impl Driver {
             Err(e) => self.fail(e),
         }
         let _ = std::fs::remove_file(&path);
-        // REVC_TXD=check (scripts/test.sh sets it for this scenario): every texture is read by
-        // librw and by Rust (rw/TexRead.cpp); load every TXD in the image, then nothing may differ.
-        // REVC_DFF_CHECK=1: every DFF in gta3.img and the loose ones read by librw and by the
-        // Rust reader (rw/DffRead.cpp), the two clumps compared (stage 2 step 2a).
-        if std::env::var_os("REVC_DFF_CHECK").is_some() {
-            let (mut files, mut unreadable) = (0, 0);
-            for (name, data) in all_dffs() {
-                let cname = std::ffi::CString::new(name).unwrap_or_default();
-                match unsafe { revc_test_check_dff(data.as_ptr(), data.len(), cname.as_ptr()) } {
-                    -1 => unreadable += 1,
-                    _ => files += 1,
-                }
-            }
-            let (mut checked, mut differing) = (0, 0);
-            unsafe { revc_dff_check_counts(&mut checked, &mut differing) };
-            let (mut pr, mut pl) = (0, 0);
-            unsafe { revc_dff_plugin_counts(&mut pr, &mut pl) };
-            log(format!("models: {files} DFFs compared ({unreadable} librw couldn't read); {checked} clumps, {differing} differ; plugin chunks read in Rust {pr}, by librw {pl}"));
-            if differing != 0 || checked < 1000 {
-                self.fail(format!("models: {differing} of {checked} clumps differ between librw and the Rust reader (see [revc-dff] lines)"));
-            }
-        }
         // REVC_DFF_GOLDEN=tests/golden/models.txt (scripts/test.sh): every model built from the Rust
         // reader must hash as librw's readers built it when the file was recorded.
         if let Some(golden) = std::env::var_os("REVC_DFF_GOLDEN") {
@@ -709,7 +685,9 @@ impl Driver {
                             None => bad.push(format!("{name}: {h} (not in the golden file)")),
                         }
                     }
-                    log(format!("models: {ok} of {seen} DFFs match {} ({} golden entries)", golden.to_string_lossy(), want.len()));
+                    let (mut pr, mut pl) = (0, 0);
+                    unsafe { revc_dff_plugin_counts(&mut pr, &mut pl) };
+                    log(format!("models: {ok} of {seen} DFFs match {} ({} golden entries); plugin chunks read in Rust {pr}, skipped or by librw {pl}", golden.to_string_lossy(), want.len()));
                     for b in bad.iter().take(5) {
                         log(format!("models: {b}"));
                     }

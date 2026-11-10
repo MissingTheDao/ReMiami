@@ -429,6 +429,10 @@ RpClumpGtaStreamRead1/2 (core/FileLoader.cpp, rw/ClumpRead.cpp, renderer/PlayerS
   still parsed by librw's plugin readers (same bytes); moving those is next.
 - **2b. Golden + removal.** Per-model hashes recorded from librw (tests/golden/models.txt), then
   librw's clump/geometry/frame stream readers and plugin stream callbacks are deleted.
+  **Done 2026-11-10:** every model plugin the game uses (BinMesh, NodeName, HAnim, Skin, MatFX,
+  rights) is read in Rust; tests/golden/models.txt holds a hash per model as librw built it
+  (4,621); librw's Clump/FrameList/Geometry/MaterialList/Material/Texture/Atomic/Light stream
+  readers and those plugin readers are deleted, with re3's split-read helpers on top of them.
 
 ## Appendix: every RW function the game calls
 
