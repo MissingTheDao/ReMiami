@@ -531,8 +531,19 @@ layouts and is checked against a recording of the original, as in steps 3 and 4.
   applyMask and palettize (an image file with a mask), so those were ported, not deleted; what
   had no callers (DXT flipping, compressPalette, extractMask, setPalette, printSearchPath) is
   gone. Checked by `tests/golden/rwimage.txt` (4,000 cases on seeded images of every depth,
-  with padded strides; `tests/golden/recorders/rwimage`). Still in C++: the search path,
-  getFilename/read/readMasked and the PNG/BMP/TGA readers and writers.
+  with padded strides; `tests/golden/recorders/rwimage`).
+  **Files done 2026-11-11:** `rust/revc/src/rwimagefile.rs` has the search path, getFilename,
+  makePath with the case-insensitive path correction, and readPNG/writePNG, readBMP/writeBMP,
+  readTGA/writeTGA. PNG goes through the png crate; the bundled lodepng is gone. BMP and TGA
+  keep librw's code byte for byte, quirks included. Checked by `tests/golden/rwimagefile.txt`
+  over a corpus of synthetic files the recorder writes (`tests/golden/imagefiles/`: 90 PNGs of
+  every colour type and bit depth, some interlaced, 60 BMPs, 40 TGAs), byte hashes of the BMP
+  and TGA writers, decoded pixels of the PNG writer, and path lookups in a mixed-case tree.
+  Found on the way: librw's writePNG of a 16-bit image encodes a buffer its own conversion had
+  just freed, and frees it again (the game only writes 32-bit images; the port writes the
+  converted pixels), and its BMP reader skips width*bpp % 4 bytes per row, so it reads past the
+  end of some BMPs its writer makes (the corpus files carry slack so the recording stays
+  defined). Image::read/readMasked and the format table stay C++ glue for now.
 - **5c. Rasters.** raster.cpp's bookkeeping (create/destroy, subrasters, createFromImage,
   format helpers) and the wgpu driver's imageFindRasterFormat/rasterFromImage/rasterToImage.
 

@@ -45,8 +45,6 @@ add_library(librw
     wgpu/wgpupipe.cpp
     wgpu/wgpuraster.cpp
 
-    lodepng/lodepng.h
-    lodepng/lodepng.cpp
 
 )
 add_library(librw::librw ALIAS librw)
@@ -59,7 +57,6 @@ target_include_directories(librw
 
 target_compile_definitions(librw
     PRIVATE
-        LODEPNG_NO_COMPILE_CPP
         "$<IF:$<CONFIG:DEBUG>,DEBUG,NDEBUG>"
     PUBLIC
         "RW_${LIBRW_PLATFORM}"

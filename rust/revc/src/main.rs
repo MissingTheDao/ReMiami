@@ -17,6 +17,7 @@ mod rwhanim;
 mod rwgeometry;
 mod rwtexture;
 mod rwimage;
+mod rwimagefile;
 mod messages;
 mod pager;
 mod savefile;

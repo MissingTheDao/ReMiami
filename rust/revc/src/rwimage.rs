@@ -33,16 +33,20 @@ pub struct Hooks {
     pub free: unsafe extern "C" fn(img: *mut Image),
     /// Image::allocate
     pub allocate: unsafe extern "C" fn(img: *mut Image),
+    /// Image::create (width, height, depth)
+    pub create: unsafe extern "C" fn(w: i32, h: i32, depth: i32) -> *mut Image,
+    /// Image::destroy
+    pub destroy: unsafe extern "C" fn(img: *mut Image),
 }
 
 static mut HOOKS: Option<Hooks> = None;
 
-fn hooks() -> &'static Hooks {
+pub(crate) fn hooks() -> &'static Hooks {
     // SAFETY: set once at startup, read-only afterwards.
     unsafe { (*std::ptr::addr_of!(HOOKS)).as_ref().expect("revc_image_set_hooks not called") }
 }
 
-fn bpp_of(depth: i32) -> i32 {
+pub(crate) fn bpp_of(depth: i32) -> i32 {
     if depth < 8 { 1 } else { depth / 8 }
 }
 
@@ -656,15 +660,15 @@ ffi! {
     revc_image_remove_mask(img: *mut Image) => remove_mask(img);
 }
 
+/// Test support shared with rwimagefile's tests: librw-like memory hooks (leaking), the
+/// recorders' seeded image generator and the image hash.
 #[cfg(test)]
-mod golden {
-    //! Replays tests/golden/rwimage.txt (recorded from librw's C++, see the recorder), building
-    //! the same images from the same seeds.
+pub(crate) mod testkit {
     use super::*;
 
-    struct Gen(u32);
+    pub(crate) struct Gen(pub(crate) u32);
     impl Gen {
-        fn next(&mut self) -> u32 {
+        pub(crate) fn next(&mut self) -> u32 {
             self.0 ^= self.0 << 13;
             self.0 ^= self.0 >> 17;
             self.0 ^= self.0 << 5;
@@ -689,7 +693,7 @@ mod golden {
             (*img).flags = 0;
         }
     }
-    unsafe extern "C" fn allocate(img: *mut Image) {
+    pub(crate) unsafe extern "C" fn allocate(img: *mut Image) {
         unsafe {
             let i = &mut *img;
             if i.pixels.is_null() {
@@ -706,8 +710,17 @@ mod golden {
         }
     }
 
+    unsafe extern "C" fn create(w: i32, h: i32, depth: i32) -> *mut Image {
+        Box::into_raw(Box::new(Image { flags: 0, width: w, height: h, depth, bpp: bpp_of(depth), stride: 0, pixels: std::ptr::null_mut(), palette: std::ptr::null_mut() }))
+    }
+    unsafe extern "C" fn destroy(_img: *mut Image) {}
+
+    pub(crate) fn test_hooks() -> Hooks {
+        Hooks { alloc, free, allocate, create, destroy }
+    }
+
     /// The recorder's build().
-    fn build(p: &[u32]) -> Box<Image> {
+    pub(crate) fn build(p: &[u32]) -> Box<Image> {
         let (seed, depth, w, h, pad, ncolors, amode) = (p[0], p[1] as i32, p[2] as i32, p[3] as i32, p[4] as i32, p[5] as usize, p[6]);
         let mut g = Gen(seed | 1);
         let mut tab = [[0u8; 4]; 256];
@@ -764,7 +777,7 @@ mod golden {
         Box::new(Image { flags: 3, width: w, height: h, depth, bpp, stride, pixels, palette })
     }
 
-    fn hash(i: &Image) -> String {
+    pub(crate) fn hash(i: &Image) -> String {
         let mut h = 0xcbf29ce484222325u64;
         let mut hb = |b: u8| h = (h ^ b as u64).wrapping_mul(0x100000001b3);
         for v in [i.depth, i.bpp, i.stride, i.flags] {
@@ -788,11 +801,20 @@ mod golden {
         format!(" {h:016x}")
     }
 
+}
+
+#[cfg(test)]
+mod golden {
+    //! Replays tests/golden/rwimage.txt (recorded from librw's C++, see the recorder), building
+    //! the same images from the same seeds.
+    use super::testkit::*;
+    use super::*;
+
     #[test]
     fn matches_librw_golden() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/golden/rwimage.txt");
         let text = std::fs::read_to_string(path).expect("tests/golden/rwimage.txt");
-        unsafe { revc_image_set_hooks(Hooks { alloc, free, allocate }) };
+        unsafe { revc_image_set_hooks(test_hooks()) };
         let (mut n, mut bad) = (0, Vec::new());
         for line in text.lines() {
             let (input, want) = line.split_once(" =>").unwrap();
