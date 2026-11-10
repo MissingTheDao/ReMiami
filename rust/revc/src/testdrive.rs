@@ -63,6 +63,8 @@ unsafe extern "C" {
     fn revc_test_dump_formats(path: *const std::ffi::c_char) -> i32;
     fn revc_test_load_all_txds() -> i32;
     fn revc_test_read_txd(data: *const u8, len: usize) -> i32;
+    fn revc_test_check_dff(data: *const u8, len: usize, name: *const std::ffi::c_char) -> i32;
+    fn revc_dff_check_counts(checked: *mut i32, differing: *mut i32);
     fn revc_test_clear_help();
     fn revc_test_show_controls_menu();
     fn revc_test_check_prompt_menu() -> i32;
@@ -664,6 +666,41 @@ impl Driver {
         let _ = std::fs::remove_file(&path);
         // REVC_TXD=check (scripts/test.sh sets it for this scenario): every texture is read by
         // librw and by Rust (rw/TexRead.cpp); load every TXD in the image, then nothing may differ.
+        // REVC_DFF_CHECK=1: every DFF in gta3.img and the loose ones read by librw and by the
+        // Rust reader (rw/DffRead.cpp), the two clumps compared (stage 2 step 2a).
+        if std::env::var_os("REVC_DFF_CHECK").is_some() {
+            let (mut files, mut unreadable) = (0, 0);
+            let mut check = |data: &[u8], name: &str| {
+                let cname = std::ffi::CString::new(name).unwrap_or_default();
+                match unsafe { revc_test_check_dff(data.as_ptr(), data.len(), cname.as_ptr()) } {
+                    -1 => unreadable += 1,
+                    _ => files += 1,
+                }
+            };
+            if let Ok(arc) = revc_formats::img::Archive::open("models/gta3.img") {
+                for e in arc.entries.iter().filter(|e| e.extension() == "dff") {
+                    if let Ok(data) = arc.read(e) {
+                        check(&data, &e.name);
+                    }
+                }
+            }
+            for dir in ["models", "models/generic", "models/Generic"] {
+                let Ok(rd) = std::fs::read_dir(dir) else { continue };
+                for p in rd.flatten().map(|e| e.path()) {
+                    if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("dff")) {
+                        if let Ok(data) = std::fs::read(&p) {
+                            check(&data, &p.to_string_lossy());
+                        }
+                    }
+                }
+            }
+            let (mut checked, mut differing) = (0, 0);
+            unsafe { revc_dff_check_counts(&mut checked, &mut differing) };
+            log(format!("models: {files} DFFs compared ({unreadable} librw couldn't read); {checked} clumps, {differing} differ"));
+            if differing != 0 || checked < 1000 {
+                self.fail(format!("models: {differing} of {checked} clumps differ between librw and the Rust reader (see [revc-dff] lines)"));
+            }
+        }
         // REVC_TXD_GOLDEN=tests/golden/textures.txt (scripts/test.sh): the Rust reader's textures
         // (every TXD loaded) must hash as librw's readers built them when the file was recorded.
         if let Some(golden) = std::env::var_os("REVC_TXD_GOLDEN") {

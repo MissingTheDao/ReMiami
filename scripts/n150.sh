@@ -177,7 +177,7 @@ case "$cmd" in
     git -C "$ROOT" describe --always --dirty > /tmp/revc-n150-commit.$$
     scp -q /tmp/revc-n150-commit.$$ "$HOST:revc-src/COMMIT"; rm -f /tmp/revc-n150-commit.$$
     echo "building $(ssh -o BatchMode=yes "$HOST" cat revc-src/COMMIT) on $HOST"
-    ssh -o BatchMode=yes "$HOST" "bash -c '$TOOLS; set -o pipefail; cd revc-src/rust && nice cargo build --locked -q --release 2>&1 | tail -30'" || exit 1
+    ssh -o BatchMode=yes "$HOST" "bash -c '$TOOLS; set -o pipefail; cd revc-src/rust && nice cargo build --locked -q --release 2>&1 | tail -120'" || exit 1
     ssh -o BatchMode=yes "$HOST" "bash -c 'set -e; mkdir -p $DIR/bin $DIR/scripts; cd revc-src; cp rust/target/release/revc ~/$DIR/bin/revc; cp scripts/perf.sh scripts/test.sh scripts/headless.sh ~/$DIR/scripts/; rm -rf ~/$DIR/tests ~/$DIR/assets; cp -r tests assets ~/$DIR/; cp COMMIT ~/$DIR/COMMIT'" || exit 1
     # Your own game files (never committed); user mods and settings stay here.
     rsync -a --delete --exclude mods --exclude userfiles --exclude reVC.ini "$ROOT/game/" "$HOST:$DIR/game/" || exit 1

@@ -74,6 +74,8 @@ for s in "${SCENARIOS[@]}"; do
   [[ "$s" == texmods ]] && cp -r "$ROOT/tests/mods" "$T/mods"
   # formats also loads every game texture and checks it against librw's recorded result.
   [[ "$s" == formats ]] && envs+=(REVC_TXD_GOLDEN="$ROOT/tests/golden/textures.txt")
+  # ... and every model read by librw and by the Rust reader, compared (stage 2 step 2a).
+  [[ "$s" == formats ]] && envs+=(REVC_DFF_CHECK=1)
   # pedhit: a car hits peds; at a high display rate (many drawn frames per 30 Hz step) the peds
   # must be drawn where the physics has them.
   [[ "$s" == pedhit ]] && envs+=(REVC_FIXED_FPS=320 REVC_TEST_PEDHIT_KMH=50)
@@ -124,7 +126,7 @@ for s in "${SCENARIOS[@]}"; do
       echo "     FAIL: slot 3 was not converted"; failed=1
     fi
   fi
-  grep -oE '\[revc-test\] (player at|loaded:|image diff|audio|formats:|textures:|pedhit: as|texmods:|gamepad:|savegame:|motion:|spot |[a-z0-9_]+: image diff).*' "$log" | sed 's/^\[revc-test\] /     /'
+  grep -oE '\[revc-test\] (player at|loaded:|image diff|audio|formats:|textures:|models:|pedhit: as|texmods:|gamepad:|savegame:|motion:|spot |[a-z0-9_]+: image diff).*' "$log" | sed 's/^\[revc-test\] /     /'
   # The captured frames as a video (144 fps, as rendered) to watch the motion.
   if [[ "$s" == motion ]] && ls "$OUT/motion-frames"/frame_*.png >/dev/null 2>&1; then
     if command -v ffmpeg >/dev/null; then

@@ -421,6 +421,12 @@ RpClumpGtaStreamRead1/2 (core/FileLoader.cpp, rw/ClumpRead.cpp, renderer/PlayerS
   field and byte by byte (frames: matrices, names, hierarchy, HAnim; geometry: flags, every
   vertex array, triangles, meshes, skin weights/indices/inverse matrices; materials; atomics), for
   every model in gta3.img (a test hook loads them all, as for TXDs).
+  **2a done 2026-11-10:** `rust/revc/src/dffload.rs` (reader) + `rw/DffRead.cpp` (builder,
+  comparison), default for RpClumpStreamRead and the vehicles' split read (RpClumpGtaStreamRead1/2;
+  `REVC_DFF=librw` keeps librw's). The formats test reads every model both ways and compares
+  (REVC_DFF_CHECK): 4,621 DFFs (gta3.img, models/, models/generic), 0 differences. Found on the
+  way: RW 3.1 files (air_vlo.dff) keep the clump extension after the CLUMP chunk. Plugin data is
+  still parsed by librw's plugin readers (same bytes); moving those is next.
 - **2b. Golden + removal.** Per-model hashes recorded from librw (tests/golden/models.txt), then
   librw's clump/geometry/frame stream readers and plugin stream callbacks are deleted.
 

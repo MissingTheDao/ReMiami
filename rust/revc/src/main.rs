@@ -6,6 +6,7 @@ mod formatcheck;
 mod padtest;
 mod texmods;
 mod txdload;
+mod dffload;
 mod text;
 mod textutil;
 mod math;
