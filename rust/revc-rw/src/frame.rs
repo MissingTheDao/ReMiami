@@ -16,7 +16,69 @@
 
 use crate::Gpu;
 use crate::prim::{expand_primitive, generate_mips, is_line_primitive};
-use std::collections::HashMap;
+use std::collections::HashMap as StdHashMap;
+
+/// rustc's Fx hash: the renderer's caches are looked up several times per draw, and std's SipHash
+/// showed up in profiles (keys are small, trusted integers).
+#[derive(Clone, Copy, Default)]
+pub struct FxBuild;
+
+#[derive(Default)]
+pub struct FxHasher(u64);
+
+impl FxHasher {
+    #[inline]
+    fn add(&mut self, x: u64) {
+        self.0 = (self.0.rotate_left(5) ^ x).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+}
+
+impl std::hash::Hasher for FxHasher {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        let (chunks, rest) = bytes.as_chunks::<8>();
+        for c in chunks {
+            self.add(u64::from_le_bytes(*c));
+        }
+        for &b in rest {
+            self.add(b as u64);
+        }
+    }
+    #[inline]
+    fn write_u8(&mut self, x: u8) {
+        self.add(x as u64);
+    }
+    #[inline]
+    fn write_u16(&mut self, x: u16) {
+        self.add(x as u64);
+    }
+    #[inline]
+    fn write_u32(&mut self, x: u32) {
+        self.add(x as u64);
+    }
+    #[inline]
+    fn write_u64(&mut self, x: u64) {
+        self.add(x);
+    }
+    #[inline]
+    fn write_usize(&mut self, x: usize) {
+        self.add(x as u64);
+    }
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+impl std::hash::BuildHasher for FxBuild {
+    type Hasher = FxHasher;
+    #[inline]
+    fn build_hasher(&self) -> FxHasher {
+        FxHasher(0)
+    }
+}
+
+type HashMap<K, V> = StdHashMap<K, V, FxBuild>;
 
 /// librw `wgpu::Im2DVertex` (same layout as gl3's).
 #[repr(C)]
@@ -238,6 +300,33 @@ struct MeshDraw {
     bones: u32,
     /// Environment texture and sampler for MatFX draws.
     env: Option<(u32, SamplerKey)>,
+}
+
+/// A bind group slot's content in a pass: a dynamic-offset block (model, bones) or a texture.
+#[derive(Clone, Copy, PartialEq)]
+enum Slot {
+    Model(u32),
+    Env(u32, SamplerKey),
+}
+
+/// The vertex (and index) buffer a pass has bound.
+#[derive(Clone, Copy, PartialEq)]
+enum Vb {
+    Im2D,
+    Im3D,
+    Uv2,
+    Geometry(u32),
+}
+
+/// State bound in the current render pass, to skip redundant calls.
+#[derive(Default)]
+struct Bound {
+    pipe: Option<PipeKey>,
+    g0: Option<u32>,
+    g1: Option<(u32, SamplerKey)>,
+    g2: Option<Slot>,
+    g3: Option<Slot>,
+    vb: Option<Vb>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1257,24 +1346,24 @@ impl Renderer {
             bones_capacity: 16,
             bones_bind,
             bones: Vec::new(),
-            geometries: HashMap::new(),
+            geometries: HashMap::default(),
             next_geometry: 1,
             dead_textures: Vec::new(),
             dead_geometries: Vec::new(),
             retired: Vec::new(),
-            pipelines: HashMap::new(),
-            samplers: HashMap::new(),
-            textures: HashMap::new(),
+            pipelines: HashMap::default(),
+            samplers: HashMap::default(),
+            textures: HashMap::default(),
             next_texture: 1,
             white,
-            bind_groups: HashMap::new(),
+            bind_groups: HashMap::default(),
             uniform_stride,
             uniform_buf,
             uniform_capacity: 256,
             uniform_bind,
             vertex_buf,
             vertex3_buf,
-            depths: HashMap::new(),
+            depths: HashMap::default(),
             recording_target: 0,
             ops: Vec::new(),
             verts: Vec::new(),
@@ -2100,7 +2189,7 @@ impl Renderer {
         }
 
         // Attachment views (level 0) of the frame's texture targets.
-        let mut target_views: HashMap<u32, (wgpu::TextureView, (u32, u32))> = HashMap::new();
+        let mut target_views: HashMap<u32, (wgpu::TextureView, (u32, u32))> = HashMap::default();
         for op in &ops {
             if let Op::Target { texture } = *op
                 && texture != 0
@@ -2152,9 +2241,8 @@ impl Renderer {
         };
 
         let mut pass: Option<wgpu::RenderPass<'static>> = None;
-        // Which immediate vertex buffer the pass has bound (None after starting a pass or after a
-        // geometry's buffers).
-        let mut bound: Option<Kind> = None;
+        // What the current pass has bound (reset with every new pass).
+        let mut bound = Bound::default();
         let mut started = false;
         // Current render target (0 = scene) and whether it can be drawn to (a destroyed or
         // compressed target texture swallows its draws).
@@ -2172,7 +2260,7 @@ impl Renderer {
                         continue;
                     }
                     drop(pass.take());
-                    bound = None;
+                    bound = Bound::default();
                     if !started {
                         pass = Some(begin(enc, 0, true, None, false, None));
                         started = true;
@@ -2185,13 +2273,13 @@ impl Renderer {
                 }
                 Op::Target { texture } => {
                     drop(pass.take());
-                    bound = None;
+                    bound = Bound::default();
                     cur_target = texture;
                     target_ok = texture == 0 || target_views.contains_key(&texture);
                 }
                 Op::CopyFrame { texture, x, y } => {
                     drop(pass.take());
-                    bound = None;
+                    bound = Bound::default();
                     if !started {
                         // Nothing drawn yet: the scene is still last frame's.
                         pass = Some(begin(enc, 0, true, None, false, None));
@@ -2226,7 +2314,7 @@ impl Renderer {
                     pass = Some(begin(enc, cur_target, cur_target == 0 && !started, color, depth || (ov.is_some() && overlay_fresh), ov));
                     overlay_fresh &= ov.is_none();
                     started |= cur_target == 0;
-                    bound = None;
+                    bound = Bound::default();
                 }
                 Op::Draw { pipe, texture, sampler, uniform, first, count, mesh } => {
                     if !target_ok {
@@ -2237,19 +2325,34 @@ impl Renderer {
                         pass = Some(begin(enc, cur_target, cur_target == 0 && !started, None, ov.is_some() && overlay_fresh, ov));
                         overlay_fresh &= ov.is_none();
                         started |= cur_target == 0;
-                        bound = None;
+                        bound = Bound::default();
                     }
                     let p = pass.as_mut().unwrap();
-                    p.set_pipeline(&self.pipelines[&pipe]);
-                    p.set_bind_group(0, &self.uniform_bind, &[(uniform as u64 * self.uniform_stride) as u32]);
-                    p.set_bind_group(1, &self.bind_groups[&(texture, sampler)], &[]);
+                    // Only state that changed since the last draw of this pass (wgpu-core's
+                    // per-call cost dominated the frame on weak CPUs); bind groups stay bound
+                    // across pipeline changes (compatible layouts), as WebGPU specifies.
+                    if bound.pipe != Some(pipe) {
+                        p.set_pipeline(&self.pipelines[&pipe]);
+                        bound.pipe = Some(pipe);
+                    }
+                    if bound.g0 != Some(uniform) {
+                        p.set_bind_group(0, &self.uniform_bind, &[(uniform as u64 * self.uniform_stride) as u32]);
+                        bound.g0 = Some(uniform);
+                    }
+                    if bound.g1 != Some((texture, sampler)) {
+                        p.set_bind_group(1, &self.bind_groups[&(texture, sampler)], &[]);
+                        bound.g1 = Some((texture, sampler));
+                    }
                     if pipe.kind == Kind::Im2DUV2 {
-                        if let Some(MeshDraw { env: Some(e), .. }) = mesh {
+                        if let Some(MeshDraw { env: Some(e), .. }) = mesh
+                            && bound.g2 != Some(Slot::Env(e.0, e.1))
+                        {
                             p.set_bind_group(2, &self.bind_groups[&e], &[]);
+                            bound.g2 = Some(Slot::Env(e.0, e.1));
                         }
-                        if bound != Some(pipe.kind) {
+                        if bound.vb != Some(Vb::Uv2) {
                             p.set_vertex_buffer(0, self.vertex_uv2_buf.slice(..));
-                            bound = Some(pipe.kind);
+                            bound.vb = Some(Vb::Uv2);
                         }
                         p.draw(first..first + count, 0..1);
                         continue;
@@ -2257,22 +2360,32 @@ impl Renderer {
                     match mesh {
                         Some(MeshDraw { geometry, model, bones, env }) => {
                             let Some(g) = self.geometries.get(&geometry) else { continue };
-                            p.set_bind_group(2, &self.model_bind, &[(model as u64 * self.model_stride) as u32]);
-                            if pipe.kind == Kind::Skin {
+                            if bound.g2 != Some(Slot::Model(model)) {
+                                p.set_bind_group(2, &self.model_bind, &[(model as u64 * self.model_stride) as u32]);
+                                bound.g2 = Some(Slot::Model(model));
+                            }
+                            if pipe.kind == Kind::Skin && bound.g3 != Some(Slot::Model(bones)) {
                                 p.set_bind_group(3, &self.bones_bind, &[(bones as u64 * self.bones_stride) as u32]);
+                                bound.g3 = Some(Slot::Model(bones));
                             }
-                            if let (Kind::MeshEnv, Some(e)) = (pipe.kind, env) {
+                            if let (Kind::MeshEnv, Some(e)) = (pipe.kind, env)
+                                && bound.g3 != Some(Slot::Env(e.0, e.1))
+                            {
                                 p.set_bind_group(3, &self.bind_groups[&e], &[]);
+                                bound.g3 = Some(Slot::Env(e.0, e.1));
                             }
-                            p.set_vertex_buffer(0, g.vertices.slice(..));
-                            p.set_index_buffer(g.indices.slice(..), wgpu::IndexFormat::Uint16);
-                            bound = None;
+                            if bound.vb != Some(Vb::Geometry(geometry)) {
+                                p.set_vertex_buffer(0, g.vertices.slice(..));
+                                p.set_index_buffer(g.indices.slice(..), wgpu::IndexFormat::Uint16);
+                                bound.vb = Some(Vb::Geometry(geometry));
+                            }
                             p.draw_indexed(first..first + count, 0, 0..1);
                         }
                         None => {
-                            if bound != Some(pipe.kind) {
-                                p.set_vertex_buffer(0, if pipe.kind == Kind::Im3D { self.vertex3_buf.slice(..) } else { self.vertex_buf.slice(..) });
-                                bound = Some(pipe.kind);
+                            let vb = if pipe.kind == Kind::Im3D { Vb::Im3D } else { Vb::Im2D };
+                            if bound.vb != Some(vb) {
+                                p.set_vertex_buffer(0, if vb == Vb::Im3D { self.vertex3_buf.slice(..) } else { self.vertex_buf.slice(..) });
+                                bound.vb = Some(vb);
                             }
                             p.draw(first..first + count, 0..1);
                         }
