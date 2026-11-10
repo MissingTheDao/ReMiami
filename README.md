@@ -21,9 +21,11 @@ strangler style, while staying playable at every step.
 
 ## No game data
 
-This repository contains no game assets. You need your own copy of Vice City; put its files in
-`game/` (never committed). Tools that derive files from it (such as the HUD upscaler) write them
-there too.
+This repository contains no game assets: no game text, textures, models, data files or
+screenshots. You need your own copy of Vice City; put its files in `game/` (never committed).
+Tools that derive files from it (such as the HUD upscaler) write them there too. The automated
+tests' reference screenshots are made locally (`scripts/test.sh --bless`) and are not committed
+either.
 
 ## Layout
 
@@ -32,7 +34,7 @@ there too.
 | `rust/` | Cargo workspace: the `revc` launcher and host, `revc-rw` (renderer), `revc-formats`, `revc-audio`, `revc-timing` |
 | `cpp/re3-miami/` | The C++ game, with vendored librw |
 | `scripts/` | Build, test and tool scripts |
-| `tests/` | Screenshot references for the automated tests |
+| `tests/` | Test scenarios, golden data (synthetic inputs, hashes) and test saves |
 | `docs/` | Building, renderer port, modding, playtest checklists |
 
 Start with [docs/BUILDING.md](docs/BUILDING.md); the renderer work is described in

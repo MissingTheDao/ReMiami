@@ -8,3 +8,12 @@
 /cpp/re3-miami/build/
 *.gguf
 /tools/
+# Copyrighted material that must stay local: reVC's extra game files (text, textures,
+# Xbox Neo data) belong in game/, and test screenshots show the game's art.
+/cpp/re3-miami/gamefiles/TEXT/
+/cpp/re3-miami/gamefiles/models/
+/cpp/re3-miami/gamefiles/neo/
+/cpp/re3-miami/utils/gxt/
+/cpp/re3-miami/vendor/milessdk/
+/tests/reference/
+/tests/reference-wgpu/

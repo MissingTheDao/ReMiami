@@ -43,8 +43,11 @@ The game needs your own Vice City files. `revc` looks for them in this order:
 1. `REVC_GAME_DIR`
 2. the nearest `game/` folder (one containing `models/`) above the current directory or the executable
 
-So a checkout with your game copy in `./game` just works. reVC's extra data files
-(`cpp/re3-miami/gamefiles/`) must be copied into the game folder once.
+So a checkout with your game copy in `./game` just works. Copy `cpp/re3-miami/gamefiles/`
+(the free-roam script and SDL's gamepad database) into the game folder once. reVC's other extra
+files (its GXT text with the new menu strings, `particle.txd`, `generic.txd`, the controller
+pictures and the Xbox Neo data in `neo/`) are Rockstar material and are not in this
+repository; they come from your own game copies (plan: imported from your PC/Xbox files).
 
 ## Reproducibility
 
