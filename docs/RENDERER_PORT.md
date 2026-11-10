@@ -354,6 +354,33 @@ done) -> skin (done) -> MatFX (done) -> post effects (colour filter done; others
 The front-end and HUD come first because the boot scenario and every in-game screenshot show
 them.
 
+### Stage 2, step 1: textures (plan, 2026-11-10)
+
+Goal: game textures come from Rust readers, converted once into a form the renderer loads
+directly, so librw's native texture readers (D3D8/D3D9/Xbox/PS2, `rwNativeTextureHackRead`) are
+no longer used for game data and can leave the game binary (they stay in the importer only).
+
+- **1a. TXDs read by revc-formats.** `RwTextureGtaStreamRead` (rw/TexRead.cpp, used by
+  CTxdStore, FileLoader and the Neo TXD) hands the native chunk to Rust (`revc_formats::txd`, which
+  already reads PC D3D8 natives and is checked against librw by the `formats` test), which
+  returns name, mask, filter/addressing, raster format, alpha and the levels: DXT blocks as they
+  are, everything else as RGBA8. C++ builds the WGPU raster from that (DXT: as `dxt_to_wgpu` /
+  texmods' `DxtRaster` do; RGBA8: per level, keeping the original's mip and AUTOMIPMAP flags) and
+  the `RwTexture` around it. Xbox natives (platform 5) are added to revc-formats for the importer.
+  Check: all screenshot scenarios identical to now (same pixels, not just within tolerance), plus
+  a characterisation test comparing every TXD in the game's IMG and loose files texture by
+  texture (format, flags, levels, bytes) between the two paths.
+- **1b. Converted cache.** On first run (and after the game files or the converter version
+  change), every TXD in gta3.img and the loose ones is converted into one revc texture pack under
+  `userfiles/cache/` (header with a source hash and converter version; per texture the fields
+  above and the GPU-ready levels: BC blocks or RGBA8 with mips already generated). Loading then
+  copies levels straight into rasters. A progress screen like the original's "converting
+  textures" one; missing or stale cache falls back to 1a.
+- **1c. Remove the old path.** Once 1a/1b pass on both backends and the N150, the game no longer
+  calls librw's native texture readers; the D3D/Xbox/PS2 texture code leaves the game build
+  (geometry natives are not used by PC data).
+
+
 ## Appendix: every RW function the game calls
 
 | Function | Call sites | Area |
