@@ -168,7 +168,22 @@ pub fn parse(data: &[u8]) -> Result<Txd> {
 }
 
 fn parse_native(c: &Chunk) -> Result<Texture> {
-    let st = c.child(ID_STRUCT)?;
+    parse_native_struct(&c.child(ID_STRUCT)?)
+}
+
+/// One texture native from the body of its chunk (what follows the 12-byte TEXTURENATIVE
+/// header: the struct, then the extension, which is ignored as the game's reader does).
+pub fn parse_native_body(body: &[u8]) -> Result<Texture> {
+    for c in rw::Chunks::new(body) {
+        let c = c?;
+        if c.id == ID_STRUCT {
+            return parse_native_struct(&c);
+        }
+    }
+    Err(Error::Invalid("texture native without a struct".into()))
+}
+
+fn parse_native_struct(st: &Chunk) -> Result<Texture> {
     let mut r = st.reader();
     let platform = r.u32("texture platform")?;
     if platform != PLATFORM_D3D8 {

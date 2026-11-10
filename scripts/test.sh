@@ -72,6 +72,8 @@ for s in "${SCENARIOS[@]}"; do
   cp "$ini" "$T/reVC.ini"
   envs=(REVC_GAME_DIR="$T" REVC_TEST="$s")
   [[ "$s" == texmods ]] && cp -r "$ROOT/tests/mods" "$T/mods"
+  # formats also compares every game texture as librw and the Rust reader load it.
+  [[ "$s" == formats ]] && envs+=(REVC_TXD=check)
   if [[ "$s" == oldsave ]]; then
     rm -f "$T"/userfiles/GTAVCsf3.b*
     cp "$ROOT/tests/saves/other/GTAVCsf1-64bit-gcc.b" "$T/userfiles/GTAVCsf3.b"
@@ -119,7 +121,7 @@ for s in "${SCENARIOS[@]}"; do
       echo "     FAIL: slot 3 was not converted"; failed=1
     fi
   fi
-  grep -oE '\[revc-test\] (player at|loaded:|image diff|audio|formats:|texmods:|gamepad:|savegame:|motion:|spot |[a-z0-9_]+: image diff).*' "$log" | sed 's/^\[revc-test\] /     /'
+  grep -oE '\[revc-test\] (player at|loaded:|image diff|audio|formats:|textures:|texmods:|gamepad:|savegame:|motion:|spot |[a-z0-9_]+: image diff).*' "$log" | sed 's/^\[revc-test\] /     /'
   # The captured frames as a video (144 fps, as rendered) to watch the motion.
   if [[ "$s" == motion ]] && ls "$OUT/motion-frames"/frame_*.png >/dev/null 2>&1; then
     if command -v ffmpeg >/dev/null; then

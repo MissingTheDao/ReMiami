@@ -370,6 +370,11 @@ no longer used for game data and can leave the game binary (they stay in the imp
   Check: all screenshot scenarios identical to now (same pixels, not just within tolerance), plus
   a characterisation test comparing every TXD in the game's IMG and loose files texture by
   texture (format, flags, levels, bytes) between the two paths.
+  **Done 2026-11-10:** `rust/revc/src/txdload.rs` + `RwTextureGtaStreamRead` (rw/TexRead.cpp),
+  default; `REVC_TXD=librw` keeps the old reader, `REVC_TXD=check` reads with both and compares
+  the WGPU rasters field by field and byte by byte. The `formats` test runs in check mode and
+  loads every TXD in gta3.img (`revc_test_load_all_txds`): 12,811 textures, 0 differences.
+  Xbox natives in revc-formats are still to do (for the importer).
 - **1b. Converted cache.** On first run (and after the game files or the converter version
   change), every TXD in gta3.img and the loose ones is converted into one revc texture pack under
   `userfiles/cache/` (header with a source hash and converter version; per texture the fields

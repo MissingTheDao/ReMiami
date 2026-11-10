@@ -404,3 +404,26 @@ revc_test_check_pad_layouts(void)
 		ControlsManager.GetControllerKeyAssociatedWithAction(VEHICLE_ACCELERATE, JOYSTICK) == 6;
 	return original && classic && standard;
 }
+
+// Loads and frees every texture dictionary in the CD image that isn't loaded yet (as the PC
+// game's CreateTxdImageForVideoCard walks them), so REVC_TXD=check compares every game texture.
+// Returns how many were loaded.
+extern "C" int
+revc_test_load_all_txds(void)
+{
+	int n = 0;
+	CStreaming::FlushRequestList();
+	for (int i = 0; i < TXDSTORESIZE; i++) {
+		if (CTxdStore::GetSlot(i) == nil || !CStreaming::IsObjectInCdImage(i + STREAM_OFFSET_TXD) ||
+		    CStreaming::HasTxdLoaded(i))
+			continue;
+		CStreaming::RequestTxd(i, STREAMFLAGS_KEEP_IN_MEMORY);
+		CStreaming::RequestModelStream(0);
+		CStreaming::FlushChannels();
+		if (CTxdStore::GetSlot(i)->texDict)
+			n++;
+		CStreaming::RemoveTxd(i);
+		CStreaming::FlushRequestList();
+	}
+	return n;
+}

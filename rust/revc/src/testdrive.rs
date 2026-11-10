@@ -56,6 +56,8 @@ unsafe extern "C" {
     fn revc_test_load_slot(slot: i32) -> i32;
     fn revc_test_player_pos(x: *mut f32, y: *mut f32, z: *mut f32);
     fn revc_test_dump_formats(path: *const std::ffi::c_char) -> i32;
+    fn revc_test_load_all_txds() -> i32;
+    fn revc_txd_check_counts(checked: *mut i32, differing: *mut i32);
     fn revc_test_clear_help();
     fn revc_test_show_controls_menu();
     fn revc_test_check_prompt_menu() -> i32;
@@ -611,6 +613,17 @@ impl Driver {
             Err(e) => self.fail(e),
         }
         let _ = std::fs::remove_file(&path);
+        // REVC_TXD=check (scripts/test.sh sets it for this scenario): every texture is read by
+        // librw and by Rust (rw/TexRead.cpp); load every TXD in the image, then nothing may differ.
+        if std::env::var("REVC_TXD").is_ok_and(|v| v == "check") {
+            let loaded = unsafe { revc_test_load_all_txds() };
+            let (mut checked, mut differing) = (0, 0);
+            unsafe { revc_txd_check_counts(&mut checked, &mut differing) };
+            log(format!("textures: {loaded} more TXDs loaded; {checked} textures read by librw and Rust, {differing} differ"));
+            if differing != 0 || checked < 1000 {
+                self.fail(format!("textures: {differing} of {checked} differ between librw and the Rust reader (see [revc-txd] lines)"));
+            }
+        }
     }
 
     /// The game must have driven the Rust mixer (sound effects started). Volume is 0 in the
