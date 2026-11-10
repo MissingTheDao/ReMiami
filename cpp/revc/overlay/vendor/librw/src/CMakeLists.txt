@@ -40,32 +40,6 @@ add_library(librw
     uvanim.cpp
     world.cpp
 
-    d3d/d3d8.cpp
-    d3d/d3d8matfx.cpp
-    d3d/d3d8render.cpp
-    d3d/d3d8skin.cpp
-    d3d/d3d9.cpp
-    d3d/d3d9matfx.cpp
-    d3d/d3d9render.cpp
-    d3d/d3d9skin.cpp
-    d3d/d3d.cpp
-    d3d/d3ddevice.cpp
-    d3d/d3dimmed.cpp
-    d3d/d3drender.cpp
-    d3d/rwd3d8.h
-    d3d/rwd3d9.h
-    d3d/rwd3d.h
-    d3d/rwd3dimpl.h
-    d3d/rwxbox.h
-    d3d/rwxboximpl.h
-    d3d/xbox.cpp
-    d3d/xboxmatfx.cpp
-    d3d/xboxskin.cpp
-    d3d/xboxvfmt.cpp
-
-    rwwdgl.h
-    wdgl.cpp
-
     wgpu/rwwgpu.h
     wgpu/wgpudevice.cpp
     wgpu/wgpupipe.cpp
@@ -74,15 +48,6 @@ add_library(librw
     lodepng/lodepng.h
     lodepng/lodepng.cpp
 
-    ps2/pds.cpp
-    ps2/ps2.cpp
-    ps2/ps2device.cpp
-    ps2/ps2matfx.cpp
-    ps2/ps2raster.cpp
-    ps2/ps2skin.cpp
-    ps2/rwps2.h
-    ps2/rwps2impl.h
-    ps2/rwps2plg.h
 )
 add_library(librw::librw ALIAS librw)
 
@@ -163,22 +128,7 @@ if(LIBRW_INSTALL)
             rwanim.h
             rwplugins.h
             rwuserdata.h
-            rwwdgl.h
         DESTINATION "${LIBRW_INSTALL_INCLUDEDIR}/src"
-    )
-    install(
-        FILES
-            d3d/rwxbox.h
-            d3d/rwd3d.h
-            d3d/rwd3d8.h
-            d3d/rwd3d9.h
-        DESTINATION "${LIBRW_INSTALL_INCLUDEDIR}/src/d3d"
-    )
-    install(
-        FILES
-            ps2/rwps2.h
-            ps2/rwps2plg.h
-        DESTINATION "${LIBRW_INSTALL_INCLUDEDIR}/src/ps2"
     )
 
     install(

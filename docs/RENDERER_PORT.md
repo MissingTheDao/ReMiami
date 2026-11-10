@@ -14,7 +14,8 @@ after the texture-state and anisotropy work, step 11 below). The host no longer 
 contexts, and librw's GL3 platform is deleted (`vendor/librw/src/gl/`, its CMake options, the
 GLFW demo apps and the premake/conan builds), as are the game's `RW_GL3` branches and
 `custompipes_gl.cpp`; the WarDrum "WDGL" model reader moved to `src/wdgl.cpp` (format only).
-The D3D8/D3D9/Xbox/PS2 code stays for reading those native formats. Next: stage 2 (librw's object
+Since stage 2 step 1, librw's D3D8/D3D9/Xbox/PS2/WDGL platform code is gone too: textures are read
+in Rust (below). Next in stage 2: the rest of librw's object
 model in Rust). N150 frame times (2026-11-10, headless, cooled runs): wgpu Vulkan 3.56 ms, wgpu GL
 4.29 ms (+20 %, wgpu's GLES backend overhead; see docs/N150.md).
 
@@ -389,6 +390,11 @@ no longer used for game data and can leave the game binary (they stay in the imp
 - **1c. Remove the old path.** Once 1a/1b pass on both backends and the N150, the game no longer
   calls librw's native texture readers; the D3D/Xbox/PS2 texture code leaves the game build
   (geometry natives are not used by PC data).
+  **Done 2026-11-10:** `vendor/librw/src/d3d`, `ps2` and the WDGL reader are deleted (~13,000
+  lines); librw keeps only its core and the WGPU platform. Console geometry (native data in the
+  Xbox/PS2 DFFs) is skipped with a message; reading it is the importer's job, in Rust. The check
+  against librw survives as recorded hashes: `tests/golden/textures.txt` (every PC texture) and
+  `tests/golden/textures-xbox.txt` (plus the Xbox release's, with `REVC_TXD_CHECK_DIR`).
 
 
 ## Appendix: every RW function the game calls

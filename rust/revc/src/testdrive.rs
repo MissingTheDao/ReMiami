@@ -58,7 +58,6 @@ unsafe extern "C" {
     fn revc_test_dump_formats(path: *const std::ffi::c_char) -> i32;
     fn revc_test_load_all_txds() -> i32;
     fn revc_test_read_txd(data: *const u8, len: usize) -> i32;
-    fn revc_txd_check_counts(checked: *mut i32, differing: *mut i32);
     fn revc_test_clear_help();
     fn revc_test_show_controls_menu();
     fn revc_test_check_prompt_menu() -> i32;
@@ -616,19 +615,12 @@ impl Driver {
         let _ = std::fs::remove_file(&path);
         // REVC_TXD=check (scripts/test.sh sets it for this scenario): every texture is read by
         // librw and by Rust (rw/TexRead.cpp); load every TXD in the image, then nothing may differ.
-        let txd_mode = std::env::var("REVC_TXD").unwrap_or_default();
-        if txd_mode == "rust" || txd_mode == "librw" {
-            // Load time of every TXD with one reader (no comparison).
+        // REVC_TXD_GOLDEN=tests/golden/textures.txt (scripts/test.sh): the Rust reader's textures
+        // (every TXD loaded) must hash as librw's readers built them when the file was recorded.
+        if let Some(golden) = std::env::var_os("REVC_TXD_GOLDEN") {
             let t0 = std::time::Instant::now();
             let loaded = unsafe { revc_test_load_all_txds() };
-            log(format!("textures: {loaded} TXDs loaded by the {txd_mode} reader in {:.0} ms", t0.elapsed().as_secs_f64() * 1000.0));
-        }
-        // REVC_TXD_GOLDEN=tests/golden/textures.txt: the Rust reader's textures (every TXD loaded)
-        // must hash as librw's did when the file was recorded (REVC_TXD=check REVC_TXD_RECORD=...).
-        if let Some(golden) = std::env::var_os("REVC_TXD_GOLDEN").filter(|_| txd_mode != "check") {
-            if txd_mode.is_empty() {
-                unsafe { revc_test_load_all_txds() };
-            }
+            log(format!("textures: {loaded} more TXDs loaded in {:.0} ms", t0.elapsed().as_secs_f64() * 1000.0));
             // with REVC_TXD_CHECK_DIR (e.g. the Xbox disc's files) those TXDs are part of the set:
             // use the matching golden (tests/golden/textures-xbox.txt holds PC and Xbox).
             if let Some(dir) = std::env::var_os("REVC_TXD_CHECK_DIR") {
@@ -652,27 +644,6 @@ impl Driver {
                     }
                 }
                 Err(e) => self.fail(format!("textures: {e}")),
-            }
-        }
-        if txd_mode == "check" {
-            let loaded = unsafe { revc_test_load_all_txds() };
-            let (mut checked, mut differing) = (0, 0);
-            unsafe { revc_txd_check_counts(&mut checked, &mut differing) };
-            log(format!("textures: {loaded} more TXDs loaded; {checked} textures read by librw and Rust, {differing} differ"));
-            // REVC_TXD_CHECK_DIR: also every .txd file and every TXD in .img archives under that
-            // folder (e.g. the files of the user's Xbox disc; never part of the repository).
-            if let Some(dir) = std::env::var_os("REVC_TXD_CHECK_DIR") {
-                let (files, textures, failed) = check_txd_dir(std::path::Path::new(&dir));
-                log(format!("textures: {files} TXDs from {} ({textures} textures, {failed} unreadable)", dir.to_string_lossy()));
-                if failed != 0 {
-                    self.fail(format!("textures: {failed} TXDs under {} not read", dir.to_string_lossy()));
-                }
-            }
-            let (mut checked, mut differing) = (0, 0);
-            unsafe { revc_txd_check_counts(&mut checked, &mut differing) };
-            log(format!("textures: {checked} textures read by librw and Rust in all, {differing} differ"));
-            if differing != 0 || checked < 1000 {
-                self.fail(format!("textures: {differing} of {checked} differ between librw and the Rust reader (see [revc-txd] lines)"));
             }
         }
     }

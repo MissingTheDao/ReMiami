@@ -14,7 +14,8 @@ Not all pre-instanced PS2 DFFs are supported.
 BSP is not supported at all.
 
 In revc, rendering goes through the WGPU platform (drawn by the Rust host on wgpu: Vulkan,
-OpenGL or DX12 underneath). The D3D/Xbox/PS2 code stays for reading those native formats.
+OpenGL or DX12 underneath). The D3D/Xbox/PS2/WDGL platform code was removed: revc reads
+textures in Rust (rust/revc/src/txdload.rs).
 
 # Uses
 
