@@ -27,6 +27,7 @@ mod zones;
 mod clock;
 mod wanted;
 mod stats;
+mod restart;
 mod savegame;
 mod host;
 mod testdrive;
