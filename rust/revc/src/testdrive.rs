@@ -59,6 +59,7 @@ unsafe extern "C" {
     fn revc_test_clear_help();
     fn revc_test_show_controls_menu();
     fn revc_test_check_prompt_menu() -> i32;
+    fn revc_test_check_pad_layouts() -> i32;
     fn revc_test_save_slot(slot: i32, state: *mut i32, name: *mut u16, date: *mut u16) -> i32;
     fn revc_test_motion_sample(out: *mut f32);
     fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
@@ -306,6 +307,11 @@ impl Driver {
                     Scenario::Boot => {
                         if unsafe { revc_test_check_prompt_menu() } == 0 {
                             self.fail("Controls menu lacks the BUTTON PROMPTS entry (or its text)".into());
+                        }
+                        if unsafe { revc_test_check_pad_layouts() } == 1 {
+                            log("pad layouts: Standard and Classic apply and are recognised");
+                        } else {
+                            self.fail("pad layouts: Standard/Classic not applied or not recognised".into());
                         }
                         if self.shot.is_none() {
                             return self.finish();

@@ -8,6 +8,9 @@
 #include "platform.h"
 #include "crossplatform.h"
 #include "Frontend.h"
+#include "ControllerConfig.h"
+extern "C" int PadLayoutCurrent(void);
+extern "C" void PadLayoutApply(int layout);
 #include "Timer.h"
 #include "World.h"
 #include "Camera.h"
@@ -218,6 +221,10 @@ revc_test_show_controls_menu(void)
 {
 	// REVC_TEST_MENU_PAGE=n / REVC_TEST_MENU_OPTION=k: another page/entry (checking menu layouts).
 	const char *page = getenv("REVC_TEST_MENU_PAGE"), *option = getenv("REVC_TEST_MENU_OPTION");
+	// REVC_TEST_PAD_LAYOUT=0/1: Standard/Classic pad bindings first.
+	if (const char *layout = getenv("REVC_TEST_PAD_LAYOUT")) {
+		PadLayoutApply(atoi(layout));
+	}
 	FrontEndMenuManager.m_nCurrScreen = page ? atoi(page) : MENUPAGE_CONTROLLER_PC;
 	FrontEndMenuManager.m_nCurrOption = option ? atoi(option) : 0;
 }
@@ -373,3 +380,16 @@ revc_test_dump_formats(const char *path)
 }
 
 #endif
+
+// Xbox-style controller layouts (boot scenario): each preset applies and is recognised again, with
+// Fire on the right trigger (Standard) or B (Classic). Returns 1 if so; leaves Standard applied.
+extern "C" int
+revc_test_check_pad_layouts(void)
+{
+	PadLayoutApply(1);
+	bool classic = PadLayoutCurrent() == 1 && ControlsManager.GetControllerKeyAssociatedWithAction(PED_FIREWEAPON, JOYSTICK) == 1;
+	PadLayoutApply(0);
+	bool standard = PadLayoutCurrent() == 0 && ControlsManager.GetControllerKeyAssociatedWithAction(PED_FIREWEAPON, JOYSTICK) == 6 &&
+		ControlsManager.GetControllerKeyAssociatedWithAction(VEHICLE_ACCELERATE, JOYSTICK) == 6;
+	return classic && standard;
+}

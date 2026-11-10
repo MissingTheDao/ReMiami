@@ -284,9 +284,10 @@ impl PadTest {
                 if stopped {
                     let strength = log[started.unwrap()];
                     self.log.push(format!("shake -> rumble {strength:?}, then stop ({} requests)", log.len()));
-                    // 200/255 of full strength, as the XInput version computes it.
-                    if strength.0 != (200.0f32 / 255.0 * 65535.0) as u16 {
-                        return Err(format!("rumble strength {strength:?}, expected 200/255 of 65535"));
+                    // Shake strength 200 with the Xbox version's motor mapping: heavy motor 200 * 64,
+                    // light motor 200 * 256.
+                    if strength != (200 * 64, 200 * 256) {
+                        return Err(format!("rumble strength {strength:?}, expected (12800, 51200): Xbox mapping of shake 200"));
                     }
                     unsafe {
                         SDL_DetachVirtualJoystick(self.ps5.unwrap());
