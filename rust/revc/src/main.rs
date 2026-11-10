@@ -26,6 +26,7 @@ mod directory;
 mod zones;
 mod clock;
 mod wanted;
+mod stats;
 mod savegame;
 mod host;
 mod testdrive;
