@@ -374,7 +374,12 @@ no longer used for game data and can leave the game binary (they stay in the imp
   default; `REVC_TXD=librw` keeps the old reader, `REVC_TXD=check` reads with both and compares
   the WGPU rasters field by field and byte by byte. The `formats` test runs in check mode and
   loads every TXD in gta3.img (`revc_test_load_all_txds`): 12,811 textures, 0 differences.
-  Xbox natives in revc-formats are still to do (for the importer).
+  Xbox natives: revc-formats reads them too (unswizzled, BGRA palettes swapped; LZO-compressed
+  `gta3.img` entries unpacked by `revc_formats::xboximg`). With `REVC_TXD_CHECK_DIR` pointing at
+  the user's Xbox disc files the formats test also reads all of those: 1,392 TXDs, 17,401
+  textures, 0 differences to librw.
+- **1b skipped:** loading all 1,295 game TXDs takes ~30 ms with either reader (main machine;
+  PC textures are mostly DXT, copied as they are), so a converted cache would gain nothing.
 - **1b. Converted cache.** On first run (and after the game files or the converter version
   change), every TXD in gta3.img and the loose ones is converted into one revc texture pack under
   `userfiles/cache/` (header with a source hash and converter version; per texture the fields

@@ -15,6 +15,7 @@ pub mod save;
 pub mod scm;
 pub mod text;
 pub mod txd;
+pub mod xboximg;
 
 use std::fmt;
 

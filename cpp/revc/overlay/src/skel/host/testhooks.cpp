@@ -427,3 +427,34 @@ revc_test_load_all_txds(void)
 	}
 	return n;
 }
+
+static RwTexture *
+DestroyTex(RwTexture *tex, void *count)
+{
+	(*(int*)count)++;
+	RwTextureDestroy(tex);
+	return tex;
+}
+
+// Reads one texture dictionary from memory through the game's reader (RwTexDictionaryGtaStreamRead,
+// so REVC_TXD=check compares it) and frees it. Returns its texture count, -1 if it failed.
+extern "C" int
+revc_test_read_txd(const unsigned char *data, size_t len)
+{
+	RwMemory mem;
+	mem.start = (RwUInt8*)data;
+	mem.length = len;
+	RwStream *s = RwStreamOpen(rwSTREAMMEMORY, rwSTREAMREAD, &mem);
+	if (s == nil)
+		return -1;
+	RwTexDictionary *dict = nil;
+	if (RwStreamFindChunk(s, rwID_TEXDICTIONARY, nil, nil))
+		dict = RwTexDictionaryGtaStreamRead(s);
+	RwStreamClose(s, nil);
+	if (dict == nil)
+		return -1;
+	int n = 0;
+	RwTexDictionaryForAllTextures(dict, DestroyTex, &n);
+	RwTexDictionaryDestroy(dict);
+	return n;
+}

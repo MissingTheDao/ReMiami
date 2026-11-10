@@ -6,6 +6,7 @@ use crate::rw::{self, Chunk, ID_STRUCT, ID_TEXDICTIONARY, ID_TEXTURENATIVE};
 use crate::{Error, Result};
 
 pub const PLATFORM_D3D8: u32 = 8;
+pub const PLATFORM_XBOX: u32 = 5;
 
 /// Raster format bits (`rw::Raster` format field).
 pub mod raster {
@@ -186,6 +187,9 @@ pub fn parse_native_body(body: &[u8]) -> Result<Texture> {
 fn parse_native_struct(st: &Chunk) -> Result<Texture> {
     let mut r = st.reader();
     let platform = r.u32("texture platform")?;
+    if platform == PLATFORM_XBOX {
+        return parse_xbox(r);
+    }
     if platform != PLATFORM_D3D8 {
         return Err(Error::Invalid(format!(
             "texture native platform {platform}, expected D3D8"
@@ -238,6 +242,130 @@ fn parse_native_struct(st: &Chunk) -> Result<Texture> {
         palette,
         levels,
     })
+}
+
+/// An Xbox texture native (the Xbox release's TXDs), read as librw's `xbox::readNativeTexture`
+/// and turned into the D3D8 layout the rest of this module uses: DXT levels split, other formats
+/// unswizzled per level and the palette's BGRA entries swapped to RGBA (as librw's
+/// `xbox::rasterToImage` does), so `rgba` and the renderer treat both platforms alike.
+fn parse_xbox(mut r: crate::bytes::Reader) -> Result<Texture> {
+    let filter_addressing = r.u32("texture filter")?;
+    let name = r.fixed_str(32, "texture name")?;
+    let mask = r.fixed_str(32, "texture mask")?;
+    let raster_format = r.u32("raster format")?;
+    let has_alpha = r.u16("raster alpha")? != 0;
+    let cube = r.u16("raster cube flag")?;
+    let width = r.u16("raster width")?;
+    let height = r.u16("raster height")?;
+    let depth = r.u8("raster depth")?;
+    let num_levels = r.u8("raster levels")?;
+    let raster_type = r.u8("raster type")?;
+    let d3d_format = r.u8("raster compression")?;
+    let total = r.u32("raster data size")? as usize;
+    if cube != 0 {
+        return Err(Error::Invalid(format!("texture {name}: Xbox cube map")));
+    }
+    if width == 0 || height == 0 {
+        return Err(Error::Invalid(format!("texture {name}: empty raster")));
+    }
+    let pal_len = if raster_format & raster::PAL4 != 0 {
+        32
+    } else if raster_format & raster::PAL8 != 0 {
+        256
+    } else {
+        0
+    };
+    let palette = r
+        .bytes(4 * pal_len, "texture palette")?
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|p| [p[2], p[1], p[0], p[3]])
+        .collect();
+    let data = r.bytes(total, "texture data")?;
+    let mipmap = raster_format & raster::MIPMAP != 0;
+    let full_chain = 32 - (width.max(height) as u32).leading_zeros();
+    let (compression, count, level_bytes): (u8, u32, Box<dyn Fn(u32, u32) -> usize>) = match d3d_format {
+        // D3DFMT_DXT1, DXT2/3, DXT4/5: blocks as on PC, levels one after the other
+        0x0C | 0x0E | 0x0F => {
+            let kind = match d3d_format {
+                0x0C => 1,
+                0x0E => 3,
+                _ => 5,
+            };
+            let bytes = if kind == 1 { 8 } else { 16 };
+            (kind, if mipmap { num_levels as u32 } else { 1 }, Box::new(move |w, h| w.div_ceil(4) as usize * h.div_ceil(4) as usize * bytes))
+        }
+        0 => {
+            let bpp = match depth {
+                8 | 16 | 32 => depth as usize / 8,
+                d => return Err(Error::Invalid(format!("texture {name}: Xbox depth {d}"))),
+            };
+            // librw allocates the whole chain for a mipmapped raster and fills it from the data
+            (0, if mipmap { full_chain } else { 1 }, Box::new(move |w, h| w as usize * h as usize * bpp))
+        }
+        f => return Err(Error::Invalid(format!("texture {name}: Xbox format {f:#x}"))),
+    };
+    let mut levels = Vec::with_capacity(count as usize);
+    let mut off = 0;
+    for i in 0..count {
+        let (w, h) = ((width as u32 >> i).max(1), (height as u32 >> i).max(1));
+        let n = level_bytes(w, h);
+        let Some(src) = data.get(off..off + n) else {
+            return Err(Error::Invalid(format!("texture {name}: Xbox data ends in level {i}")));
+        };
+        off += n;
+        levels.push(if compression == 0 { unswizzle(src, w as usize, h as usize, n / (w * h) as usize) } else { src.to_vec() });
+    }
+    Ok(Texture {
+        name,
+        mask,
+        filter_addressing,
+        raster_format,
+        has_alpha,
+        width,
+        height,
+        depth,
+        raster_type,
+        compression,
+        palette,
+        levels,
+    })
+}
+
+/// Xbox swizzled (Morton order) pixels to rows, as librw's `xbox::unswizzle`.
+pub fn unswizzle(src: &[u8], w: usize, h: usize, bpp: usize) -> Vec<u8> {
+    let (mut mask_u, mut mask_v) = (0usize, 0usize);
+    let (mut i, mut j) = (1usize, 1usize);
+    loop {
+        let mut c = 0;
+        if i < w {
+            mask_u |= j;
+            j <<= 1;
+            c = j;
+        }
+        if i < h {
+            mask_v |= j;
+            j <<= 1;
+            c = j;
+        }
+        i <<= 1;
+        if c == 0 {
+            break;
+        }
+    }
+    let mut dst = vec![0u8; w * h * bpp];
+    let mut v = 0usize;
+    for y in 0..h {
+        let mut u = 0usize;
+        for x in 0..w {
+            let s = (u | v) * bpp;
+            dst[(y * w + x) * bpp..][..bpp].copy_from_slice(&src[s..s + bpp]);
+            u = u.wrapping_sub(mask_u) & mask_u;
+        }
+        v = v.wrapping_sub(mask_v) & mask_v;
+    }
+    dst
 }
 
 #[cfg(test)]

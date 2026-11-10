@@ -57,6 +57,7 @@ unsafe extern "C" {
     fn revc_test_player_pos(x: *mut f32, y: *mut f32, z: *mut f32);
     fn revc_test_dump_formats(path: *const std::ffi::c_char) -> i32;
     fn revc_test_load_all_txds() -> i32;
+    fn revc_test_read_txd(data: *const u8, len: usize) -> i32;
     fn revc_txd_check_counts(checked: *mut i32, differing: *mut i32);
     fn revc_test_clear_help();
     fn revc_test_show_controls_menu();
@@ -627,6 +628,18 @@ impl Driver {
             let (mut checked, mut differing) = (0, 0);
             unsafe { revc_txd_check_counts(&mut checked, &mut differing) };
             log(format!("textures: {loaded} more TXDs loaded; {checked} textures read by librw and Rust, {differing} differ"));
+            // REVC_TXD_CHECK_DIR: also every .txd file and every TXD in .img archives under that
+            // folder (e.g. the files of the user's Xbox disc; never part of the repository).
+            if let Some(dir) = std::env::var_os("REVC_TXD_CHECK_DIR") {
+                let (files, textures, failed) = check_txd_dir(std::path::Path::new(&dir));
+                log(format!("textures: {files} TXDs from {} ({textures} textures, {failed} unreadable)", dir.to_string_lossy()));
+                if failed != 0 {
+                    self.fail(format!("textures: {failed} TXDs under {} not read", dir.to_string_lossy()));
+                }
+            }
+            let (mut checked, mut differing) = (0, 0);
+            unsafe { revc_txd_check_counts(&mut checked, &mut differing) };
+            log(format!("textures: {checked} textures read by librw and Rust in all, {differing} differ"));
             if differing != 0 || checked < 1000 {
                 self.fail(format!("textures: {differing} of {checked} differ between librw and the Rust reader (see [revc-txd] lines)"));
             }
@@ -868,4 +881,53 @@ fn read_png(path: &PathBuf) -> Result<(u32, u32, Vec<u8>), String> {
     }
     buf.truncate(info.buffer_size());
     Ok((info.width, info.height, buf))
+}
+
+/// Every .txd file under `dir` and every TXD inside its .img archives, through the game's reader
+/// (revc_test_read_txd). Returns (TXDs read, textures, TXDs that failed).
+fn check_txd_dir(dir: &std::path::Path) -> (usize, usize, usize) {
+    let (mut files, mut textures, mut failed) = (0, 0, 0);
+    let mut read = |data: &[u8], what: &str| {
+        let n = unsafe { revc_test_read_txd(data.as_ptr(), data.len()) };
+        if n < 0 {
+            log(format!("textures: can't read {what}"));
+            failed += 1;
+        } else {
+            files += 1;
+            textures += n as usize;
+        }
+    };
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        let mut paths: Vec<_> = rd.flatten().map(|e| e.path()).collect();
+        paths.sort();
+        for p in paths {
+            let ext = p.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+            if p.is_dir() {
+                stack.push(p);
+            } else if ext == "txd" {
+                if let Ok(data) = std::fs::read(&p) {
+                    read(&data, &p.to_string_lossy());
+                }
+            } else if ext == "img" {
+                let Ok(arc) = revc_formats::img::Archive::open(&p) else { continue };
+                for e in arc.entries.iter().filter(|e| e.extension() == "txd") {
+                    if let Ok(data) = arc.read(e) {
+                        let what = format!("{}:{}", p.to_string_lossy(), e.name);
+                        // the Xbox gta3.img stores its TXDs LZO-compressed
+                        if revc_formats::xboximg::is_wrapped(&data) {
+                            match revc_formats::xboximg::unwrap(&data) {
+                                Ok(d) => read(&d, &what),
+                                Err(err) => read(&[], &format!("{what} ({err})")),
+                            }
+                        } else {
+                            read(&data, &what);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    (files, textures, failed)
 }
