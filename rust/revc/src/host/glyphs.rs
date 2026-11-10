@@ -288,7 +288,7 @@ mod tests {
         let mut missing = Vec::new();
         for (kind, labels) in kinds {
             for b in ALL {
-                let (folder, f) = glyph_file(kind, labels, b).unwrap();
+                let Some((folder, f)) = glyph_file(kind, labels, b) else { continue }; // e.g. GameCube has no Select
                 if !pack.join(folder).join("Double").join(&f).is_file() {
                     missing.push(format!("{kind:?} {b:?}: {folder}/{f}"));
                 }
