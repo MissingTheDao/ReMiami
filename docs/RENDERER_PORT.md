@@ -524,6 +524,15 @@ layouts and is checked against a recording of the original, as in steps 3 and 4.
   convertTo32, hasAlpha, removeMask, readMasked's search path and file formats) in Rust. The
   rest has no callers in the game or the wgpu driver (DXT decompress and flip, palettize and
   ColorQuant, compressPalette, makeMask/applyMask/extractMask) and is deleted instead.
+  **Pixel functions done 2026-11-11:** `rust/revc/src/rwimage.rs` has setPixelsDXT (DXT1/3/5,
+  which the wgpu driver uses to read compressed rasters back), hasAlpha, convertTo32,
+  unpalettize, palettize with the octree quantizer, makeMask, applyMask and removeMask; image
+  objects and their memory stay in C++. A closer look showed readMasked does reach makeMask,
+  applyMask and palettize (an image file with a mask), so those were ported, not deleted; what
+  had no callers (DXT flipping, compressPalette, extractMask, setPalette, printSearchPath) is
+  gone. Checked by `tests/golden/rwimage.txt` (4,000 cases on seeded images of every depth,
+  with padded strides; `tests/golden/recorders/rwimage`). Still in C++: the search path,
+  getFilename/read/readMasked and the PNG/BMP/TGA readers and writers.
 - **5c. Rasters.** raster.cpp's bookkeeping (create/destroy, subrasters, createFromImage,
   format helpers) and the wgpu driver's imageFindRasterFormat/rasterFromImage/rasterToImage.
 

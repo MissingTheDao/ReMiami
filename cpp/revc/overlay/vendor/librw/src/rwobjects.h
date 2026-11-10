@@ -139,8 +139,6 @@ struct Image
 	void free(void);
 	void setPixels(uint8 *pixels);
 	void setPixelsDXT(int32 type, uint8 *pixels);
-	void setPalette(uint8 *palette);
-	void compressPalette(void);	// turn 8 bit into 4 bit if possible
 	bool32 hasAlpha(void);
 	void convertTo32(void);
 	void palettize(int32 depth);
@@ -148,10 +146,8 @@ struct Image
 	void makeMask(void);
 	void applyMask(Image *mask);
 	void removeMask(void);
-	Image *extractMask(void);
 
 	static void setSearchPath(const char*);
-	static void printSearchPath(void);
 	static char *getFilename(const char*);
 	static Image *read(const char *imageName);
 	static Image *readMasked(const char *imageName, const char *maskName);
@@ -172,38 +168,6 @@ Image *readBMP(const char *filename);
 void writeBMP(Image *image, const char *filename);
 Image *readPNG(const char *filename);
 void writePNG(Image *image, const char *filename);
-
-enum { QUANTDEPTH = 8 };
-
-struct ColorQuant
-{
-	struct Node {
-		uint32 r, g, b, a;
-		int32 numPixels;
-		Node *parent;
-		Node *children[16];
-		LLLink link;
-
-		void destroy(void);
-		void addColor(RGBA color);
-		bool isLeaf(void) { for(int32 i = 0; i < 16; i++) if(this->children[i]) return false; return true; }
-	};
-
-	Node *root;
-	LinkList leaves;
-
-	void init(void);
-	void destroy(void);
-	Node *createNode(int32 level);
-	Node *getNode(Node *root, uint32 addr, int32 level);
-	Node *findNode(Node *root, uint32 addr, int32 level);
-	void reduceNode(Node *node);
-	void addColor(RGBA color);
-	uint8 findColor(RGBA color);
-	void addImage(Image *img);
-	void makePalette(int32 numColors, RGBA *colors);
-	void matchImage(uint8 *dstPixels, uint32 dstStride, Image *src);
-};
 
 // used to emulate d3d and xbox textures
 struct RasterLevels
@@ -338,7 +302,6 @@ void expandPal4_BE(uint8 *dst, uint32 dststride, uint8 *src, uint32 srcstride, i
 void compressPal4_BE(uint8 *dst, uint32 dststride, uint8 *src, uint32 srcstride, int32 w, int32 h);
 void copyPal8(uint8 *dst, uint32 dststride, uint8 *src, uint32 srcstride, int32 w, int32 h);
 
-void flipDXT(int32 type, uint8 *dst, uint8 *src, uint32 width, uint32 height);
 
 
 #define IGNORERASTERIMP 0
