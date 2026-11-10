@@ -38,6 +38,10 @@ pub struct Gpu {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub info: wgpu::AdapterInfo,
+    /// Model blocks live in one storage buffer indexed per draw (vertex-stage storage buffers);
+    /// otherwise they are uniform blocks bound at a per-draw offset. REVC_RW_NO_STORAGE=1 forces
+    /// the fallback.
+    pub model_storage: bool,
 }
 
 impl Gpu {
@@ -62,10 +66,20 @@ impl Gpu {
         }))
         .map_err(|e| format!("no {backend:?} adapter: {e}"))?;
         let info = adapter.get_info();
+        // What GL (GLES 3 level) can do too, so both backends run the same code; plus one
+        // storage buffer per stage for the model blocks where the adapter has them in vertex shaders.
+        let mut limits = wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits());
+        let model_storage = std::env::var_os("REVC_RW_NO_STORAGE").is_none()
+            && adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::VERTEX_STORAGE)
+            && adapter.limits().max_storage_buffers_per_shader_stage >= 1
+            && adapter.limits().max_storage_buffer_binding_size >= 1 << 24;
+        if model_storage {
+            limits.max_storage_buffers_per_shader_stage = 1;
+            limits.max_storage_buffer_binding_size = adapter.limits().max_storage_buffer_binding_size.min(1 << 27);
+        }
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("revc-rw"),
-            // What GL (GLES 3 level) can do too, so both backends run the same code.
-            required_limits: wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
+            required_limits: limits,
             // DXT textures stay compressed where the GPU samples BC formats (both backends on
             // desktop GPUs); otherwise they are decoded on the CPU.
             required_features: adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC
@@ -74,7 +88,7 @@ impl Gpu {
             ..Default::default()
         }))
         .map_err(|e| format!("{backend:?} device: {e}"))?;
-        Ok(Gpu { adapter, device, queue, info })
+        Ok(Gpu { adapter, device, queue, info, model_storage })
     }
 }
 

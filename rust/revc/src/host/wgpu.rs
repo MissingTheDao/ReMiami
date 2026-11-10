@@ -61,7 +61,7 @@ pub fn create(window: *mut SDL_Window, samples: i32) -> Result<(), String> {
     let (w, h) = pixel_size(window);
     let p = unsafe { Presenter::new(backend(), native(window)?, w, h, true)? };
     let bc = p.gpu.bc_textures();
-    eprintln!("revc: wgpu renderer on {} ({:?}), {:?} {w}x{h}, DXT {}", p.gpu.info.name, p.gpu.info.backend, p.format(), if bc { "on the GPU" } else { "decoded on the CPU" });
+    eprintln!("revc: wgpu renderer on {} ({:?}), {:?} {w}x{h}, DXT {}, models in {}", p.gpu.info.name, p.gpu.info.backend, p.format(), if bc { "on the GPU" } else { "decoded on the CPU" }, if p.gpu.model_storage { "a storage buffer" } else { "uniform blocks" });
     let r = Renderer::with_samples(&p.gpu, p.format(), samples.max(1) as u32);
     let used = Renderer::supported_samples(&p.gpu, samples.max(1) as u32);
     if used > 1 || samples > 1 {

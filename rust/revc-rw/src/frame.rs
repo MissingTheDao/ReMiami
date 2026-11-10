@@ -583,7 +583,11 @@ struct M {
     fx: vec4<f32>,
     extra: array<vec4<f32>, 12>,
 };
-@group(2) @binding(0) var<uniform> m: M;
+// The models of the frame: a storage buffer indexed by the draw's instance (one bind per pass)
+// where the device has vertex-stage storage buffers, else one uniform block at a per-draw offset
+// (always index 0). `mi` is the current model's index, set by every entry point using it.
+//MODELS_DECL
+var<private> mi: u32;
 
 // `mask`: light types the shader handles (1 directional, 2 point, 4 spot), as gl3's
 // DIRECTIONALS / POINTLIGHTS / SPOTLIGHTS shader defines.
@@ -594,10 +598,10 @@ fn dynamic_light(v: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
 fn dynamic_light_mask(v: vec3<f32>, n: vec3<f32>, mask: u32) -> vec3<f32> {
     var color = vec3<f32>(0.0);
     for (var i = 0; i < 8; i++) {
-        let params = m.lights[i * 4];
-        let pos = m.lights[i * 4 + 1].xyz;
-        let dir = m.lights[i * 4 + 2].xyz;
-        let col = m.lights[i * 4 + 3].rgb;
+        let params = models[mi].lights[i * 4];
+        let pos = models[mi].lights[i * 4 + 1].xyz;
+        let dir = models[mi].lights[i * 4 + 2].xyz;
+        let col = models[mi].lights[i * 4 + 3].rgb;
         if (params.x == 0.0) {
             break;
         }
@@ -631,7 +635,8 @@ fn dynamic_light_mask(v: vec3<f32>, n: vec3<f32>, mask: u32) -> vec3<f32> {
 }
 
 @vertex
-fn vs_mesh(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>) -> Out {
+fn vs_mesh(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @builtin(instance_index) ii: u32) -> Out {
+    mi = ii;
     return lit(pos, normal, color, uv);
 }
 
@@ -641,7 +646,8 @@ struct Bones { m: array<mat4x4<f32>, 64> };
 @group(3) @binding(0) var<uniform> bones: Bones;
 
 @vertex
-fn vs_skin(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @location(5) weights: vec4<f32>, @location(6) indices: vec4<u32>) -> Out {
+fn vs_skin(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @location(5) weights: vec4<f32>, @location(6) indices: vec4<u32>, @builtin(instance_index) ii: u32) -> Out {
+    mi = ii;
     var p = vec3<f32>(0.0);
     var n = vec3<f32>(0.0);
     for (var i = 0; i < 4; i++) {
@@ -654,13 +660,13 @@ fn vs_skin(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @locatio
 
 fn lit(pos: vec3<f32>, normal: vec3<f32>, color: vec4<f32>, uv: vec2<f32>) -> Out {
     var o: Out;
-    let v = m.world * vec4<f32>(pos, 1.0);
+    let v = models[mi].world * vec4<f32>(pos, 1.0);
     o.pos = u.mvp * v;
-    let n = (m.world * vec4<f32>(normal, 0.0)).xyz;
+    let n = (models[mi].world * vec4<f32>(normal, 0.0)).xyz;
     var c = color;
-    c = vec4<f32>(c.rgb + m.ambient.rgb * m.surf.x, c.a);
-    c = vec4<f32>(c.rgb + dynamic_light(v.xyz, n) * m.surf.z, c.a);
-    o.color = clamp(c, vec4<f32>(0.0), vec4<f32>(1.0)) * m.mat_color;
+    c = vec4<f32>(c.rgb + models[mi].ambient.rgb * models[mi].surf.x, c.a);
+    c = vec4<f32>(c.rgb + dynamic_light(v.xyz, n) * models[mi].surf.z, c.a);
+    o.color = clamp(c, vec4<f32>(0.0), vec4<f32>(1.0)) * models[mi].mat_color;
     o.uv = uv;
     o.fog = clamp((o.pos.w - u.fog.y) * u.fog.z, u.fog.w, 1.0);
     return o;
@@ -675,24 +681,27 @@ struct OutEnv {
     @location(2) fog: f32,
     @location(3) env_color: vec4<f32>,
     @location(4) uv1: vec2<f32>,
+    @location(5) @interpolate(flat) mi: u32,
 };
 @group(3) @binding(0) var env_tex: texture_2d<f32>;
 @group(3) @binding(1) var env_samp: sampler;
 
 @vertex
-fn vs_env(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>) -> OutEnv {
+fn vs_env(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @builtin(instance_index) ii: u32) -> OutEnv {
+    mi = ii;
     var o: OutEnv;
-    let v = m.world * vec4<f32>(pos, 1.0);
+    o.mi = mi;
+    let v = models[mi].world * vec4<f32>(pos, 1.0);
     o.pos = u.mvp * v;
-    let n = (m.world * vec4<f32>(normal, 0.0)).xyz;
+    let n = (models[mi].world * vec4<f32>(normal, 0.0)).xyz;
     o.uv = uv;
-    o.uv1 = (m.tex_matrix * vec4<f32>(n, 1.0)).xy;
+    o.uv1 = (models[mi].tex_matrix * vec4<f32>(n, 1.0)).xy;
     var c = color;
-    c = vec4<f32>(c.rgb + m.ambient.rgb * m.surf.x, c.a);
-    c = vec4<f32>(c.rgb + dynamic_light(v.xyz, n) * m.surf.z, c.a);
+    c = vec4<f32>(c.rgb + models[mi].ambient.rgb * models[mi].surf.x, c.a);
+    c = vec4<f32>(c.rgb + dynamic_light(v.xyz, n) * models[mi].surf.z, c.a);
     c = clamp(c, vec4<f32>(0.0), vec4<f32>(1.0));
-    o.env_color = max(c, m.color_clamp) * m.env_color;
-    o.color = c * m.mat_color;
+    o.env_color = max(c, models[mi].color_clamp) * models[mi].env_color;
+    o.color = c * models[mi].mat_color;
     o.fog = clamp((o.pos.w - u.fog.y) * u.fog.z, u.fog.w, 1.0);
     return o;
 }
@@ -700,28 +709,30 @@ fn vs_env(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location
 // re3 Neo shaders (extras/shaders/neo*.vert/.frag, default_UV2.vert, neoWorldVC.frag).
 fn neo_lit(v: vec4<f32>, n: vec3<f32>, color: vec4<f32>, mask: u32, light_strength: f32) -> vec4<f32> {
     var c = color;
-    c = vec4<f32>(c.rgb + m.ambient.rgb * m.surf.x, c.a);
-    c = vec4<f32>(c.rgb + dynamic_light_mask(v.xyz, n, mask) * m.surf.z * light_strength, c.a);
+    c = vec4<f32>(c.rgb + models[mi].ambient.rgb * models[mi].surf.x, c.a);
+    c = vec4<f32>(c.rgb + dynamic_light_mask(v.xyz, n, mask) * models[mi].surf.z * light_strength, c.a);
     return clamp(c, vec4<f32>(0.0), vec4<f32>(1.0));
 }
 
 @vertex
-fn vs_neo_vehicle(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>) -> OutEnv {
+fn vs_neo_vehicle(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @builtin(instance_index) ii: u32) -> OutEnv {
+    mi = ii;
     var o: OutEnv;
-    let v = m.world * vec4<f32>(pos, 1.0);
+    o.mi = mi;
+    let v = models[mi].world * vec4<f32>(pos, 1.0);
     o.pos = u.mvp * v;
-    let n = (m.world * vec4<f32>(normal, 0.0)).xyz;
-    let refl = m.extra[1];
-    let view = normalize(m.extra[0].xyz - v.xyz);
+    let n = (models[mi].world * vec4<f32>(normal, 0.0)).xyz;
+    let refl = models[mi].extra[1];
+    let view = normalize(models[mi].extra[0].xyz - v.xyz);
     o.uv = uv;
-    o.color = neo_lit(v, n, color, 1u, refl.y) * m.mat_color;
+    o.color = neo_lit(v, n, color, 1u, refl.y) * models[mi].mat_color;
     let uv2 = n * dot(view, n) * 2.0 - view;
     o.uv1 = uv2.xy * 0.5 + 0.5;
     let b = 1.0 - clamp(dot(view, n), 0.0, 1.0);
     var rc = vec4<f32>(0.0, 0.0, 0.0, mix(b * b * b * b * b, 1.0, refl.x) * refl.z);
     for (var k = 0; k < 5; k++) {
-        let d = m.extra[2 + k];
-        let col = m.extra[7 + k].rgb;
+        let d = models[mi].extra[2 + k];
+        let col = models[mi].extra[7 + k].rgb;
         rc = vec4<f32>(rc.rgb + pow(clamp(dot(n, normalize(view - d.xyz)), 0.0, 1.0), d.w) * col * refl.w * refl.y, rc.a);
     }
     o.env_color = rc;
@@ -731,6 +742,7 @@ fn vs_neo_vehicle(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @
 
 @fragment
 fn fs_neo_vehicle(i: OutEnv) -> @location(0) vec4<f32> {
+    mi = i.mi;
     var p1 = i.color * textureSample(tex, samp, i.uv);
     let env = textureSample(env_tex, env_samp, i.uv1).rgb;
     p1 = vec4<f32>(mix(p1.rgb, env, i.env_color.a), p1.a);
@@ -745,14 +757,16 @@ fn fs_neo_vehicle(i: OutEnv) -> @location(0) vec4<f32> {
 
 // default_UV2.vert is built without light defines: ambient only.
 @vertex
-fn vs_neo_world(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @location(4) uv2: vec2<f32>) -> OutEnv {
+fn vs_neo_world(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @location(4) uv2: vec2<f32>, @builtin(instance_index) ii: u32) -> OutEnv {
+    mi = ii;
     var o: OutEnv;
-    let v = m.world * vec4<f32>(pos, 1.0);
+    o.mi = mi;
+    let v = models[mi].world * vec4<f32>(pos, 1.0);
     o.pos = u.mvp * v;
-    let n = (m.world * vec4<f32>(normal, 0.0)).xyz;
+    let n = (models[mi].world * vec4<f32>(normal, 0.0)).xyz;
     o.uv = uv;
     o.uv1 = uv2;
-    o.color = neo_lit(v, n, color, 0u, 1.0) * m.mat_color;
+    o.color = neo_lit(v, n, color, 0u, 1.0) * models[mi].mat_color;
     o.env_color = vec4<f32>(0.0);
     o.fog = clamp((o.pos.w - u.fog.y) * u.fog.z, u.fog.w, 1.0);
     return o;
@@ -760,7 +774,8 @@ fn vs_neo_world(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @lo
 
 @fragment
 fn fs_neo_world(i: OutEnv) -> @location(0) vec4<f32> {
-    let lm = m.extra[0];
+    mi = i.mi;
+    let lm = models[mi].extra[0];
     let t0 = textureSample(tex, samp, i.uv);
     let t1 = textureSample(env_tex, env_samp, i.uv1);
     var c = t0 * i.color * (1.0 + lm * (t1 - 1.0));
@@ -773,13 +788,15 @@ fn fs_neo_world(i: OutEnv) -> @location(0) vec4<f32> {
 
 // Gloss: the light direction is the first light's (u_lightDirection[0]); the normal is up.
 @vertex
-fn vs_neo_gloss(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>) -> OutEnv {
+fn vs_neo_gloss(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @builtin(instance_index) ii: u32) -> OutEnv {
+    mi = ii;
     var o: OutEnv;
-    let v = m.world * vec4<f32>(pos, 1.0);
+    o.mi = mi;
+    let v = models[mi].world * vec4<f32>(pos, 1.0);
     o.pos = u.mvp * v;
     o.uv = uv;
-    let view = normalize(m.extra[0].xyz - v.xyz);
-    let light = normalize(view - m.lights[2].xyz);
+    let view = normalize(models[mi].extra[0].xyz - v.xyz);
+    let light = normalize(view - models[mi].lights[2].xyz);
     o.env_color = vec4<f32>(0.5 * (1.0 + light), 0.0);
     o.color = vec4<f32>(1.0);
     o.uv1 = vec2<f32>(0.0);
@@ -789,11 +806,12 @@ fn vs_neo_gloss(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @lo
 
 @fragment
 fn fs_neo_gloss(i: OutEnv) -> @location(0) vec4<f32> {
+    mi = i.mi;
     var c = textureSample(tex, samp, i.uv);
     let s = dot(vec3<f32>(0.0, 0.0, 1.0), 2.0 * i.env_color.xyz - 1.0);
     let s2 = s * s;
     let s4 = s2 * s2;
-    c = s4 * s4 * c * i.fog * m.extra[1].x;
+    c = s4 * s4 * c * i.fog * models[mi].extra[1].x;
     if (c.a < u.alpha.x || c.a >= u.alpha.y) {
         discard;
     }
@@ -805,24 +823,26 @@ fn rim(v: vec4<f32>, n: vec3<f32>, color: vec4<f32>, uv: vec2<f32>) -> Out {
     o.pos = u.mvp * v;
     o.uv = uv;
     var c = color;
-    c = vec4<f32>(c.rgb + m.ambient.rgb * m.surf.x, c.a);
-    c = vec4<f32>(c.rgb + dynamic_light_mask(v.xyz, n, 1u) * m.surf.z, c.a);
-    let rd = m.extra[3];
-    let f = rd.x - rd.y * dot(n, m.extra[0].xyz);
-    let rimlight = clamp(mix(m.extra[2], m.extra[1], f) * rd.z, vec4<f32>(0.0), vec4<f32>(1.0));
+    c = vec4<f32>(c.rgb + models[mi].ambient.rgb * models[mi].surf.x, c.a);
+    c = vec4<f32>(c.rgb + dynamic_light_mask(v.xyz, n, 1u) * models[mi].surf.z, c.a);
+    let rd = models[mi].extra[3];
+    let f = rd.x - rd.y * dot(n, models[mi].extra[0].xyz);
+    let rimlight = clamp(mix(models[mi].extra[2], models[mi].extra[1], f) * rd.z, vec4<f32>(0.0), vec4<f32>(1.0));
     c = vec4<f32>(c.rgb + rimlight.rgb, c.a);
-    o.color = clamp(c, vec4<f32>(0.0), vec4<f32>(1.0)) * m.mat_color;
+    o.color = clamp(c, vec4<f32>(0.0), vec4<f32>(1.0)) * models[mi].mat_color;
     o.fog = clamp((o.pos.w - u.fog.y) * u.fog.z, u.fog.w, 1.0);
     return o;
 }
 
 @vertex
-fn vs_neo_rim(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>) -> Out {
-    return rim(m.world * vec4<f32>(pos, 1.0), (m.world * vec4<f32>(normal, 0.0)).xyz, color, uv);
+fn vs_neo_rim(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @builtin(instance_index) ii: u32) -> Out {
+    mi = ii;
+    return rim(models[mi].world * vec4<f32>(pos, 1.0), (models[mi].world * vec4<f32>(normal, 0.0)).xyz, color, uv);
 }
 
 @vertex
-fn vs_neo_rim_skin(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @location(5) weights: vec4<f32>, @location(6) indices: vec4<u32>) -> Out {
+fn vs_neo_rim_skin(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) color: vec4<f32>, @location(3) uv: vec2<f32>, @location(5) weights: vec4<f32>, @location(6) indices: vec4<u32>, @builtin(instance_index) ii: u32) -> Out {
+    mi = ii;
     var p = vec3<f32>(0.0);
     var n = vec3<f32>(0.0);
     for (var i = 0; i < 4; i++) {
@@ -830,16 +850,17 @@ fn vs_neo_rim_skin(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, 
         p += (b * vec4<f32>(pos, 1.0)).xyz * weights[i];
         n += (b * vec4<f32>(normal, 0.0)).xyz * weights[i];
     }
-    return rim(m.world * vec4<f32>(p, 1.0), (m.world * vec4<f32>(n, 0.0)).xyz, color, uv);
+    return rim(models[mi].world * vec4<f32>(p, 1.0), (models[mi].world * vec4<f32>(n, 0.0)).xyz, color, uv);
 }
 
 @fragment
 fn fs_env(i: OutEnv) -> @location(0) vec4<f32> {
+    mi = i.mi;
     var p1 = i.color * textureSample(tex, samp, i.uv);
-    var p2 = i.env_color * m.fx.x * textureSample(env_tex, env_samp, i.uv1);
+    var p2 = i.env_color * models[mi].fx.x * textureSample(env_tex, env_samp, i.uv1);
     p1 = vec4<f32>(mix(u.fog_color.rgb, p1.rgb, i.fog), p1.a);
     p2 = vec4<f32>(p2.rgb * i.fog, p2.a);
-    let fba = max(p1.a, m.fx.y);
+    let fba = max(p1.a, models[mi].fx.y);
     let c = vec4<f32>(p1.rgb * p1.a + p2.rgb * fba, p1.a);
     if (c.a < u.alpha.x || c.a >= u.alpha.y) {
         discard;
@@ -928,6 +949,8 @@ pub struct Renderer {
     model_stride: u64,
     model_buf: wgpu::Buffer,
     model_capacity: usize,
+    /// Gpu::model_storage at creation.
+    model_storage: bool,
     model_bind: wgpu::BindGroup,
     models: Vec<ModelState>,
     skin_layout: wgpu::PipelineLayout,
@@ -1226,7 +1249,12 @@ impl Renderer {
             multiview_mask: None,
             cache: None,
         });
-        let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("im2d"), source: wgpu::ShaderSource::Wgsl(SHADER.into()) });
+        let models_decl = if gpu.model_storage {
+            "@group(2) @binding(0) var<storage, read> models: array<M>;"
+        } else {
+            "@group(2) @binding(0) var<uniform> models: array<M, 1>;"
+        };
+        let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("im2d"), source: wgpu::ShaderSource::Wgsl(SHADER.replace("//MODELS_DECL", models_decl).into()) });
         let uniform_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("draw uniforms"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -1254,7 +1282,11 @@ impl Renderer {
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: true, min_binding_size: None },
+                ty: if gpu.model_storage {
+                    wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }
+                } else {
+                    wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: true, min_binding_size: None }
+                },
                 count: None,
             }],
         });
@@ -1269,8 +1301,10 @@ impl Renderer {
             immediate_size: 0,
         });
         let align = d.limits().min_uniform_buffer_offset_alignment as u64;
-        let model_stride = (std::mem::size_of::<ModelState>() as u64).next_multiple_of(align);
-        let (model_buf, model_bind) = Self::make_dyn_uniforms(gpu, &model_layout, model_stride, 64, std::mem::size_of::<ModelState>() as u64);
+        // Storage: packed (the WGSL array stride is the struct size, a multiple of 16); uniform
+        // blocks: at the dynamic offset alignment.
+        let model_stride = if gpu.model_storage { std::mem::size_of::<ModelState>() as u64 } else { (std::mem::size_of::<ModelState>() as u64).next_multiple_of(align) };
+        let (model_buf, model_bind) = Self::make_models(gpu, &model_layout, model_stride, 64);
         let bones_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("bone matrices"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -1336,6 +1370,7 @@ impl Renderer {
             model_stride,
             model_buf,
             model_capacity: 64,
+            model_storage: gpu.model_storage,
             model_bind,
             models: Vec::new(),
             skin_layout,
@@ -1398,6 +1433,25 @@ impl Renderer {
 
     /// A uniform buffer of `capacity` blocks `stride` apart, bound with a dynamic offset and
     /// `binding` bytes visible per block.
+    /// The model blocks' buffer and bind group (storage: the whole buffer; uniform: one block).
+    fn make_models(gpu: &Gpu, layout: &wgpu::BindGroupLayout, stride: u64, capacity: usize) -> (wgpu::Buffer, wgpu::BindGroup) {
+        if !gpu.model_storage {
+            return Self::make_dyn_uniforms(gpu, layout, stride, capacity, std::mem::size_of::<ModelState>() as u64);
+        }
+        let buf = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("models"),
+            size: stride * capacity as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("models"),
+            layout,
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: buf.as_entire_binding() }],
+        });
+        (buf, bind)
+    }
+
     fn make_dyn_uniforms(gpu: &Gpu, layout: &wgpu::BindGroupLayout, stride: u64, capacity: usize, binding: u64) -> (wgpu::Buffer, wgpu::BindGroup) {
         let buf = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("per-draw uniforms"),
@@ -2067,7 +2121,7 @@ impl Renderer {
         let models = std::mem::take(&mut self.models);
         if models.len() > self.model_capacity {
             let cap = models.len().next_power_of_two();
-            (self.model_buf, self.model_bind) = Self::make_dyn_uniforms(gpu, &self.model_layout, self.model_stride, cap, std::mem::size_of::<ModelState>() as u64);
+            (self.model_buf, self.model_bind) = Self::make_models(gpu, &self.model_layout, self.model_stride, cap);
             self.model_capacity = cap;
         }
         if !models.is_empty() {
@@ -2360,9 +2414,15 @@ impl Renderer {
                     match mesh {
                         Some(MeshDraw { geometry, model, bones, env }) => {
                             let Some(g) = self.geometries.get(&geometry) else { continue };
-                            if bound.g2 != Some(Slot::Model(model)) {
-                                p.set_bind_group(2, &self.model_bind, &[(model as u64 * self.model_stride) as u32]);
-                                bound.g2 = Some(Slot::Model(model));
+                            // Storage: bound once, the model picked by the instance index.
+                            let (slot, instance) = if self.model_storage { (Slot::Model(u32::MAX), model) } else { (Slot::Model(model), 0) };
+                            if bound.g2 != Some(slot) {
+                                if self.model_storage {
+                                    p.set_bind_group(2, &self.model_bind, &[]);
+                                } else {
+                                    p.set_bind_group(2, &self.model_bind, &[(model as u64 * self.model_stride) as u32]);
+                                }
+                                bound.g2 = Some(slot);
                             }
                             if pipe.kind == Kind::Skin && bound.g3 != Some(Slot::Model(bones)) {
                                 p.set_bind_group(3, &self.bones_bind, &[(bones as u64 * self.bones_stride) as u32]);
@@ -2379,7 +2439,7 @@ impl Renderer {
                                 p.set_index_buffer(g.indices.slice(..), wgpu::IndexFormat::Uint16);
                                 bound.vb = Some(Vb::Geometry(geometry));
                             }
-                            p.draw_indexed(first..first + count, 0, 0..1);
+                            p.draw_indexed(first..first + count, 0, instance..instance + 1);
                         }
                         None => {
                             let vb = if pipe.kind == Kind::Im3D { Vb::Im3D } else { Vb::Im2D };
