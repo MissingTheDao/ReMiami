@@ -192,10 +192,10 @@ fn im3d(backend: Backend) {
     let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, ..base() };
     r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
     // At z, the view spans -z..z: red covers the middle, green (nearer) its left half.
-    r.draw_3d(&state, 5, &quad3(-10.0, -10.0, 10.0, 10.0, 20.0, [255, 0, 0, 255]), None, &proj);
-    r.draw_3d(&state, 5, &quad3(-5.0, -5.0, 0.0, 5.0, 10.0, [0, 255, 0, 255]), None, &proj);
+    r.draw_3d(&state, 5, &quad3(-10.0, -10.0, 10.0, 10.0, 20.0, [255, 0, 0, 255]), None, &proj.into());
+    r.draw_3d(&state, 5, &quad3(-5.0, -5.0, 0.0, 5.0, 10.0, [0, 255, 0, 255]), None, &proj.into());
     // Blue far behind, drawn last, covering the whole view.
-    r.draw_3d(&state, 3, &quad3(-90.0, -90.0, 90.0, 90.0, 90.0, [0, 0, 255, 255]), Some(&[0, 1, 2, 0, 2, 3]), &proj);
+    r.draw_3d(&state, 3, &quad3(-90.0, -90.0, 90.0, 90.0, 90.0, [0, 0, 255, 255]), Some(&[0, 1, 2, 0, 2, 3]), &proj.into());
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
@@ -253,8 +253,8 @@ fn mesh(backend: Backend) {
     let model = ModelState { ambient: [0.2, 0.2, 0.2, 1.0], lights, ..ModelState::new(world) };
     let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, ..base() };
     r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
-    r.draw_mesh(&state, geo, 0, 6, &proj, &model, &MeshExtras::default());
-    r.draw_mesh(&state, geo, 6, 6, &proj, &ModelState { mat_color: [0.5, 0.5, 0.5, 1.0], ..model }, &MeshExtras::default());
+    r.draw_mesh(&state, geo, 0, 6, &proj.into(), &model, &MeshExtras::default());
+    r.draw_mesh(&state, geo, 6, 6, &proj.into(), &ModelState { mat_color: [0.5, 0.5, 0.5, 1.0], ..model }, &MeshExtras::default());
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
@@ -310,8 +310,8 @@ fn skin(backend: Backend) {
     let model = ModelState::new(world);
     let state = DrawState { z_test: 1, z_write: 0, alpha_func: 0, ..base() };
     r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
-    r.draw_mesh(&state, geo, 0, 6, &proj, &model, &MeshExtras { bones: Some(&[ident, moved]), env: None });
-    r.draw_mesh(&state, geo, 6, 6, &proj, &ModelState { mat_color: [0.0, 1.0, 0.0, 1.0], ..model }, &MeshExtras { bones: Some(&[ident, moved]), env: None });
+    r.draw_mesh(&state, geo, 0, 6, &proj.into(), &model, &MeshExtras { bones: Some(&[ident, moved]), env: None });
+    r.draw_mesh(&state, geo, 6, 6, &proj.into(), &ModelState { mat_color: [0.0, 1.0, 0.0, 1.0], ..model }, &MeshExtras { bones: Some(&[ident, moved]), env: None });
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
@@ -376,8 +376,8 @@ fn env(backend: Backend) {
     let e = MeshExtras { bones: None, env: Some(EnvMap { texture: env_tex, filter: 1, address_u: 1, address_v: 1 }) };
     let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, blend: 1, src_blend: 2, dst_blend: 6, ..base() };
     r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
-    r.draw_mesh(&state, geo, 0, 6, &proj, &first, &e);
-    r.draw_mesh(&state, geo, 6, 6, &proj, &second, &e);
+    r.draw_mesh(&state, geo, 0, 6, &proj.into(), &first, &e);
+    r.draw_mesh(&state, geo, 6, 6, &proj.into(), &second, &e);
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
@@ -583,7 +583,7 @@ fn neo_world(backend: Backend) {
     let e = MeshExtras { bones: None, env: Some(EnvMap { texture: lmtex, filter: 1, address_u: 3, address_v: 3 }) };
     let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, shader: MESH_NEO_WORLD, ..base() };
     r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
-    r.draw_mesh(&state, geo, 0, 6, &proj, &model, &e);
+    r.draw_mesh(&state, geo, 0, 6, &proj.into(), &model, &e);
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },

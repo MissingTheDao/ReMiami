@@ -112,6 +112,9 @@ struct WgpuRaster
 	bool32 dirty;		// written since the last upload
 	bool32 autogenMipmap;	// MIPMAP|AUTOMIPMAP: one level here, the host builds the chain
 	int32 maxAnisotropy;	// as last set by a texture using the raster (gl3 natras->maxAnisotropy)
+	// Sampler state of the texture as GL3 keeps it on its GL texture object (gl3 natras->filterMode,
+	// addressU, addressV; 0 = never set, GL's defaults): a draw samples with these, not the stage's.
+	int32 filterMode, addressU, addressV;
 };
 
 // One draw's device state, as the Rust host reads it (revc_rw::frame::DrawState).
@@ -163,7 +166,7 @@ int32 dxtLevelSize(int32 dxt, int32 width, int32 height);
 // Device state for the next draw (uploads the bound raster if needed) and the camera's
 // projection * view (column-major), as set up by the last beginUpdate.
 void currentDrawState(DrawState *s);
-const float32 *viewProjMatrix(void);
+const float32 *cameraXform(void);
 
 // Model drawing (wgpupipe.cpp), shared by the default, MatFX and skin pipelines and re3's custom
 // (Neo) pipelines in custompipes_wgpu.cpp.
@@ -231,6 +234,10 @@ const float32 *lastLightDirection(void);
 void setModelMaterial(ModelState *model, const RGBA &color, const SurfaceProperties &surfProps);
 // gl3 setTexture on stage 0: raster, filter, addressing (nil: untextured).
 void setTexture(Texture *tex);
+// gl3device setTexture(0, tex): the device side of setTexture (wgpudevice.cpp).
+void setTextureStage0(Texture *tex);
+// gl3 evictRaster: unbinds a raster that is being destroyed.
+void evictRaster(Raster *raster);
 // Draws one mesh (with the PS2 alpha test emulation) using shader `shader` (0 = default
 // lighting) and, if `useTex1`, `tex1` as second texture (nil = white).
 void drawMesh(InstanceDataHeader *header, InstanceData *inst, const ModelState *model, uint32 shader,

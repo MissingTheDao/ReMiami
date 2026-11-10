@@ -17,11 +17,14 @@ pub mod frame;
 pub mod present;
 mod prim;
 
-/// The graphics API to render with (the game's settings will offer both).
+/// The graphics API to render with (the game's settings offer each one the platform has).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Backend {
     Vulkan,
     Gl,
+    /// Direct3D 12, Windows builds only (wgpu's DX12 backend).
+    #[cfg(windows)]
+    Dx12,
 }
 
 impl Backend {
@@ -29,6 +32,8 @@ impl Backend {
         match self {
             Backend::Vulkan => wgpu::Backends::VULKAN,
             Backend::Gl => wgpu::Backends::GL,
+            #[cfg(windows)]
+            Backend::Dx12 => wgpu::Backends::DX12,
         }
     }
 }
@@ -88,6 +93,11 @@ impl Gpu {
             ..Default::default()
         }))
         .map_err(|e| format!("{backend:?} device: {e}"))?;
+        // wgpu's default panics on a validation error (which aborts the game: the renderer is
+        // called through C). Log it and go on; the faulty pass is skipped by wgpu.
+        device.on_uncaptured_error(std::sync::Arc::new(|e: wgpu::Error| {
+            eprintln!("revc-rw: wgpu error (frame continues): {e}");
+        }));
         Ok(Gpu { adapter, device, queue, info, model_storage })
     }
 }

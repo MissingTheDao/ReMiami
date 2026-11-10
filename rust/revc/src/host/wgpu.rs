@@ -1,10 +1,10 @@
 //! Host side of librw's WGPU platform (feature `wgpu`, plan task 12): the window has no GL
-//! context; frames are presented by revc-rw on Vulkan or OpenGL (REVC_RENDERER_BACKEND=vulkan|gl,
+//! context; frames are presented by revc-rw on Vulkan or OpenGL (REVC_RENDERER_BACKEND=vulkan|gl, dx12 on Windows;
 //! default vulkan). The device's camera clears, texture uploads and Im2D draws are recorded by
 //! revc_rw::frame::Renderer and drawn when the frame is presented; Im3D and models come next.
 
 use revc_rw::Backend;
-use revc_rw::frame::{Antialiasing, DrawState, EnvMap, MAX_BONES, Mat4, MeshExtras, MeshVertex, ModelState, Renderer, SkinVertex, TexData, Vertex2D, Vertex2DUV2, Vertex3D};
+use revc_rw::frame::{Antialiasing, DrawState, EnvMap, MAX_BONES, Mat4, MeshExtras, MeshVertex, ModelState, Renderer, SkinVertex, TexData, Vertex2D, Vertex2DUV2, Vertex3D, Xform};
 use revc_rw::present::{NativeWindow, Presenter};
 use sdl3_sys::everything::*;
 use std::cell::{Cell, RefCell};
@@ -24,6 +24,8 @@ const CLEAR_Z: u32 = 2;
 fn backend() -> Backend {
     match std::env::var("REVC_RENDERER_BACKEND").as_deref() {
         Ok("gl") | Ok("opengl") => Backend::Gl,
+        #[cfg(windows)]
+        Ok("dx12") | Ok("d3d12") => Backend::Dx12,
         _ => Backend::Vulkan,
     }
 }
@@ -173,19 +175,19 @@ pub unsafe extern "C" fn revc_rw_im2d(state: *const DrawState, prim: u32, vertic
 }
 
 /// # Safety
-/// As `revc_rw_im2d`, with Im3DVertex; `mvp` points at 16 floats.
+/// As `revc_rw_im2d`, with Im3DVertex; `xform` points at an Xform (48 floats).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn revc_rw_im3d(state: *const DrawState, prim: u32, vertices: *const Vertex3D, num_vertices: i32, indices: *const u16, num_indices: i32, mvp: *const f32) {
-    if state.is_null() || vertices.is_null() || num_vertices <= 0 || mvp.is_null() {
+pub unsafe extern "C" fn revc_rw_im3d(state: *const DrawState, prim: u32, vertices: *const Vertex3D, num_vertices: i32, indices: *const u16, num_indices: i32, xform: *const Xform) {
+    if state.is_null() || vertices.is_null() || num_vertices <= 0 || xform.is_null() {
         return;
     }
     let state = unsafe { &*state };
     let verts = unsafe { std::slice::from_raw_parts(vertices, num_vertices as usize) };
     let idx = (!indices.is_null() && num_indices > 0).then(|| unsafe { std::slice::from_raw_parts(indices, num_indices as usize) });
-    let mvp: Mat4 = unsafe { *mvp.cast::<Mat4>() };
+    let xf = unsafe { *xform };
     RENDERER.with(|c| {
         if let Some(r) = c.borrow_mut().as_mut() {
-            r.draw_3d(state, prim, verts, idx, &mvp);
+            r.draw_3d(state, prim, verts, idx, &xf);
         }
     });
 }
@@ -232,21 +234,21 @@ pub extern "C" fn revc_rw_geometry_destroy(id: u32) {
 }
 
 /// # Safety
-/// `state` and `model` (a ModelState) are valid; `view_proj` points at 16 floats; `bones` is null
+/// `state` and `model` (a ModelState) are valid; `xform` points at an Xform (projection, view; world unused); `bones` is null
 /// (unskinned) or holds `num_bones` matrices of 16 floats; `env` is null or a MatFX env map.
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
-pub unsafe extern "C" fn revc_rw_draw_mesh(state: *const DrawState, geometry: u32, first: u32, count: u32, view_proj: *const f32, model: *const ModelState, bones: *const Mat4, num_bones: i32, env: *const EnvMap) {
-    if state.is_null() || view_proj.is_null() || model.is_null() {
+pub unsafe extern "C" fn revc_rw_draw_mesh(state: *const DrawState, geometry: u32, first: u32, count: u32, xform: *const Xform, model: *const ModelState, bones: *const Mat4, num_bones: i32, env: *const EnvMap) {
+    if state.is_null() || xform.is_null() || model.is_null() {
         return;
     }
     let (state, model) = unsafe { (&*state, &*model) };
-    let vp: Mat4 = unsafe { *view_proj.cast::<Mat4>() };
+    let xf = unsafe { *xform };
     let bones = (!bones.is_null()).then(|| unsafe { std::slice::from_raw_parts(bones, num_bones.clamp(0, MAX_BONES as i32) as usize) });
     let env = (!env.is_null()).then(|| unsafe { *env });
     RENDERER.with(|c| {
         if let Some(r) = c.borrow_mut().as_mut() {
-            r.draw_mesh(state, geometry, first, count, &vp, model, &MeshExtras { bones, env });
+            r.draw_mesh(state, geometry, first, count, &xf, model, &MeshExtras { bones, env });
         }
     });
 }

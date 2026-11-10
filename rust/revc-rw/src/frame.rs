@@ -353,7 +353,29 @@ struct SamplerKey {
 
 /// xform, alpha window, fog, fog colour, the Im3D model-view-projection matrix, then the
 /// override shader's parameters.
-type Uniforms = [f32; 40];
+type Uniforms = [f32; 72];
+
+/// The vertex transform of a draw, kept apart like GL3's u_proj, u_view and u_world so the
+/// shaders multiply in GL3's order (clip = proj * view * world * pos) and round the same.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Xform {
+    pub proj: Mat4,
+    pub view: Mat4,
+    pub world: Mat4,
+}
+
+/// Im2D draws ignore the transform.
+const NO_XFORM: Xform = Xform { proj: [0.0; 16], view: [0.0; 16], world: [0.0; 16] };
+
+pub const IDENTITY: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+
+impl From<Mat4> for Xform {
+    /// One combined matrix (as projection; view and world identity).
+    fn from(m: Mat4) -> Xform {
+        Xform { proj: m, view: IDENTITY, world: IDENTITY }
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 enum Op {
@@ -534,7 +556,7 @@ impl TexData {
 }
 
 const SHADER: &str = r#"
-struct U { xform: vec4<f32>, alpha: vec4<f32>, fog: vec4<f32>, fog_color: vec4<f32>, mvp: mat4x4<f32>, p0: vec4<f32>, p1: vec4<f32> };
+struct U { xform: vec4<f32>, alpha: vec4<f32>, fog: vec4<f32>, fog_color: vec4<f32>, proj: mat4x4<f32>, view: mat4x4<f32>, world: mat4x4<f32>, p0: vec4<f32>, p1: vec4<f32> };
 @group(0) @binding(0) var<uniform> u: U;
 @group(1) @binding(0) var tex: texture_2d<f32>;
 @group(1) @binding(1) var samp: sampler;
@@ -562,7 +584,8 @@ fn vs_2d(@location(0) pos: vec4<f32>, @location(1) color: vec4<f32>, @location(2
 @vertex
 fn vs_3d(@location(0) pos: vec3<f32>, @location(1) color: vec4<f32>, @location(2) uv: vec2<f32>) -> Out {
     var o: Out;
-    o.pos = u.mvp * vec4<f32>(pos, 1.0);
+    // gl3 im3d.vert: u_proj * (u_view * (u_world * pos)).
+    o.pos = u.proj * (u.view * (u.world * vec4<f32>(pos, 1.0)));
     o.fog = clamp((o.pos.w - u.fog.y) * u.fog.z, u.fog.w, 1.0);
     o.color = color;
     o.uv = uv;
@@ -661,7 +684,7 @@ fn vs_skin(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @locatio
 fn lit(pos: vec3<f32>, normal: vec3<f32>, color: vec4<f32>, uv: vec2<f32>) -> Out {
     var o: Out;
     let v = models[mi].world * vec4<f32>(pos, 1.0);
-    o.pos = u.mvp * v;
+    o.pos = u.proj * u.view * v;
     let n = (models[mi].world * vec4<f32>(normal, 0.0)).xyz;
     var c = color;
     c = vec4<f32>(c.rgb + models[mi].ambient.rgb * models[mi].surf.x, c.a);
@@ -692,7 +715,7 @@ fn vs_env(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location
     var o: OutEnv;
     o.mi = mi;
     let v = models[mi].world * vec4<f32>(pos, 1.0);
-    o.pos = u.mvp * v;
+    o.pos = u.proj * u.view * v;
     let n = (models[mi].world * vec4<f32>(normal, 0.0)).xyz;
     o.uv = uv;
     o.uv1 = (models[mi].tex_matrix * vec4<f32>(n, 1.0)).xy;
@@ -720,7 +743,7 @@ fn vs_neo_vehicle(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @
     var o: OutEnv;
     o.mi = mi;
     let v = models[mi].world * vec4<f32>(pos, 1.0);
-    o.pos = u.mvp * v;
+    o.pos = u.proj * u.view * v;
     let n = (models[mi].world * vec4<f32>(normal, 0.0)).xyz;
     let refl = models[mi].extra[1];
     let view = normalize(models[mi].extra[0].xyz - v.xyz);
@@ -762,7 +785,7 @@ fn vs_neo_world(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @lo
     var o: OutEnv;
     o.mi = mi;
     let v = models[mi].world * vec4<f32>(pos, 1.0);
-    o.pos = u.mvp * v;
+    o.pos = u.proj * u.view * v;
     let n = (models[mi].world * vec4<f32>(normal, 0.0)).xyz;
     o.uv = uv;
     o.uv1 = uv2;
@@ -793,7 +816,7 @@ fn vs_neo_gloss(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @lo
     var o: OutEnv;
     o.mi = mi;
     let v = models[mi].world * vec4<f32>(pos, 1.0);
-    o.pos = u.mvp * v;
+    o.pos = u.proj * u.view * v;
     o.uv = uv;
     let view = normalize(models[mi].extra[0].xyz - v.xyz);
     let light = normalize(view - models[mi].lights[2].xyz);
@@ -820,7 +843,7 @@ fn fs_neo_gloss(i: OutEnv) -> @location(0) vec4<f32> {
 
 fn rim(v: vec4<f32>, n: vec3<f32>, color: vec4<f32>, uv: vec2<f32>) -> Out {
     var o: Out;
-    o.pos = u.mvp * v;
+    o.pos = u.proj * u.view * v;
     o.uv = uv;
     var c = color;
     c = vec4<f32>(c.rgb + models[mi].ambient.rgb * models[mi].surf.x, c.a);
@@ -1004,7 +1027,7 @@ const ATTRS_2D_UV2: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => F
 // re3 im2d_UV2.vert + screenDroplet.frag: the droplet mask (tex) times the frame copy (tex1) at
 // the second coordinates, times the vertex colour; no perspective (w = 1), no fog, no alpha test.
 const UV2_SHADER: &str = r#"
-struct U { xform: vec4<f32>, alpha: vec4<f32>, fog: vec4<f32>, fog_color: vec4<f32>, mvp: mat4x4<f32>, p0: vec4<f32>, p1: vec4<f32> };
+struct U { xform: vec4<f32>, alpha: vec4<f32>, fog: vec4<f32>, fog_color: vec4<f32>, proj: mat4x4<f32>, view: mat4x4<f32>, world: mat4x4<f32>, p0: vec4<f32>, p1: vec4<f32> };
 @group(0) @binding(0) var<uniform> u: U;
 @group(1) @binding(0) var tex: texture_2d<f32>;
 @group(1) @binding(1) var samp: sampler;
@@ -1053,6 +1076,12 @@ fn blend_factor(f: u32) -> wgpu::BlendFactor {
         11 => B::SrcAlphaSaturated,
         _ => B::One,
     }
+}
+
+/// REVC_RW_ANISOTROPY=1: anisotropic filtering on (see ensure_bind_group).
+fn anisotropy_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("REVC_RW_ANISOTROPY").is_ok_and(|v| v == "1"))
 }
 
 fn address_mode(a: u32) -> wgpu::AddressMode {
@@ -1321,7 +1350,7 @@ impl Renderer {
         });
         let bones_stride = ((BONE_FLOATS * 4) as u64).next_multiple_of(align);
         let (bones_buf, bones_bind) = Self::make_dyn_uniforms(gpu, &bones_layout, bones_stride, 16, (BONE_FLOATS * 4) as u64);
-        let uniform_stride = (d.limits().min_uniform_buffer_offset_alignment as u64).max(std::mem::size_of::<Uniforms>() as u64);
+        let uniform_stride = (std::mem::size_of::<Uniforms>() as u64).next_multiple_of(d.limits().min_uniform_buffer_offset_alignment as u64);
         let (uniform_buf, uniform_bind) = Self::make_uniforms(gpu, &uniform_layout, uniform_stride, 256);
         let white = new_texture(gpu, wgpu::TextureFormat::Rgba8Unorm, 1, 1, 1);
         write_levels(gpu, &white, &[&[255, 255, 255, 255]]);
@@ -1592,16 +1621,16 @@ impl Renderer {
         let first = self.verts.len() as u32;
         self.verts.extend(self.scratch_out.iter().filter_map(|&i| verts.get(i as usize)));
         let count = self.verts.len() as u32 - first;
-        self.record(state, prim, Kind::Im2D, first, count, &[0.0; 16], None);
+        self.record(state, prim, Kind::Im2D, first, count, &NO_XFORM, None);
     }
 
-    /// An Im3D primitive: `mvp` = projection * view * world (column-major).
-    pub fn draw_3d(&mut self, state: &DrawState, prim: u32, verts: &[Vertex3D], indices: Option<&[u16]>, mvp: &Mat4) {
+    /// An Im3D primitive with its projection, view and world matrices (column-major).
+    pub fn draw_3d(&mut self, state: &DrawState, prim: u32, verts: &[Vertex3D], indices: Option<&[u16]>, xf: &Xform) {
         self.expand(prim, verts.len(), indices);
         let first = self.verts3.len() as u32;
         self.verts3.extend(self.scratch_out.iter().filter_map(|&i| verts.get(i as usize)));
         let count = self.verts3.len() as u32 - first;
-        self.record(state, prim, Kind::Im3D, first, count, mvp, None);
+        self.record(state, prim, Kind::Im3D, first, count, xf, None);
     }
 
     /// An Im2D primitive with two coordinate sets, textured with the bound raster and `tex1`
@@ -1613,14 +1642,14 @@ impl Renderer {
         let count = self.verts_uv2.len() as u32 - first;
         let t = if self.textures.contains_key(&tex1.texture) { tex1.texture } else { 0 };
         let env = Some((t, SamplerKey { filter: tex1.filter, address_u: tex1.address_u, address_v: tex1.address_v, anisotropy: 1 }));
-        self.record(state, prim, Kind::Im2DUV2, first, count, &[0.0; 16], Some(MeshDraw { geometry: 0, model: 0, bones: 0, env }));
+        self.record(state, prim, Kind::Im2DUV2, first, count, &NO_XFORM, Some(MeshDraw { geometry: 0, model: 0, bones: 0, env }));
     }
 
     /// Triangles `first..first + count` of the index list of a stored geometry, lit with
-    /// `model`; `view_proj` = projection * view. A skinned geometry gets its bones (at most
+    /// `model`; `xf` = projection and view (world comes with the model). A skinned geometry gets its bones (at most
     /// MAX_BONES; missing ones are identity); a MatFX material its environment map.
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_mesh(&mut self, state: &DrawState, geometry: u32, first: u32, count: u32, view_proj: &Mat4, model: &ModelState, extras: &MeshExtras) {
+    pub fn draw_mesh(&mut self, state: &DrawState, geometry: u32, first: u32, count: u32, xf: &Xform, model: &ModelState, extras: &MeshExtras) {
         let bones = extras.bones;
         if !self.geometries.contains_key(&geometry) {
             return;
@@ -1650,11 +1679,11 @@ impl Renderer {
         });
         // Skinned atomics never take the MatFX path (as in gl3, whose skin pipeline has no env pass).
         let kind = if env.is_some() && kind == Kind::Mesh { Kind::MeshEnv } else { kind };
-        self.record(state, 3, kind, first, count, view_proj, Some(MeshDraw { geometry, model: mi, bones: bi, env }));
+        self.record(state, 3, kind, first, count, xf, Some(MeshDraw { geometry, model: mi, bones: bi, env }));
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn record(&mut self, state: &DrawState, prim: u32, kind: Kind, first: u32, count: u32, mvp: &Mat4, mesh: Option<MeshDraw>) {
+    fn record(&mut self, state: &DrawState, prim: u32, kind: Kind, first: u32, count: u32, xf: &Xform, mesh: Option<MeshDraw>) {
         if count == 0 {
             return;
         }
@@ -1665,56 +1694,27 @@ impl Renderer {
             _ => [-1000.0, 1000.0],
         };
         let c = state.fog_color;
-        let u: Uniforms = [
-            state.xform[0],
-            state.xform[1],
-            state.xform[2],
-            state.xform[3],
-            alpha[0],
-            alpha[1],
-            0.0,
-            0.0,
-            state.fog_start,
-            state.fog_end,
-            1.0 / (state.fog_start - state.fog_end),
-            if state.fog != 0 { 0.0 } else { 1.0 },
-            (c & 0xFF) as f32 / 255.0,
-            (c >> 8 & 0xFF) as f32 / 255.0,
-            (c >> 16 & 0xFF) as f32 / 255.0,
-            (c >> 24 & 0xFF) as f32 / 255.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-                    0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-];
+        let mut u: Uniforms = [0.0; 72];
+        u[0..4].copy_from_slice(&state.xform);
+        u[4] = alpha[0];
+        u[5] = alpha[1];
+        u[8] = state.fog_start;
+        u[9] = state.fog_end;
+        u[10] = 1.0 / (state.fog_start - state.fog_end);
+        u[11] = if state.fog != 0 { 0.0 } else { 1.0 };
+        u[12] = (c & 0xFF) as f32 / 255.0;
+        u[13] = (c >> 8 & 0xFF) as f32 / 255.0;
+        u[14] = (c >> 16 & 0xFF) as f32 / 255.0;
+        u[15] = (c >> 24 & 0xFF) as f32 / 255.0;
         // GL3 computes the range unguarded; keep the uniform finite either way.
-        let mut u = u;
         if !u[10].is_finite() {
             u[10] = 0.0;
         }
-        u[16..32].copy_from_slice(mvp);
+        u[16..32].copy_from_slice(&xf.proj);
+        u[32..48].copy_from_slice(&xf.view);
+        u[48..64].copy_from_slice(&xf.world);
         if kind == Kind::Im2D {
-            u[32..40].copy_from_slice(&state.shader_params);
+            u[64..72].copy_from_slice(&state.shader_params);
         }
         if self.uniforms.last() != Some(&u) {
             self.uniforms.push(u);
@@ -1854,11 +1854,16 @@ impl Renderer {
                 4 => (L, L, M::Nearest, true),
                 5 => (N, N, M::Linear, true),
                 6 => (L, L, M::Linear, true),
+                // Never set on the texture: GL's default (NEAREST_MIPMAP_LINEAR, mag LINEAR).
+                0 => (N, L, M::Linear, true),
                 _ => (L, L, M::Nearest, false),
             };
-            // Anisotropic filtering needs all-linear filtering in wgpu; GL applies it to any
-            // mipmapped linear filter, so those become trilinear while it is on.
-            let aniso = if mips && min == L && key.anisotropy > 1 { key.anisotropy } else { 1 };
+            // Anisotropic filtering: off by default, like the GL3 renderer (re3 asks for the
+            // maximum on every texture, but in GL3 it never takes effect: forcing it off there
+            // changes no pixel of the references). REVC_RW_ANISOTROPY=1 turns it on (a quality
+            // option for the settings menu later). It needs all-linear filtering in wgpu, so
+            // mipmapped linear filters become trilinear while it is on.
+            let aniso = if mips && min == L && key.anisotropy > 1 && anisotropy_enabled() { key.anisotropy } else { 1 };
             let mip = if aniso > 1 { M::Linear } else { mip };
             gpu.device.create_sampler(&wgpu::SamplerDescriptor {
                 label: Some("raster"),
@@ -2113,7 +2118,26 @@ impl Renderer {
             self.scene = Some((t, bind, size));
         }
         let scene_view = self.scene.as_ref().unwrap().0.create_view(&Default::default());
-        let ops = std::mem::take(&mut self.ops);
+        let mut ops = std::mem::take(&mut self.ops);
+        // A draw into a texture target that samples that same texture (a feedback loop: GL3
+        // tolerates it with undefined results, wgpu rejects the pass) samples white instead.
+        let mut tgt = 0u32;
+        for op in ops.iter_mut() {
+            match op {
+                Op::Target { texture } => tgt = *texture,
+                Op::Draw { texture, mesh, .. } if tgt != 0 => {
+                    if *texture == tgt {
+                        *texture = 0;
+                    }
+                    if let Some(MeshDraw { env: Some((t, _)), .. }) = mesh
+                        && *t == tgt
+                    {
+                        *t = 0;
+                    }
+                }
+                _ => {}
+            }
+        }
         let verts = std::mem::take(&mut self.verts);
         let verts3 = std::mem::take(&mut self.verts3);
         let verts_uv2 = std::mem::take(&mut self.verts_uv2);
