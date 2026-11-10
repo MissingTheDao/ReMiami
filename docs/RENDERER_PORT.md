@@ -493,6 +493,15 @@ the original C++ as in step 3.
   every bone matrix hashed per step; `tests/golden/recorders/rwhanim`).
 - **4c. Geometry and atomic math.** Bounding spheres (MorphTarget, Atomic's world sphere),
   generateTriangles, buildMeshes, correctTristripWinding, removeUnusedMaterials.
+  **Done 2026-11-10, for what the game runs:** `rust/revc/src/rwgeometry.rs` has
+  V3d::transformPoints/transformVectors (the game's RwV3dTransformPoints, and the atomics'
+  world bounding spheres), MorphTarget::calculateBoundingSphere, and buildMeshes' indices:
+  per-material lists and tristrip.cpp's strip builder (the game strips the water geometry at
+  start-up; librw's tunnel pass was already disabled). verifyMesh still checks the strips in
+  C++. Checked by `tests/golden/rwgeometry.txt` (3,000 transforms, 2,000 spheres, 600 meshes:
+  grids like the water's, with dropped and shuffled triangles, and random triangle soups;
+  `tests/golden/recorders/rwgeometry`). generateTriangles, correctTristripWinding and
+  removeUnusedMaterials have no callers in the game; they stay in C++ and go with librw.
 
 ## Appendix: every RW function the game calls
 
