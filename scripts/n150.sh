@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 # The N150 test box (plan tasks 2, 14, 22, 24): a weak Intel iGPU (Mesa ANV / iris) on a 4K TV,
-# the performance floor of the port. Everything runs over SSH in the box's desktop session; the box
-# needs no build tools (builds are made here and copied).
+# the performance floor of the port. Everything runs over SSH in the box's desktop session. Builds
+# are normally made here and copied (deploy); rdeploy builds on the box instead, for when this
+# machine is busy (Rust from rustup and cmake/ninja in ~/.local/revc-tools there, all user-local).
 #
 # usage: scripts/n150.sh <command> [args]
 #   deploy                   build release, copy it with assets/, tests/ and game/ to the box
+#   rdeploy [--ref REV] [--as NAME]
+#                            build on the box (slower, this machine stays free) and deploy like
+#                            deploy: the working tree is synced to ~/revc-src there (kept for
+#                            incremental builds). --ref REV builds that commit instead (git archive,
+#                            in ~/revc-src-REV) and only installs its binary as bin/NAME
+#                            (default revc-REV), e.g. an old GL3 build to compare with.
 #   test [--backend vulkan|gl] [scenario ...]    (Vulkan by default; --wgpu accepted, no effect)
 #                            run the regression suite there (Intel driver: catches driver-specific
 #                            rendering bugs; runs alongside a local suite as a second runner)
@@ -141,6 +148,40 @@ case "$cmd" in
     # Your own game files (never committed); user mods and settings stay here.
     rsync -a --delete --exclude mods --exclude userfiles --exclude reVC.ini "$ROOT/game/" "$HOST:$DIR/game/" || exit 1
     echo "deployed $(cat "$STAGE/COMMIT") to $HOST:$DIR"
+    ;;
+  rdeploy)
+    REF="" AS=""
+    while (( $# )); do
+      case "$1" in
+        --ref) REF=$2; shift ;;
+        --as) AS=$2; shift ;;
+        *) echo "unknown option $1"; exit 2 ;;
+      esac
+      shift
+    done
+    TOOLS='export PATH=$HOME/.cargo/bin:$HOME/.local/revc-tools/bin:$PATH'
+    if [[ -n "$REF" ]]; then
+      rev=$(git -C "$ROOT" rev-parse --short "$REF") || exit 1
+      AS=${AS:-revc-$rev}
+      SRC=revc-src-$rev
+      ssh -o BatchMode=yes "$HOST" "test -d $SRC" ||
+        git -C "$ROOT" archive --format=tar "$rev" | ssh -o BatchMode=yes "$HOST" "mkdir -p $SRC && tar xf - -C $SRC" || exit 1
+      echo "building $rev on $HOST (bin/$AS)"
+      ssh -o BatchMode=yes "$HOST" "bash -c '$TOOLS; cd $SRC/rust && nice cargo build -q --release 2>&1 | tail -20 && mkdir -p ~/$DIR/bin && cp target/release/revc ~/$DIR/bin/$AS'" || exit 1
+      echo "deployed $rev as $HOST:$DIR/bin/$AS"
+      exit 0
+    fi
+    # The working tree as it is (tracked and new files, not ignored ones): same content as deploy.
+    git -C "$ROOT" ls-files -co --exclude-standard -z |
+      rsync -a --from0 --files-from=- --delete-missing-args "$ROOT/" "$HOST:revc-src/" || exit 1
+    git -C "$ROOT" describe --always --dirty > /tmp/revc-n150-commit.$$
+    scp -q /tmp/revc-n150-commit.$$ "$HOST:revc-src/COMMIT"; rm -f /tmp/revc-n150-commit.$$
+    echo "building $(ssh -o BatchMode=yes "$HOST" cat revc-src/COMMIT) on $HOST"
+    ssh -o BatchMode=yes "$HOST" "bash -c '$TOOLS; cd revc-src/rust && nice cargo build --locked -q --release 2>&1 | tail -20; test -x target/release/revc'" || exit 1
+    ssh -o BatchMode=yes "$HOST" "bash -c 'set -e; mkdir -p $DIR/bin $DIR/scripts; cd revc-src; cp rust/target/release/revc ~/$DIR/bin/revc; cp scripts/perf.sh scripts/test.sh scripts/headless.sh ~/$DIR/scripts/; rm -rf ~/$DIR/tests ~/$DIR/assets; cp -r tests assets ~/$DIR/; cp COMMIT ~/$DIR/COMMIT'" || exit 1
+    # Your own game files (never committed); user mods and settings stay here.
+    rsync -a --delete --exclude mods --exclude userfiles --exclude reVC.ini "$ROOT/game/" "$HOST:$DIR/game/" || exit 1
+    echo "built and deployed $(ssh -o BatchMode=yes "$HOST" cat $DIR/COMMIT) on $HOST:$DIR"
     ;;
   test)
     check_screen
