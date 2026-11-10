@@ -27,7 +27,13 @@ pub struct Voice {
     cursor: f64,
     /// Send level into the reverb (the game's per-channel "effects level"), 0 = dry only.
     reverb_mix: f32,
+    /// Left, right and reverb gains the last mix ended with (None: not mixed since it started).
+    /// Changes are ramped from these, as OpenAL Soft does, instead of jumping (clicks).
+    applied: Option<(f32, f32, f32)>,
 }
+
+/// Output samples a gain change is spread over (2.7 ms at 48 kHz).
+const GAIN_RAMP: usize = 128;
 
 pub struct Mixer {
     voices: Vec<Voice>,
@@ -68,6 +74,7 @@ impl Default for Voice {
             playing: false,
             cursor: 0.0,
             reverb_mix: 0.0,
+            applied: None,
         }
     }
 }
@@ -93,6 +100,7 @@ impl Mixer {
             voice.data = data.to_vec();
             voice.freq = freq;
             voice.cursor = 0.0;
+            voice.applied = None; // a new sound starts at its gain, without a ramp
             if voice.loop_count >= 2 {
                 voice.loops_left = voice.loop_count - 1;
             } else {
@@ -253,9 +261,17 @@ impl Voice {
             }
             return;
         }
-        let (lg, rg, wg) = self.gains();
+        let target = self.gains();
+        let from = self.applied.unwrap_or(target);
+        self.applied = Some(target);
         let (rs, re) = self.loop_region();
-        for (frame, w) in out.chunks_exact_mut(2).zip(wet.iter_mut()) {
+        for (n, (frame, w)) in out.chunks_exact_mut(2).zip(wet.iter_mut()).enumerate() {
+            let (lg, rg, wg) = if n >= GAIN_RAMP || from == target {
+                target
+            } else {
+                let t = (n + 1) as f32 / GAIN_RAMP as f32;
+                (from.0 + (target.0 - from.0) * t, from.1 + (target.1 - from.1) * t, from.2 + (target.2 - from.2) * t)
+            };
             let looping = self.loop_count == 0 || self.loops_left > 0;
             let i = (self.cursor as usize).min(len - 1);
             let frac = (self.cursor - i as f64) as f32;
@@ -295,6 +311,30 @@ mod tests {
         let mut buf = vec![0.0f32; frames * 2];
         m.mix(&mut buf);
         buf
+    }
+
+    #[test]
+    fn gain_changes_are_ramped() {
+        // A constant (DC) looping 2D voice: its output level is its gain.
+        let mut m = started(&[16384; LEN], 0);
+        m.set_gain(0, 1.0);
+        let a = run(&mut m, 256);
+        let before = a[a.len() - 2];
+        m.set_gain(0, 0.2);
+        let b = run(&mut m, 256);
+        let after = b[(GAIN_RAMP + 10) * 2];
+        assert!((after - before * 0.2).abs() < 1e-4, "settles at the new gain: {before} -> {after}");
+        // no jump: each sample moves by at most 1/GAIN_RAMP of the change
+        let max_step = (before - after).abs() / GAIN_RAMP as f32 + 1e-5;
+        let mut prev = before;
+        for f in b.chunks_exact(2) {
+            assert!((f[0] - prev).abs() <= max_step, "step {} > {max_step}", (f[0] - prev).abs());
+            prev = f[0];
+        }
+        // a restarted sound starts at its gain at once
+        m.start(0, &[16384; LEN], 48000);
+        let c = run(&mut m, 4);
+        assert!((c[0] - after).abs() < 1e-4);
     }
 
     fn started(data: &[i16], loop_count: i32) -> Mixer {
