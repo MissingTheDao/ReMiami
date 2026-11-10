@@ -629,6 +629,15 @@ impl Driver {
             if txd_mode.is_empty() {
                 unsafe { revc_test_load_all_txds() };
             }
+            // with REVC_TXD_CHECK_DIR (e.g. the Xbox disc's files) those TXDs are part of the set:
+            // use the matching golden (tests/golden/textures-xbox.txt holds PC and Xbox).
+            if let Some(dir) = std::env::var_os("REVC_TXD_CHECK_DIR") {
+                let (files, textures, failed) = check_txd_dir(std::path::Path::new(&dir));
+                log(format!("textures: {files} TXDs from {} ({textures} textures, {failed} unreadable)", dir.to_string_lossy()));
+                if failed != 0 {
+                    self.fail(format!("textures: {failed} TXDs under {} not read", dir.to_string_lossy()));
+                }
+            }
             match crate::txdload::golden_check(std::path::Path::new(&golden)) {
                 Ok((seen, missing, extra)) => {
                     log(format!("textures: {seen} distinct textures, {} missing from / {} not in {}", missing.len(), extra.len(), golden.to_string_lossy()));
