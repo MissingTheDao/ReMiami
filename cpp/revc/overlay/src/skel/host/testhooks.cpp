@@ -619,3 +619,32 @@ revc_test_pedhit_result(float *maxRise, float *carDist)
 	for (int i = 0; i < PEDHIT_NUM; i++)
 		maxRise[i] = phMaxRise[i];
 }
+
+// Scanner check (REVC_TEST=scanner): the player in a police car with a wanted level, so the
+// police scanner talks (with its radio crackle); the mixer output is recorded (REVC_TEST_WAV).
+extern "C" int
+revc_test_scanner_setup(void)
+{
+	const float x = 480.0f, y = -1400.0f;	// beach (flat, see revc_test_pedhit_setup)
+	revc_test_goto_spot(x - 10.0f, y, -100.0f, -10.0f, -12.0f, 8.0f, 22, 0);
+	CStreaming::RequestModel(MI_POLICE, STREAMFLAGS_DEPENDENCY);
+	CStreaming::LoadAllRequestedModels(false);
+	if (!CStreaming::HasModelLoaded(MI_POLICE))
+		return 0;
+	CAutomobile *car = new CAutomobile(MI_POLICE, MISSION_VEHICLE);
+	CVector pos(x, y, CWorld::FindGroundZForCoord(x, y));
+	pos.z += car->GetDistanceFromCentreOfMassToBaseOfModel();
+	car->SetPosition(pos);
+	CTheScripts::ClearSpaceForMissionEntity(pos, car);
+	car->SetStatus(STATUS_ABANDONED);
+	CWorld::Add(car);
+	CPlayerPed *player = FindPlayerPed();
+	player->SetObjective(OBJECTIVE_ENTER_CAR_AS_DRIVER, car);
+	player->WarpPedIntoCar(car);
+	player->SetWantedLevel(2);
+	// the normal follow camera behind the car (as in play), not goto_spot's fixed one: sounds
+	// attached to the car are then centred, as the player hears them
+	TheCamera.RestoreWithJumpCut();
+	CHud::m_Wants_To_Draw_Hud = true;
+	return 1;
+}

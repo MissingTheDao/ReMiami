@@ -30,6 +30,8 @@ pub struct Voice {
     /// Left, right and reverb gains the last mix ended with (None: not mixed since it started).
     /// Changes are ramped from these, as OpenAL Soft does, instead of jumping (clicks).
     applied: Option<(f32, f32, f32)>,
+    /// diagnostics (REVC_AUDIO_PAN_LOG): already reported since it started
+    pan_logged: bool,
 }
 
 /// Output samples a gain change is spread over (2.7 ms at 48 kHz).
@@ -75,6 +77,7 @@ impl Default for Voice {
             cursor: 0.0,
             reverb_mix: 0.0,
             applied: None,
+            pan_logged: false,
         }
     }
 }
@@ -101,6 +104,7 @@ impl Mixer {
             voice.freq = freq;
             voice.cursor = 0.0;
             voice.applied = None; // a new sound starts at its gain, without a ramp
+            voice.pan_logged = false;
             if voice.loop_count >= 2 {
                 voice.loops_left = voice.loop_count - 1;
             } else {
@@ -199,6 +203,20 @@ impl Mixer {
     /// Adds all playing voices to `out` (interleaved stereo; the caller starts it at silence and
     /// may have mixed other sources in already), then clamps the result to [-1, 1].
     pub fn mix(&mut self, out: &mut [f32]) {
+        // REVC_AUDIO_PAN_LOG=1 (diagnostics): voices playing mostly on one side, once per start
+        static PAN_LOG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        if *PAN_LOG.get_or_init(|| std::env::var_os("REVC_AUDIO_PAN_LOG").is_some()) {
+            for (i, v) in self.voices.iter_mut().enumerate() {
+                if !v.playing || v.pan_logged {
+                    continue;
+                }
+                let (l, r, _) = v.gains();
+                if l.max(r) > 0.02 && (l - r).abs() > 0.6 * l.max(r) {
+                    eprintln!("[revc-audio] voice {i} one-sided: L {l:.3} R {r:.3} pos {:?} 2d {} freq {} len {}", v.pos, v.is_2d, v.freq, v.data.len());
+                    v.pan_logged = true;
+                }
+            }
+        }
         let frames = out.len() / 2;
         self.wet.clear();
         self.wet.resize(frames, 0.0);

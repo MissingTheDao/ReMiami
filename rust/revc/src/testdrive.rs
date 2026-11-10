@@ -72,6 +72,7 @@ unsafe extern "C" {
     fn revc_test_save_slot(slot: i32, state: *mut i32, name: *mut u16, date: *mut u16) -> i32;
     fn revc_test_motion_sample(out: *mut f32);
     fn revc_test_pedhit_setup(kmh: f32) -> i32;
+    fn revc_test_scanner_setup() -> i32;
     fn revc_test_pedhit_sample() -> i32;
     fn revc_test_pedhit_result(max_rise: *mut f32, car_dist: *mut f32);
     fn revc_test_pedhit_drawn(body_rise: *mut f32, head_rise: *mut f32, hit: *mut i32);
@@ -96,6 +97,7 @@ enum Scenario {
     SaveGame,
     Motion,
     PedHit,
+    Scanner,
 }
 
 #[derive(Debug)]
@@ -117,6 +119,8 @@ enum Phase {
     /// Motion capture: scripted walk since game time `t0`, `step` into MOTION_SCRIPT.
     Motion { t0: u32, step: usize },
     PedHit,
+    /// Scanner check: recording since game time `t0`.
+    Scanner { t0: u32 },
     Done,
 }
 
@@ -223,7 +227,8 @@ pub fn init() -> Result<bool, String> {
         "savegame" => Scenario::SaveGame,
         "motion" => Scenario::Motion,
         "pedhit" => Scenario::PedHit,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit)")),
+        "scanner" => Scenario::Scanner,
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, scanner)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -337,7 +342,7 @@ impl Driver {
                         self.phase = Phase::MenuShot { frames: 0 };
                         return false;
                     }
-                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::Scanner => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -379,6 +384,15 @@ impl Driver {
                     crate::host::CAPTURE_KEEPS_ALPHA.store(true, Ordering::Relaxed);
                     crate::host::request_capture();
                     self.phase = Phase::Motion { t0: unsafe { revc_test_game_ms() }, step: 0 };
+                    return false;
+                }
+                if self.scenario == Scenario::Scanner {
+                    if unsafe { revc_test_scanner_setup() } == 0 {
+                        self.fail("scanner: police car model didn't load".into());
+                        return self.finish();
+                    }
+                    log("scanner: player in a police car, wanted level 2; recording 30 s".to_string());
+                    self.phase = Phase::Scanner { t0: unsafe { revc_test_game_ms() } };
                     return false;
                 }
                 if self.scenario == Scenario::PedHit {
@@ -437,6 +451,12 @@ impl Driver {
                     step += 1;
                 }
                 self.phase = Phase::Script { t0, step };
+            }
+            Phase::Scanner { t0 } => {
+                if unsafe { revc_test_game_ms() }.wrapping_sub(t0) < 30000 {
+                    return false;
+                }
+                return self.finish();
             }
             Phase::PedHit => {
                 if unsafe { revc_test_pedhit_sample() } < 6000 {
