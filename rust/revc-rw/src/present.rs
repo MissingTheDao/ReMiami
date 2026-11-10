@@ -49,11 +49,29 @@ pub struct Presenter {
     config: wgpu::SurfaceConfiguration,
 }
 
+/// wgpu's GL backend presents with FIFO only on Linux (wgpu-hal 30: immediate is a TODO there), so
+/// the game's VSync off would still wait for vertical blank. The drivers' own switches turn the
+/// swap interval off instead: Mesa `vblank_mode=0`, NVIDIA `__GL_SYNC_TO_VBLANK=0`. They are read
+/// when the GL driver loads, so on GL a VSync change applies from the next start; a value the user
+/// set already wins.
+fn no_gl_vsync() {
+    for (k, v) in [("vblank_mode", "0"), ("__GL_SYNC_TO_VBLANK", "0")] {
+        if std::env::var_os(k).is_none() {
+            // SAFETY: called while the renderer starts, before the GL driver (and any thread
+            // reading the environment) exists.
+            unsafe { std::env::set_var(k, v) };
+        }
+    }
+}
+
 impl Presenter {
     /// # Safety
     /// The window (and its display) must outlive the presenter.
     pub unsafe fn new(backend: Backend, window: NativeWindow, width: u32, height: u32, vsync: bool) -> Result<Presenter, String> {
         let (raw_display, raw_window) = window.raw();
+        if backend == Backend::Gl && !vsync {
+            no_gl_vsync();
+        }
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: backend.wgpu(),
             display: Some(Box::new(Display(raw_display))),

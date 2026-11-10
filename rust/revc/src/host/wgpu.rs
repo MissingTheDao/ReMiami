@@ -59,7 +59,11 @@ fn pixel_size(window: *mut SDL_Window) -> (u32, u32) {
 /// MSAA (the game's MultiSampling setting; clamped to what the GPU does).
 pub fn create(window: *mut SDL_Window, samples: i32) -> Result<(), String> {
     let (w, h) = pixel_size(window);
-    let p = unsafe { Presenter::new(backend(), native(window)?, w, h, true)? };
+    unsafe extern "C" {
+        fn revc_cpp_prefs_vsync() -> i32;
+    }
+    let vsync = unsafe { revc_cpp_prefs_vsync() } != 0;
+    let p = unsafe { Presenter::new(backend(), native(window)?, w, h, vsync)? };
     let bc = p.gpu.bc_textures();
     eprintln!("revc: wgpu renderer on {} ({:?}), {:?} {w}x{h}, DXT {}, models in {}", p.gpu.info.name, p.gpu.info.backend, p.format(), if bc { "on the GPU" } else { "decoded on the CPU" }, if p.gpu.model_storage { "a storage buffer" } else { "uniform blocks" });
     let r = Renderer::with_samples(&p.gpu, p.format(), samples.max(1) as u32);

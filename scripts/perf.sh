@@ -48,9 +48,6 @@ else sed -e 's/^VSync=.*/VSync=0/' -e 's/^FrameLimiter=.*/FrameLimiter=0/' "$ROO
 
 envs=(REVC_GAME_DIR="$T" REVC_TEST=spots)
 [[ "$BACKEND" != gl3 ]] && envs+=(REVC_RENDERER_BACKEND="$BACKEND")
-# wgpu's GL backend presents with FIFO only on Linux (wgpu-hal 30: Immediate is a TODO there), so
-# it would be locked to the display refresh; Mesa's driconf switch turns the swap interval off.
-(( ! CAPPED )) && [[ "$BACKEND" == gl ]] && envs+=(vblank_mode=0)
 echo "== $(basename "$BIN") backend $BACKEND ${W}x${H}"
 for ((i = 1; i <= RUNS; i++)); do
   log=$TMP/run$i.log
