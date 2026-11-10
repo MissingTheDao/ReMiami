@@ -306,7 +306,19 @@ impl AlStreams {
     /// or clamp; the caller does.
     pub fn mix(&mut self, out: &mut [f32]) {
         let buffers = &self.buffers;
-        for source in self.sources.values_mut() {
+        static PAN_LOG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        let log = *PAN_LOG.get_or_init(|| std::env::var_os("REVC_AUDIO_PAN_LOG").is_some());
+        for (id, source) in self.sources.iter_mut() {
+            if log && source.state == State::Playing {
+                let (l, r) = source.gains();
+                static SEEN: std::sync::Mutex<Vec<(u32, i32, i32)>> = std::sync::Mutex::new(Vec::new());
+                let key = (*id, (l * 100.0) as i32, (r * 100.0) as i32);
+                let mut seen = SEEN.lock().unwrap();
+                if !seen.contains(&key) {
+                    eprintln!("[revc-audio] stream source {id}: L {l:.3} R {r:.3} pos {:?} gain {:.3} queued {}", source.pos, source.gain, source.queue.len());
+                    seen.push(key);
+                }
+            }
             if source.state == State::Playing {
                 self.frames_mixed += source.mix_into(buffers, out);
             }
