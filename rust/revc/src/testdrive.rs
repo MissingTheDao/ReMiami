@@ -615,7 +615,14 @@ impl Driver {
         let _ = std::fs::remove_file(&path);
         // REVC_TXD=check (scripts/test.sh sets it for this scenario): every texture is read by
         // librw and by Rust (rw/TexRead.cpp); load every TXD in the image, then nothing may differ.
-        if std::env::var("REVC_TXD").is_ok_and(|v| v == "check") {
+        let txd_mode = std::env::var("REVC_TXD").unwrap_or_default();
+        if txd_mode == "rust" || txd_mode == "librw" {
+            // Load time of every TXD with one reader (no comparison).
+            let t0 = std::time::Instant::now();
+            let loaded = unsafe { revc_test_load_all_txds() };
+            log(format!("textures: {loaded} TXDs loaded by the {txd_mode} reader in {:.0} ms", t0.elapsed().as_secs_f64() * 1000.0));
+        }
+        if txd_mode == "check" {
             let loaded = unsafe { revc_test_load_all_txds() };
             let (mut checked, mut differing) = (0, 0);
             unsafe { revc_txd_check_counts(&mut checked, &mut differing) };
