@@ -15,8 +15,8 @@ contexts, and librw's GL3 platform is deleted (`vendor/librw/src/gl/`, its CMake
 GLFW demo apps and the premake/conan builds), as are the game's `RW_GL3` branches and
 `custompipes_gl.cpp`; the WarDrum "WDGL" model reader moved to `src/wdgl.cpp` (format only).
 The D3D8/D3D9/Xbox/PS2 code stays for reading those native formats. Next: stage 2 (librw's object
-model in Rust). N150 frame times (2026-11-10, display on): wgpu Vulkan 13 % faster than GL3 was, wgpu GL
-about 10 % slower.
+model in Rust). N150 frame times (2026-11-10, headless, cooled runs): wgpu Vulkan 3.56 ms, wgpu GL
+4.29 ms (+20 %, wgpu's GLES backend overhead; see docs/N150.md).
 
 **Step 11 (2026-11-10): closer to GL3.** Texture stage 0 follows GL3's state machine exactly
 (filter, addressing and anisotropy live on the texture, as on a GL texture object; draws sample
