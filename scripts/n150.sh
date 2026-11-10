@@ -167,7 +167,7 @@ case "$cmd" in
       ssh -o BatchMode=yes "$HOST" "test -d $SRC" ||
         git -C "$ROOT" archive --format=tar "$rev" | ssh -o BatchMode=yes "$HOST" "mkdir -p $SRC && tar xf - -C $SRC" || exit 1
       echo "building $rev on $HOST (bin/$AS)"
-      ssh -o BatchMode=yes "$HOST" "bash -c '$TOOLS; cd $SRC/rust && nice cargo build -q --release 2>&1 | tail -20 && mkdir -p ~/$DIR/bin && cp target/release/revc ~/$DIR/bin/$AS'" || exit 1
+      ssh -o BatchMode=yes "$HOST" "bash -c '$TOOLS; set -o pipefail; cd $SRC/rust && nice cargo build -q --release 2>&1 | tail -30 && mkdir -p ~/$DIR/bin && cp target/release/revc ~/$DIR/bin/$AS'" || exit 1
       echo "deployed $rev as $HOST:$DIR/bin/$AS"
       exit 0
     fi
@@ -177,7 +177,7 @@ case "$cmd" in
     git -C "$ROOT" describe --always --dirty > /tmp/revc-n150-commit.$$
     scp -q /tmp/revc-n150-commit.$$ "$HOST:revc-src/COMMIT"; rm -f /tmp/revc-n150-commit.$$
     echo "building $(ssh -o BatchMode=yes "$HOST" cat revc-src/COMMIT) on $HOST"
-    ssh -o BatchMode=yes "$HOST" "bash -c '$TOOLS; cd revc-src/rust && nice cargo build --locked -q --release 2>&1 | tail -20; test -x target/release/revc'" || exit 1
+    ssh -o BatchMode=yes "$HOST" "bash -c '$TOOLS; set -o pipefail; cd revc-src/rust && nice cargo build --locked -q --release 2>&1 | tail -30'" || exit 1
     ssh -o BatchMode=yes "$HOST" "bash -c 'set -e; mkdir -p $DIR/bin $DIR/scripts; cd revc-src; cp rust/target/release/revc ~/$DIR/bin/revc; cp scripts/perf.sh scripts/test.sh scripts/headless.sh ~/$DIR/scripts/; rm -rf ~/$DIR/tests ~/$DIR/assets; cp -r tests assets ~/$DIR/; cp COMMIT ~/$DIR/COMMIT'" || exit 1
     # Your own game files (never committed); user mods and settings stay here.
     rsync -a --delete --exclude mods --exclude userfiles --exclude reVC.ini "$ROOT/game/" "$HOST:$DIR/game/" || exit 1

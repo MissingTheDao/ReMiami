@@ -461,3 +461,161 @@ revc_test_read_txd(const unsigned char *data, size_t len)
 	RwTexDictionaryDestroy(dict);
 	return n;
 }
+
+// Ped-hit check (REVC_TEST=pedhit): a car rolls at a fixed speed into a row of standing peds on
+// the airport tarmac; for each ped the highest point it reaches above where it stood is recorded.
+// The physics runs in fixed 30 Hz steps, so the result must not depend on the display rate
+// (REVC_FIXED_FPS) or on render interpolation (REVC_NO_BONE_INTERP).
+#include "Automobile.h"
+#include "CivilianPed.h"
+#include "Script.h"
+
+#define PEDHIT_NUM 5
+static CVehicle *phCar;
+static CPed *phPeds[PEDHIT_NUM];
+static float phBaseZ[PEDHIT_NUM], phMaxRise[PEDHIT_NUM];
+// As drawn (render interpolation applied): highest body position and head bone above their start.
+static float phHeadBase[PEDHIT_NUM], phDrawnRise[PEDHIT_NUM], phDrawnHeadRise[PEDHIT_NUM];
+static bool phHit[PEDHIT_NUM];
+static CVector phCarSpeed, phCarStart;
+static uint32 phStartMs;
+static void PedHitStep(void);
+static void PedHitRender(void);
+extern void (*gTestStepHook)(void);
+extern void (*gTestRenderHook)(void);
+
+extern "C" int
+revc_test_pedhit_setup(float kmh)
+{
+	// The first candidate whose ground is flat (within 0.3 m) and clear for 25 m towards +y:
+	// beach sand, the airport runway, roads.
+	static const float cand[][2] = {
+		{ 520.0f, -1100.0f }, { 560.0f, -700.0f }, { 480.0f, -1400.0f }, { -1600.0f, -1250.0f },
+		{ -1300.0f, -1250.0f }, { 290.0f, -1000.0f },
+	};
+	float x = 0.0f, y = 0.0f;
+	bool found = false;
+	for (int c = 0; c < (int)(sizeof(cand)/sizeof(cand[0])) && !found; c++) {
+		x = cand[c][0]; y = cand[c][1];
+		revc_test_goto_spot(x - 15.0f, y, -100.0f, -10.0f, -12.0f, 8.0f, 12, 0);
+		float z0 = CWorld::FindGroundZForCoord(x, y), lo = z0, hi = z0;
+		for (float d = 0.0f; d <= 25.0f; d += 1.0f)
+			for (float s = -1.5f; s <= 1.5f; s += 1.5f) {
+				float z = CWorld::FindGroundZForCoord(x + s, y + d);
+				lo = Min(lo, z); hi = Max(hi, z);
+			}
+		printf("[revc-test] pedhit: candidate (%.0f, %.0f) ground %.2f..%.2f\n", x, y, lo, hi);
+		found = hi - lo < 0.3f && z0 > 0.0f;
+	}
+	if (!found)
+		return 0;
+	CStreaming::RequestModel(MI_ADMIRAL, STREAMFLAGS_DEPENDENCY);
+	CStreaming::RequestModel(MI_MALE01, STREAMFLAGS_DEPENDENCY);
+	CStreaming::LoadAllRequestedModels(false);
+	if (!CStreaming::HasModelLoaded(MI_ADMIRAL) || !CStreaming::HasModelLoaded(MI_MALE01))
+		return 0;
+
+	CAutomobile *car = new CAutomobile(MI_ADMIRAL, MISSION_VEHICLE);
+	CVector pos(x, y, CWorld::FindGroundZForCoord(x, y));
+	pos.z += car->GetDistanceFromCentreOfMassToBaseOfModel();
+	car->SetPosition(pos);
+	car->SetHeading(0.0f);	// facing +y
+	CTheScripts::ClearSpaceForMissionEntity(pos, car);
+	car->SetStatus(STATUS_ABANDONED);
+	car->bIsLocked = true;
+	car->AutoPilot.m_nCarMission = MISSION_NONE;
+	car->bEngineOn = false;
+	CWorld::Add(car);
+	phCar = car;
+	phCarStart = car->GetPosition();
+	phCarSpeed = car->GetForward() * (kmh / 180.0f);	// game speed unit: 50 m/s
+
+	static const float ahead[PEDHIT_NUM] = { 8.0f, 11.0f, 14.0f, 17.0f, 20.0f };
+	static const float side[PEDHIT_NUM] = { 0.0f, 0.5f, -0.5f, 0.8f, -0.8f };
+	for (int i = 0; i < PEDHIT_NUM; i++) {
+		CPed *ped = new CCivilianPed(PEDTYPE_CIVMALE, MI_MALE01);
+		ped->CharCreatedBy = MISSION_CHAR;
+		ped->bRespondsToThreats = false;
+		CVector p(x + side[i], y + ahead[i], 0.0f);
+		p.z = CWorld::FindGroundZForCoord(p.x, p.y) + 1.0f;
+		ped->SetPosition(p);
+		ped->SetOrientation(0.0f, 0.0f, 0.0f);
+		CWorld::Add(ped);
+		CPopulation::ms_nTotalMissionPeds++;
+		phPeds[i] = ped;
+		phBaseZ[i] = p.z;
+		phMaxRise[i] = phDrawnRise[i] = phDrawnHeadRise[i] = -100.0f;
+		phHeadBase[i] = 0.0f;	// set on the first drawn frame
+		phHit[i] = false;
+	}
+	phStartMs = CTimer::GetTimeInMilliseconds();
+	gTestStepHook = PedHitStep;
+	gTestRenderHook = PedHitRender;
+	return 1;
+}
+
+// Once per game step (gTestStepHook, before CGame::Process): keeps the car at its speed for the
+// first 2 s, then records the peds' heights.
+static void
+PedHitStep(void)
+{
+	uint32 t = CTimer::GetTimeInMilliseconds() - phStartMs;
+	if (phCar && t < 4000) {
+		phCar->SetIsStatic(false);	// resting physics objects sleep until disturbed
+		phCar->SetMoveSpeed(phCarSpeed);
+	}
+	for (int i = 0; i < PEDHIT_NUM; i++) {
+		CPed *ped = phPeds[i];
+		if (ped == nil)	// mission peds stay for the few seconds the check runs
+			continue;
+		float rise = ped->GetPosition().z - phBaseZ[i];
+		if (rise > phMaxRise[i])
+			phMaxRise[i] = rise;
+		if (ped->m_fHealth < 100.0f || ped->GetPedState() == PED_FALL || ped->GetPedState() == PED_DIE ||
+		    ped->GetPedState() == PED_DEAD)
+			phHit[i] = true;
+	}
+}
+
+static void
+PedHitRender(void)
+{
+	for (int i = 0; i < PEDHIT_NUM; i++) {
+		CPed *ped = phPeds[i];
+		if (ped == nil || ped->GetClump() == nil)
+			continue;
+		float body = ped->GetPosition().z - phBaseZ[i];
+		if (body > phDrawnRise[i])
+			phDrawnRise[i] = body;
+		float head = ped->GetNodePosition(PED_HEAD).z;
+		if (phHeadBase[i] == 0.0f)
+			phHeadBase[i] = head;
+		if (head - phHeadBase[i] > phDrawnHeadRise[i])
+			phDrawnHeadRise[i] = head - phHeadBase[i];
+	}
+}
+
+// Called every drawn frame by the test driver; returns the game ms since setup.
+extern "C" int
+revc_test_pedhit_sample(void)
+{
+	return (int)(CTimer::GetTimeInMilliseconds() - phStartMs);
+}
+
+extern "C" void
+revc_test_pedhit_drawn(float *bodyRise, float *headRise, int *hit)
+{
+	for (int i = 0; i < PEDHIT_NUM; i++) {
+		bodyRise[i] = phDrawnRise[i];
+		headRise[i] = phDrawnHeadRise[i];
+		hit[i] = phHit[i];
+	}
+}
+
+extern "C" void
+revc_test_pedhit_result(float *maxRise, float *carDist)
+{
+	*carDist = phCar ? (phCar->GetPosition() - phCarStart).Magnitude() : -1.0f;
+	for (int i = 0; i < PEDHIT_NUM; i++)
+		maxRise[i] = phMaxRise[i];
+}

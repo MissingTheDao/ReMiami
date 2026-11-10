@@ -151,11 +151,20 @@ ApplyBones(float alpha)
 		    (int)b.prev.size() != b.hier->numNodes)
 			continue;
 		b.current.resize(b.hier->numNodes);
+		// Like bodies: no blending across a jump. When a ped is knocked over its skeleton can
+		// change pose abruptly between two steps; blending across that drew peds thrown metres
+		// into the air (pedhit test: heads 12 m up at 320 fps). Then the ped's bones are drawn
+		// as the step left them.
+		bool continuous = true;
 		for (int n = 0; n < b.hier->numNodes; n++) {
-			RwMatrix *m = &b.hier->matrices[n];
-			GetRw(b.current[n], m);
-			PutRw(Blend(b.prev[n], b.current[n], alpha), m);
+			GetRw(b.current[n], &b.hier->matrices[n]);
+			if (!Continuous(b.prev[n], b.current[n], 1.0f, 0.0f))
+				continuous = false;
 		}
+		if (!continuous)
+			continue;
+		for (int n = 0; n < b.hier->numNodes; n++)
+			PutRw(Blend(b.prev[n], b.current[n], alpha), &b.hier->matrices[n]);
 		b.applied = true;
 	}
 }

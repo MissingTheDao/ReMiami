@@ -27,6 +27,11 @@
 //!                       (the game's own check). scripts/test.sh then loads that slot.
 //!   REVC_TEST=formats   like saveload, then dumps what the C++ loaders hold and compares it
 //!                       with revc-formats (formatcheck.rs).
+//!   REVC_TEST=pedhit    like saveload, then a car rolls at 20 km/h into five standing peds on
+//!                       the airport tarmac; logs how high each ped is thrown (metres above where
+//!                       it stood), both in the physics and as drawn; fails if a ped is drawn far
+//!                       above its physics position (render interpolation). scripts/test.sh runs it
+//!                       at 50 km/h (REVC_TEST_PEDHIT_KMH) and 320 fps (REVC_FIXED_FPS).
 //!   REVC_TEST=motion    like saveload, then walks the player forward and turns (injected keys)
 //!                       while capturing every frame with its render interpolation (run with
 //!                       REVC_FIXED_FPS, e.g. 144). Writes the frames to REVC_TEST_VIDEO_DIR
@@ -64,6 +69,10 @@ unsafe extern "C" {
     fn revc_test_check_pad_layouts() -> i32;
     fn revc_test_save_slot(slot: i32, state: *mut i32, name: *mut u16, date: *mut u16) -> i32;
     fn revc_test_motion_sample(out: *mut f32);
+    fn revc_test_pedhit_setup(kmh: f32) -> i32;
+    fn revc_test_pedhit_sample() -> i32;
+    fn revc_test_pedhit_result(max_rise: *mut f32, car_dist: *mut f32);
+    fn revc_test_pedhit_drawn(body_rise: *mut f32, head_rise: *mut f32, hit: *mut i32);
     fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
 }
 
@@ -84,6 +93,7 @@ enum Scenario {
     Spots,
     SaveGame,
     Motion,
+    PedHit,
 }
 
 #[derive(Debug)]
@@ -104,6 +114,7 @@ enum Phase {
     Spot { idx: usize, base: u32, stage: SpotStage },
     /// Motion capture: scripted walk since game time `t0`, `step` into MOTION_SCRIPT.
     Motion { t0: u32, step: usize },
+    PedHit,
     Done,
 }
 
@@ -209,7 +220,8 @@ pub fn init() -> Result<bool, String> {
         "spots" => Scenario::Spots,
         "savegame" => Scenario::SaveGame,
         "motion" => Scenario::Motion,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion)")),
+        "pedhit" => Scenario::PedHit,
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -323,7 +335,7 @@ impl Driver {
                         self.phase = Phase::MenuShot { frames: 0 };
                         return false;
                     }
-                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -365,6 +377,16 @@ impl Driver {
                     crate::host::CAPTURE_KEEPS_ALPHA.store(true, Ordering::Relaxed);
                     crate::host::request_capture();
                     self.phase = Phase::Motion { t0: unsafe { revc_test_game_ms() }, step: 0 };
+                    return false;
+                }
+                if self.scenario == Scenario::PedHit {
+                    let kmh: f32 = std::env::var("REVC_TEST_PEDHIT_KMH").ok().and_then(|v| v.parse().ok()).unwrap_or(20.0);
+                    if unsafe { revc_test_pedhit_setup(kmh) } == 0 {
+                        self.fail("pedhit: no flat spot found or the car/ped model didn't load".into());
+                        return self.finish();
+                    }
+                    log(format!("pedhit: car at {kmh} km/h towards 5 peds"));
+                    self.phase = Phase::PedHit;
                     return false;
                 }
                 if self.scenario == Scenario::Formats {
@@ -413,6 +435,33 @@ impl Driver {
                     step += 1;
                 }
                 self.phase = Phase::Script { t0, step };
+            }
+            Phase::PedHit => {
+                if unsafe { revc_test_pedhit_sample() } < 6000 {
+                    return false;
+                }
+                let (mut rise, mut dist) = ([0.0f32; 5], 0.0f32);
+                unsafe { revc_test_pedhit_result(rise.as_mut_ptr(), &mut dist) };
+                let list: Vec<String> = rise.iter().map(|r| format!("{r:.2}")).collect();
+                log(format!("pedhit: car moved {dist:.1} m; highest point above start per ped (m): {}", list.join(" ")));
+                let (mut body, mut head, mut hit) = ([0.0f32; 5], [0.0f32; 5], [0i32; 5]);
+                unsafe { revc_test_pedhit_drawn(body.as_mut_ptr(), head.as_mut_ptr(), hit.as_mut_ptr()) };
+                let f = |v: &[f32]| v.iter().map(|r| format!("{r:.2}")).collect::<Vec<_>>().join(" ");
+                log(format!("pedhit: as drawn: body {}; head {}; hit {:?}", f(&body), f(&head), hit));
+                // A drawn ped far above where the physics has it: the render interpolation is
+                // blending something it shouldn't (peds thrown "two cars high" at 320 Hz).
+                for i in 0..5 {
+                    if head[i] > rise[i] + 2.5 || body[i] > rise[i] + 0.5 {
+                        self.fail(format!("pedhit: ped {i} drawn {:.1} m up (head) while the physics has it at {:.1} m", head[i], rise[i]));
+                    }
+                }
+                if hit.iter().filter(|&&h| h != 0).count() < 3 {
+                    self.fail(format!("pedhit: the car hit only {} of 5 peds", hit.iter().filter(|&&h| h != 0).count()));
+                }
+                if dist < 10.0 {
+                    self.fail(format!("pedhit: the car only moved {dist:.1} m"));
+                }
+                return self.finish();
             }
             Phase::Motion { t0, step } => {
                 let t = unsafe { revc_test_game_ms() }.wrapping_sub(t0);

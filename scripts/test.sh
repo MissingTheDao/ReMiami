@@ -6,7 +6,7 @@
 #   --wgpu   (accepted, no effect: the wgpu renderer is the only one; REVC_RENDERER_BACKEND=vulkan|gl
 #            picks its backend, Vulkan by default)
 # Needs a display (the game opens a window). Game data: REVC_GAME_DIR or ./game.
-# Scenarios: boot, saveload, savegame (save slot 1's game to slot 2, then load slot 2: own reference), formats, texmods, gamepad, spots (default), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
+# Scenarios: boot, saveload, savegame (save slot 1's game to slot 2, then load slot 2: own reference), formats, texmods, gamepad, spots (default), motion, pedhit (car hits peds at 320 fps: drawn where the physics has them), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
 # formats: compares what the C++ loaders read with the Rust parsers in rust/revc-formats.
 # oldsave: saveload of tests/saves/other/GTAVCsf1-64bit-gcc.b (slot 1's game as a 64-bit GCC build
 #   saves it) in slot 3: the game converts it (FixSave, keeps a .bak) and loads it; saveload's reference.
@@ -31,7 +31,7 @@ for a in "$@"; do
     *) SCENARIOS+=("$a") ;;
   esac
 done
-(( ${#SCENARIOS[@]} )) || SCENARIOS=(boot saveload savegame oldsave formats texmods gamepad spots motion)
+(( ${#SCENARIOS[@]} )) || SCENARIOS=(boot saveload savegame oldsave formats texmods gamepad spots motion pedhit)
 
 GAME=${REVC_GAME_DIR:-$ROOT/game}
 [[ -d "$GAME/models" ]] || { echo "game data not found at $GAME (set REVC_GAME_DIR)" >&2; exit 2; }
@@ -74,6 +74,9 @@ for s in "${SCENARIOS[@]}"; do
   [[ "$s" == texmods ]] && cp -r "$ROOT/tests/mods" "$T/mods"
   # formats also loads every game texture and checks it against librw's recorded result.
   [[ "$s" == formats ]] && envs+=(REVC_TXD_GOLDEN="$ROOT/tests/golden/textures.txt")
+  # pedhit: a car hits peds; at a high display rate (many drawn frames per 30 Hz step) the peds
+  # must be drawn where the physics has them.
+  [[ "$s" == pedhit ]] && envs+=(REVC_FIXED_FPS=320 REVC_TEST_PEDHIT_KMH=50)
   if [[ "$s" == oldsave ]]; then
     rm -f "$T"/userfiles/GTAVCsf3.b*
     cp "$ROOT/tests/saves/other/GTAVCsf1-64bit-gcc.b" "$T/userfiles/GTAVCsf3.b"
@@ -121,7 +124,7 @@ for s in "${SCENARIOS[@]}"; do
       echo "     FAIL: slot 3 was not converted"; failed=1
     fi
   fi
-  grep -oE '\[revc-test\] (player at|loaded:|image diff|audio|formats:|textures:|texmods:|gamepad:|savegame:|motion:|spot |[a-z0-9_]+: image diff).*' "$log" | sed 's/^\[revc-test\] /     /'
+  grep -oE '\[revc-test\] (player at|loaded:|image diff|audio|formats:|textures:|pedhit: as|texmods:|gamepad:|savegame:|motion:|spot |[a-z0-9_]+: image diff).*' "$log" | sed 's/^\[revc-test\] /     /'
   # The captured frames as a video (144 fps, as rendered) to watch the motion.
   if [[ "$s" == motion ]] && ls "$OUT/motion-frames"/frame_*.png >/dev/null 2>&1; then
     if command -v ffmpeg >/dev/null; then
