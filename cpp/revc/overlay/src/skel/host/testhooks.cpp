@@ -381,15 +381,21 @@ revc_test_dump_formats(const char *path)
 
 #endif
 
-// Xbox-style controller layouts (boot scenario): each preset applies and is recognised again, with
-// Fire on the right trigger (Standard) or B (Classic). Returns 1 if so; leaves Standard applied.
+// Controller layouts (boot scenario): the test config is recognised as ORIGINAL PC, and each preset
+// applies and is recognised again (Fire on B for original PC and Xbox Classic, on the right trigger
+// for Xbox Standard). Returns 1 if so; leaves Standard applied.
 extern "C" int
 revc_test_check_pad_layouts(void)
 {
+	// The test config holds re3's old pad bindings: ORIGINAL PC.
+	bool original = PadLayoutCurrent() == 2;
+	PadLayoutApply(2);
+	original = original && PadLayoutCurrent() == 2 && ControlsManager.GetControllerKeyAssociatedWithAction(PED_FIREWEAPON, JOYSTICK) == 1 &&
+		ControlsManager.GetControllerKeyAssociatedWithAction(GO_FORWARD, JOYSTICK) == 13;
 	PadLayoutApply(1);
 	bool classic = PadLayoutCurrent() == 1 && ControlsManager.GetControllerKeyAssociatedWithAction(PED_FIREWEAPON, JOYSTICK) == 1;
 	PadLayoutApply(0);
 	bool standard = PadLayoutCurrent() == 0 && ControlsManager.GetControllerKeyAssociatedWithAction(PED_FIREWEAPON, JOYSTICK) == 6 &&
 		ControlsManager.GetControllerKeyAssociatedWithAction(VEHICLE_ACCELERATE, JOYSTICK) == 6;
-	return classic && standard;
+	return original && classic && standard;
 }

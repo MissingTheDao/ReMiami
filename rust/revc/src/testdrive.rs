@@ -309,9 +309,9 @@ impl Driver {
                             self.fail("Controls menu lacks the BUTTON PROMPTS entry (or its text)".into());
                         }
                         if unsafe { revc_test_check_pad_layouts() } == 1 {
-                            log("pad layouts: Standard and Classic apply and are recognised");
+                            log("pad layouts: test config is Original PC; Xbox Standard, Xbox Classic and Original PC apply and are recognised");
                         } else {
-                            self.fail("pad layouts: Standard/Classic not applied or not recognised".into());
+                            self.fail("pad layouts: a preset is not applied or not recognised".into());
                         }
                         if self.shot.is_none() {
                             return self.finish();
