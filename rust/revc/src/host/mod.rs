@@ -12,7 +12,6 @@ mod joystick;
 mod keymap;
 mod glyphs;
 mod pads;
-#[cfg(feature = "wgpu")]
 mod wgpu;
 
 pub use pads::PadKind;
@@ -86,8 +85,6 @@ struct Host {
     initialised: bool,
     displays: Vec<Display>,
     window: *mut SDL_Window,
-    gl: SDL_GLContext,
-    swap_interval: Option<i32>,
     should_close: bool,
     cursor_mode: c_int,
     /// Virtual cursor in window coordinates. In DISABLED (relative) mode it is
@@ -114,8 +111,6 @@ impl Default for Host {
             initialised: false,
             displays: Vec::new(),
             window: null_mut(),
-            gl: null_mut(),
-            swap_interval: None,
             should_close: false,
             cursor_mode: HOST_CURSOR_NORMAL,
             cursor: (0.0, 0.0),
@@ -181,15 +176,11 @@ pub fn shutdown() {
         }
         h.joysticks = Joysticks::default(); // closes devices
         unsafe {
-            if !h.gl.is_null() {
-                SDL_GL_DestroyContext(h.gl);
-            }
             if !h.window.is_null() {
                 SDL_DestroyWindow(h.window);
             }
             SDL_Quit();
         }
-        h.gl = null_mut();
         h.window = null_mut();
         h.initialised = false;
     });
@@ -322,15 +313,6 @@ unsafe extern "C" fn api_get_video_mode(_: *mut c_void, display: i32, index: i32
     }
 }
 
-/// Same fallback order as librw's SDL2/GLFW backends.
-#[cfg(not(feature = "wgpu"))]
-const PROFILES: [(SDL_GLProfile, c_int, c_int); 4] = [
-    (SDL_GL_CONTEXT_PROFILE_CORE, 3, 3),
-    (SDL_GL_CONTEXT_PROFILE_COMPATIBILITY, 2, 1),
-    (SDL_GL_CONTEXT_PROFILE_ES, 3, 1),
-    (SDL_GL_CONTEXT_PROFILE_ES, 2, 0),
-];
-
 unsafe extern "C" fn api_create_window(
     _: *mut c_void,
     title: *const c_char,
@@ -354,103 +336,40 @@ unsafe extern "C" fn api_create_window(
     let remembered = with(|host| host.geometry);
     let (w, h) = if fullscreen { (mode.width, mode.height) } else { remembered.size.unwrap_or((width, height)) };
 
-    // wgpu renderer: a window without a GL context; revc-rw presents to it.
-    #[cfg(feature = "wgpu")]
-    {
-        let _ = (gles, glversion);
-        let win = unsafe { SDL_CreateWindow(title, w, h, SDL_WINDOW_RESIZABLE) };
-        if win.is_null() {
-            eprintln!("revc: SDL_CreateWindow failed: {}", sdl_error());
-            return null_mut();
-        }
-        if !fullscreen {
-            restore_windowed_placement(win, &remembered);
-        } else {
-            unsafe {
-                SDL_SetWindowFullscreenMode(win, sdl_mode);
-                SDL_SetWindowFullscreen(win, true);
-            }
-        }
-        if let Err(e) = wgpu::create(win, samples) {
-            eprintln!("revc: {e}");
-            unsafe { SDL_DestroyWindow(win) };
-            return null_mut();
-        }
-        unsafe {
-            *gles = 0;
-            *glversion = 0;
-        }
-        with(|host| {
-            host.window = win;
-            host.cursor = (w as f64 / 2.0, h as f64 / 2.0);
-        });
-        #[allow(clippy::needless_return)]
-        return win.cast();
+    // A window without a GL context; revc-rw (wgpu) presents to it.
+    let _ = (gles, glversion);
+    let win = unsafe { SDL_CreateWindow(title, w, h, SDL_WINDOW_RESIZABLE) };
+    if win.is_null() {
+        eprintln!("revc: SDL_CreateWindow failed: {}", sdl_error());
+        return null_mut();
     }
-
-    #[cfg(not(feature = "wgpu"))]
+    if !fullscreen {
+        restore_windowed_placement(win, &remembered);
+    } else {
+        unsafe {
+            SDL_SetWindowFullscreenMode(win, sdl_mode);
+            SDL_SetWindowFullscreen(win, true);
+        }
+    }
+    if let Err(e) = wgpu::create(win, samples) {
+        eprintln!("revc: {e}");
+        unsafe { SDL_DestroyWindow(win) };
+        return null_mut();
+    }
     unsafe {
-        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, (samples > 0) as c_int);
-        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, samples.max(0));
+        *gles = 0;
+        *glversion = 0;
     }
-
-    #[cfg(not(feature = "wgpu"))]
-    for (profile, major, minor) in PROFILES {
-        unsafe {
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, profile.0);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, major);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, minor);
-        }
-        let win = unsafe { SDL_CreateWindow(title, w, h, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE) };
-        if win.is_null() {
-            eprintln!("revc: SDL_CreateWindow failed: {}", sdl_error());
-            continue;
-        }
-        let ctx = unsafe { SDL_GL_CreateContext(win) };
-        if ctx.is_null() {
-            unsafe { SDL_DestroyWindow(win) };
-            continue;
-        }
-        unsafe { SDL_GL_MakeCurrent(win, ctx) };
-        if !fullscreen {
-            restore_windowed_placement(win, &remembered);
-        }
-        if fullscreen {
-            unsafe {
-                SDL_SetWindowFullscreenMode(win, sdl_mode);
-                SDL_SetWindowFullscreen(win, true);
-            }
-        }
-        unsafe {
-            *gles = (profile == SDL_GL_CONTEXT_PROFILE_ES) as i32;
-            *glversion = major * 10 + minor;
-        }
-        with(|host| {
-            host.window = win;
-            host.gl = ctx;
-            host.swap_interval = None;
-            host.cursor = (w as f64 / 2.0, h as f64 / 2.0);
-        });
-        return win.cast();
-    }
-    #[cfg(not(feature = "wgpu"))]
-    {
-        eprintln!("revc: could not create an OpenGL context: {}", sdl_error());
-        null_mut()
-    }
+    with(|host| {
+        host.window = win;
+        host.cursor = (w as f64 / 2.0, h as f64 / 2.0);
+    });
+    win.cast()
 }
 
 unsafe extern "C" fn api_destroy_window(_: *mut c_void, win: *mut c_void) {
-    #[cfg(feature = "wgpu")]
     wgpu::destroy();
     with(|h| unsafe {
-        if !h.gl.is_null() {
-            SDL_GL_DestroyContext(h.gl);
-            h.gl = null_mut();
-        }
         SDL_DestroyWindow(win.cast());
         if h.window == win.cast() {
             h.window = null_mut();
@@ -458,63 +377,16 @@ unsafe extern "C" fn api_destroy_window(_: *mut c_void, win: *mut c_void) {
     });
 }
 
-unsafe extern "C" fn api_swap_buffers(_: *mut c_void, win: *mut c_void, vsync: i32) {
-    with(|h| {
-        if h.swap_interval != Some(vsync) {
-            unsafe { SDL_GL_SetSwapInterval(vsync) };
-            h.swap_interval = Some(vsync);
-        }
-        if h.capture_requested {
-            h.capture_requested = false;
-            h.captured = read_back_buffer(win.cast());
-        }
-    });
-    unsafe { SDL_GL_SwapWindow(win.cast()) };
-}
+// GL-only callbacks of the window API (librw's GL3 platform); the WGPU device presents through
+// revc-rw and never calls them. Kept so the struct matches librw's HostWindowApi.
+unsafe extern "C" fn api_swap_buffers(_: *mut c_void, _: *mut c_void, _: i32) {}
 
-unsafe extern "C" fn api_get_proc_address(_: *mut c_void, name: *const c_char) -> *mut c_void {
-    match unsafe { SDL_GL_GetProcAddress(name) } {
-        Some(f) => f as *mut c_void,
-        None => null_mut(),
-    }
+unsafe extern "C" fn api_get_proc_address(_: *mut c_void, _: *const c_char) -> *mut c_void {
+    null_mut()
 }
 
 unsafe extern "C" fn api_get_drawable_size(_: *mut c_void, win: *mut c_void, w: *mut i32, h: *mut i32) {
     unsafe { SDL_GetWindowSizeInPixels(win.cast(), w, h) };
-}
-
-/// Reads the finished frame from the back buffer (before the swap) as top-down RGBA.
-fn read_back_buffer(win: *mut SDL_Window) -> Option<(u32, u32, Vec<u8>)> {
-    type ReadPixels = unsafe extern "C" fn(i32, i32, i32, i32, u32, u32, *mut c_void);
-    type PixelStorei = unsafe extern "C" fn(u32, i32);
-    type ReadBuffer = unsafe extern "C" fn(u32);
-    const GL_BACK: u32 = 0x0405;
-    const GL_PACK_ALIGNMENT: u32 = 0x0D05;
-    const GL_RGBA: u32 = 0x1908;
-    const GL_UNSIGNED_BYTE: u32 = 0x1401;
-    unsafe {
-        let read: ReadPixels = std::mem::transmute(SDL_GL_GetProcAddress(c"glReadPixels".as_ptr())?);
-        let store: PixelStorei = std::mem::transmute(SDL_GL_GetProcAddress(c"glPixelStorei".as_ptr())?);
-        let buffer: ReadBuffer = std::mem::transmute(SDL_GL_GetProcAddress(c"glReadBuffer".as_ptr())?);
-        let (mut w, mut h) = (0, 0);
-        SDL_GetWindowSizeInPixels(win, &mut w, &mut h);
-        if w <= 0 || h <= 0 {
-            return None;
-        }
-        let row = w as usize * 4;
-        let mut px = vec![0u8; row * h as usize];
-        buffer(GL_BACK);
-        store(GL_PACK_ALIGNMENT, 1);
-        read(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.as_mut_ptr().cast());
-        // GL rows are bottom-up.
-        let mut flipped = vec![0u8; px.len()];
-        for y in 0..h as usize {
-            flipped[y * row..(y + 1) * row].copy_from_slice(&px[(h as usize - 1 - y) * row..(h as usize - y) * row]);
-        }
-        // The default framebuffer's alpha is meaningless here.
-        flipped.chunks_exact_mut(4).for_each(|p| p[3] = 255);
-        Some((w as u32, h as u32, flipped))
-    }
 }
 
 /// Regression harness: capture the next frame that is presented.

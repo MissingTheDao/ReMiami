@@ -11,8 +11,9 @@ strangler style, while staying playable at every step.
 - **Rust, incrementally.** C++ subsystems are replaced one at a time behind the existing
   interfaces (platform host, timing, audio, file formats, renderer), each checked against the
   original with automated screenshot and save/load tests.
-- **A modern renderer.** librw is being replaced by `revc-rw`, a wgpu renderer with Vulkan and
-  OpenGL both selectable, plus optional extras: the Xbox "Neo" vehicle and world effects, screen
+- **A modern renderer.** The game draws with `revc-rw`, a wgpu renderer (Vulkan by default,
+  OpenGL selectable with `REVC_RENDERER_BACKEND=gl`, DirectX 12 for Windows builds); the old GL3
+  renderer is gone, and librw's object model is next to be replaced. Optional extras: the Xbox "Neo" vehicle and world effects, screen
   droplets, colour filter choices, and a full antialiasing suite (FXAA, SMAA, MSAA, SSAA).
 - **Reproducible builds** from one repository, with pinned dependencies.
 - **Better presentation, optionally.** Upscaled HUD and menu art made locally from your own game

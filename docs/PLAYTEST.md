@@ -45,10 +45,10 @@ Controller):
 - [ ] A broken file: the console says `texmods: ... keeping the original` and the game shows
       the original texture.
 
-## Task 12: wgpu renderer (work in progress)
+## Task 12: wgpu renderer
 
-Build: `cd rust && CARGO_TARGET_DIR=target-wgpu cargo build --features wgpu`, run
-`target-wgpu/debug/revc` (backend: `REVC_RENDERER_BACKEND=vulkan` or `gl`). No colour filter yet.
+The only renderer now: `scripts/build.sh` (or `cd rust && cargo build`), backend
+`REVC_RENDERER_BACKEND=vulkan` (default) or `gl`.
 
 - [ ] Cars have their shiny reflections (MatFX environment map) like the normal build, on both
       backends; nothing looks inside out or too bright.

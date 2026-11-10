@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Frame-time baseline at the fixed spots (plan tasks 2 and 14).
 #
-# usage: scripts/perf.sh [--bin PATH] [--game DIR] [--size WxH] [--backend gl3|vulkan|gl] [--runs N]
+# usage: scripts/perf.sh [--bin PATH] [--game DIR] [--size WxH] [--backend vulkan|gl] [--runs N]
 #                        [--out FILE] [--logs DIR] [--capped]
 #   --out   append one line per spot and run: backend size spot mean median p99 max (ms)
 #   --logs  keep the game log of every failed run there
@@ -11,10 +11,10 @@
 # Runs REVC_TEST=spots with the test settings but VSync and the frame limiter off, and prints the
 # `perf` lines (frame times over the 3 s before each spot's capture). Screenshots are not compared.
 # Works from a repository checkout or from a deployed folder holding bin/, tests/ and game/
-# (scripts/n150.sh deploy). --backend vulkan|gl needs a wgpu build (--bin); gl3 a normal one.
+# (scripts/n150.sh deploy). --backend picks the wgpu renderer's backend (Vulkan by default).
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BIN="" GAME=$ROOT/game SIZE=1280x720 BACKEND=gl3 RUNS=1 OUTFILE="" LOGS="" CAPPED=0
+BIN="" GAME=$ROOT/game SIZE=1280x720 BACKEND=vulkan RUNS=1 OUTFILE="" LOGS="" CAPPED=0
 while (( $# )); do
   case "$1" in
     --bin) BIN=$2; shift ;;
@@ -30,8 +30,8 @@ while (( $# )); do
   shift
 done
 if [[ -z "$BIN" ]]; then
-  if [[ "$BACKEND" == gl3 ]]; then BIN=$ROOT/rust/target/release/revc; else BIN=$ROOT/rust/target-wgpu/release/revc; fi
-  [[ -x "$BIN" ]] || BIN=$ROOT/bin/revc-$([[ "$BACKEND" == gl3 ]] && echo gl3 || echo wgpu)
+  BIN=$ROOT/rust/target/release/revc
+  [[ -x "$BIN" ]] || BIN=$ROOT/bin/revc
 fi
 [[ -x "$BIN" ]] || { echo "no binary $BIN"; exit 1; }
 W=${SIZE%x*} H=${SIZE#*x}
@@ -47,7 +47,7 @@ if (( CAPPED )); then cp "$ROOT/tests/config/reVC.ini" "$T/reVC.ini"
 else sed -e 's/^VSync=.*/VSync=0/' -e 's/^FrameLimiter=.*/FrameLimiter=0/' "$ROOT/tests/config/reVC.ini" > "$T/reVC.ini"; fi
 
 envs=(REVC_GAME_DIR="$T" REVC_TEST=spots)
-[[ "$BACKEND" != gl3 ]] && envs+=(REVC_RENDERER_BACKEND="$BACKEND")
+envs+=(REVC_RENDERER_BACKEND="$BACKEND")
 echo "== $(basename "$BIN") backend $BACKEND ${W}x${H}"
 for ((i = 1; i <= RUNS; i++)); do
   log=$TMP/run$i.log

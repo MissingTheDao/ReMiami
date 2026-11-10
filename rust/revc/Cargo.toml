@@ -20,9 +20,9 @@ revc-audio = { path = "../revc-audio" }
 revc-timing = { path = "../revc-timing" }
 revc-formats = { path = "../revc-formats" }
 revc-import = { path = "../revc-import" }
-# Renderer on wgpu (plan task 12), only with the `wgpu` feature.
-revc-rw = { path = "../revc-rw", optional = true }
+# The renderer: revc-rw on wgpu (Vulkan, OpenGL; DX12 on Windows), plan task 12.
+revc-rw = { path = "../revc-rw" }
 
 [features]
-# Draw with revc-rw on wgpu (Vulkan/OpenGL) through librw's WGPU platform instead of GL3.
-wgpu = ["dep:revc-rw"]
+# Kept so `--features wgpu` in old commands still builds; the wgpu renderer is the only one.
+wgpu = []

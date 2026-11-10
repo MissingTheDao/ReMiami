@@ -3,8 +3,8 @@
 # usage: scripts/test.sh [--bless] [--keep] [scenario ...]     (default scenarios: boot saveload)
 #   --bless  accept the current screenshots as the new references (tests/reference/)
 #   --keep   keep the temporary game folder
-#   --wgpu   test the wgpu renderer build (cargo feature wgpu, rust/target-wgpu) against its own
-#            references in tests/reference-wgpu/; REVC_RENDERER_BACKEND=vulkan|gl picks the backend
+#   --wgpu   (accepted, no effect: the wgpu renderer is the only one; REVC_RENDERER_BACKEND=vulkan|gl
+#            picks its backend, Vulkan by default)
 # Needs a display (the game opens a window). Game data: REVC_GAME_DIR or ./game.
 # Scenarios: boot, saveload, savegame (save slot 1's game to slot 2, then load slot 2: own reference), formats, texmods, gamepad, spots (default), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
 # formats: compares what the C++ loaders read with the Rust parsers in rust/revc-formats.
@@ -38,11 +38,10 @@ GAME=${REVC_GAME_DIR:-$ROOT/game}
 OUT=$ROOT/rust/target/test-output
 mkdir -p "$OUT"
 REF=$ROOT/tests/reference
-(( WGPU )) && REF=$ROOT/tests/reference-wgpu
 # The wgpu references come from Vulkan. The GL backend matches them within 0.01 % except where
 # anisotropic filtering samples high-frequency textures at grazing angles (water sparkles, fences),
 # which the two drivers do slightly differently (up to ~1 %): allow 1.5 % there.
-if (( WGPU )) && [[ "${REVC_RENDERER_BACKEND:-vulkan}" == gl* ]] && [[ -z "${REVC_TEST_MAXDIFF:-}" ]]; then
+if [[ "${REVC_RENDERER_BACKEND:-vulkan}" == gl* ]] && [[ -z "${REVC_TEST_MAXDIFF:-}" ]]; then
   export REVC_TEST_MAXDIFF=0.015
   echo "(wgpu on GL: screenshot limit 1.5 %, see scripts/test.sh)"
 fi
@@ -51,13 +50,8 @@ if [[ -n "${REVC_TEST_BIN:-}" ]]; then
   BIN=$REVC_TEST_BIN
 else
   echo "== build"
-  if (( WGPU )); then
-    (cd "$ROOT/rust" && CARGO_TARGET_DIR=target-wgpu cargo build --locked -q --features wgpu) || { echo "build failed"; exit 1; }
-    BIN=$ROOT/rust/target-wgpu/debug/revc
-  else
-    (cd "$ROOT/rust" && cargo build --locked -q) || { echo "build failed"; exit 1; }
-    BIN=$ROOT/rust/target/debug/revc
-  fi
+  (cd "$ROOT/rust" && cargo build --locked -q) || { echo "build failed"; exit 1; }
+  BIN=$ROOT/rust/target/debug/revc
 fi
 
 # Isolated game folder: symlink the game files, but use the test settings and saves.

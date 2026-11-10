@@ -6,6 +6,24 @@ screenshot tests passing on both (plan task 12), then the effects (task 13) and 
 
 ## Where it stands
 
+**2026-11-10: wgpu is the only renderer.** The `wgpu` Cargo feature, the `target-wgpu` build and
+the GL3 references are gone: `cargo build` builds the game on librw's WGPU platform, drawing with
+revc-rw (Vulkan by default, `REVC_RENDERER_BACKEND=gl` for OpenGL, DX12 in Windows builds), and
+`tests/reference/` holds the wgpu screenshots (the GL3 set they replace was within 1-2 % of them
+after the texture-state and anisotropy work, step 11 below). The host no longer creates GL
+contexts. Next: removing librw's GL3 platform code itself, then stage 2 (librw's object model in
+Rust). N150 frame times (2026-11-10, display on): wgpu Vulkan 13 % faster than GL3 was, wgpu GL
+about 10 % slower.
+
+**Step 11 (2026-11-10): closer to GL3.** Texture stage 0 follows GL3's state machine exactly
+(filter, addressing and anisotropy live on the texture, as on a GL texture object; draws sample
+with the texture's own state), anisotropic filtering is off by default (GL3 asks for it, but it
+never takes effect there; `REVC_RW_ANISOTROPY=1` turns it on), and the shaders multiply
+projection, view and world like GL3. Spots and saveload went from 1-10 % to 1-2 % of pixels
+different from GL3; what's left is mostly single-pixel edge coverage. Draws that sample their own
+render target sample white (wgpu rejects the feedback loop GL3 tolerated), and wgpu validation
+errors are logged instead of aborting.
+
 `rust/revc-rw` renders whole RenderWare models offscreen on both backends: clump parts placed by
 their frame hierarchy, every material with its TXD texture (all mips) and colour, RW alpha test,
 a fixed light. `tests/backends.rs` renders the textured Infernus on Vulkan and OpenGL and

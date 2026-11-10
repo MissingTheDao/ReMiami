@@ -4,11 +4,11 @@
 # needs no build tools (builds are made here and copied).
 #
 # usage: scripts/n150.sh <command> [args]
-#   deploy                   build release (GL3 + wgpu), copy them with assets/, tests/ and game/ to the box
-#   test [--wgpu] [--backend vulkan|gl] [scenario ...]
+#   deploy                   build release, copy it with assets/, tests/ and game/ to the box
+#   test [--backend vulkan|gl] [scenario ...]    (Vulkan by default; --wgpu accepted, no effect)
 #                            run the regression suite there (Intel driver: catches driver-specific
 #                            rendering bugs; runs alongside a local suite as a second runner)
-#   perf [--runs N] [--sizes "WxH ..."] [--backends "gl3 vulkan gl"]
+#   perf [--runs N] [--sizes "WxH ..."] [--backends "vulkan gl"]
 #                            frame times at the fixed spots; saves logs/n150/perf-<time>.txt and
 #                            compares it with tests/perf/n150-baseline.txt (slower by more than
 #                            REVC_PERF_TOLERANCE, default 10 %, at any spot: exit 1)
@@ -128,11 +128,10 @@ wait_job() {
 cmd=${1:-}; shift || true
 case "$cmd" in
   deploy)
-    (cd "$ROOT/rust" && cargo build --locked -q --release && CARGO_TARGET_DIR=target-wgpu cargo build --locked -q --release --features wgpu) || exit 1
+    (cd "$ROOT/rust" && cargo build --locked -q --release) || exit 1
     STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
     mkdir -p "$STAGE/bin" "$STAGE/scripts"
-    cp "$ROOT/rust/target/release/revc" "$STAGE/bin/revc-gl3"
-    cp "$ROOT/rust/target-wgpu/release/revc" "$STAGE/bin/revc-wgpu"
+    cp "$ROOT/rust/target/release/revc" "$STAGE/bin/revc"
     cp "$ROOT/scripts/perf.sh" "$ROOT/scripts/test.sh" "$ROOT/scripts/headless.sh" "$STAGE/scripts/"
     cp -r "$ROOT/tests" "$ROOT/assets" "$STAGE/"   # assets: controller glyphs, found next to bin/
     git -C "$ROOT" describe --always --dirty > "$STAGE/COMMIT"
@@ -143,24 +142,20 @@ case "$cmd" in
     ;;
   test)
     check_screen
-    WGPU=0 BACKEND=vulkan ARGS=()
+    BACKEND=vulkan ARGS=()
     while (( $# )); do
       case "$1" in
-        --wgpu) WGPU=1 ;;
-        --backend) BACKEND=$2; WGPU=1; shift ;;
+        --wgpu) ;;
+        --backend) BACKEND=$2; shift ;;
         *) ARGS+=("$1") ;;
       esac
       shift
     done
-    if (( WGPU )); then
-      REMOTE_SCRIPT="REVC_RENDERER_BACKEND=$BACKEND REVC_TEST_BIN=\$PWD/bin/revc-wgpu $RUN scripts/test.sh --wgpu ${ARGS[*]:-}" remote
-    else
-      REMOTE_SCRIPT="REVC_TEST_BIN=\$PWD/bin/revc-gl3 $RUN scripts/test.sh ${ARGS[*]:-}" remote
-    fi
+    REMOTE_SCRIPT="REVC_RENDERER_BACKEND=$BACKEND REVC_TEST_BIN=\$PWD/bin/revc $RUN scripts/test.sh ${ARGS[*]:-}" remote
     ;;
   perf)
     check_screen
-    RUNS=1 SIZES="1280x720 1920x1080" BACKENDS="gl3 vulkan gl"
+    RUNS=1 SIZES="1280x720 1920x1080" BACKENDS="vulkan gl"
     while (( $# )); do
       case "$1" in
         --runs) RUNS=$2; shift ;;
@@ -194,7 +189,7 @@ done; done"
     ;;
   soak)
     check_screen
-    MIN=30 BACKEND=gl3 SIZE=1280x720 CAP=""
+    MIN=30 BACKEND=vulkan SIZE=1280x720 CAP=""
     while (( $# )); do
       case "$1" in
         --minutes) MIN=$2; shift ;;
@@ -215,7 +210,7 @@ echo '# time pkg_temp_C cpu_avg_MHz gpu_MHz revc_rss_MB' > \$mon
     temp=\$(( \$(cat \${z%/type}/temp) / 1000 ))
     mhz=\$(awk '/cpu MHz/ { s += \$4; n++ } END { printf \"%.0f\", s / n }' /proc/cpuinfo)
     gpu=\$(cat /sys/class/drm/card*/gt_act_freq_mhz 2>/dev/null | head -1)
-    rss=\$(ps -C revc-gl3,revc-wgpu -o rss= 2>/dev/null | awk '{ s += \$1 } END { printf \"%.0f\", s / 1024 }')
+    rss=\$(ps -C revc -o rss= 2>/dev/null | awk '{ s += \$1 } END { printf \"%.0f\", s / 1024 }')
     echo \"\$(date +%s) \$temp \$mhz \${gpu:-0} \$rss\" >> \$mon
     sleep 5
   done ) &
