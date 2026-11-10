@@ -10,6 +10,7 @@
 #include "Frontend.h"
 #include "ControllerConfig.h"
 extern "C" int PadLayoutCurrent(void);
+void PadPictureContextPress(int8 action);	// core/PadPicture.cpp
 extern "C" void PadLayoutApply(int layout);
 #include "Timer.h"
 #include "World.h"
@@ -225,7 +226,11 @@ revc_test_show_controls_menu(void)
 	if (const char *layout = getenv("REVC_TEST_PAD_LAYOUT")) {
 		PadLayoutApply(atoi(layout));
 	}
-	FrontEndMenuManager.m_nCurrScreen = page ? atoi(page) : MENUPAGE_CONTROLLER_PC;
+	// REVC_TEST_PAD_CONTEXT=1: the pad picture's In Car side.
+	if (getenv("REVC_TEST_PAD_CONTEXT") && atoi(getenv("REVC_TEST_PAD_CONTEXT")) == 1) {
+		PadPictureContextPress(FEOPTION_ACTION_SELECT);
+	}
+	FrontEndMenuManager.m_nCurrScreen = !page ? MENUPAGE_CONTROLLER_PC : strcmp(page, "pad") == 0 ? MENUPAGE_PAD_PICTURE : atoi(page);
 	FrontEndMenuManager.m_nCurrOption = option ? atoi(option) : 0;
 }
 

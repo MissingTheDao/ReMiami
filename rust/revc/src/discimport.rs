@@ -27,8 +27,9 @@ static FILTERS: Filters = Filters([
     SDL_DialogFileFilter { name: c"All files".as_ptr(), pattern: c"*".as_ptr() },
 ]);
 
+/// `userfiles/import`, or REVC_IMPORT_DIR (tests point it at an import made beforehand).
 pub fn cache_dir() -> PathBuf {
-    PathBuf::from("userfiles/import")
+    std::env::var_os("REVC_IMPORT_DIR").map_or_else(|| PathBuf::from("userfiles/import"), PathBuf::from)
 }
 
 /// Imports from the image at `path` into the cache; Ok(summary) or Err(reason).
@@ -82,6 +83,10 @@ pub extern "C" fn revc_import_busy() -> c_int {
 /// Opens the file dialog for a disc image (Xbox or PS2 .iso); the import starts when one is chosen.
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_import_prompt() {
+    // Regression tests never open a dialog (nobody would answer it).
+    if std::env::var_os("REVC_TEST").is_some() {
+        return;
+    }
     {
         let mut s = STATE.lock().unwrap();
         if s.busy {
@@ -104,5 +109,26 @@ pub extern "C" fn revc_import_message(buf: *mut c_char, size: c_int) {
     unsafe {
         std::ptr::copy_nonoverlapping(bytes.as_ptr().cast(), buf, n);
         *buf.add(n) = 0;
+    }
+}
+
+/// Decodes an imported image (`rel` inside the cache, e.g. "xbox/ui/r3_menu_336.dds") to RGBA8;
+/// free the pixels with revc_texmod_free. 0 if it isn't there or can't be decoded.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_import_image(rel: *const c_char, width: *mut c_int, height: *mut c_int, rgba: *mut *mut u8) -> c_int {
+    if rel.is_null() || width.is_null() || height.is_null() || rgba.is_null() {
+        return 0;
+    }
+    let rel = unsafe { CStr::from_ptr(rel) }.to_string_lossy().into_owned();
+    match crate::texmods::decode(&cache_dir().join(rel)) {
+        Ok((w, h, px)) => {
+            unsafe {
+                *width = w as c_int;
+                *height = h as c_int;
+                *rgba = Box::into_raw(px.into_boxed_slice()) as *mut u8;
+            }
+            1
+        }
+        Err(_) => 0,
     }
 }
