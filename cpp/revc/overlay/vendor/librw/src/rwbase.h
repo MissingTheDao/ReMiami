@@ -6,22 +6,6 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// TODO: clean up the opengl defines
-//       and figure out what we even want here...
-#ifdef RW_GL3
-#define RW_OPENGL
-#define RWDEVICE gl3
-// doesn't help
-//#define RW_GL_USE_VAOS
-#endif
-
-#ifdef RW_GLES2
-#define RW_GLES
-#endif
-#ifdef RW_GLES3
-#define RW_GLES
-#endif
-
 #ifdef RW_WGPU
 #define RWDEVICE wgpu
 #endif
@@ -38,10 +22,6 @@
 #ifdef RW_PS2
 #define RWHALFPIXEL
 #define RWDEVICE ps2
-#endif
-
-#ifdef RW_WDGL
-#define RW_OPENGL
 #endif
 
 namespace rw {

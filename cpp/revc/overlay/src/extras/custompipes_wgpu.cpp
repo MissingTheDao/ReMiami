@@ -1,5 +1,5 @@
 // revc: re3's Neo pipelines (EXTENDED_PIPELINES: the Xbox look) for librw's WGPU platform. A port
-// of custompipes_gl.cpp: the same render callbacks and parameters, drawn through the WGPU
+// of re3's custompipes_gl.cpp (GL3, removed): the same render callbacks and parameters, drawn through the WGPU
 // device's model API (rwwgpu.h) with the WGSL versions of the Neo shaders
 // (rust/revc-rw/src/frame.rs, rw::wgpu::MESH_NEO_*). The generic parts (tweak tables, env map camera, gloss
 // textures) stay in custompipes.cpp.

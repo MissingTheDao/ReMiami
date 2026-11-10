@@ -12,22 +12,13 @@ set(librw_AUTHOR aap)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
-if(WIN32)
-    set(LIBRW_PLATFORMS "NULL" "GL3" "D3D9")
-    set(LIBRW_PLATFORM_GL3_REQUIRES_OPENGL ON)
-elseif(NINTENDO_SWITCH)
-    set(LIBRW_PLATFORMS "NULL" "GL3")
-    set(LIBRW_PLATFORM_GL3_REQUIRES_OPENGL OFF)
-    list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake/nx")
-    include(NXFunctions)
-elseif(PS2)
+# revc: librw draws through the Rust host on wgpu (WGPU); NULL and PS2 stay for the tools.
+if(PS2)
     set(LIBRW_PLATFORMS "PS2")
-    set(LIBRW_PLATFORM_GL3_REQUIRES_OPENGL OFF)
     list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake/ps2")
     include(PS2Functions)
 else()
-    set(LIBRW_PLATFORMS "NULL" "GL3" "WGPU")
-    set(LIBRW_PLATFORM_GL3_REQUIRES_OPENGL ON)
+    set(LIBRW_PLATFORMS "NULL" "WGPU")
 endif()
 list(GET LIBRW_PLATFORMS 0 LIBRW_PLATFORM_DEFAULT)
 set(LIBRW_PLATFORM "${LIBRW_PLATFORM_DEFAULT}" CACHE STRING "Platform")
@@ -36,16 +27,6 @@ message(STATUS "LIBRW_PLATFORM = ${LIBRW_PLATFORM} (choices=${LIBRW_PLATFORMS})"
 set("LIBRW_PLATFORM_${LIBRW_PLATFORM}" ON)
 if(NOT LIBRW_PLATFORM IN_LIST LIBRW_PLATFORMS)
     message(FATAL_ERROR "Illegal LIBRW_PLATFORM=${LIBRW_PLATFORM}")
-endif()
-
-set(LIBRW_GL3_GFXLIBS "GLFW" "SDL2" "HOST")
-set(LIBRW_GL3_GFXLIB "GLFW" CACHE STRING "gfxlib for gl3")
-set_property(CACHE LIBRW_GL3_GFXLIB PROPERTY STRINGS ${LIBRW_GL3_GFXLIBS})
-if(LIBRW_PLATFORM_GL3)
-    message(STATUS "LIBRW_GL3_GFXLIB = ${LIBRW_GL3_GFXLIB} (choices=${LIBRW_GL3_GFXLIBS})")
-endif()
-if(NOT LIBRW_GL3_GFXLIB IN_LIST LIBRW_GL3_GFXLIBS)
-    message(FATAL_ERROR "Illegal LIBRW_GL3_GFXLIB=${LIBRW_GL3_GFXLIB}")
 endif()
 
 if(LIBRW_PLATFORM_PS2)
@@ -61,7 +42,6 @@ include(CMakeDependentOption)
 
 option(LIBRW_TOOLS "Build librw tools" ${librw_MAINPROJECT})
 option(LIBRW_INSTALL "Install librw files" ${librw_MAINPROJECT})
-cmake_dependent_option(LIBRW_EXAMPLES "Build librw examples" ON "LIBRW_TOOLS;NOT LIBRW_PLATFORM_NULL" OFF)
 
 if(LIBRW_INSTALL)
     include(GNUInstallDirs)
@@ -69,10 +49,6 @@ if(LIBRW_INSTALL)
 endif()
 
 add_subdirectory(src)
-
-if(LIBRW_TOOLS AND NOT LIBRW_PLATFORM_PS2 AND NOT LIBRW_PLATFORM_NULL)
-    add_subdirectory(skeleton)
-endif()
 
 add_subdirectory(tools)
 
@@ -89,13 +65,6 @@ if(LIBRW_INSTALL)
         EXPORT librw-targets NAMESPACE librw::
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
     )
-
-    if(LIBRW_GL3_GFXLIB STREQUAL "SDL2")
-        install(
-            FILES "${CMAKE_CURRENT_LIST_DIR}/cmake/FindSDL2.cmake"
-            DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake"
-        )
-    endif()
 
     string(REPLACE "." ";" cmake_c_compiler_version_list "${CMAKE_C_COMPILER_VERSION}")
     list(GET cmake_c_compiler_version_list 0 cmake_c_compiler_version_major)
@@ -121,14 +90,8 @@ if(LIBRW_INSTALL)
         set(platform "-null")
     elseif(LIBRW_PLATFORM_PS2)
         set(platform "-ps2")
-    elseif(LIBRW_PLATFORM_GL3)
-        if(LIBRW_GL3_GFXLIB STREQUAL "GLFW")
-            set(platform "-gl3-glfw")
-        else()
-            set(platform "-gl3-sdl2")
-        endif()
-    elseif(LIBRW_PLATFORM_D3D9)
-        set(platform "-d3d9")
+    elseif(LIBRW_PLATFORM_WGPU)
+        set(platform "-wgpu")
     endif()
     if(NOT LIBRW_PLATFORM_PS2)
         if(WIN32)

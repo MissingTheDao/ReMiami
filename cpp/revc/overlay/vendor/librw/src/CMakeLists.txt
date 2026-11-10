@@ -63,24 +63,8 @@ add_library(librw
     d3d/xboxskin.cpp
     d3d/xboxvfmt.cpp
 
-    gl/gl3.cpp
-    gl/gl3device.cpp
-    gl/gl3immed.cpp
-    gl/gl3matfx.cpp
-    gl/gl3pipe.cpp
-    gl/gl3raster.cpp
-    gl/gl3render.cpp
-    gl/gl3shader.cpp
-    gl/gl3skin.cpp
-    gl/rwgl3.h
-    gl/rwgl3impl.h
-    gl/rwgl3plg.h
-    gl/rwgl3shader.h
-    gl/rwwdgl.h
-    gl/wdgl.cpp
-    gl/glad/glad.h
-    gl/glad/glad.c
-    gl/glad/khrplatform.h
+    rwwdgl.h
+    wdgl.cpp
 
     wgpu/rwwgpu.h
     wgpu/wgpudevice.cpp
@@ -154,55 +138,8 @@ set_target_properties(librw
 )
 
 if(LIBRW_PLATFORM_WGPU)
-    # revc: window from the host (like the GL3 HOST gfxlib), drawing in the Rust host on wgpu.
+    # revc: window from the host, drawing in the Rust host on wgpu.
     target_compile_definitions(librw PUBLIC LIBRW_HOST)
-endif()
-if(LIBRW_PLATFORM_GL3)
-    if (LIBRW_GL3_GFXLIB STREQUAL "GLFW")
-        find_package(glfw3 REQUIRED)
-        target_link_libraries(librw
-            PUBLIC
-                glfw
-            )
-    elseif (LIBRW_GL3_GFXLIB STREQUAL "SDL2")
-        find_package(SDL2 REQUIRED)
-        target_compile_definitions(librw PUBLIC LIBRW_SDL2)
-        target_link_libraries(librw
-            PUBLIC
-                SDL2::SDL2
-        )
-    elseif (LIBRW_GL3_GFXLIB STREQUAL "HOST")
-        # Window, GL context and video modes come from the embedding application
-        # through rw::gl3::HostWindowApi (see rwgl3.h).
-        target_compile_definitions(librw PUBLIC LIBRW_HOST)
-    endif()
-
-    set(OpenGL_GL_PREFERENCE GLVND)
-    find_package(OpenGL)
-    if(TARGET OpenGL::OpenGL)
-        target_link_libraries(librw
-            PRIVATE
-                OpenGL::OpenGL
-        )
-    elseif(TARGET OpenGL::EGL)
-        target_link_libraries(librw
-            PRIVATE
-                OpenGL::EGL
-        )
-    elseif(TARGET OpenGL::GL)
-        target_link_libraries(librw
-            PRIVATE
-                OpenGL::GL
-        )
-    else()
-        message(FATAL_ERROR "find_package(OpenGL) failed.")
-    endif()
-elseif(LIBRW_PLATFORM_D3D9)
-    target_link_libraries(librw
-        PRIVATE
-            d3d9
-            xinput
-    )
 endif()
 
 if(LIBRW_INSTALL)
@@ -226,6 +163,7 @@ if(LIBRW_INSTALL)
             rwanim.h
             rwplugins.h
             rwuserdata.h
+            rwwdgl.h
         DESTINATION "${LIBRW_INSTALL_INCLUDEDIR}/src"
     )
     install(
@@ -241,21 +179,6 @@ if(LIBRW_INSTALL)
             ps2/rwps2.h
             ps2/rwps2plg.h
         DESTINATION "${LIBRW_INSTALL_INCLUDEDIR}/src/ps2"
-    )
-    install(
-        FILES
-            gl/rwwdgl.h
-            gl/rwgl3.h
-            gl/rwgl3plg.h
-            gl/rwgl3shader.h
-        DESTINATION "${LIBRW_INSTALL_INCLUDEDIR}/src/gl"
-    )
-
-    install(
-        FILES
-            gl/glad/glad.h
-            gl/glad/khrplatform.h
-        DESTINATION "${LIBRW_INSTALL_INCLUDEDIR}/src/gl/glad"
     )
 
     install(

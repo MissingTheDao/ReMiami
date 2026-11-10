@@ -29,7 +29,7 @@ fn main() {
     cfg.arg("-S").arg(&src).arg("-B").arg(&build)
         .args(["-G", "Ninja", "-DCMAKE_BUILD_TYPE=RelWithDebInfo", "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"])
         // librw's WGPU platform: drawing in Rust (revc-rw, plan task 12). The GL3 platform is gone.
-        .args(["-DLIBRW_PLATFORM=WGPU", "-DLIBRW_GL3_GFXLIB=HOST"])
+        .args(["-DLIBRW_PLATFORM=WGPU"])
         .args(["-DREVC_AUDIO=OAL", "-DREVC_VENDORED_LIBRW=ON"])
         .args(["-DCMAKE_C_COMPILER=clang", "-DCMAKE_CXX_COMPILER=clang++"]);
     // Reproducible output: map checkout and build paths out of __FILE__ strings and debug

@@ -8,8 +8,8 @@ namespace rw {
 
 #ifdef RW_WGPU
 namespace wgpu {
-// Same layout and meaning as gl3::HostWindowApi (the host fills one table for either platform);
-// createWindow makes a window without a GL context here and getProcAddress/swapBuffers are unused.
+// Window services of the Rust host (rust/revc/src/host/mod.rs, HostWindowApi): the device asks it
+// for displays, modes and the window; revc-rw draws into and presents that window.
 struct HostVideoMode
 {
 	int32 width, height;
@@ -26,10 +26,8 @@ struct HostWindowApi
 	int32 (*numVideoModes)(void *user, int32 display);
 	int32 (*getVideoMode)(void *user, int32 display, int32 index, HostVideoMode *mode);
 	void *(*createWindow)(void *user, const char *title, int32 display, const HostVideoMode *mode,
-	                      int32 width, int32 height, int32 samples, int32 *gles, int32 *glversion);
+	                      int32 width, int32 height, int32 samples);
 	void (*destroyWindow)(void *user, void *window);
-	void (*swapBuffers)(void *user, void *window, int32 vsync);
-	void *(*getProcAddress)(void *user, const char *name);
 	void (*getDrawableSize)(void *user, void *window, int32 *width, int32 *height);
 };
 }

@@ -11,8 +11,11 @@ the GL3 references are gone: `cargo build` builds the game on librw's WGPU platf
 revc-rw (Vulkan by default, `REVC_RENDERER_BACKEND=gl` for OpenGL, DX12 in Windows builds), and
 `tests/reference/` holds the wgpu screenshots (the GL3 set they replace was within 1-2 % of them
 after the texture-state and anisotropy work, step 11 below). The host no longer creates GL
-contexts. Next: removing librw's GL3 platform code itself, then stage 2 (librw's object model in
-Rust). N150 frame times (2026-11-10, display on): wgpu Vulkan 13 % faster than GL3 was, wgpu GL
+contexts, and librw's GL3 platform is deleted (`vendor/librw/src/gl/`, its CMake options, the
+GLFW demo apps and the premake/conan builds), as are the game's `RW_GL3` branches and
+`custompipes_gl.cpp`; the WarDrum "WDGL" model reader moved to `src/wdgl.cpp` (format only).
+The D3D8/D3D9/Xbox/PS2 code stays for reading those native formats. Next: stage 2 (librw's object
+model in Rust). N150 frame times (2026-11-10, display on): wgpu Vulkan 13 % faster than GL3 was, wgpu GL
 about 10 % slower.
 
 **Step 11 (2026-11-10): closer to GL3.** Texture stage 0 follows GL3's state machine exactly

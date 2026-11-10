@@ -53,7 +53,7 @@ pub struct HostVideoMode {
     flags: u32,
 }
 
-/// rw::gl3::HostWindowApi
+/// rw::wgpu::HostWindowApi
 #[repr(C)]
 pub struct HostWindowApi {
     user: *mut c_void,
@@ -62,11 +62,9 @@ pub struct HostWindowApi {
     num_video_modes: unsafe extern "C" fn(*mut c_void, i32) -> i32,
     get_video_mode: unsafe extern "C" fn(*mut c_void, i32, i32, *mut HostVideoMode) -> i32,
     create_window: unsafe extern "C" fn(
-        *mut c_void, *const c_char, i32, *const HostVideoMode, i32, i32, i32, *mut i32, *mut i32,
+        *mut c_void, *const c_char, i32, *const HostVideoMode, i32, i32, i32,
     ) -> *mut c_void,
     destroy_window: unsafe extern "C" fn(*mut c_void, *mut c_void),
-    swap_buffers: unsafe extern "C" fn(*mut c_void, *mut c_void, i32),
-    get_proc_address: unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut c_void,
     get_drawable_size: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut i32, *mut i32),
 }
 // SAFETY: contains only function pointers and a null user pointer.
@@ -321,8 +319,6 @@ unsafe extern "C" fn api_create_window(
     width: i32,
     height: i32,
     samples: i32,
-    gles: *mut i32,
-    glversion: *mut i32,
 ) -> *mut c_void {
     let mode = unsafe { *mode };
     let fullscreen = mode.flags & VIDEOMODEEXCLUSIVE != 0;
@@ -336,8 +332,7 @@ unsafe extern "C" fn api_create_window(
     let remembered = with(|host| host.geometry);
     let (w, h) = if fullscreen { (mode.width, mode.height) } else { remembered.size.unwrap_or((width, height)) };
 
-    // A window without a GL context; revc-rw (wgpu) presents to it.
-    let _ = (gles, glversion);
+    // revc-rw (wgpu) presents to the window.
     let win = unsafe { SDL_CreateWindow(title, w, h, SDL_WINDOW_RESIZABLE) };
     if win.is_null() {
         eprintln!("revc: SDL_CreateWindow failed: {}", sdl_error());
@@ -356,10 +351,6 @@ unsafe extern "C" fn api_create_window(
         unsafe { SDL_DestroyWindow(win) };
         return null_mut();
     }
-    unsafe {
-        *gles = 0;
-        *glversion = 0;
-    }
     with(|host| {
         host.window = win;
         host.cursor = (w as f64 / 2.0, h as f64 / 2.0);
@@ -375,14 +366,6 @@ unsafe extern "C" fn api_destroy_window(_: *mut c_void, win: *mut c_void) {
             h.window = null_mut();
         }
     });
-}
-
-// GL-only callbacks of the window API (librw's GL3 platform); the WGPU device presents through
-// revc-rw and never calls them. Kept so the struct matches librw's HostWindowApi.
-unsafe extern "C" fn api_swap_buffers(_: *mut c_void, _: *mut c_void, _: i32) {}
-
-unsafe extern "C" fn api_get_proc_address(_: *mut c_void, _: *const c_char) -> *mut c_void {
-    null_mut()
 }
 
 unsafe extern "C" fn api_get_drawable_size(_: *mut c_void, win: *mut c_void, w: *mut i32, h: *mut i32) {
@@ -407,8 +390,6 @@ static WINDOW_API: HostWindowApi = HostWindowApi {
     get_video_mode: api_get_video_mode,
     create_window: api_create_window,
     destroy_window: api_destroy_window,
-    swap_buffers: api_swap_buffers,
-    get_proc_address: api_get_proc_address,
     get_drawable_size: api_get_drawable_size,
 };
 
