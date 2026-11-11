@@ -213,6 +213,13 @@ MenuSkinXboxDialog(int page)
 	return page == MENUPAGE_NEW_GAME_RELOAD || page == MENUPAGE_LOAD_SLOT_CONFIRM || page == MENUPAGE_DELETE_SLOT_CONFIRM;
 }
 
+// Behind a dialog the console dims the title, logo, icon bar and help line too (to about 45 %).
+static uint8
+DialogDim(uint8 alpha)
+{
+	return MenuSkinXboxDialog(FrontEndMenuManager.m_nCurrScreen) ? alpha * 45 / 100 : alpha;
+}
+
 static int
 CurrentTab(int page)
 {
@@ -253,6 +260,7 @@ MenuSkinXboxTitle(wchar *title, uint8 alpha)
 		title = TheText.Get("RVC_XTC");
 	else if (page == MENUPAGE_PAD_PICTURE)
 		title = TheText.Get("RVC_XTD");
+	alpha = DialogDim(alpha);
 	CFont::SetRightJustifyOff();
 	CFont::SetCentreOff();
 	CFont::SetColor(CRGBA(0, 0, 0, alpha));
@@ -272,6 +280,7 @@ static uint32 glintStart;
 void
 MenuSkinXboxLogo(uint8 alpha)
 {
+	alpha = DialogDim(alpha);
 	const float x0 = X(458.0f), y0 = Y(36.0f), w = W(134.0f), h = H(67.0f);
 	logo.Draw(CRect(x0, y0, x0 + w, y0 + h), CRGBA(255, 255, 255, alpha));
 	uint32 now = CTimer::GetTimeInMillisecondsPauseMode();
@@ -360,9 +369,10 @@ DrawHelpLine(CMenuManager *m, uint8 alpha)
 		HelpItem(X(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
 		return;
 	}
-	HelpItem(X(200.0f), y, barFocus ? lr : ud, 2, nil, "RVC_XHS", alpha);
+	bool bar = barFocus && !MenuSkinXboxDialog(m->m_nCurrScreen);	// a dialog is a list
+	HelpItem(X(200.0f), y, bar ? lr : ud, 2, nil, "RVC_XHS", alpha);
 	HelpItem(X(340.0f), y, a, 1, nil, "RVC_XHS", alpha);
-	if (!barFocus)
+	if (!bar)
 		HelpItem(X(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
 }
 
@@ -388,6 +398,10 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 	float sx = 0.9f + (1.157f - 0.9f) * t, sy = 0.9f + (1.081f - 0.9f) * t;
 	float a = 0.5f + (0.059f - 0.5f) * t;
 	float cx = (x0 + x1) / 2.0f, cy = (y0 + y1) / 2.0f, hw = (x1 - x0) / 2.0f * sx, hh = (y1 - y0) / 2.0f * sy;
+	// whole-row bars (the radio station) reach the panel's edge: the glow stays within the bar
+	// there, or it shows as a grey box over the black beyond the panel (round 7)
+	if (!tail)
+		hw = Min(hw, (x1 - x0) / 2.0f);
 	CSprite2d::DrawRect(CRect(cx - hw, cy - hh, cx + hw, cy + hh), CRGBA(255, 255, 255, (uint8)(a * alpha)));
 }
 
@@ -449,7 +463,7 @@ MenuSkinXboxDraw(CMenuManager *m, uint8 alpha)
 		else if (m->m_nCurrOption != barFocusOption)
 			barFocus = false;
 	}
-	DrawIconBar(m, alpha);
-	DrawHelpLine(m, alpha);
+	DrawIconBar(m, DialogDim(alpha));
+	DrawHelpLine(m, DialogDim(alpha));
 	CFont::DrawFonts();
 }

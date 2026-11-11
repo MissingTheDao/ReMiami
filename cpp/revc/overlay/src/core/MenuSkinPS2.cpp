@@ -80,7 +80,10 @@ DrawTabs(CMenuManager *m, uint8 alpha)
 	CFont::SetPropOn();
 	CFont::SetBackgroundOff();
 	CFont::SetWrapx(SCREEN_WIDTH);
-	{
+	// the confirmations show the tabs without a highlight (console)
+	bool confirm = m->m_nCurrScreen == MENUPAGE_NEW_GAME_RELOAD || m->m_nCurrScreen == MENUPAGE_LOAD_SLOT_CONFIRM ||
+		m->m_nCurrScreen == MENUPAGE_DELETE_SLOT_CONFIRM;
+	if (!confirm) {
 		float w = CFont::GetStringWidth(TheText.Get(tabs[cur].name), true);
 		float cx = SCALE_AND_CENTER_X(tabCX[cur]), cy = SCREEN_SCALE_Y(tabRowY[cur / 4]);
 		float hw = w / 2.0f + SX(8.0f), h0 = SY(13.0f), t = SY(2.0f);
