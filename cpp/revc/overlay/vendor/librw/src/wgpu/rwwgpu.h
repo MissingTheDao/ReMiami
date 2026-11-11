@@ -143,7 +143,7 @@ void im2DRenderIndexedPrimitiveUV2(PrimitiveType primType, void *vertices, int32
 // Antialiasing level (revc_rw::frame::Antialiasing::LEVELS, cheapest first: off, FXAA, SMAA,
 // MSAA 2x/4x, MSAA 4x + SMAA, MSAA 8x, SSAA 2x, SSAA 2x + MSAA 4x). The game's menu and ini set
 // it; the device applies changes with the next frame.
-extern int8 antialiasing;
+inline int8 antialiasing;
 
 // The 3D scene of this frame is finished: what follows (HUD, menus) is drawn at window
 // resolution on top of the scaled and antialiased scene.

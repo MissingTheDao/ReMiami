@@ -729,6 +729,21 @@ there is logic, deletion where nothing calls it.
     (Rust keeps the state).
   - **7d3. librw's .cpp files go**: every remaining method becomes an inline forwarder in its
     header (calling `revc_*`); the librw CMake target is removed.
+    **7d2 (b) and 7d3 done 2026-11-11:** every librw .cpp file is gone and librw is a header-only
+    CMake INTERFACE library (build.rs no longer links an archive for it). How:
+    - The modules' hooks fall back to Rust defaults (the class plugin lists and counters, the
+      engine's memory functions, Rust callbacks), so no C++ installs them; the golden tests
+      still set their own. Module and plugin registrations that only touched Rust moved to Rust
+      (frame, image, raster, texture modules, the wgpu raster plugin, anisotropy); the texture
+      module's open/close, the default find/read callbacks and the image objects are Rust.
+    - The remaining methods are inline in `src/rwimpl.h` (included at the end of rw.h): Rust
+      forwarders, plus the C++ glue that must stay C++ while the game is C++ (the trampolines
+      that make virtual calls on the game's Stream objects, the plugin callbacks the game
+      registers, the driver/pipeline objects the custom pipelines use). Their one-time set-up
+      runs from C++17 inline variables (initialised once per program).
+    - librw's globals are Rust statics or C++17 inline variables; all librw headers have
+      `#pragma once`. (The game compiles as C++11; clang accepts the C++17 inline variables as
+      an extension. Moving the game to C++17 is worth doing in stage 4.)
   - **7d4. fakerw goes**: fake.cpp's RW API (358 functions) is exported by Rust under the C
     names fakerw's headers declare (extern "C"); fake.cpp is deleted.
 

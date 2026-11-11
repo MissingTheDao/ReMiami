@@ -3,6 +3,9 @@
 #pragma once
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stddef.h>
 #include "rwbase.h"
 #include "rwerror.h"
 #include "rwplg.h"
@@ -2681,3 +2684,456 @@ inline bool findChunk(Stream *s, uint32 type, uint32 *length, uint32 *version) {
 
 
 }
+
+// ---------------------------------------------------------------- debug font (rwcharset.rs)
+#ifndef RW_NULL
+
+#ifdef RWHALFPIXEL
+#define HALFPX (0.5f)
+#else
+#define HALFPX (0.0f)
+#endif
+
+// The debug font is Rust (rust/revc/src/rwcharset.rs, checked against tests/golden/rwcharset.txt);
+// it reaches rasters, render states and Im2D through these hooks. The font bitmap (vgafont.inc)
+// is read by the Rust side.
+namespace rw {
+
+static_assert(sizeof(Charset) == 40, "Charset layout (rwcharset.rs)");
+
+extern "C" {
+struct CharsetHooks {
+	Raster *(*rasterFromFont)(const uint8 *pixels, const uint8 *palette);
+	void (*rasterDestroy)(Raster *r);
+	void (*setRenderState)(int32 state, uint32 value);
+	void (*setRenderStatePtr)(int32 state, void *value);
+	uint32 (*getRenderState)(int32 state);
+	float32 (*nearZ)(void);
+	float32 (*nearPlane)(void);
+	void (*renderIndexed)(uint32 prim, void *vertices, int32 numVertices, void *indices, int32 numIndices);
+};
+void revc_charset_set_hooks(CharsetHooks h);
+int32 revc_charset_open(void);
+void revc_charset_close(void);
+Charset *revc_charset_create(const RGBA *fg, const RGBA *bg);
+void revc_charset_destroy(Charset *cs);
+Charset *revc_charset_set_colors(Charset *cs, const RGBA *fg, const RGBA *bg);
+void revc_charset_print(Charset *cs, const char *s, int32 x, int32 y, int32 hide);
+void revc_charset_print_buffered(Charset *cs, const char *s, int32 x, int32 y, int32 hide);
+void revc_charset_flush(void);
+}
+
+inline Raster*
+hRasterFromFont(const uint8 *pixels, const uint8 *palette)
+{
+	Image *img = Image::create(256, 256, 8);
+	if(img == nil)
+		return nil;
+	img->pixels = (uint8*)pixels;
+	img->stride = 256;
+	img->allocate();
+	memcpy(img->palette, palette, 8);
+	Raster *r = Raster::createFromImage(img);
+	img->destroy();
+	return r;
+}
+inline void hRasterDestroy(Raster *r) { r->destroy(); }
+inline void hSetRenderState(int32 s, uint32 v) { SetRenderState(s, v); }
+inline void hSetRenderStatePtr(int32 s, void *v) { SetRenderStatePtr(s, v); }
+inline uint32 hGetRenderState(int32 s) { return GetRenderState(s); }
+inline float32 hNearZ(void) { return im2d::GetNearZ(); }
+inline float32 hNearPlane(void) { return ((Camera*)engine->currentCamera)->nearPlane; }
+inline void
+hRenderIndexed(uint32 prim, void *v, int32 nv, void *ix, int32 ni)
+{
+	im2d::RenderIndexedPrimitive((PrimitiveType)prim, v, nv, ix, ni);
+}
+inline struct CharsetInit {
+	CharsetInit(void) {
+		revc_charset_set_hooks({ hRasterFromFont, hRasterDestroy, hSetRenderState, hSetRenderStatePtr,
+			hGetRenderState, hNearZ, hNearPlane, hRenderIndexed });
+	}
+} charsetInit;
+
+inline bool32 Charset::open(void) { return revc_charset_open(); }
+inline void Charset::close(void) { revc_charset_close(); }
+inline Charset *Charset::create(const RGBA *fg, const RGBA *bg) { return revc_charset_create(fg, bg); }
+inline void Charset::destroy(void) { revc_charset_destroy(this); }
+inline Charset *Charset::setColors(const RGBA *fg, const RGBA *bg) { return revc_charset_set_colors(this, fg, bg); }
+inline void Charset::flushBuffer(void) { revc_charset_flush(); }
+inline void Charset::print(const char *str, int32 x, int32 y, bool32 hideSpaces) { revc_charset_print(this, str, x, y, hideSpaces); }
+inline void Charset::printBuffered(const char *str, int32 x, int32 y, bool32 hideSpaces) { revc_charset_print_buffered(this, str, x, y, hideSpaces); }
+
+}
+
+#endif
+
+// ---------------------------------------------------------------- Engine (rwengine.rs)
+// on windows
+//#ifdef DEBUG
+//#include <crtdbg.h>
+//#define free(p) _free_dbg(p, _NORMAL_BLOCK);
+//#define malloc(sz) _malloc_dbg(sz, _NORMAL_BLOCK, __FILE__, __LINE__)
+//#define realloc(p, sz) _realloc_dbg(p, sz, _NORMAL_BLOCK, __FILE__, __LINE__)
+//#endif
+
+// The engine core is Rust (rust/revc/src/rwengine.rs): the state machine, the default memory
+// functions, the driver tables and the errors. The C++ statics the headers name stay here, and
+// the per-class modules and plugin lists that are still C++ are reached through hooks.
+namespace rw {
+
+
+static_assert(sizeof(Engine) == 288 && sizeof(Driver) == 88 && sizeof(MemoryFunctions) == 40, "engine layout (rwengine.rs)");
+static_assert(NUM_PLATFORMS == 14, "rwengine.rs NUM_PLATFORMS");
+// the plugin lists start at these sizes (rwplugin.rs class_sizes)
+static_assert(sizeof(Frame) == 200 && sizeof(Raster) == 96 && sizeof(Texture) == 120 && sizeof(TexDictionary) == 48 &&
+              sizeof(Geometry) == 168 && sizeof(Material) == 40 && sizeof(Atomic) == 136 && sizeof(Clump) == 88 &&
+              sizeof(Light) == 120 && sizeof(Camera) == 600 && sizeof(World) == 64, "class sizes (rwplugin.rs)");
+
+extern "C" {
+struct EngineHooks {
+	void (*registerModules)(void);
+	void (*registerImageFormats)(void);
+	ObjPipeline *(*pipelineCreate)(void);
+	void (*pipelineDestroy)(ObjPipeline *pipe);
+};
+void revc_engine_set_hooks(EngineHooks h);
+int32 revc_engine_init(MemoryFunctions *memfuncs);
+int32 revc_engine_open(EngineOpenParams *p);
+int32 revc_engine_start(void);
+void revc_engine_stop(void);
+void revc_engine_close(void);
+void revc_engine_term(void);
+int32 revc_engine_system(int32 req, void *arg, int32 n);
+}
+
+inline void
+registerModules(void)
+{
+	// core plugin attach here
+	Frame::registerModule();
+	Image::registerModule();
+	Raster::registerModule();
+	Texture::registerModule();
+
+	Frame::numAllocated = 0;
+	Image::numAllocated = 0;
+	Raster::numAllocated = 0;
+	Texture::numAllocated = 0;
+	TexDictionary::numAllocated = 0;
+	Geometry::numAllocated = 0;
+	Material::numAllocated = 0;
+	Atomic::numAllocated = 0;
+	Light::numAllocated = 0;
+	Camera::numAllocated = 0;
+	Clump::numAllocated = 0;
+	World::numAllocated = 0;
+
+	// driver plugin attach
+	wgpu::registerPlatformPlugins();
+}
+
+inline void
+registerImageFormats(void)
+{
+	Image::registerFileFormat("tga", readTGA, writeTGA);
+	Image::registerFileFormat("bmp", readBMP, writeBMP);
+	Image::registerFileFormat("png", readPNG, writePNG);
+}
+
+inline ObjPipeline *pipelineCreate(void) { return ObjPipeline::create(); }
+inline void pipelineDestroy(ObjPipeline *pipe) { pipe->destroy(); }
+
+inline struct EngineHooksInit {
+	EngineHooksInit(void) {
+		revc_engine_set_hooks({ registerModules, registerImageFormats, pipelineCreate, pipelineDestroy });
+	}
+} engineHooksInit;
+
+inline char *strdup_LOC(const char *s, uint32 hint, const char *here) {
+	char *t;
+	size_t sz = strlen(s)+1;
+	t = (char*)malloc_LOC(sz, hint, here);
+	if(t)
+		memcpy(t, s, sz);
+	return t;
+}
+
+inline bool32 Engine::init(MemoryFunctions *memfuncs) { return revc_engine_init(memfuncs); }
+inline bool32 Engine::open(EngineOpenParams *p) { return revc_engine_open(p); }
+inline bool32 Engine::start(void) { return revc_engine_start(); }
+inline void Engine::term(void) { revc_engine_term(); }
+inline void Engine::close(void) { revc_engine_close(); }
+inline void Engine::stop(void) { revc_engine_stop(); }
+
+inline int32 Engine::getNumSubSystems(void) { return revc_engine_system(DEVICEGETNUMSUBSYSTEMS, nil, 0); }
+inline int32 Engine::getCurrentSubSystem(void) { return revc_engine_system(DEVICEGETCURRENTSUBSYSTEM, nil, 0); }
+inline bool32 Engine::setSubSystem(int32 subsys) { return revc_engine_system(DEVICESETSUBSYSTEM, nil, subsys); }
+inline SubSystemInfo*
+Engine::getSubSystemInfo(SubSystemInfo *info, int32 subsys)
+{
+	return revc_engine_system(DEVICEGETSUBSSYSTEMINFO, info, subsys) ? info : nil;
+}
+inline int32 Engine::getNumVideoModes(void) { return revc_engine_system(DEVICEGETNUMVIDEOMODES, nil, 0); }
+inline int32 Engine::getCurrentVideoMode(void) { return revc_engine_system(DEVICEGETCURRENTVIDEOMODE, nil, 0); }
+inline bool32 Engine::setVideoMode(int32 mode) { return revc_engine_system(DEVICESETVIDEOMODE, nil, mode); }
+inline VideoMode*
+Engine::getVideoModeInfo(VideoMode *info, int32 mode)
+{
+	return revc_engine_system(DEVICEGETVIDEOMODEINFO, info, mode) ? info : nil;
+}
+inline uint32 Engine::getMaxMultiSamplingLevels(void) { return revc_engine_system(DEVICEGETMAXMULTISAMPLINGLEVELS, nil, 0); }
+inline uint32 Engine::getMultiSamplingLevels(void) { return revc_engine_system(DEVICEGETMULTISAMPLINGLEVELS, nil, 0); }
+inline bool32 Engine::setMultiSamplingLevels(uint32 levels) { return revc_engine_system(DEVICESETMULTISAMPLINGLEVELS, nil, levels); }
+
+}
+
+// ---------------------------------------------------------------- the wgpu device (rwdevice.rs)
+// WGPU platform device: the driver plugin and the C++ face of the Rust device
+// (rust/revc/src/rwdevice.rs); models go through wgpupipe.cpp.
+
+
+
+#ifdef RW_WGPU
+
+namespace rw {
+namespace wgpu {
+
+Raster *rasterCreate(Raster *raster);
+uint8 *rasterLock(Raster *raster, int32 level, int32 lockMode);
+void rasterUnlock(Raster *raster, int32 level);
+int32 rasterNumLevels(Raster *raster);
+bool32 imageFindRasterFormat(Image *img, int32 type, int32 *pWidth, int32 *pHeight, int32 *pDepth, int32 *pFormat);
+bool32 rasterFromImage(Raster *raster, Image *image);
+Image *rasterToImage(Raster *raster);
+void registerNativeRaster(void);
+
+// The device itself is Rust (rust/revc/src/rwdevice.rs); the Device table is filled from it and
+// the names the pipelines and the game's custom pipelines use forward to it.
+extern "C" {
+struct DeviceHooks {
+	Camera **(*currentCamera)(void);
+	Raster *(*currentContext)(void);
+	int32 (*maxAnisotropy)(Texture *tex);
+	int32 (*antialiasing)(void);
+};
+void revc_device_set_hooks(DeviceHooks h);
+void revc_device_evict_raster(Raster *r);
+void revc_device_set_texture_stage0(Texture *t);
+void revc_device_set_im2d_override(uint32 shader, const float32 *params);
+void revc_device_current_draw_state(DrawState *s);
+const float32 *revc_device_camera_xform(void);
+void revc_device_begin_overlay(void);
+void revc_device_im2d_uv2(PrimitiveType prim, void *v, int32 nv, void *i, int32 ni, Texture *tex1);
+}
+
+static_assert(sizeof(Device) == 136, "Device layout (rwdevice.rs)");
+static_assert(sizeof(DrawState) == 120, "DrawState layout (revc_rw::frame::DrawState)");
+
+
+inline Camera **hCurrentCamera(void) { return &engine->currentCamera; }
+inline Raster *hCurrentContext(void) { return Raster::getCurrentContext(); }
+inline int32 hMaxAnisotropy(Texture *t) { return t->getMaxAnisotropy(); }
+inline int32 hAntialiasing(void) { return antialiasing; }
+inline struct DeviceInit {
+	DeviceInit(void) {
+		revc_device_set_hooks({ hCurrentCamera, hCurrentContext, hMaxAnisotropy, hAntialiasing });
+	}
+} deviceInit;
+
+inline void evictRaster(Raster *raster) { revc_device_evict_raster(raster); }
+inline void setTextureStage0(Texture *tex) { revc_device_set_texture_stage0(tex); }
+inline void setIm2DOverride(uint32 shader, const float32 *params) { revc_device_set_im2d_override(shader, params); }
+inline void currentDrawState(DrawState *s) { revc_device_current_draw_state(s); }
+inline const float32 *cameraXform(void) { return revc_device_camera_xform(); }
+inline void beginOverlay(void) { revc_device_begin_overlay(); }
+inline void
+im2DRenderIndexedPrimitiveUV2(PrimitiveType primType, void *vertices, int32 numVertices,
+	void *indices, int32 numIndices, Texture *tex1)
+{
+	revc_device_im2d_uv2(primType, vertices, numVertices, indices, numIndices, tex1);
+}
+
+inline void*
+driverOpen(void *o, int32, int32)
+{
+	engine->driver[PLATFORM_WGPU]->defaultPipeline = makeDefaultPipeline();
+	engine->driver[PLATFORM_WGPU]->rasterNativeOffset = nativeRasterOffset;
+	engine->driver[PLATFORM_WGPU]->rasterCreate = rasterCreate;
+	engine->driver[PLATFORM_WGPU]->rasterLock = rasterLock;
+	engine->driver[PLATFORM_WGPU]->rasterUnlock = rasterUnlock;
+	engine->driver[PLATFORM_WGPU]->rasterNumLevels = rasterNumLevels;
+	engine->driver[PLATFORM_WGPU]->imageFindRasterFormat = imageFindRasterFormat;
+	engine->driver[PLATFORM_WGPU]->rasterFromImage = rasterFromImage;
+	engine->driver[PLATFORM_WGPU]->rasterToImage = rasterToImage;
+	return o;
+}
+
+inline void*
+driverClose(void *o, int32, int32)
+{
+	return o;
+}
+
+inline void
+registerPlatformPlugins(void)
+{
+	Driver::registerPlugin(PLATFORM_WGPU, 0, PLATFORM_WGPU, driverOpen, driverClose);
+	registerNativeRaster();
+}
+
+}
+}
+
+#else
+
+namespace rw {
+namespace wgpu {
+inline void registerPlatformPlugins(void) {}
+}
+}
+
+#endif
+
+// ---------------------------------------------------------------- the wgpu pipelines (rwpipe.rs)
+// WGPU platform atomic pipelines: the C++ face of rust/revc/src/rwpipe.rs (instancing, lighting,
+// MatFX env maps, skinning) and the default/MatFX/skin pipeline objects.
+
+
+
+#ifdef RW_WGPU
+
+namespace rw {
+namespace wgpu {
+
+// The pipeline's work is Rust (rust/revc/src/rwpipe.rs); the pipeline objects, the driver
+// plugins that make them, and the names the game's custom pipelines use stay here.
+extern "C" {
+struct EnvSettings { int32 flipU, applyLight, useMatColor; RGBA color; };
+struct PipeHooks {
+	World *(*currentWorld)(void);
+	int32 (*skinAtomicOffset)(void);
+	void (*envSettings)(EnvSettings *out);
+};
+void revc_pipe_set_hooks(PipeHooks h);
+void revc_pipe_destroy_native_data(Geometry *g);
+void revc_pipe_instance(uint32 pluginID, Atomic *a);
+void revc_pipe_render(uint32 pluginID, Atomic *a);
+InstanceDataHeader *revc_pipe_instance_atomic(uint32 pluginID, Atomic *a);
+void revc_pipe_begin_model(Atomic *a, InstanceDataHeader *h, ModelState *m);
+void revc_pipe_set_model_material(ModelState *m, const RGBA *c, const SurfaceProperties *sp);
+void revc_pipe_draw_mesh(InstanceDataHeader *h, InstanceData *i, const ModelState *m, uint32 shader, int32 useTex1, Texture *tex1);
+void revc_pipe_render_default(uint32 pluginID, Atomic *a, InstanceDataHeader *h);
+const float32 *revc_pipe_last_light_direction(void);
+}
+static_assert(sizeof(InstanceDataHeader) == 32 && sizeof(InstanceData) == 24, "instance data layout (rwpipe.rs)");
+static_assert(sizeof(ModelState) == 232*4, "ModelState layout (revc_rw::frame::ModelState)");
+
+inline World *hCurrentWorld(void) { return (World*)engine->currentWorld; }
+inline int32 hSkinAtomicOffset(void) { return skinGlobals.atomicOffset; }
+inline void
+hEnvSettings(EnvSettings *out)
+{
+	out->flipU = MatFX::envMapFlipU;
+	out->applyLight = MatFX::envMapApplyLight;
+	out->useMatColor = MatFX::envMapUseMatColor;
+	out->color = MatFX::envMapColor;
+}
+inline struct PipeInit {
+	PipeInit(void) { revc_pipe_set_hooks({ hCurrentWorld, hSkinAtomicOffset, hEnvSettings }); }
+} pipeInit;
+
+inline void *destroyNativeData(void *object, int32, int32) { revc_pipe_destroy_native_data((Geometry*)object); return object; }
+inline void instance(rw::ObjPipeline *pipe, Atomic *atomic) { revc_pipe_instance(pipe->pluginID, atomic); }
+inline void uninstance(rw::ObjPipeline*, Atomic*) { assert(0 && "can't uninstance"); }
+inline void render(rw::ObjPipeline *pipe, Atomic *atomic) { revc_pipe_render(pipe->pluginID, atomic); }
+inline InstanceDataHeader *instanceAtomic(rw::ObjPipeline *pipe, Atomic *atomic) { return revc_pipe_instance_atomic(pipe->pluginID, atomic); }
+inline void beginModel(Atomic *atomic, InstanceDataHeader *header, ModelState *model) { revc_pipe_begin_model(atomic, header, model); }
+inline void setModelMaterial(ModelState *model, const RGBA &col, const SurfaceProperties &sp) { revc_pipe_set_model_material(model, &col, &sp); }
+inline void setTexture(Texture *tex) { setTextureStage0(tex); }
+inline const float32 *lastLightDirection(void) { return revc_pipe_last_light_direction(); }
+inline void
+drawMesh(InstanceDataHeader *header, InstanceData *inst, const ModelState *model, uint32 shader,
+	bool32 useTex1, Texture *tex1)
+{
+	revc_pipe_draw_mesh(header, inst, model, shader, useTex1, tex1);
+}
+inline void renderDefault(rw::ObjPipeline *pipe, Atomic *atomic, InstanceDataHeader *header) { revc_pipe_render_default(pipe->pluginID, atomic, header); }
+
+inline void*
+matfxOpen(void *o, int32, int32)
+{
+	rw::ObjPipeline *pipe = makeDefaultPipeline();
+	pipe->pluginID = ID_MATFX;
+	pipe->pluginData = 0;
+	matFXGlobals.pipelines[PLATFORM_WGPU] = pipe;
+	return o;
+}
+
+inline void*
+matfxClose(void *o, int32, int32)
+{
+	if(matFXGlobals.pipelines[PLATFORM_WGPU]){
+		matFXGlobals.pipelines[PLATFORM_WGPU]->destroy();
+		matFXGlobals.pipelines[PLATFORM_WGPU] = nil;
+	}
+	return o;
+}
+
+inline void
+initMatFX(void)
+{
+	Driver::registerPlugin(PLATFORM_WGPU, 0, ID_MATFX, matfxOpen, matfxClose);
+}
+
+inline void*
+skinOpen(void *o, int32, int32)
+{
+	rw::ObjPipeline *pipe = makeDefaultPipeline();
+	pipe->pluginID = ID_SKIN;
+	pipe->pluginData = 1;
+	skinGlobals.pipelines[PLATFORM_WGPU] = pipe;
+	return o;
+}
+
+inline void*
+skinClose(void *o, int32, int32)
+{
+	if(skinGlobals.pipelines[PLATFORM_WGPU]){
+		skinGlobals.pipelines[PLATFORM_WGPU]->destroy();
+		skinGlobals.pipelines[PLATFORM_WGPU] = nil;
+	}
+	return o;
+}
+
+inline void
+initSkin(void)
+{
+	Driver::registerPlugin(PLATFORM_WGPU, 0, ID_SKIN, skinOpen, skinClose);
+}
+
+inline rw::ObjPipeline*
+makeDefaultPipeline(void)
+{
+	rw::ObjPipeline *pipe = rw::ObjPipeline::create();
+	pipe->init(PLATFORM_WGPU);
+	pipe->impl.instance = instance;
+	pipe->impl.uninstance = uninstance;
+	pipe->impl.render = render;
+	return pipe;
+}
+
+}
+}
+
+#else
+
+namespace rw {
+namespace wgpu {
+inline void *destroyNativeData(void *object, int32, int32) { return object; }
+inline void initMatFX(void) { }
+inline void initSkin(void) { }
+}
+}
+
+#endif

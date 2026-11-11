@@ -54,10 +54,8 @@ fn main() {
 
     // Static archives produced by the CMake build.
     println!("cargo:rustc-link-search=native={}", build.join("src").display());
-    println!("cargo:rustc-link-search=native={}", build.join("vendor/librw/src").display());
-    // Order matters for static archives: game first, then librw it depends on.
+    // librw is header-only since stage 2 step 7d3 (its code is the Rust in this crate).
     println!("cargo:rustc-link-lib=static:+whole-archive=reVC");
-    println!("cargo:rustc-link-lib=static=rw");
     // System libraries (same set CMake links for the standalone executable).
     for lib in ["OpenGL", "mpg123", "pthread", "m", "dl", "stdc++"] {
         println!("cargo:rustc-link-lib=dylib={lib}");
