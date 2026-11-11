@@ -1125,10 +1125,10 @@ impl Driver {
                         "menu_base" => unsafe { revc_test_scene(x, y, heading, hour, minute, weather); },
                         "foot_open" => unsafe { revc_test_world_start(0, 560.0, -700.0, 0.0) },	// beach sand, flat and clear
                         "car_straight" => unsafe { revc_test_world_start(1, MOONLITE.0, MOONLITE.1, 0.0) },	// Ocean Drive, north
-                        "car_open" => unsafe { revc_test_world_start(1, -1450.0, -900.0, 0.0) },	// the airport
+                        "car_open" => unsafe { revc_test_world_start(1, -1500.0, -1200.0, 0.0) },	// the airport tarmac (z 13.8)
                         "bike_straight" => unsafe { revc_test_world_start(2, MOONLITE.0, MOONLITE.1, 0.0) },
                         "bloodrb_straight" => unsafe { revc_test_world_start(3, MOONLITE.0, MOONLITE.1, 0.0) },	// the PS2 tests' cheat car
-                        "bloodrb_open" => unsafe { revc_test_world_start(3, -1450.0, -900.0, 0.0) },
+                        "bloodrb_open" => unsafe { revc_test_world_start(3, -1500.0, -1200.0, 0.0) },
                         other => {
                             self.fail(format!("pad script start state {other:?} not known (menu_base, foot_open, car_straight, car_open, bike_straight, bloodrb_straight, bloodrb_open)"));
                             return self.finish();
