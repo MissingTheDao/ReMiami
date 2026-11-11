@@ -254,7 +254,7 @@ revc_test_hud_text(int kind)
 	case 5:
 		*CTheScripts::GetPointerToScriptVariable(var) = 155000;
 		*CTheScripts::GetPointerToScriptVariable(var + 4) = 3;
-		CUserDisplay::OnscnTimer.AddClock(var, nil, true);
+		CUserDisplay::OnscnTimer.AddClock(var, (char*)"SEG3_1", true);	// "TIME:"
 		CUserDisplay::OnscnTimer.AddCounter(var + 4, 0, (char*)"FARES", 0);
 		break;
 	case 6: CMessages::AddBigMessageWithNumber(TheText.Get("M_PASS"), 8000, 0, 1000, -1, -1, -1, -1, -1); break;
