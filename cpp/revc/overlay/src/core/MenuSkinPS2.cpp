@@ -49,14 +49,48 @@ static const Ps2Tab tabs[] = {
 	{ MENUPAGE_CONSOLE_OPTIONS, MENUPAGE_LANGUAGE_SETTINGS, 1043.0f, 995.0f, "RVC_PT8" },	// revc: "options" in the EU discs' "language" place
 };
 
+// The PS2's glides take the same time whatever the distance: 5 steps at its 30 Hz menu rate
+// (167 ms), big steps first and last and small ones in the middle while the box changes width
+// (measured on v1.40: one row, wraps, Audio, Load column -> slot all 167 ms). Fraction of the way
+// after `ms`.
+float
+MenuSkinPS2GlideT(uint32 ms)
+{
+	static const float frac[5] = { 0.285f, 0.514f, 0.592f, 0.707f, 1.0f };
+	int step = Min(5, (int)(ms / 33));
+	return step == 0 ? 0.0f : frac[step - 1];
+}
+
+// A short move (one row) first morphs the box a little for one step, then glides: 200 ms in all
+// (measured: ~10 % one step ahead of the travel).
+float
+MenuSkinPS2GlideTLead(uint32 ms)
+{
+	int step = (int)(ms / 33);
+	return step == 0 ? 0.0f : step == 1 ? 0.1f : 0.1f + 0.9f * MenuSkinPS2GlideT(ms - 66);
+}
+
 // The PS2's highlight boxes glide: to a new item in 167 ms (the label's size morphing on the way),
 // and in from 190 px below when a page opens (measured on the v3.00 video). id: one box kind
 // (0 the tab bar, 1 the slot lists); returns the box to draw this frame.
+static struct { CRect from, to, cur; uint32 start; int page; bool init; } glides[4];
+float MenuSkinPS2GlideT(uint32 ms);
+
+// Start glide box `id` at r (its next target glides from there), on whatever page comes next.
+void
+MenuSkinPS2GlideSeed(int id, CRect r)
+{
+	auto &s = glides[id];
+	s.init = true;
+	s.page = FrontEndMenuManager.m_nCurrScreen;
+	s.from = s.to = s.cur = r;
+	s.start = CTimer::GetTimeInMillisecondsPauseMode();
+}
+
 CRect
 MenuSkinPS2Glide(int id, int page, const CRect &target)
 {
-	static struct { CRect from, to, cur; uint32 start; int page; bool init; } g[4];
-	auto &s = g[id];
+	auto &s = glides[id];
 	uint32 now = CTimer::GetTimeInMillisecondsPauseMode();
 	if (!s.init || s.page != page) {
 		s.init = true;
@@ -71,10 +105,30 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 		s.to = target;
 		s.start = now;
 	}
-	float t = Min(1.0f, (now - s.start) / (s.from.top - s.to.top > SY(100.0f) ? 100.0f : 167.0f));	// (the page-open sweep: 3 frames)
+	float t;
+	if (s.from.top - s.to.top > SY(100.0f))
+		t = Min(1.0f, (now - s.start) / 100.0f);	// (the page-open sweep: 3 frames)
+	else
+		t = MenuSkinPS2GlideT(now - s.start);
 	s.cur = CRect(s.from.left + (s.to.left - s.from.left) * t, s.from.top + (s.to.top - s.from.top) * t,
 		s.from.right + (s.to.right - s.from.right) * t, s.from.bottom + (s.to.bottom - s.from.bottom) * t);
 	return s.cur;
+}
+
+// Focus from the tab bar into a list: the box leaves the tab and glides to row 0 (measured).
+// gTabRect: the tab box as last drawn; Seed starts a glide box there.
+static CRect gTabRect;
+static bool gTabSweep;
+void
+MenuSkinPS2GlideSeed(int id, CRect r);
+bool
+MenuSkinPS2TakeTabSweep(CRect *r)
+{
+	if (!gTabSweep)
+		return false;
+	gTabSweep = false;
+	*r = gTabRect;
+	return true;
 }
 
 // "screen position" (PS2 Display page): the picture's offset for TVs that crop it, as on the PS2.
@@ -124,12 +178,13 @@ DrawTabs(CMenuManager *m, uint8 alpha)
 	// the confirmations show the tabs without a highlight (console)
 	bool confirm = m->m_nCurrScreen == MENUPAGE_NEW_GAME_RELOAD || m->m_nCurrScreen == MENUPAGE_LOAD_SLOT_CONFIRM ||
 		m->m_nCurrScreen == MENUPAGE_DELETE_SLOT_CONFIRM;
-	if (!confirm && !(m->m_nCurrScreen == MENUPAGE_MAP && pageFocus)) {
+	if (!confirm && !pageFocus) {	// (the tab loses its box when focus goes into the list)
 		float w = CFont::GetStringWidth(TheText.Get(tabs[cur].name), true);
 		float cx = SCALE_AND_CENTER_X(tabCX[cur]), cy = SCREEN_SCALE_Y(tabRowY[cur / 4]);
 		float hw = w / 2.0f + SX(8.0f), h0 = SY(13.0f), t = SY(2.0f);
 		// gliding from tab to tab (one box for the bar: no sweep on page changes)
 		CRect r = MenuSkinPS2Glide(0, 0, CRect(cx - hw, cy - h0, cx + hw, cy + h0));
+		gTabRect = r;
 		cx = (r.left + r.right) / 2.0f;
 		hw = (r.right - r.left) / 2.0f;
 		cy = (r.top + r.bottom) / 2.0f;
@@ -459,6 +514,11 @@ MenuSkinPS2Input(CMenuManager *m)
 		return true;
 	}
 	if (cross) {
+		// the box leaves the tab and glides to the list's first item
+		MenuSkinPS2GlideSeed(1, gTabRect);
+		MenuSkinPS2GlideSeed(2, gTabRect);
+		gTabSweep = true;
+		m->m_nOptionHighlightTransitionBlend = 0;
 		pageFocus = true;
 		loadColumn = m->m_nCurrScreen == MENUPAGE_CHOOSE_LOAD_SLOT;
 		loadRow = 0;

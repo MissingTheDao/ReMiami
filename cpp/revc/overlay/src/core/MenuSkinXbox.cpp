@@ -651,6 +651,11 @@ DrawSubTabs(int page, uint8 alpha)
 #define NUM_DROP 3
 static bool dropOpen;
 static int dropSel;
+// A on an entry asks first (dialog: "Do you want to overwrite your current controls?", OK / CANCEL
+// with CANCEL preselected; left/right switch, A confirms, nothing else acts); then the drop-down
+// is open again on the entry picked.
+static bool dropConfirm;
+static int dropConfirmSel;
 extern "C" int PadLayoutCurrent(void);
 extern "C" void PadLayoutApply(int layout);
 void SaveINIControllerSettings(void);
@@ -750,22 +755,35 @@ MenuSkinXboxInput(CMenuManager *m)
 		return true;
 	}
 	// inside a page
-	if (dropOpen) {	// the Controls drop-down: up/down choose, A applies, B closes without applying
+	if (dropOpen && dropConfirm) {
+		if (left || right)
+			dropConfirmSel = 1 - dropConfirmSel;
+		if (a) {
+			if (dropConfirmSel == 0) {
+				extern int8 gPs2Setup;
+				PadLayoutApply(dropSel);
+				gPs2Setup = -1;
+				SaveINIControllerSettings();
+			}
+			dropConfirm = false;
+		}
+		return true;
+	}
+	if (dropOpen) {	// the Controls drop-down: up/down choose, A asks to apply, B closes it
 		const bool up = pad->GetDPadUpJustDown() || pad->GetUpJustDown(), down = pad->GetDPadDownJustDown() || pad->GetDownJustDown();
 		if (up || down)
 			dropSel = (dropSel + (down ? 1 : NUM_DROP - 1)) % NUM_DROP;
 		if (a) {
-			extern int8 gPs2Setup;
-			PadLayoutApply(dropSel);
-			gPs2Setup = -1;
-			SaveINIControllerSettings();
+			dropConfirm = true;
+			dropConfirmSel = 1;
 		}
-		if (a || b || m->m_nCurrScreen != MENUPAGE_CONSOLE_CONTROLS)
+		if (b || m->m_nCurrScreen != MENUPAGE_CONSOLE_CONTROLS)
 			dropOpen = false;
 		return true;
 	}
 	if (a && m->m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS && m->m_nCurrOption == 0) {
 		dropOpen = true;
+		dropConfirm = false;
 		dropSel = Max(PadLayoutCurrent(), 0);
 		return true;
 	}
@@ -820,7 +838,33 @@ MenuSkinXboxDraw(CMenuManager *m, uint8 alpha)
 		DrawSubTabs(m->m_nCurrScreen, alpha);
 	DrawIconBar(m, DialogDim(alpha));
 	DrawHelpLine(m, DialogDim(alpha));
-	if (dropOpen && m->m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS)
+	if (dropOpen && m->m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS) {
 		DrawDropDown(alpha);
+		if (dropConfirm) {
+			MenuSkinXboxDialogBack(alpha);
+			wchar buf[96];
+			AsciiToUnicode("do you want to overwrite your current controls?", buf);
+			CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
+			CFont::SetScale(W(0.6f), H(0.9f));
+			CFont::SetCentreOn();
+			CFont::SetCentreSize(W(360.0f));
+			CFont::SetPropOn();
+			CFont::SetDropShadowPosition(0);
+			CFont::SetColor(CRGBA(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha));
+			CFont::PrintString(X(312.0f), Y(185.0f), buf);
+			const char *b2[2] = { "ok", "cancel" };
+			const float bx[2] = { 200.0f, 420.0f };
+			for (int i = 0; i < 2; i++) {
+				AsciiToUnicode(b2[i], buf);
+				float w = CFont::GetStringWidth(buf, true);
+				if (i == dropConfirmSel)
+					MenuSkinXboxSelection(X(bx[i]) - w / 2 - W(8.0f), Y(272.0f), X(bx[i]) + w / 2 + W(8.0f), Y(272.0f) + H(22.0f), alpha, false, 0.0f);
+				CFont::SetColor(i == dropConfirmSel ? CRGBA(0, 0, 0, alpha) : CRGBA(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha));
+				CFont::PrintString(X(bx[i]), Y(275.0f), buf);
+			}
+			CFont::SetCentreOff();
+			CFont::DrawFonts();
+		}
+	}
 	CFont::DrawFonts();
 }
