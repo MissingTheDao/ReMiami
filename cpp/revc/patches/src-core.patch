@@ -1958,7 +1958,34 @@
  	CFont::PrintString(MENU_X_LEFT_ALIGNED(STATS_RATING_X) - CFont::GetStringWidth(gUString2, true) / 2.f, MENU_Y(STATS_RATING_Y_2), gUString2);
  }
  
-@@ -3715,11 +4634,11 @@
+@@ -3602,6 +4521,26 @@
+ 				}
+ 			}
+ 
++			// revc: the PS2 zooms smoothly while R1 (in) or R2 (out) is held: the scale eases toward
++			// 10x the overview (or back to it) in log scale, time constant 1.2 s (measured: about
++			// 1.2x per 0.1 s at first, 4.8x after a 1.4 s hold), around the screen's centre
++			static uint32 lastZoomTick = 0;
++			uint32 zoomNow = CTimer::GetTimeInMillisecondsPauseMode();
++			float zoomDt = Min(100u, zoomNow - lastZoomTick) / 1000.0f;
++			lastZoomTick = zoomNow;
++			const bool ps2Zoom = PS2_SKIN_ON && (CPad::GetPad(0)->GetRightShoulder1() || CPad::GetPad(0)->GetRightShoulder2()) &&
++				!CPad::GetPad(0)->GetMouseWheelUp() && !CPad::GetPad(0)->GetMouseWheelDown();
++			if (ps2Zoom) {
++				float base = MENU_Y(150.0f), target = CPad::GetPad(0)->GetRightShoulder1() ? base * 10.0f : base;
++				float ls = logf(m_fMapSize);
++				ls += (logf(target) - ls) * (1.0f - expf(-zoomDt / 1.2f));
++				float z2 = expf(ls) / m_fMapSize;
++				m_fMapCenterX += (SCREEN_WIDTH / 2 - m_fMapCenterX) * (1.0f - z2);
++				m_fMapCenterY += (SCREEN_HEIGHT / 2 - m_fMapCenterY) * (1.0f - z2);
++				m_fMapSize *= z2;
++				m_fMapCenterX = Clamp(m_fMapCenterX, SCREEN_WIDTH/2 - (m_fMapSize - MENU_X(MAP_MIN_SIZE)), m_fMapSize - MENU_X(MAP_MIN_SIZE) + SCREEN_WIDTH/2);
++				m_fMapCenterY = Clamp(m_fMapCenterY, SCREEN_HEIGHT/2 - (m_fMapSize - MENU_Y(MAP_MIN_SIZE)), m_fMapSize - MENU_Y(MAP_MIN_SIZE) + SCREEN_HEIGHT/2);
++			} else
+ 			if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
+ 				if (CPad::GetPad(0)->GetMouseWheelDown() && m_fMapSize > MENU_X(MAP_SIZE_TO_ALLOW_X_MOVE))
+ 					ZOOM(mapCrosshair.x, mapCrosshair.y, false);
+@@ -3715,11 +4654,11 @@
  			break;
  		}
  		case MENUPAGE_SOUND_SETTINGS:
@@ -1972,7 +1999,7 @@
  					m_nHoverOption = HOVEROPTION_NEXT_RADIO;
  			}
  			break;
-@@ -4297,6 +5216,8 @@
+@@ -4297,6 +5236,8 @@
  
  	if (!m_AllowNavigation && m_firstStartCounter == 255)
  		m_AllowNavigation = true;
@@ -1981,7 +2008,7 @@
  	if (!m_bShowMouse && m_nCurrScreen != MENUPAGE_MAP && (m_nMouseOldPosX != m_nMousePosX || m_nMouseOldPosY != m_nMousePosY)) {
  		m_bShowMouse = true;
  	}
-@@ -4547,7 +5468,8 @@
+@@ -4547,7 +5488,8 @@
  		}
  	}
  	if (changeValueBy != 0) {
@@ -1991,7 +2018,7 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_NOTHING
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_LABEL
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_YES
-@@ -4957,7 +5879,7 @@
+@@ -4957,7 +5899,7 @@
  					ControlsManager.MakeControllerActionsBlank();
  					ControlsManager.InitDefaultControlConfiguration();
  					ControlsManager.InitDefaultControlConfigMouse(MousePointerStateHelper.GetMouseSetUp());
@@ -2000,7 +2027,7 @@
  					if (AllValidWinJoys.m_aJoys[JOYSTICK1].m_bInitialised) {
  						DIDEVCAPS devCaps;
  						devCaps.dwSize = sizeof(DIDEVCAPS);
-@@ -5720,6 +6642,7 @@
+@@ -5720,6 +6662,7 @@
  void
  CMenuManager::UnloadTextures()
  {
@@ -2008,7 +2035,7 @@
  	if (m_nCurrScreen == MENUPAGE_SOUND_SETTINGS)
  		DMAudio.StopFrontEndTrack();
  
-@@ -5827,52 +6750,54 @@
+@@ -5827,52 +6770,54 @@
  
  	// Because m_fMapSize is half of the map length(hence * 2), and map consists of 3x3 tiles(hence / 3).
  	float halfTile = m_fMapSize * 2.f / 3.f / 2.f;
@@ -2090,7 +2117,7 @@
  	}
  
  	CRadar::DrawBlips();
-@@ -5933,12 +6858,15 @@
+@@ -5933,12 +6878,15 @@
  		mapCrosshair.y = m_nMousePosY;
  	}
  
