@@ -435,7 +435,8 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 	}
 	// the pulse: a white glow over the bar growing 0.9 -> 1.157 x 1.081 while fading 0.5 -> 0.059,
 	// every 0.8 s (R3_Menu.anm)
-	float t = (CTimer::GetTimeInMillisecondsPauseMode() % 800) / 800.0f;
+	// in 30 Hz steps, as the Xbox updates its menu (R3_Menu.anm keyframes at 30 fps)
+	float t = ((CTimer::GetTimeInMillisecondsPauseMode() % 800) * 3 / 100) / 24.0f;
 	float sx = 0.9f + (1.157f - 0.9f) * t, sy = 0.9f + (1.081f - 0.9f) * t;
 	float a = 0.5f + (0.059f - 0.5f) * t;
 	float cx = (x0 + x1) / 2.0f, cy = (y0 + y1) / 2.0f, hw = (x1 - x0) / 2.0f * sx, hh = (y1 - y0) / 2.0f * sy;

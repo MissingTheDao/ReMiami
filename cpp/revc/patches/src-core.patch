@@ -1916,7 +1916,18 @@
  	CFont::SetRightJustifyOff();
  
  	if (!strcmp(m_aSkinName, m_PrefsSkinFile)) {
-@@ -3352,6 +4246,15 @@
+@@ -2941,6 +3835,10 @@
+ int
+ CMenuManager::FadeIn(int alpha)
+ {
++	// revc: on the Xbox a page change cuts the content in at once; only the panel's corners move
++	// to the new page's shape (~400 ms, menuBg.Translate below, measured)
++	if (gPs2FadeIsPageChange && MenuSkinXboxActive(m_nCurrScreen, m_bGameNotLoaded))
++		return alpha;
+ 	return Min(m_nMenuFadeAlpha, alpha);
+ }
+ 
+@@ -3352,6 +4250,15 @@
  void
  CMenuManager::PrintBriefs()
  {
@@ -1932,7 +1943,7 @@
  	CFont::SetColor(CRGBA(0, 0, 0, FadeIn(255)));
  	CFont::SetRightJustifyOff();
  	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
-@@ -3389,6 +4292,14 @@
+@@ -3389,6 +4296,14 @@
  	static float scrollY = 0;
  
  	int rowNum = CStats::ConstructStatLine(99999);
@@ -1947,7 +1958,7 @@
  	CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(90.0f), MENU_Y(142.0f),
  		MENU_X_LEFT_ALIGNED(543.0f), MENU_Y(142.f),
  		MENU_X_LEFT_ALIGNED(107.0f), MENU_Y(316.f),
-@@ -3413,13 +4324,17 @@
+@@ -3413,13 +4328,17 @@
  
  	static uint32 lastCheck = 0;
  
@@ -1968,7 +1979,7 @@
  		}
  		lastCheck = CTimer::GetTimeInMillisecondsPauseMode();
  	}
-@@ -3444,6 +4359,11 @@
+@@ -3444,6 +4363,11 @@
  		}
  		alpha = 0.f;
  
@@ -1980,7 +1991,7 @@
  		// If it's still on screen
  		if (y > MENU_Y(STATS_VISIBLE_START_Y) && y < MENU_Y(STATS_VISIBLE_END_Y)) {
  			CStats::ConstructStatLine(row);
-@@ -3464,27 +4384,48 @@
+@@ -3464,27 +4388,48 @@
  			if (y >= MENU_Y(STATS_TOP_Y + STATS_FADING_AREA_LENGTH) && y <= MENU_Y(STATS_BOTTOM_Y - STATS_FADING_AREA_LENGTH))
  				alpha = 255.0f;
  
@@ -2031,7 +2042,7 @@
  	AsciiToUnicode(gString, gUString);
  
  	UnicodeStrcpy(gUString2, CStats::FindCriminalRatingString());
-@@ -3499,6 +4440,13 @@
+@@ -3499,6 +4444,13 @@
  	CFont::SetColor(CRGBA(0, 0, 0, FadeIn(255)));
  	CFont::SetDropShadowPosition(0);
  
@@ -2045,7 +2056,7 @@
  	CFont::PrintString(MENU_X_LEFT_ALIGNED(STATS_RATING_X) - CFont::GetStringWidth(gUString2, true) / 2.f, MENU_Y(STATS_RATING_Y_2), gUString2);
  }
  
-@@ -3602,6 +4550,26 @@
+@@ -3602,6 +4554,26 @@
  				}
  			}
  
@@ -2072,7 +2083,7 @@
  			if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
  				if (CPad::GetPad(0)->GetMouseWheelDown() && m_fMapSize > MENU_X(MAP_SIZE_TO_ALLOW_X_MOVE))
  					ZOOM(mapCrosshair.x, mapCrosshair.y, false);
-@@ -3715,11 +4683,11 @@
+@@ -3715,11 +4687,11 @@
  			break;
  		}
  		case MENUPAGE_SOUND_SETTINGS:
@@ -2086,7 +2097,7 @@
  					m_nHoverOption = HOVEROPTION_NEXT_RADIO;
  			}
  			break;
-@@ -4297,6 +5265,8 @@
+@@ -4297,6 +5269,8 @@
  
  	if (!m_AllowNavigation && m_firstStartCounter == 255)
  		m_AllowNavigation = true;
@@ -2095,7 +2106,7 @@
  	if (!m_bShowMouse && m_nCurrScreen != MENUPAGE_MAP && (m_nMouseOldPosX != m_nMousePosX || m_nMouseOldPosY != m_nMousePosY)) {
  		m_bShowMouse = true;
  	}
-@@ -4547,7 +5517,8 @@
+@@ -4547,7 +5521,8 @@
  		}
  	}
  	if (changeValueBy != 0) {
@@ -2105,7 +2116,7 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_NOTHING
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_LABEL
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_YES
-@@ -4957,7 +5928,7 @@
+@@ -4957,7 +5932,7 @@
  					ControlsManager.MakeControllerActionsBlank();
  					ControlsManager.InitDefaultControlConfiguration();
  					ControlsManager.InitDefaultControlConfigMouse(MousePointerStateHelper.GetMouseSetUp());
@@ -2114,7 +2125,7 @@
  					if (AllValidWinJoys.m_aJoys[JOYSTICK1].m_bInitialised) {
  						DIDEVCAPS devCaps;
  						devCaps.dwSize = sizeof(DIDEVCAPS);
-@@ -5720,6 +6691,7 @@
+@@ -5720,6 +6695,7 @@
  void
  CMenuManager::UnloadTextures()
  {
@@ -2122,7 +2133,7 @@
  	if (m_nCurrScreen == MENUPAGE_SOUND_SETTINGS)
  		DMAudio.StopFrontEndTrack();
  
-@@ -5827,52 +6799,54 @@
+@@ -5827,52 +6803,54 @@
  
  	// Because m_fMapSize is half of the map length(hence * 2), and map consists of 3x3 tiles(hence / 3).
  	float halfTile = m_fMapSize * 2.f / 3.f / 2.f;
@@ -2204,7 +2215,7 @@
  	}
  
  	CRadar::DrawBlips();
-@@ -5933,12 +6907,15 @@
+@@ -5933,12 +6911,15 @@
  		mapCrosshair.y = m_nMousePosY;
  	}
  
