@@ -24,8 +24,12 @@ shoot() {	# set, ui style, width, height, suffix[, final height]
   sed -e "s/^\[Graphics\]/[Graphics]\nUiStyle=$2/" -e "s/^Width=.*/Width=$3/" -e "s/^Height=.*/Height=$4/" \
     "$ROOT/tests/config/reVC.ini" > "$cfg"
   mkdir -p "$TMP/shots"; rm -f "$TMP"/shots/*
+  # The game picks its resolution from the display's modes: sizes a desktop rarely offers (21:9)
+  # get a hidden display of exactly that size (scripts/headless.sh).
+  local wrap=()
+  [[ "$3x$4" == 2560x1080 ]] && wrap=("$ROOT/scripts/headless.sh" --size "$3x$4")
   REVC_TEST_CONFIG=$cfg REVC_TEST_WINDOW=${3}x$4 REVC_TEST_MENU_SET=$1 REVC_TEST_SHOT_DIR=$TMP/shots \
-    "$ROOT/scripts/test.sh" menus || { echo "menu-shots: the menus test FAILED ($1 $3x$4); keeping the shots it took, others may be stale" >&2; FAILED=1; }
+    "${wrap[@]}" "$ROOT/scripts/test.sh" menus || { echo "menu-shots: the menus test FAILED ($1 $3x$4); keeping the shots it took, others may be stale" >&2; FAILED=1; }
   compgen -G "$TMP/shots/*.png" > /dev/null || { echo "menu-shots: no shots taken" >&2; exit 1; }
   for f in "$TMP"/shots/*.png; do cp "$f" "$OUT/$(basename "${f%.png}")$5.png"; done
   # The PS2 frame is 640x448 (shown 4:3); the game has no 448-line mode, so 640x480 is scaled.
