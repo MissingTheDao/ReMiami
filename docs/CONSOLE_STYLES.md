@@ -12,7 +12,7 @@ content and stay outside the repo; this file records what the code does and why.
 | 13a | Reference scenes: the `scenes` test scenario stands the player at the console capture spots (time, weather, follow camera, HUD on) and writes 640x480 frames; `scripts/scene_colours.py` measures them | done |
 | 13b | World colours per style (lighting, colour filter, PS2 highlight clipping), checked against the captures with the same measurements | PS2 checked; Xbox lightmaps and gamma open |
 | 13c | Trails: console persistence, frame-rate and resolution independent, on in both console styles | done |
-| 13d | Style settings: fixed LOD 1.0, Classic camera and movement, 4:3 option, PS2 time cycle from an imported disc | LOD done |
+| 13d | Style settings: fixed LOD 1.0, Classic camera and movement, 4:3 option, PS2 time cycle from an imported disc | LOD, camera, time cycle done |
 | 13e | HUD per style (Xbox safe-area shift and rounder radar), console UI scaled by screen height | done (measured elements) |
 | 13f | Button glyph variants per UI style | done |
 | 13g | PS2 menu look and animations | |
@@ -127,7 +127,7 @@ the console look:
 - The shift is 2 px at 448 lines, scaled with the screen height (was 2 px at any resolution and
   only with the debug menu's Blur switch).
 
-## 13g/13h: console menus (proposed approach)
+## 13g/13h: console menus (approach, agreed)
 
 re3's PS2 menu (`core/Frontend_PS2.cpp`, `PS2_MENU`) is a separate 3,000-line `CMenuManager`
 chosen at compile time: it can't be switched at runtime and lacks the PC/revc options (graphics,
@@ -150,9 +150,10 @@ replaced:
 Steps: (1) the skin hook in `CMenuManager::DrawFrontEnd` and an animation clock; (2) PS2 skin;
 (3) Xbox skin; (4) captures of each page vs the console references.
 
-## Open decisions
+## Decisions
 
-- **Camera in the console styles.** The consoles use the Classic control method's camera (level
-  follow camera, the horizon at 47 % of the screen); the PC's default Standard method uses the mouse
-  camera, which pitches down (horizon at 31 %) and makes Tommy strafe. The scenes use Classic. Should
-  the PS2/Xbox presets switch to Classic (movement changes too) or leave the control method alone?
+- **Camera (user 2026-11-11):** the console styles use the console camera. The PS2 and Xbox presets
+  set the Classic control method (level follow camera, Tommy turns toward the stick, as on the
+  consoles); the PC preset sets Standard (the PC's mouse camera). Changing the control method
+  afterwards shows the style as Custom.
+- **Menus (user 2026-11-11):** a skin over the PC menu is fine as long as it feels right.
