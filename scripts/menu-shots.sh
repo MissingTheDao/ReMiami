@@ -17,6 +17,7 @@ shift || true
 SETS=("$@"); (( ${#SETS[@]} )) || SETS=(ps2 xbox)
 mkdir -p "$OUT"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+FAILED=0
 [[ -z "${REVC_TEST_MODS:-}" && -d "$ROOT/game/mods" ]] && export REVC_TEST_MODS="$ROOT/game/mods"
 shoot() {	# set, ui style, width, height, suffix[, final height]
   local cfg=$TMP/menus.ini
@@ -24,7 +25,7 @@ shoot() {	# set, ui style, width, height, suffix[, final height]
     "$ROOT/tests/config/reVC.ini" > "$cfg"
   mkdir -p "$TMP/shots"; rm -f "$TMP"/shots/*
   REVC_TEST_CONFIG=$cfg REVC_TEST_WINDOW=${3}x$4 REVC_TEST_MENU_SET=$1 REVC_TEST_SHOT_DIR=$TMP/shots \
-    "$ROOT/scripts/test.sh" menus || echo "menu-shots: the menus test reported a failure; keeping the shots it took" >&2
+    "$ROOT/scripts/test.sh" menus || { echo "menu-shots: the menus test FAILED ($1 $3x$4); keeping the shots it took, others may be stale" >&2; FAILED=1; }
   compgen -G "$TMP/shots/*.png" > /dev/null || { echo "menu-shots: no shots taken" >&2; exit 1; }
   for f in "$TMP"/shots/*.png; do cp "$f" "$OUT/$(basename "${f%.png}")$5.png"; done
   # The PS2 frame is 640x448 (shown 4:3); the game has no 448-line mode, so 640x480 is scaled.
@@ -66,3 +67,4 @@ for set in "${SETS[@]}"; do
   esac
 done
 echo "shots in $OUT"
+exit $FAILED
