@@ -336,7 +336,7 @@ MenuSkinPS2Draw(CMenuManager *m, uint8 alpha, float cornerX, float cornerY)
 	// 640x448), over the panel's bottom-right corner: placed from the Display page's corner.
 	(void)cornerX; (void)cornerY;
 	gCornerX = PX(1345.0f) + SX(5.0f);
-	gCornerY = PY(870.0f) - SY(5.0f);
+	gCornerY = PY(870.0f) - SY(1.0f);	// (top edge at y 303 for x 560, 640x448: v3.00 captures)
 	if (!MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return;
 	DrawHelpBox(alpha, m->m_nCurrScreen);

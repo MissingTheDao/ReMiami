@@ -100,6 +100,8 @@ pub const MANIFEST: &[Lift] = &[
     // collects (core/BriefLists.cpp).
     Lift { kind: DiscKind::Xbox, dir: "neo/Hints.txt", exts: &[], dest: "neo" },
     Lift { kind: DiscKind::Xbox, dir: "neo/UnlockedItems.txt", exts: &[], dest: "neo" },
+    // The pause menu's Maestro animation (R3_Menu.anm): the selection bar's five outline shapes.
+    Lift { kind: DiscKind::Xbox, dir: "neo/UserInterface/models/R3_Menu.anm", exts: &[], dest: "ui" },
     // HUD and fonts (DXT5: smoother alpha than the PC's DXT3).
     Lift { kind: DiscKind::Xbox, dir: "models/hud.txd", exts: &[], dest: "models" },
     Lift { kind: DiscKind::Xbox, dir: "models/fonts.txd", exts: &[], dest: "models" },

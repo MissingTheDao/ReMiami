@@ -417,6 +417,83 @@ DrawHelpLine(CMenuManager *m, uint8 alpha)
 	}
 }
 
+// The selection bar's five hand-drawn outlines (R3_Menu.anm shapes 0-4, read from the player's
+// imported disc): plain quads in pixels around the bar's origin. The console steps to the next one
+// each time the selection moves. Path chunks: id 0x1A1, version 0x1003FFFF, the size counting the
+// 12-byte header; body: closed, node count (5), 3 more words, then per node x, y, nx, ny, dist
+// (floats) and flags; node 5 repeats node 1.
+static float barShape[5][4][2];
+static int barShapes = -1;	// -1 not read yet, 0 none
+static int barShapeIndex;
+
+static void
+ReadBarShapes(void)
+{
+	barShapes = 0;
+	static uint8 *buf;
+	const size_t cap = 2 * 1024 * 1024;
+	if (buf == nil)
+		buf = new uint8[cap];
+	ssize_t len = revc_import_read(0, "ui/r3_menu.anm", buf, cap);
+	if (len <= 0)
+		return;
+	auto u32 = [&](ssize_t o) { uint32 v; memcpy(&v, buf + o, 4); return v; };
+	auto f32 = [&](ssize_t o) { float v; memcpy(&v, buf + o, 4); return v; };
+	for (ssize_t o = 0; o + 12 <= len && barShapes < 5; o += 4) {
+		uint32 size = u32(o + 4);
+		if (u32(o) != 0x1A1 || u32(o + 8) != 0x1003FFFF || size == 0 || size >= 0x10000 || o + (ssize_t)size > len)
+			continue;
+		ssize_t b = o + 12;
+		if (u32(b + 4) != 5 || b + 20 + 5 * 24 > len)
+			continue;
+		for (int k = 0; k < 4; k++) {
+			barShape[barShapes][k][0] = f32(b + 20 + k * 24);
+			barShape[barShapes][k][1] = f32(b + 20 + k * 24 + 4);
+		}
+		barShapes++;
+		o += size - 4;
+	}
+	if (barShapes < 5)
+		barShapes = 0;	// all five or none
+}
+
+// Draws the current outline over x0..x1 x y0..y1 (the quad's extent mapped onto the bar's box).
+static bool
+DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col)
+{
+	if (barShapes < 0)
+		ReadBarShapes();
+	if (barShapes == 0)
+		return false;
+	// a new place for the bar: the next outline (0 -> 4, then again)
+	static float lastX0 = -1.0f, lastY0 = -1.0f;
+	if (x0 != lastX0 || y0 != lastY0) {
+		if (lastX0 >= 0.0f)
+			barShapeIndex = (barShapeIndex + 1) % 5;
+		lastX0 = x0;
+		lastY0 = y0;
+	}
+	const float (*q)[2] = barShape[barShapeIndex];
+	float minx = q[0][0], maxx = q[0][0], miny = q[0][1], maxy = q[0][1];
+	for (int k = 1; k < 4; k++) {
+		minx = Min(minx, q[k][0]); maxx = Max(maxx, q[k][0]);
+		miny = Min(miny, q[k][1]); maxy = Max(maxy, q[k][1]);
+	}
+	float px[4], py[4];
+	for (int k = 0; k < 4; k++) {
+		px[k] = x0 + (q[k][0] - minx) / (maxx - minx) * (x1 - x0);
+		py[k] = y0 + (q[k][1] - miny) / (maxy - miny) * (y1 - y0);
+	}
+	// the corners by quadrant (the five shapes list their nodes in different orders)
+	int tl = 0, tr = 0, bl = 0, br = 0;
+	for (int k = 0; k < 4; k++) {
+		bool left = q[k][0] < 0.0f, top = q[k][1] < 0.0f;
+		(left ? (top ? tl : bl) : (top ? tr : br)) = k;
+	}
+	CSprite2d::Draw2DPolygon(px[tl], py[tl], px[tr], py[tr], px[bl], py[bl], px[br], py[br], col);
+	return true;
+}
+
 // The mint selection bar behind the current item, with the Xbox's pulse: a white glow over it
 // growing from 0.9x to 1.157 x 1.081 while fading from 0.5 to 0.059 alpha, every 0.8 s
 // (R3_Menu.anm, decoded; docs/CONSOLE_STYLES.md 13h).
@@ -427,7 +504,9 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 	// fixed width, the last part a darker mint tail (measured on the Xbox's list pages).
 	x1 = Max(x1, x0 + W(minWidth));	// (dialog buttons: tight, minWidth 0)
 	float tilt = W(5.0f), tailW = W(16.0f);
-	if (!tail) {	// whole-row bars (the radio station) have no tail
+	if (DrawBarShape(x0, y0, x1, y1, CRGBA(0, 207, 133, alpha))) {
+		// the console's own outline (its colour from the shape's brush: 0, 207, 133)
+	} else if (!tail) {	// whole-row bars (the radio station) have no tail
 		CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 + tilt, y0, x0, y1, x1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
 	} else {
 	CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 - tailW + tilt, y0, x0, y1, x1 - tailW, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
