@@ -15,7 +15,7 @@ content and stay outside the repo; this file records what the code does and why.
 | 13d | Style settings: fixed LOD 1.0, Classic camera and movement, 4:3 option, PS2 time cycle from an imported disc | LOD, camera, time cycle done |
 | 13e | HUD per style (Xbox safe-area shift and rounder radar), console UI scaled by screen height | done (measured elements) |
 | 13f | Button glyph variants per UI style | done |
-| 13g | PS2 menu look and animations | |
+| 13g | PS2 menu look and animations | started: tabs and help box |
 | 13h | Xbox menu (Maestro) look and animations, controller page | |
 | 13i | Console data from an imported disc (Xbox maps and flames, PS2 animations), texture packs from zips | zip packs done |
 
@@ -157,3 +157,17 @@ Steps: (1) the skin hook in `CMenuManager::DrawFrontEnd` and an animation clock;
   consoles); the PC preset sets Standard (the PC's mouse camera). Changing the control method
   afterwards shows the style as Custom.
 - **Menus (user 2026-11-11):** a skin over the PC menu is fine as long as it feels right.
+
+## 13g: PS2 menu skin (in progress)
+
+`core/MenuSkinPS2.cpp`, drawn from `CMenuManager::DrawBackground` with UI STYLE = PS2 during a
+game, on the pages the PS2 pause menu has (map, brief, load, stats, controls, audio, display or
+graphics, language). Done: the two rows of page tabs with the current one on the slanted green box,
+the green help box (Select / Back / Resume / Navigate with the pad's glyphs), and the list shortened
+to 7 rows so it stays above them. Measured on the PS2 Display capture (positions in capture pixels
+in the file). `REVC_TEST_MENU_SKIN=1` shows it before a game is loaded (boot screenshots).
+
+Still to do: the D-pad glyphs of the Navigate line don't draw; PS2 item layout ("label : value"
+centred on the colon, larger row spacing); L1/R1 or left/right switching between tabs; the
+animations (open fade, page cross-fade, highlight slide); the other pages checked against their
+captures; the tab names are English built-in texts.

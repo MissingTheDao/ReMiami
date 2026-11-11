@@ -1,0 +1,133 @@
+// revc (plan task 13g): PS2 skin for the PC menu, with UI STYLE = PS2.
+//
+// The menu logic, pages and options stay the PC menu's; this draws what the PS2 pause menu has
+// on top of the shared panel, logo and title: the page tabs at the bottom (two rows, the current
+// one on a slanted green box) and the green help box with the buttons. Positions and colours are
+// measured on the PS2 captures (PCSX2, Display page, 1440x1080 = the 640x448 frame scaled to 4:3)
+// and given here in those capture pixels; docs/CONSOLE_STYLES.md.
+// re3's Frontend_PS2.cpp is GTA III's PS2 menu and is not used.
+#include "common.h"
+#include "Frontend.h"
+#include "Font.h"
+#include "Sprite2d.h"
+#include "Text.h"
+#include "Timer.h"
+
+extern int8 gUiStyle;
+
+// Capture pixels (1440x1080) to the menu's 640x448 layout space, scaled and centred like the
+// PC menu (SCALE_AND_CENTER_X / SCREEN_SCALE_Y; the PS2 UI style lays out in 448 lines).
+static float PX(float x) { return SCALE_AND_CENTER_X(x * 640.0f / 1440.0f); }
+static float PY(float y) { return SCREEN_SCALE_Y(y * 448.0f / 1080.0f); }
+static float SX(float s) { return SCREEN_SCALE_X(s); }
+static float SY(float s) { return SCREEN_SCALE_Y(s); }
+
+static const CRGBA PS2_GREEN(25, 130, 70, 255);
+static const CRGBA PS2_TAB_TEXT(211, 211, 211, 255);
+
+// The PS2 pause menu's eight pages, in tab order (two rows of four), and the PC page shown for
+// each; centres of the tab labels in capture pixels.
+struct Ps2Tab { int page; int alt; float x, y; const char *name; };
+static const Ps2Tab tabs[] = {
+	{ MENUPAGE_MAP, -1, 400.0f, 942.0f, "RVC_PT0" },
+	{ MENUPAGE_BRIEFS, -1, 577.0f, 942.0f, "RVC_PT1" },
+	{ MENUPAGE_CHOOSE_LOAD_SLOT, -1, 755.0f, 942.0f, "RVC_PT2" },
+	{ MENUPAGE_STATS, -1, 946.0f, 942.0f, "RVC_PT3" },
+	{ MENUPAGE_CONTROLLER_PC, -1, 332.0f, 995.0f, "RVC_PT4" },
+	{ MENUPAGE_SOUND_SETTINGS, -1, 568.0f, 995.0f, "RVC_PT5" },
+	{ MENUPAGE_DISPLAY_SETTINGS, MENUPAGE_GRAPHICS_SETTINGS, 785.0f, 995.0f, "RVC_PT6" },
+	{ MENUPAGE_LANGUAGE_SETTINGS, -1, 1043.0f, 995.0f, "RVC_PT7" },
+};
+
+static int
+CurrentTab(int page)
+{
+	for (int i = 0; i < (int)ARRAY_SIZE(tabs); i++)
+		if (tabs[i].page == page || tabs[i].alt == page)
+			return i;
+	return -1;
+}
+
+static void
+DrawTabs(CMenuManager *m, uint8 alpha)
+{
+	int cur = CurrentTab(m->m_nCurrScreen);
+	if (cur < 0)
+		return;
+	// The active tab's slanted box (measured around DISPLAY: 672..890 x 950..1060), moved to the
+	// current tab.
+	const Ps2Tab &t = tabs[cur];
+	float dx = t.x - 785.0f, dy = t.y - 995.0f;
+	CSprite2d::Draw2DPolygon(PX(672.0f + dx), PY(958.0f + dy), PX(895.0f + dx), PY(948.0f + dy),
+		PX(672.0f + dx), PY(1062.0f + dy), PX(885.0f + dx), PY(1052.0f + dy),
+		CRGBA(PS2_GREEN.r, PS2_GREEN.g, PS2_GREEN.b, alpha));
+
+	CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
+	CFont::SetScale(SX(0.55f), SY(0.75f));
+	CFont::SetCentreOn();
+	CFont::SetCentreSize(SCREEN_WIDTH);
+	CFont::SetPropOn();
+	CFont::SetBackgroundOff();
+	CFont::SetDropShadowPosition(2);
+	CFont::SetDropColor(CRGBA(0, 0, 0, alpha));
+	CFont::SetColor(CRGBA(PS2_TAB_TEXT.r, PS2_TAB_TEXT.g, PS2_TAB_TEXT.b, alpha));
+	for (int i = 0; i < (int)ARRAY_SIZE(tabs); i++)
+		CFont::PrintString(PX(tabs[i].x), PY(tabs[i].y - 24.0f), TheText.Get(tabs[i].name));
+	CFont::SetCentreOff();
+	CFont::SetDropShadowPosition(0);
+}
+
+static void
+DrawHelpBox(uint8 alpha)
+{
+	CSprite2d::Draw2DPolygon(PX(975.0f), PY(742.0f), PX(1390.0f), PY(728.0f), PX(990.0f), PY(882.0f), PX(1418.0f), PY(910.0f),
+		CRGBA(PS2_GREEN.r, PS2_GREEN.g, PS2_GREEN.b, alpha));
+	static const char *keys[4] = { "~X~", "~T~", "RVC_HST", "~E~ ~G~ ~F~ ~I~" };
+	static const char *actions[4] = { "RVC_HSE", "RVC_HBA", "RVC_HRE", "RVC_HNA" };
+	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
+	CFont::SetScale(SX(0.42f), SY(0.7f));
+	CFont::SetPropOn();
+	CFont::SetBackgroundOff();
+	CFont::SetDropShadowPosition(0);
+	CFont::SetColor(CRGBA(255, 255, 255, alpha));
+	wchar buf[64];
+	for (int i = 0; i < 4; i++) {
+		float y = PY(752.0f + 36.0f * i);
+		// "<button> button" right-aligned before the dash, the action after it.
+		if (keys[i][0] == '~')
+			AsciiToUnicode(keys[i], buf);
+		else
+			UnicodeStrcpy(buf, TheText.Get(keys[i]));
+		if (i < 3) {
+			int n = UnicodeStrlen(buf);
+			buf[n++] = ' ';
+			UnicodeStrcpy(buf + n, TheText.Get("RVC_HBT"));
+		}
+		CFont::SetRightJustifyOn();
+		CFont::PrintString(PX(1205.0f), y, buf);
+		CFont::SetRightJustifyOff();
+		CFont::PrintString(PX(1215.0f), y, TheText.Get("RVC_HDA"));
+		CFont::PrintString(PX(1245.0f), y, TheText.Get(actions[i]));
+	}
+}
+
+// Whether the skin draws on this page: PS2 UI style, a game running (the PS2 pause menu), a page
+// that has a PS2 tab. The menu then shows fewer rows so the list stays above the help box.
+bool
+MenuSkinPS2Active(int page, bool gameNotLoaded)
+{
+	// REVC_TEST_MENU_SKIN: also before a game is loaded (screenshots from the boot test).
+	static bool test = getenv("REVC_TEST_MENU_SKIN") != nil;
+	return gUiStyle == 1 && (!gameNotLoaded || test) && CurrentTab(page) >= 0;
+}
+
+// Called by CMenuManager::DrawBackground after the page; draws nothing unless UI STYLE is PS2.
+void
+MenuSkinPS2Draw(CMenuManager *m, uint8 alpha)
+{
+	if (!MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded))
+		return;
+	DrawHelpBox(alpha);
+	DrawTabs(m, alpha);
+	CFont::DrawFonts();
+}
