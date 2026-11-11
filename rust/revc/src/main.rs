@@ -4,6 +4,7 @@
 mod audio;
 mod formatcheck;
 mod padtest;
+mod padscript;
 mod texmods;
 mod ziparchive;
 mod txdload;

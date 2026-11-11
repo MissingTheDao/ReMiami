@@ -3271,6 +3271,22 @@
  
  #ifdef GTA_PS2
  	bObsoleteControllerMessage = false;
+@@ -1978,6 +1986,15 @@
+ 		NewState = ReconcileTwoControllersInput(PCTempKeyState, PCTempJoyState);
+ 		NewState = ReconcileTwoControllersInput(PCTempMouseState, NewState);
+ 	}
++#ifdef LIBRW_HOST
++	// revc test harness: pad scripts (REVC_TEST=padscript) drive pad 0 (skel/host/testhooks.cpp)
++	if (pad == 0) {
++		extern bool gRevcTestPadOn;
++		extern CControllerState gRevcTestPad;
++		if (gRevcTestPadOn)
++			NewState = gRevcTestPad;
++	}
++#endif
+ 
+ 	PCTempJoyState.Clear();
+ 	PCTempKeyState.Clear();
 --- a/src/core/Radar.cpp
 +++ b/src/core/Radar.cpp
 @@ -1117,7 +1117,7 @@

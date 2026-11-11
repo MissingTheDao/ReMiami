@@ -282,6 +282,40 @@ revc_test_menu_input(int down, int change)
 		FrontEndMenuManager.ProcessUserInput(down, 0, 0, 0, change);
 }
 
+// Pad scripts (REVC_TEST=padscript, rust padscript.rs): pad 0's state for this frame, as a
+// controller would send it. buttons: bits in padscript::BUTTONS order (cross circle square
+// triangle l1 r1 l2 r2 l3 r3 select start up down left right); axes lx ly rx ry -1..1, l2 r2 0..1.
+}	// extern "C"
+bool gRevcTestPadOn = false;
+CControllerState gRevcTestPad;
+extern "C" {
+void
+revc_test_pad(int on, unsigned int b, float lx, float ly, float rx, float ry, float l2, float r2)
+{
+	gRevcTestPadOn = on != 0;
+	CControllerState &s = gRevcTestPad;
+	s.Clear();
+	auto bit = [&](int i) { return (int16)((b >> i) & 1 ? 255 : 0); };
+	s.Cross = bit(0); s.Circle = bit(1); s.Square = bit(2); s.Triangle = bit(3);
+	s.LeftShoulder1 = bit(4); s.RightShoulder1 = bit(5);
+	s.LeftShoulder2 = Max(bit(6), (int16)(l2 * 255.0f)); s.RightShoulder2 = Max(bit(7), (int16)(r2 * 255.0f));
+	s.LeftShock = bit(8); s.RightShock = bit(9); s.Select = bit(10); s.Start = bit(11);
+	s.DPadUp = bit(12); s.DPadDown = bit(13); s.DPadLeft = bit(14); s.DPadRight = bit(15);
+	s.LeftStickX = (int16)(Clamp(lx, -1.0f, 1.0f) * 128.0f); s.LeftStickY = (int16)(Clamp(ly, -1.0f, 1.0f) * 128.0f);
+	s.RightStickX = (int16)(Clamp(rx, -1.0f, 1.0f) * 128.0f); s.RightStickY = (int16)(Clamp(ry, -1.0f, 1.0f) * 128.0f);
+}
+
+extern "C++" bool MenuSkinPS2PageFocus(void);
+// Where the menu is (pad-script routes): open, page, row; returns the PS2 style's page focus.
+int
+revc_test_menu_where(int *open, int *page, int *row)
+{
+	*open = FrontEndMenuManager.m_bMenuActive;
+	*page = FrontEndMenuManager.m_nCurrScreen;
+	*row = FrontEndMenuManager.m_nCurrOption;
+	return MenuSkinPS2PageFocus();
+}
+
 // Motion tests: one menu input of any kind (down, up, select, back, left/right change).
 void
 revc_test_menu_key(int down, int up, int select, int back, int change)

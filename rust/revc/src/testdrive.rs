@@ -83,6 +83,9 @@ unsafe extern "C" {
     fn revc_test_map_zoom(dir: i32);
     fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
     fn revc_test_hud_text(kind: i32);
+    #[allow(clippy::too_many_arguments)]
+    fn revc_test_pad(on: i32, buttons: u32, lx: f32, ly: f32, rx: f32, ry: f32, l2: f32, r2: f32);
+    fn revc_test_menu_where(open: *mut i32, page: *mut i32, row: *mut i32) -> i32;
     fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
 }
 
@@ -107,6 +110,7 @@ enum Scenario {
     Scanner,
     Scenes,
     Menus,
+    PadScript,
 }
 
 #[derive(Debug)]
@@ -134,6 +138,8 @@ enum Phase {
     PedHit,
     /// Scanner check: recording since game time `t0`.
     Scanner { t0: u32 },
+    /// Pad script (REVC_TEST_PAD_SCRIPT): frames since the start state was set.
+    PadScript { frame: u32 },
     Done,
 }
 
@@ -306,6 +312,18 @@ const MOTIONS: &[Motion] = &[
     ("xbox_confirm_open", "load", 1, -1, -1, "select", 90),
 ];
 
+/// The pad script of REVC_TEST_PAD_SCRIPT (a file), parsed once.
+fn pad_script() -> Result<&'static crate::padscript::PadScript, String> {
+    static S: std::sync::OnceLock<Result<crate::padscript::PadScript, String>> = std::sync::OnceLock::new();
+    S.get_or_init(|| {
+        let path = std::env::var("REVC_TEST_PAD_SCRIPT").map_err(|_| "REVC_TEST_PAD_SCRIPT not set".to_string())?;
+        let text = std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
+        crate::padscript::PadScript::parse(&text).map_err(|e| format!("{path}: {e}"))
+    })
+    .as_ref()
+    .map_err(|e| e.clone())
+}
+
 fn motion() -> Option<&'static Motion> {
     let id = std::env::var("REVC_TEST_MOTION").ok()?;
     MOTIONS.iter().find(|m| m.0 == id)
@@ -464,7 +482,8 @@ pub fn init() -> Result<bool, String> {
         "scanner" => Scenario::Scanner,
         "scenes" => Scenario::Scenes,
         "menus" => Scenario::Menus,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, scanner, scenes, menus)")),
+        "padscript" => Scenario::PadScript,
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, scanner, scenes, menus, padscript)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -578,7 +597,7 @@ impl Driver {
                         self.phase = Phase::MenuShot { frames: 0 };
                         return false;
                     }
-                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::Scanner | Scenario::Scenes | Scenario::Menus => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::Scanner | Scenario::Scenes | Scenario::Menus | Scenario::PadScript => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -655,6 +674,10 @@ impl Driver {
                 }
                 if self.scenario == Scenario::Menus {
                     self.phase = Phase::Menus { idx: 0, frames: 0 };
+                    return false;
+                }
+                if self.scenario == Scenario::PadScript {
+                    self.phase = Phase::PadScript { frame: 0 };
                     return false;
                 }
                 if self.scenario == Scenario::Scenes {
@@ -931,6 +954,58 @@ impl Driver {
                         return self.finish();
                     }
                 }
+            }
+            Phase::PadScript { frame } => {
+                // A pad script (padscript.rs) from a named start state: menu_base = scene S1
+                // (in game, on foot, menu closed). The start state is set, settles PAD_SETTLE
+                // frames, then the script plays on pad 0 at 60 Hz (run with REVC_FIXED_FPS=60).
+                // Frames from 30 before mark:input (or the start) to mark:end (or 60 after the last
+                // step) go to REVC_TEST_VIDEO_DIR as frame_%05d.png.
+                const PAD_SETTLE: u32 = 150;
+                let script = match pad_script() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        self.fail(e);
+                        return self.finish();
+                    }
+                };
+                if frame == 0 {
+                    let (_, x, y, heading, hour, minute, weather) = SCENES[0];
+                    if script.start != "menu_base" {
+                        self.fail(format!("pad script start state {:?} not known (menu_base)", script.start));
+                        return self.finish();
+                    }
+                    unsafe { revc_test_scene(x, y, heading, hour, minute, weather) };
+                    MENU_VIDEO_FRAME.store(0, Ordering::Relaxed);
+                }
+                let rec_start = script.mark("input").map_or(0, |f| f.saturating_sub(MOTION_INPUT_FRAME));
+                let rec_end = script.mark("end").unwrap_or(script.last_frame() + 60);
+                if let Some((w, h, rgba)) = crate::host::take_capture() {
+                    if let Some(dir) = &self.video_dir {
+                        let n = MENU_VIDEO_FRAME.fetch_add(1, Ordering::Relaxed);
+                        if let Err(e) = write_png(&dir.join(format!("frame_{n:05}.png")), w, h, &rgba) {
+                            self.fail(format!("writing a frame: {e}"));
+                            return self.finish();
+                        }
+                    }
+                }
+                if frame >= PAD_SETTLE {
+                    let t = frame - PAD_SETTLE;
+                    let st = script.state_at(t);
+                    let a = st.axes;
+                    unsafe { revc_test_pad(1, st.buttons, a[0], a[1], a[2], a[3], a[4], a[5]) };
+                    if t > rec_end {
+                        unsafe { revc_test_pad(0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) };
+                        let (mut open, mut page, mut row) = (0, 0, 0);
+                        let focus = unsafe { revc_test_menu_where(&mut open, &mut page, &mut row) };
+                        log(format!("pad script {}: {} frames, ends with menu open {open} page {page} row {row} focus {focus}", script.id, t));
+                        return self.finish();
+                    }
+                    if t >= rec_start && self.video_dir.is_some() {
+                        crate::host::request_capture();
+                    }
+                }
+                self.phase = Phase::PadScript { frame: frame + 1 };
             }
             Phase::Scene { idx, base, stage } => {
                 let scenes = scene_list();
