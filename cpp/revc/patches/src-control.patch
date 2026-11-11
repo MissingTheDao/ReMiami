@@ -1,3 +1,65 @@
+--- a/src/control/CarCtrl.cpp
++++ b/src/control/CarCtrl.cpp
+@@ -1,5 +1,6 @@
+ #include "common.h"
+ 
++#include "WeaponInfo.h"
+ #include "CarCtrl.h"
+ 
+ #include "Accident.h"
+@@ -1277,10 +1278,16 @@
+ 							pPlayerPed->AnnoyPlayerPed(false);
+ 							pPlayerPed->SetLookFlag(pVehicle, true);
+ 							pPlayerPed->SetLookTimer(1500);
++#ifdef FIX_BUGS
++							// revc (SilentPatch VC): III's weapon list; VC's by slot, as for a bump (Ped.cpp)
++							uint32 fistSlot = CWeaponInfo::GetWeaponInfo(pPlayerPed->GetWeapon()->m_eWeaponType)->m_nWeaponSlot;
++							if (fistSlot == 0 || fistSlot == 1 || fistSlot == 3 || fistSlot == 5) {
++#else
+ 							if (pPlayerPed->GetWeapon()->m_eWeaponType == WEAPONTYPE_UNARMED ||
+ 								pPlayerPed->GetWeapon()->m_eWeaponType == WEAPONTYPE_BASEBALLBAT ||
+ 								pPlayerPed->GetWeapon()->m_eWeaponType == WEAPONTYPE_COLT45 ||
+ 								pPlayerPed->GetWeapon()->m_eWeaponType == WEAPONTYPE_UZI) {
++#endif
+ 								pPlayerPed->bShakeFist = true;
+ 							}
+ 						}
+--- a/src/control/GameLogic.cpp
++++ b/src/control/GameLogic.cpp
+@@ -251,6 +251,9 @@
+ 				takeMoney = 1500;
+ 				break;
+ 			}
++#ifdef FIX_BUGS
++			bool jailFree = pPlayerInfo.m_bGetOutOfJailFree;	// revc (SilentPatch VC): keeps the weapons below too
++#endif
+ 			if (pPlayerInfo.m_bGetOutOfJailFree) {
+ 				pPlayerInfo.m_bGetOutOfJailFree = false;
+ 			} else {
+@@ -283,6 +286,9 @@
+ 			PassTime(720);
+ 			RestorePlayerStuffDuringResurrection(pPlayerInfo.m_pPed, vecRestartPos, fRestartFloat);
+ 			AfterDeathArrestSetUpShortCutTaxi();
++#ifdef FIX_BUGS
++			if (!jailFree)
++#endif
+ 			pPlayerInfo.m_pPed->ClearWeapons();
+ 			SortOutStreamingAndMemory(pPlayerInfo.GetPos());
+ 			TheCamera.m_fCamShakeForce = 0.0f;
+--- a/src/control/Garages.cpp
++++ b/src/control/Garages.cpp
+@@ -1881,7 +1881,11 @@
+ 	pVehicle->m_currentColour2 = m_nSecondaryColor;
+ 	pVehicle->m_nRadioStation = m_nRadioStation;
+ 	pVehicle->bFreebies = false;
++#ifdef FIX_BUGS
++	if (pVehicle->IsCar() || pVehicle->IsBike())	// revc (SilentPatch VC): bikes keep their bomb too (stored the same way)
++#else
+ 	if (pVehicle->IsCar())
++#endif
+ 	{
+ 		((CAutomobile*)pVehicle)->m_bombType = m_nCarBombType;
+ #ifdef FIX_BUGS
 --- a/src/control/Restart.cpp
 +++ b/src/control/Restart.cpp
 @@ -1,69 +1,81 @@
@@ -364,6 +426,47 @@
  			pObject->GetMatrix() = tmp;
  			pObject->ObjectCreatedBy = TEMP_OBJECT;
  			pObject->m_nEndOfLifeTime = CTimer::GetTimeInMilliseconds() + 600000;
+--- a/src/control/Script4.cpp
++++ b/src/control/Script4.cpp
+@@ -785,6 +785,9 @@
+ 				pPed->bRenderPedInCar = true;
+ 			if (pPed->m_pMyVehicle->pDriver == pPed){
+ 				pPed->m_pMyVehicle->RemoveDriver();
++#ifdef FIX_BUGS
++				if (pPed->m_pMyVehicle->GetStatus() != STATUS_WRECKED)	// revc (SilentPatch VC): a wrecked car must stay wrecked (double explosion)
++#endif
+ 				pPed->m_pMyVehicle->SetStatus(STATUS_ABANDONED);
+ 				pPed->m_pMyVehicle->bEngineOn = false;
+ 				pPed->m_pMyVehicle->AutoPilot.m_nCruiseSpeed = 0;
+--- a/src/control/Script5.cpp
++++ b/src/control/Script5.cpp
+@@ -2664,6 +2664,9 @@
+ 		if (pPed->InVehicle() && pPed->m_pMyVehicle) {
+ 			if (pPed->m_pMyVehicle->pDriver == pPed) {
+ 				pPed->m_pMyVehicle->RemoveDriver();
++#ifdef FIX_BUGS
++				if (pPed->m_pMyVehicle->GetStatus() != STATUS_WRECKED)	// revc (SilentPatch VC): a wrecked car must stay wrecked (double explosion)
++#endif
+ 				pPed->m_pMyVehicle->SetStatus(STATUS_ABANDONED);
+ 				if (pPed->m_pMyVehicle->m_nDoorLock == CARLOCK_LOCKED_INITIALLY)
+ 					pPed->m_pMyVehicle->m_nDoorLock = CARLOCK_UNLOCKED;
+--- a/src/control/Script6.cpp
++++ b/src/control/Script6.cpp
+@@ -1002,7 +1002,13 @@
+ 		// PC shit
+ 		static int nCounter = 0;
+ 		nCounter = Max(0, nCounter - 1);
+-		if (!pPed->GetWeapon()->IsTypeMelee() && !bTargetting) {
++		// (revc, SilentPatch VC: only with the mouse camera; in classic/pad control just looking at
++		// a shopkeeper counted as aiming at him)
++		if (!pPed->GetWeapon()->IsTypeMelee() && !bTargetting
++#ifdef FIX_BUGS
++		    && CCamera::m_bUseMouse3rdPerson
++#endif
++		    ) {
+ 			if ((pTestedPed->GetPosition() - TheCamera.GetPosition()).Magnitude() < 10.0f) {
+ 				CVector vTestedPos(pTestedPed->GetPosition().x, pTestedPed->GetPosition().y, pTestedPed->GetPosition().z + 0.4);
+ 				CVector vScreenPos;
 --- a/src/control/Script.cpp
 +++ b/src/control/Script.cpp
 @@ -741,6 +741,8 @@
@@ -375,6 +478,16 @@
  	for (int i = 0; i < SIZE_SCRIPT_SPACE; i++)
  		ScriptSpace[i] = 0;
  	pActiveScripts = pIdleScripts = nil;
+@@ -3195,6 +3197,9 @@
+ 				pPlayer->m_pPed->bRenderPedInCar = true;
+ 			if (pPlayer->m_pPed->m_pMyVehicle->pDriver == pPlayer->m_pPed){
+ 				pPlayer->m_pPed->m_pMyVehicle->RemoveDriver();
++#ifdef FIX_BUGS
++				if (pPlayer->m_pPed->m_pMyVehicle->GetStatus() != STATUS_WRECKED)	// revc (SilentPatch VC): a wrecked car must stay wrecked (double explosion)
++#endif
+ 				pPlayer->m_pPed->m_pMyVehicle->SetStatus(STATUS_ABANDONED);
+ 				pPlayer->m_pPed->m_pMyVehicle->bEngineOn = false;
+ 				pPlayer->m_pPed->m_pMyVehicle->AutoPilot.m_nCruiseSpeed = 0;
 --- a/src/control/Script.h
 +++ b/src/control/Script.h
 @@ -513,8 +513,12 @@

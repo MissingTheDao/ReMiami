@@ -1,3 +1,17 @@
+--- a/src/peds/PedAI.cpp
++++ b/src/peds/PedAI.cpp
+@@ -1619,7 +1619,11 @@
+ 					ClearObjective();
+ 				}
+ 			}
++#ifdef FIX_BUGS
++			break;	// revc (SilentPatch VC): falling into WANDER dropped the mugging at once
++#else
+ 			// fall through
++#endif
+ 			case OBJECTIVE_WANDER:
+ 				if (CTimer::GetTimeInMilliseconds() > m_leaveCarTimer && !bInVehicle) {
+ 					m_leaveCarTimer = 0;
 --- a/src/peds/PedAttractor.cpp
 +++ b/src/peds/PedAttractor.cpp
 @@ -104,7 +104,7 @@
@@ -46,6 +60,53 @@
  
  public:
  	CPedAttractor* RegisterPedWithAttractor(CPed* pPed, C2dEffect* pEffect, const CMatrix& matrix);
+--- a/src/peds/Ped.cpp
++++ b/src/peds/Ped.cpp
+@@ -434,6 +434,11 @@
+ CPed::Initialise(void)
+ {
+ 	debug("Initialising CPed...\n");
++#ifdef FIX_BUGS
++	// revc (SilentPatch VC): the script-set ranges don't carry into a new game
++	nThreatReactionRangeMultiplier = 1;
++	nEnterCarRangeMultiplier = 1;
++#endif
+ 	CPedType::Initialise();
+ 	LoadFightData();
+ 	SetAnimOffsetForEnterOrExitVehicle();
+@@ -2172,6 +2177,9 @@
+ 								eWeaponType weaponType = GetWeapon()->m_eWeaponType;
+ 								uint32 weaponSlot = CWeaponInfo::GetWeaponInfo(weaponType)->m_nWeaponSlot;
+ 								if (weaponType == WEAPONTYPE_UNARMED
++#ifdef FIX_BUGS
++									|| weaponType == WEAPONTYPE_BRASSKNUCKLE	// revc (SilentPatch VC)
++#endif
+ 									|| weaponSlot == 3
+ 									|| weaponSlot == 5
+ 									|| weaponSlot == 1) {
+@@ -4623,6 +4631,10 @@
+ CPed::GiveWeapon(eWeaponType weaponType, uint32 ammo, bool unused)
+ {
+ 	int slot = GetWeaponSlot(weaponType);
++#ifdef FIX_BUGS
++	if (weaponType > WEAPONTYPE_UNARMED)
++		ammo = Max(1u, ammo);	// revc (SilentPatch VC): a weapon given with no ammo can still be used once
++#endif
+ 
+ 	if (m_weapons[slot].m_eWeaponType == weaponType) {
+ 		GetWeapon(slot).m_nAmmoTotal += ammo;
+--- a/src/peds/PedFight.cpp
++++ b/src/peds/PedFight.cpp
+@@ -880,6 +880,9 @@
+ 							DMAudio.PlayOneShot(m_audioEntityId, SOUND_FIGHT_46, (damagerType | (GetWeapon()->m_eWeaponType << 8)));
+ 						break;
+ 					case ASSOCGRP_KNIFE:
++#ifdef FIX_BUGS
++					case ASSOCGRP_SCREWDRIVER:	// revc (SilentPatch VC): screwdriver hits make a sound too
++#endif
+ 					case ASSOCGRP_BASEBALLBAT:
+ 					case ASSOCGRP_GOLFCLUB:
+ 					case ASSOCGRP_CHAINSAW:
 --- a/src/peds/PedType.cpp
 +++ b/src/peds/PedType.cpp
 @@ -40,86 +40,19 @@

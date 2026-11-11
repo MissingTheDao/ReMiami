@@ -1429,3 +1429,15 @@
  	int h1 = CClock::GetHours();
  	int h2 = (h1+1)%24;
  	int w1 = CWeather::OldWeatherType;
+--- a/src/renderer/Weather.cpp
++++ b/src/renderer/Weather.cpp
+@@ -135,6 +135,9 @@
+ 	WhenToPlayLightningSound = 0;
+ 	WeatherTypeInList = 0;
+ 	ForcedWeatherType = WEATHER_RANDOM;
++#ifdef FIX_BUGS
++	StreamAfterRainTimer = 0;	// revc (SilentPatch VC): not carried into a new game
++#endif
+ 	SoundHandle = DMAudio.CreateEntity(AUDIOTYPE_WEATHER, (void*)1);
+ 	if (SoundHandle >= 0)
+ 		DMAudio.SetEntityStatus(SoundHandle, TRUE);

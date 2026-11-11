@@ -1,3 +1,48 @@
+--- a/src/core/Cam.cpp
++++ b/src/core/Cam.cpp
+@@ -1400,9 +1400,13 @@
+ 		}
+ 	}
+ 
+-	if(TheCamera.GetFading() && TheCamera.GetFadingDirection() == FADE_IN && nFadeControlThreshhold < CDraw::FadeValue ||
++	if(
++#ifdef FIX_BUGS
++	   !(CPad::GetPad(0)->GetMouseX() != 0.0f || CPad::GetPad(0)->GetMouseY() != 0.0f) &&	// revc (SilentPatch VC): the mouse keeps the vertical axis during fade-ins
++#endif
++	   (TheCamera.GetFading() && TheCamera.GetFadingDirection() == FADE_IN && nFadeControlThreshhold < CDraw::FadeValue ||
+ 	   CDraw::FadeValue > 200 ||
+-	   CPad::GetPad(0)->IsPlayerControlsDisabledBy(PLAYERCONTROL_PLAYERINFO)){
++	   CPad::GetPad(0)->IsPlayerControlsDisabledBy(PLAYERCONTROL_PLAYERINFO))){
+ 		if(Alpha < fDefaultAlphaOrient-0.05f)
+ 			AlphaOffset = 0.05f;
+ 		else if(Alpha < fDefaultAlphaOrient)
+--- a/src/core/Camera.cpp
++++ b/src/core/Camera.cpp
+@@ -108,6 +108,9 @@
+ void
+ CCamera::Init(void)
+ {
++#ifdef FIX_BUGS
++	float savedMouseAccel = m_fMouseAccelHorzntl;	// revc (SilentPatch VC): the settings were loaded already
++#endif
+ 	memset(this, 0, sizeof(CCamera));	// this is fine, no vtable
+ 	m_pRwCamera = nil;
+ 	m_bPlayerWasOnBike = false;
+@@ -197,8 +200,14 @@
+ 		m_bMusicFading = false;
+ 		m_fTimeToFadeMusic = 0.0f;
+ 		m_fFLOATingFadeMusic = 0.0f;
++#ifdef FIX_BUGS
++		// revc (SilentPatch VC): keep the loaded mouse sensitivity; both axes the same
++		m_fMouseAccelHorzntl = savedMouseAccel > 0.0f ? savedMouseAccel : 0.0025f;
++		m_fMouseAccelVertical = m_fMouseAccelHorzntl;
++#else
+ 		m_fMouseAccelVertical = 0.003f;
+ 		m_fMouseAccelHorzntl = 0.0025f;
++#endif
+ 	}
+ 	if(FrontEndMenuManager.m_bWantToRestart)
+ 		m_fTimeToFadeMusic = 0.0f;
 --- a/src/core/CdStreamPosix.cpp
 +++ b/src/core/CdStreamPosix.cpp
 @@ -3,6 +3,7 @@
@@ -794,6 +839,15 @@
  		hostSetCursorPos(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
  #endif
  
+@@ -763,7 +884,7 @@
+ 		TheCamera.m_fMouseAccelHorzntl += value * 1.0f/200.0f/15.0f;	// probably because diving it to 15 instead of 16(MENUSLIDER_LOGICAL_BARS) had more accurate steps
+ 		TheCamera.m_fMouseAccelHorzntl = Clamp(TheCamera.m_fMouseAccelHorzntl, 1.0f/3200.0f, 1.0f/200.0f);
+ #ifdef FIX_BUGS
+-		TheCamera.m_fMouseAccelVertical = TheCamera.m_fMouseAccelHorzntl + 0.0005f;
++		TheCamera.m_fMouseAccelVertical = TheCamera.m_fMouseAccelHorzntl;	// (revc, SilentPatch VC: the same on both axes)
+ #endif
+ 		break;
+ #ifdef CUSTOM_FRONTEND_OPTIONS
 @@ -786,11 +907,82 @@
  	SaveSettings();
  }
@@ -2155,6 +2209,15 @@
  	return Min(m_nMenuFadeAlpha, alpha);
  }
  
+@@ -3183,7 +4222,7 @@
+ #endif
+ 
+ #ifdef FIX_BUGS
+-	TheCamera.m_fMouseAccelVertical = TheCamera.m_fMouseAccelHorzntl + 0.0005f;
++	TheCamera.m_fMouseAccelVertical = TheCamera.m_fMouseAccelHorzntl;	// (revc, SilentPatch VC: the same on both axes)
+ #endif
+ #ifdef PC_PLAYER_CONTROLS
+ 	CCamera::m_bUseMouse3rdPerson = m_ControlMethod == CONTROL_STANDARD;
 @@ -3352,6 +4391,15 @@
  void
  CMenuManager::PrintBriefs()
@@ -5660,6 +5723,21 @@
 -	m_nWantedLevel = 0;
 -	ResetPolicePursuit();
 -}
+--- a/src/core/World.cpp
++++ b/src/core/World.cpp
+@@ -1862,7 +1862,11 @@
+ 	for (int32 i = poolSize - 1; i >= 0; i--) {
+ 		CPed* pPed = CPools::GetPedPool()->GetSlot(i);
+ 		// suspicious copypaste
+-		if (pPed && pPed->m_nPedState != PED_DEAD && !pPed->bInVehicle && !pPed->m_pFire && !pPed->bFireProof && pPed->CharCreatedBy != MISSION_CHAR) {
++		if (pPed && pPed->m_nPedState != PED_DEAD && !pPed->bInVehicle && !pPed->m_pFire && !pPed->bFireProof
++#ifndef FIX_BUGS
++		    && pPed->CharCreatedBy != MISSION_CHAR	// (revc, SilentPatch VC: tear gas hurts Tommy and mission peds too, as on the PS2)
++#endif
++		    ) {
+ 			if (Abs(pPed->GetPosition().z - z) < 5.0f && Abs(pPed->GetPosition().x - x) < radius &&
+ 				Abs(pPed->GetPosition().y - y) < radius) {
+ 				if (!pPed->IsPlayer())
 --- a/src/core/Zones.cpp
 +++ b/src/core/Zones.cpp
 @@ -33,94 +33,49 @@

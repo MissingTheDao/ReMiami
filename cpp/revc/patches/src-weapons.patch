@@ -1,3 +1,18 @@
+--- a/src/weapons/Weapon.cpp
++++ b/src/weapons/Weapon.cpp
+@@ -455,7 +455,12 @@
+ 
+ 	if ( FireInstantHitFromCar(shooter, left, right) )
+ 	{
++#ifdef FIX_BUGS
++		// revc (SilentPatch VC): the driver's weapon sound, not the car's
++		DMAudio.PlayOneShot(shooter->pDriver ? shooter->pDriver->m_audioEntityId : shooter->m_audioEntityId, SOUND_WEAPON_SHOT_FIRED, 0.0f);
++#else
+ 		DMAudio.PlayOneShot(shooter->m_audioEntityId, SOUND_WEAPON_SHOT_FIRED, 0.0f);
++#endif
+ 
+ 		if ( m_nAmmoInClip > 0 )
+ 			m_nAmmoInClip--;
 --- a/src/weapons/WeaponInfo.cpp
 +++ b/src/weapons/WeaponInfo.cpp
 @@ -137,131 +137,39 @@

@@ -1,3 +1,30 @@
+--- a/src/audio/AudioLogic.cpp
++++ b/src/audio/AudioLogic.cpp
+@@ -880,7 +880,11 @@
+ 	{SFX_CAR_REV_3, SFX_BANK_SPIDER, SFX_CAR_HORN_BUS, 18286, SFX_CAR_HORN_JEEP, 9600, OLD_DOOR},
+ 	{SFX_CAR_REV_2, SFX_BANK_PORSCHE, SFX_CAR_HORN_PORSCHE, 11025, SFX_CAR_HORN_JEEP, 9500, NEW_DOOR},
+ 	{SFX_CAR_REV_3, SFX_BANK_SPIDER, SFX_CAR_HORN_JEEP, 22295, SFX_AMBULANCE_SIREN_SLOW, 12688, OLD_DOOR},
++#ifdef FIX_BUGS
++	{SFX_CAR_REV_4, SFX_BANK_MERC, SFX_CAR_HORN_PORSCHE, 9271, SFX_POLICE_SIREN_SLOW, 10511, NEW_DOOR},	// revc (SilentPatch VC): FBI Washington siren pitch
++#else
+ 	{SFX_CAR_REV_4, SFX_BANK_MERC, SFX_CAR_HORN_PORSCHE, 9271, SFX_POLICE_SIREN_SLOW, 11471, NEW_DOOR},
++#endif
+ 	{SFX_CAR_REV_11, SFX_BANK_PACARD, SFX_CAR_HORN_56CHEV, 12170, SFX_CAR_HORN_JEEP, 9400, OLD_DOOR},
+ 	{SFX_CAR_REV_11, SFX_BANK_PACARD, SFX_CAR_HORN_BMW328, 11000, SFX_CAR_HORN_JEEP, 9300, OLD_DOOR},
+ 	{SFX_CAR_REV_10, SFX_BANK_PATHFINDER, SFX_CAR_HORN_BMW328, 10796, SFX_CAR_HORN_JEEP, 9200, NEW_DOOR},
+@@ -2858,7 +2862,11 @@
+ 						return TRUE;
+ 					if (veh->m_nCarHornTimer > 0 && params.m_nIndex != FIRETRUK && params.m_nIndex != MRWHOOP) {
+ 						m_sQueueSample.m_nSampleIndex = SFX_SIREN_FAST;
+-						if (params.m_nIndex == FBIRANCH)
++						if (params.m_nIndex == FBIRANCH
++#ifdef FIX_BUGS
++						    || params.m_nIndex == FBICAR	// revc (SilentPatch VC): the FBI Washington's siren as the Rancher's
++#endif
++						    )
+ 							m_sQueueSample.m_nFrequency = 12668;
+ 						else
+ 							m_sQueueSample.m_nFrequency = SampleManager.GetSampleBaseFrequency(SFX_SIREN_FAST);
 --- a/src/audio/eax/eax.h
 +++ b/src/audio/eax/eax.h
 @@ -50,7 +50,7 @@
