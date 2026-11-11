@@ -220,7 +220,13 @@ native 640x480 xemu captures:
   page's picture too. `cargo run -p revc-import --example import -- <disc> <dir>` imports a disc
   outside the game (with `REVC_IMPORT_DIR=<dir>` for tests).
 
-Still to do: the panel's tilt/move animation (~400 ms on page change), the logo glint (3.8 s),
+- Logo glint: a white flash over "city" (`r3_menu_230`) then "Vice" (`232`), 200 ms each from
+  3.4 s after a page starts, every 3.8 s (anim 4); placed from the menu video, slightly fainter than
+  the Xbox's. `REVC_TEST_GLINT=1|2` shows a stage for screenshots.
+- Panel: the PC menu's panel already moves its corners on a page change in ~380 ms (Xbox ~400 ms);
+  the Xbox's own per-page panel shapes are not decoded yet (anim 0 holds them as 45 states).
+
+Still to do: the Xbox per-page panel shapes,
 the Xbox fonts (RWFont/RWSFArborcrestHeavy), dialogs (blue layered panels), the controls page's
 pad drawing with callout lines, the Load list and Stats in the Xbox style, checking every page
 against the captures.

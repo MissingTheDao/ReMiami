@@ -44,7 +44,7 @@ static const float ICON_Y = 395.0f, ICON_SIZE = 50.0f, ICON_SELECTED = 80.0f;
 
 // Heap-allocated so nothing runs at program exit (after RenderWare is gone); freed with the menu's
 // own textures by MenuSkinXboxUnload.
-static CSprite2d *icons, *logoSprite;
+static CSprite2d *icons, *logoSprite, *glint;
 #define logo (*logoSprite)
 static int spritesState;	// 0 not tried, 1 loaded, -1 no import
 
@@ -79,11 +79,14 @@ LoadSprites(void)
 		if (icons == nil) {
 			icons = new CSprite2d[7];
 			logoSprite = new CSprite2d;
+			glint = new CSprite2d[2];
 		}
 		bool ok = true;
 		for (int i = 0; i < 7; i++)
 			ok = ok && (icons[i].m_pTexture = ImportTexture(tabs[i].icon)) != nil;
 		logo.m_pTexture = ImportTexture("ui/r3_menu_228.dds");
+		glint[0].m_pTexture = ImportTexture("ui/r3_menu_230.dds");
+		glint[1].m_pTexture = ImportTexture("ui/r3_menu_232.dds");
 		if (ok && logo.m_pTexture)
 			spritesState = 1;
 	}
@@ -99,6 +102,8 @@ MenuSkinXboxUnload(void)
 	for (int i = 0; i < 7; i++)
 		icons[i].Delete();
 	logo.Delete();
+	glint[0].Delete();
+	glint[1].Delete();
 	spritesState = 0;
 }
 
@@ -133,12 +138,33 @@ MenuSkinXboxTitle(wchar *title, uint8 alpha)
 	CFont::PrintString(X(52.0f), Y(48.0f), title);
 }
 
-// The Vice City logo, top right (instead of the PC's top left).
+// The Vice City logo, top right (instead of the PC's top left), with the Xbox's glint: a white
+// flash over "city" (r3_menu_230) then over "Vice" (232), 200 ms each from 3.4 s after the page
+// started, repeating every 3.8 s (R3_Menu.anm anim 4; positions from the menu video).
+// Test: draw the glint stage `stage` (1 or 2) whatever the time (REVC_TEST_GLINT).
+static int TestGlint(void) { static int g = getenv("REVC_TEST_GLINT") ? atoi(getenv("REVC_TEST_GLINT")) : 0; return g; }
+static int glintPage = -1;
+static uint32 glintStart;
+
 void
 MenuSkinXboxLogo(uint8 alpha)
 {
-	logo.Draw(CRect(X(458.0f), Y(36.0f), X(458.0f) + W(134.0f), Y(36.0f) + H(67.0f)), CRGBA(255, 255, 255, alpha));
+	const float x0 = X(458.0f), y0 = Y(36.0f), w = W(134.0f), h = H(67.0f);
+	logo.Draw(CRect(x0, y0, x0 + w, y0 + h), CRGBA(255, 255, 255, alpha));
+	uint32 now = CTimer::GetTimeInMillisecondsPauseMode();
+	if (FrontEndMenuManager.m_nCurrScreen != glintPage) {
+		glintPage = FrontEndMenuManager.m_nCurrScreen;
+		glintStart = now;
+	}
+	uint32 t = (now - glintStart) % 3800;
+	if (TestGlint())
+		t = TestGlint() == 1 ? 3500 : 3700;
+	if (t >= 3400 && t < 3600 && glint[0].m_pTexture)
+		glint[0].Draw(CRect(x0 + 0.46f * w, y0 + 0.12f * h, x0 + 0.88f * w, y0 + 1.0f * h), CRGBA(255, 255, 255, alpha));
+	else if (t >= 3600 && glint[1].m_pTexture)
+		glint[1].Draw(CRect(x0 + 0.08f * w, y0 + 0.22f * h, x0 + 0.50f * w, y0 + 0.92f * h), CRGBA(255, 255, 255, alpha));
 }
+
 
 static void
 DrawIconBar(CMenuManager *m, uint8 alpha)
