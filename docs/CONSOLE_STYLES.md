@@ -126,3 +126,33 @@ the console look:
   same at 30, 60 or 144 fps.
 - The shift is 2 px at 448 lines, scaled with the screen height (was 2 px at any resolution and
   only with the debug menu's Blur switch).
+
+## 13g/13h: console menus (proposed approach)
+
+re3's PS2 menu (`core/Frontend_PS2.cpp`, `PS2_MENU`) is a separate 3,000-line `CMenuManager`
+chosen at compile time: it can't be switched at runtime and lacks the PC/revc options (graphics,
+controls, button prompts, console discs). The Xbox menu (Maestro `R3_Menu.anm`) has no code in
+re3 at all.
+
+Proposal: a **menu skin** over the existing menu logic. Pages, entries and actions stay the PC
+menu's (so every revc option stays reachable); with the PS2 or Xbox UI style the drawing is
+replaced:
+- PS2: background, page frames, tabs and highlight from the PS2's own sprites (`FRONTEN2.TXD`,
+  imported from the player's disc; `ps2-ui-remake` upscales), layout from `Frontend_PS2.cpp`'s
+  draw code, timings from the measured PS2 animations (open fade 234 ms, page cross-fade 167 ms,
+  highlight slide 133-200 ms, radio logo fade 367 ms).
+- Xbox: panels, icon bar, selection bar and dialogs as in `R3_Menu.anm` (decoded keyframes:
+  0.2 s linear, nested clips; item pulse 0.8 s; logo glint 3.8 s), sprites from the imported
+  `neo/UserInterface` files; the controller page draws the current pad in the Xbox style with
+  callout lines.
+- Without an imported disc, the skin falls back to the PC menu.
+
+Steps: (1) the skin hook in `CMenuManager::DrawFrontEnd` and an animation clock; (2) PS2 skin;
+(3) Xbox skin; (4) captures of each page vs the console references.
+
+## Open decisions
+
+- **Camera in the console styles.** The consoles use the Classic control method's camera (level
+  follow camera, the horizon at 47 % of the screen); the PC's default Standard method uses the mouse
+  camera, which pitches down (horizon at 31 %) and makes Tommy strafe. The scenes use Classic. Should
+  the PS2/Xbox presets switch to Classic (movement changes too) or leave the control method alone?
