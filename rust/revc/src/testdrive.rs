@@ -99,6 +99,12 @@ const STATE_PLAYING: i32 = 2;
 /// Part of the gamepad screenshots compared with the reference (fractions of width and height:
 /// x0, y0, x1, y1): the help box with every button glyph, top left.
 const GLYPH_BOX: [f32; 4] = [0.0, 0.0, 0.3, 0.2];
+/// Parts of the in-game screenshots after loading a save that aren't compared (fractions, as
+/// GLYPH_BOX): HUD elements animated in real time, which land on another phase depending on the
+/// frame pacing (saveload went from 0.38 % to 1.66 % differing over six runs on these alone):
+/// the wanted stars, which fade in after a load, and, bottom right, the save cassette icon and
+/// the zone name as it fades. The world, the player and the rest of the HUD are still compared.
+const LOADED_HUD_SKIP: [[f32; 4]; 2] = [[0.70, 0.16, 0.90, 0.25], [0.64, 0.72, 1.0, 0.98]];
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Scenario {
@@ -999,7 +1005,7 @@ impl Driver {
                             if std::env::var_os("REVC_TEST_REF_DIR").is_some() && reference.is_none() {
                                 self.fail(format!("{name}: no reference image (run with --bless)"));
                             }
-                            self.check_image_at(w, h, &rgba, dir("REVC_TEST_SHOT_DIR"), reference, &format!("{name}: "), None);
+                            self.check_image_at(w, h, &rgba, dir("REVC_TEST_SHOT_DIR"), reference, &format!("{name}: "), None, &[]);
                             if idx + 1 < SPOTS.len() {
                                 self.phase = Phase::Spot { idx: idx + 1, base, stage: SpotStage::Travel };
                             } else {
@@ -1321,7 +1327,7 @@ impl Driver {
                     }
                     // Only the help box with the glyphs counts: the scene behind it has things that
                     // differ between machines (a pickup bobbing by its memory address, the clock).
-                    self.check_image_at(w, h, &rgba, dir("REVC_TEST_SHOT_DIR"), reference, &format!("{name}: "), Some(GLYPH_BOX));
+                    self.check_image_at(w, h, &rgba, dir("REVC_TEST_SHOT_DIR"), reference, &format!("{name}: "), Some(GLYPH_BOX), &[]);
                     self.pads.capture = None;
                     self.pad_capture_requested = false;
                 }
@@ -1578,12 +1584,17 @@ impl Driver {
     }
 
     fn check_image(&mut self, w: u32, h: u32, rgba: &[u8]) {
-        self.check_image_at(w, h, rgba, self.shot.clone(), self.reference.clone(), "", None);
+        let skip: &[[f32; 4]] = match self.scenario {
+            Scenario::SaveLoad | Scenario::SaveGame => &LOADED_HUD_SKIP,
+            _ => &[],
+        };
+        self.check_image_at(w, h, rgba, self.shot.clone(), self.reference.clone(), "", None, skip);
     }
 
     /// Writes the frame to `shot` and compares it with `reference` (both optional); `label`
     /// prefixes the log lines when several images are checked in one run. `region` (fractions of
-    /// the width and height: x0, y0, x1, y1) limits the comparison to that part of the image.
+    /// the width and height: x0, y0, x1, y1) limits the comparison to that part of the image;
+    /// pixels in `skip` (the same form) aren't compared.
     #[allow(clippy::too_many_arguments)]
     fn check_image_at(
         &mut self,
@@ -1594,13 +1605,16 @@ impl Driver {
         reference: Option<PathBuf>,
         label: &str,
         region: Option<[f32; 4]>,
+        skip: &[[f32; 4]],
     ) {
-        let [x0, y0, x1, y1] = region.unwrap_or([0.0, 0.0, 1.0, 1.0]);
-        let (x0, x1) = ((x0 * w as f32) as u32, (x1 * w as f32) as u32);
-        let (y0, y1) = ((y0 * h as f32) as u32, (y1 * h as f32) as u32);
+        let px = |r: [f32; 4]| ((r[0] * w as f32) as u32, (r[1] * h as f32) as u32, (r[2] * w as f32) as u32, (r[3] * h as f32) as u32);
+        let (x0, y0, x1, y1) = px(region.unwrap_or([0.0, 0.0, 1.0, 1.0]));
+        let skip: Vec<_> = skip.iter().map(|&r| px(r)).collect();
         let inside = |i: usize| {
             let (x, y) = (i as u32 % w, i as u32 / w);
-            (x0..x1).contains(&x) && (y0..y1).contains(&y)
+            (x0..x1).contains(&x)
+                && (y0..y1).contains(&y)
+                && !skip.iter().any(|&(a, b, c, d)| (a..c).contains(&x) && (b..d).contains(&y))
         };
         if let Some(path) = shot.clone() {
             match write_png(&path, w, h, rgba) {
@@ -1623,9 +1637,12 @@ impl Driver {
         // A pixel "differs" if any channel is off by more than 32/255.
         let mut diff_img = vec![0u8; rgba.len()];
         let mut differing = 0usize;
+        let mut compared = 0usize;
         for (i, (a, b)) in rgba.chunks_exact(4).zip(rref.chunks_exact(4)).enumerate() {
             let d = (0..3).map(|c| a[c].abs_diff(b[c])).max().unwrap();
-            if d > 32 && inside(i) {
+            let counted = inside(i);
+            compared += counted as usize;
+            if d > 32 && counted {
                 differing += 1;
                 diff_img[i * 4..i * 4 + 4].copy_from_slice(&[255, 0, 255, 255]);
             } else {
@@ -1636,8 +1653,14 @@ impl Driver {
                 diff_img[i * 4 + 3] = 255;
             }
         }
-        let frac = differing as f64 / ((x1 - x0) as f64 * (y1 - y0) as f64).max(1.0);
-        let what = if region.is_some() { format!("of pixels in {}x{} at {x0},{y0}", x1 - x0, y1 - y0) } else { "of pixels".into() };
+        let frac = differing as f64 / (compared as f64).max(1.0);
+        let what = if region.is_some() {
+            format!("of pixels in {}x{} at {x0},{y0}", x1 - x0, y1 - y0)
+        } else if !skip.is_empty() {
+            format!("of {compared} compared pixels ({} boxes skipped)", skip.len())
+        } else {
+            "of pixels".into()
+        };
         log(format!("{label}image diff: {:.3}% {what} differ (limit {:.3}%)", frac * 100.0, self.max_diff * 100.0));
         if frac > self.max_diff {
             let mut p = shot.clone().unwrap_or_else(|| std::env::temp_dir().join("revc-test.png")).into_os_string();
