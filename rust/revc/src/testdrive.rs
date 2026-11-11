@@ -172,7 +172,7 @@ const SPOTS: &[(&str, f32, f32, f32, f32, f32)] = &[
 ];
 /// Console reference scenes (plan task 13; the PS2/Xbox stills are in Claude outputs/world-captures,
 /// local only): (name, x, y, heading in degrees with 0 = north, hour, minute, weather 0 sunny
-/// 1 cloudy 2 rain 3 fog). The player stands with the follow camera behind him and the HUD on, as in
+/// 1 cloudy 2 rain 3 fog 4 extra sunny). The player stands with the follow camera behind him and the HUD on, as in
 /// the console captures. REVC_TEST_SCENES=S1,S4 picks some; REVC_TEST_SCENE=x,y,heading,hour,minute,
 /// weather[;...] adds scenes named custom0, custom1, ... (for finding a spot).
 const SCENES: &[(&str, f32, f32, f32, i32, i32, i32)] = &[
@@ -184,6 +184,9 @@ const SCENES: &[(&str, f32, f32, f32, i32, i32, i32)] = &[
     ("S6_lighthouse", LIGHTHOUSE.0, LIGHTHOUSE.1, 35.0, 19, 0, 0),
     ("S6_lighthouse_noon", LIGHTHOUSE.0, LIGHTHOUSE.1, 35.0, 11, 38, 0),
     ("S10_dawn", MOONLITE.0, MOONLITE.1, 0.0, 5, 33, 0),
+    // the Xbox stills' noon: extra sunny (weather 4: no clouds, its own sky; research
+    // XBOX_COLOUR_RE.md 6.1, matched to the capture's sky)
+    ("S1x_noon", MOONLITE.0, MOONLITE.1, 0.0, 12, 46, 4),
 ];
 /// Middle of Ocean Drive in front of the Moonlite Hotel, and next to the lighthouse.
 const MOONLITE: (f32, f32) = (257.0, -1250.0);

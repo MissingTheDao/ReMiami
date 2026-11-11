@@ -338,7 +338,9 @@ DrawIconBar(CMenuManager *m, uint8 alpha)
 		// the other pages' icons in grey, about 55 % (measured)
 		icons[i].Draw(CRect(X(iconX[i]) - W(s / 2), Y(ICON_Y) - H(s / 2), X(iconX[i]) + W(s / 2), Y(ICON_Y) + H(s / 2)), CRGBA(140, 140, 140, alpha));
 	}
-	// a page change: the new icon grows and the old one shrinks over ~4 frames (Xbox autopad)
+	// a page change (Xbox autopad set 2, Brief -> Stats): the mint box moves to the new icon at
+	// once while the old icon stays enlarged and white and the new one stays small for one 30 Hz
+	// game frame; then they swap sizes in one step
 	static int prevIcon = -1, lastIcon = -1;
 	static uint32 iconAt;
 	uint32 now = CTimer::GetTimeInMillisecondsPauseMode();
@@ -347,18 +349,18 @@ DrawIconBar(CMenuManager *m, uint8 alpha)
 		lastIcon = cur;
 		iconAt = now;
 	}
-	float grow = Min(1.0f, (now - iconAt) / 33.0f);	// (2 steps at 30 Hz)
-	if (prevIcon >= 0 && prevIcon != cur && grow < 1.0f) {
-		float px = iconX[prevIcon], ps = ICON_SELECTED + (ICON_SIZE - ICON_SELECTED) * grow;
-		icons[prevIcon].Draw(CRect(X(px) - W(ps / 2), Y(ICON_Y) - H(ps / 2), X(px) + W(ps / 2), Y(ICON_Y) + H(ps / 2)), CRGBA(140, 140, 140, alpha));
-	}
+	bool swapped = now - iconAt >= 33;
 	if (cur >= 0) {
 		// the current page's icon, enlarged on the mint box (measured 482..580 x 368..425 for the TV)
-		float cx = iconX[cur], s = ICON_SIZE + (ICON_SELECTED - ICON_SIZE) * grow;
+		float cx = iconX[cur], s = swapped || prevIcon < 0 ? ICON_SELECTED : ICON_SIZE;
 		if (barFocus)	// the green card only while the icon bar has focus
 			CSprite2d::Draw2DPolygon(X(cx - 48.0f), Y(370.0f), X(cx + 50.0f), Y(367.0f), X(cx - 46.0f), Y(426.0f), X(cx + 48.0f), Y(424.0f),
 				CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
 		icons[cur].Draw(CRect(X(cx) - W(s / 2), Y(ICON_Y + 2.0f) - H(s / 2), X(cx) + W(s / 2), Y(ICON_Y + 2.0f) + H(s / 2)), CRGBA(255, 255, 255, alpha));
+	}
+	if (prevIcon >= 0 && prevIcon != cur && !swapped) {	// (over the box's edge)
+		float px = iconX[prevIcon], ps = ICON_SELECTED;
+		icons[prevIcon].Draw(CRect(X(px) - W(ps / 2), Y(ICON_Y + 2.0f) - H(ps / 2), X(px) + W(ps / 2), Y(ICON_Y + 2.0f) + H(ps / 2)), CRGBA(255, 255, 255, alpha));
 	}
 }
 
