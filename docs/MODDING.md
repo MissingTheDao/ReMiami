@@ -30,10 +30,13 @@ mods/textures/<texture>.png                 replaces <texture> wherever it appea
   (`texmods: <path>: <reason>; keeping the original ...`) and the original texture stays.
 
 **Packs:** a set of replacements can stay in one zip file in `mods/packs/` (e.g.
-`mods/packs/hud-remake.zip`). Inside, the same layout: `textures/<dictionary>/<texture>.png`
+`mods/packs/pc-hud-remake.zip`). Inside, the same layout: `textures/<dictionary>/<texture>.png`
 (or `<dictionary>/<texture>.png`; files directly in `textures/` replace the texture everywhere).
 Loose files in `mods/textures/` win over packs, so a single texture of a pack can be overridden;
-between packs, the first in name order wins. Stored and deflated zip entries are supported (no
+between packs, the first in name order wins. A pack whose name starts with `pc-`, `ps2-` or `xbox-` applies
+only in that UI style (Graphics menu UI STYLE), any other pack in every style; the current
+style's packs come before the general ones. Changing the UI style reloads the HUD and fonts; the
+menu's own art changes the next time the menu opens. Stored and deflated zip entries are supported (no
 zip64 or encryption). The console names each pack and how many textures it provides.
 
 To find texture names, list a dictionary (from the `rust/` folder):

@@ -11,6 +11,7 @@
 #include "Font.h"
 #include "Sprite2d.h"
 #include "TxdStore.h"
+#include "Hud.h"
 
 extern "C" {
 void revc_glyph_set_override(int style);
@@ -125,6 +126,17 @@ HostUpdateButtonGlyphs(void)
 {
 	revc_glyph_set_override(gButtonPromptsOverride);
 	revc_ui_style_set(gUiStyle);
+	// Texture packs per UI style (mods/packs/pc-*, ps2-*, xbox-*): textures loaded so far used the
+	// PC style's packs; when the style differs, load the HUD and fonts again (the menu's art loads
+	// each time the menu opens). Also right after start with a console style saved.
+	static int texStyle = 0;
+	if (gUiStyle != texStyle && CTxdStore::FindTxdSlot("hud") != -1) {
+		texStyle = gUiStyle;
+		CFont::Shutdown();
+		CFont::Initialise();
+		CHud::ReloadTextures();
+		LoadedGlyphSet = 0;	// CFont::Initialise put back the game's buttons
+	}
 	int set = revc_glyph_set_id();
 	if (set == 0 || set == LoadedGlyphSet)
 		return;	// no pad, or already loaded (keyboard use keeps the last pad's set)

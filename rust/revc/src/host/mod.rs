@@ -813,6 +813,7 @@ static UI_STYLE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::ne
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_ui_style_set(style: c_int) {
     UI_STYLE.store(style, std::sync::atomic::Ordering::Relaxed);
+    crate::texmods::set_style(style);
 }
 
 fn ui_style() -> glyphs::UiStyle {

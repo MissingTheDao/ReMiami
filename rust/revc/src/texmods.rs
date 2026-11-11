@@ -49,7 +49,23 @@ impl std::fmt::Display for Source {
 
 type Index = HashMap<(String, String), Source>;
 
-static INDEX: OnceLock<Index> = OnceLock::new();
+/// One index per UI style (0 PC, 1 PS2, 2 Xbox): style packs differ.
+static INDEX: [OnceLock<Index>; 3] = [OnceLock::new(), OnceLock::new(), OnceLock::new()];
+/// The UI style the game shows (Graphics menu UI STYLE), set by the host.
+static STYLE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+/// The UI style picks which style packs apply; the C++ side reloads the HUD and font textures
+/// when it changes.
+pub fn set_style(style: i32) {
+    STYLE.store(style.clamp(0, 2), Ordering::Relaxed);
+}
+
+/// The UI style a pack is for, from its file name: `pc-*`, `ps2-*`, `xbox-*` (any case); None for
+/// a pack that applies in every style.
+fn pack_style(zip: &Path) -> Option<i32> {
+    let name = zip.file_name()?.to_string_lossy().to_ascii_lowercase();
+    [("pc-", 0), ("ps2-", 1), ("xbox-", 2)].iter().find(|(p, _)| name.starts_with(p)).map(|&(_, s)| s)
+}
 static APPLIED: AtomicUsize = AtomicUsize::new(0);
 static FAILED: AtomicUsize = AtomicUsize::new(0);
 static COMPRESSED: AtomicUsize = AtomicUsize::new(0);
@@ -66,14 +82,17 @@ fn packs_dir() -> PathBuf {
 }
 
 /// Adds the image files of every pack in `dir` (zips, in name order) that the index lacks.
-fn add_packs(index: &mut Index, dir: &Path) {
+/// Packs for this UI style first (`pc-`, `ps2-`, `xbox-` names), then the packs for every style;
+/// packs for other styles are left out. In each group the first pack in name order wins.
+fn add_packs(index: &mut Index, dir: &Path, style: i32) {
     let Ok(rd) = std::fs::read_dir(dir) else { return };
     let mut zips: Vec<PathBuf> = rd
         .flatten()
         .map(|e| e.path())
         .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")))
+        .filter(|p| pack_style(p).is_none_or(|s| s == style))
         .collect();
-    zips.sort();
+    zips.sort_by_key(|p| (pack_style(p).is_none(), p.clone()));
     for zip in zips {
         let entries = match crate::ziparchive::list(&zip) {
             Ok(e) => e,
@@ -140,12 +159,13 @@ fn build_index(root: &Path) -> Index {
 }
 
 fn index() -> &'static Index {
-    INDEX.get_or_init(|| {
+    let style = STYLE.load(Ordering::Relaxed);
+    INDEX[style as usize].get_or_init(|| {
         let mut idx = build_index(&mods_dir());
         if !idx.is_empty() {
             eprintln!("texmods: {} texture overrides in {}", idx.len(), mods_dir().display());
         }
-        add_packs(&mut idx, &packs_dir());
+        add_packs(&mut idx, &packs_dir(), style);
         idx
     })
 }
@@ -372,12 +392,28 @@ mod tests {
         std::fs::write(root.join("packs/b.zip"), &zip).unwrap();
         std::fs::write(root.join("packs/a.zip"), crate::ziparchive::tests::build(&[("hud/radardisc.png", b"first", false)])).unwrap();
         let mut idx = build_index(&root.join("loose"));
-        add_packs(&mut idx, &root.join("packs"));
+        add_packs(&mut idx, &root.join("packs"), 0);
         assert_eq!(idx.len(), 4);
         assert!(matches!(&idx[&("hud".into(), "fist".into())], Source::File(_)));
         assert_eq!(idx[&("hud".into(), "radardisc".into())].read().unwrap(), b"first");
         assert_eq!(idx[&("".into(), "radar".into())].read().unwrap(), b"any");
         assert_eq!(idx[&("fonts".into(), "font1".into())].read().unwrap(), b"font");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn style_packs_by_name() {
+        let root = std::env::temp_dir().join(format!("revc-stylepacks-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let one = |body: &[u8]| crate::ziparchive::tests::build(&[("textures/hud/fist.png", body, false)]);
+        std::fs::write(root.join("a-general.zip"), one(b"general")).unwrap();
+        std::fs::write(root.join("PS2-ui.zip"), one(b"ps2")).unwrap();
+        std::fs::write(root.join("xbox-ui.zip"), one(b"xbox")).unwrap();
+        for (style, want) in [(0, &b"general"[..]), (1, b"ps2"), (2, b"xbox")] {
+            let mut idx = Index::new();
+            add_packs(&mut idx, &root, style);
+            assert_eq!(idx[&("hud".into(), "fist".into())].read().unwrap(), want, "style {style}");
+        }
         std::fs::remove_dir_all(root).unwrap();
     }
 

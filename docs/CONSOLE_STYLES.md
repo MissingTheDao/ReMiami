@@ -17,7 +17,7 @@ content and stay outside the repo; this file records what the code does and why.
 | 13f | Button glyph variants per UI style | done |
 | 13g | PS2 menu look and animations | done |
 | 13h | Xbox menu (Maestro) look and animations, controller page | in progress: layout, icon bar, help line, selection pulse |
-| 13i | Console data from an imported disc (Xbox maps and flames, PS2 animations), texture packs from zips | zip packs done |
+| 13i | Console data from an imported disc (Xbox maps and flames, PS2 animations, PS2 world textures as a style pack), texture packs from zips | zip packs and per-style packs done |
 
 ## 13a: reference scenes
 
@@ -235,3 +235,16 @@ Still to do: the Xbox per-page panel shapes,
 the Xbox fonts (RWFont/RWSFArborcrestHeavy), dialogs (blue layered panels), the controls page's
 pad drawing with callout lines, the Load list and Stats in the Xbox style, checking every page
 against the captures.
+
+## 13i: texture packs per UI style
+
+`mods/packs/pc-*.zip`, `ps2-*.zip`, `xbox-*.zip` apply only in that UI style; other packs in every
+style. Order: loose `mods/textures`, then the style's packs, then the general packs (each in name
+order). One texture index per style (`texmods.rs`); when the UI style changes, `HostUpdateButtonGlyphs`
+reloads the fonts and `hud.txd` (`CHud::ReloadTextures`, radar sprites included). Imported console
+art (`ui/r3_menu_*`) is looked up in the same index.
+
+Goal (research session, 2026-11-11): import the PS2 world textures as a style pack
+(`userfiles/import/ps2/packs/ps2-world.zip`, about 12,000 textures via a Rust port of the GS
+memory reader) with an option for exact PS2 versus PC textures in the PS2 style; texmods would
+index packs in the import cache too. Details: research notes `importer/IMPORT_LIST.md` (local).
