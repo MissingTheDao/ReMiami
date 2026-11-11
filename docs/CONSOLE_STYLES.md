@@ -294,3 +294,24 @@ for upscaled UI and font replacements (the HUD and fonts are drawn NEAREST and h
 rectangle edges and thin lines snapped to output pixels, every console offset scaled, optional
 30 Hz pacing of menu animations and optional UI softness. `compare.py` checks that the 1440x1080
 shot scaled down matches the native one.
+
+## Menu fix list, round 1 (research comparison 2026-11-11)
+
+The research session compared the shots with the consoles (`menu-compare/MENU_FIX_LIST.md`,
+local). Done:
+- Both: no PC cursor in the console skins; confirm dialogs start on No.
+- PS2 frame: logo 21 px right and 11 down, title 20 px left and 22 down of the PC's places; the
+  help box at the console's place, about (438,303)-(626,376); the console's panel shape per page
+  (640x448 table in `Frontend.cpp`); the tab bar in the EU v3.00 layout (revc keeps eight tabs,
+  language too) with the active box just around its label; no PC scrollbar.
+- PS2 highlight: a box just around the selected label (not the PC's full-width bar).
+
+Next (in that order): the Xbox highlight (tilted mint bar with a dark tail), the icon-bar states
+(unselected icons grey; the green card only while the bar has focus), help lines per page, then the
+page contents per console. Plan for the extras (research, from the user's "add options without
+breaking cohesion", `menu-compare/OPTIONS_PLACEMENT.md`): console pages stay as on the console;
+revc's extra options go into patterns the consoles used: PS2 an "options" eighth tab (language
+becomes a row) with a Stats-style list; Xbox an "advanced" sub-tab on Display, Audio and
+Controls; merged settings (motion blur into trails, aspect ratio into wide screen, map legend into
+the map's legend item, user music into the station strip); console discs as a third Load entry;
+no back/restore rows.

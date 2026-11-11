@@ -58,31 +58,37 @@ CurrentTab(int page)
 	return -1;
 }
 
+// The tab bar: two rows under the panel, the current tab on a green box just around its label,
+// slightly tilted. revc keeps the EU's eight tabs (language too), so the EU v3.00 layout (US v1.40
+// has seven, x about 158-453, y 404 / 426).
+static const float tabCX[8] = { 178, 256, 336, 420, 148, 252, 349, 464 };	// EU v3.00 (8 tabs)
+static const float tabRowY[2] = { 392, 414 };
+
 static void
 DrawTabs(CMenuManager *m, uint8 alpha)
 {
 	int cur = CurrentTab(m->m_nCurrScreen);
 	if (cur < 0)
 		return;
-	// The active tab's slanted box (measured around DISPLAY: 672..890 x 950..1060), moved to the
-	// current tab.
-	const Ps2Tab &t = tabs[cur];
-	float dx = t.x - 785.0f, dy = t.y - 995.0f;
-	CSprite2d::Draw2DPolygon(PX(672.0f + dx), PY(958.0f + dy), PX(895.0f + dx), PY(948.0f + dy),
-		PX(672.0f + dx), PY(1062.0f + dy), PX(885.0f + dx), PY(1052.0f + dy),
-		CRGBA(PS2_GREEN.r, PS2_GREEN.g, PS2_GREEN.b, alpha));
-
 	CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
-	CFont::SetScale(SX(0.55f), SY(0.75f));
+	CFont::SetScale(SX(0.68f), SY(0.92f));
 	CFont::SetCentreOn();
 	CFont::SetCentreSize(SCREEN_WIDTH);
 	CFont::SetPropOn();
 	CFont::SetBackgroundOff();
+	CFont::SetWrapx(SCREEN_WIDTH);
+	{
+		float w = CFont::GetStringWidth(TheText.Get(tabs[cur].name), true);
+		float cx = SCALE_AND_CENTER_X(tabCX[cur]), cy = SCREEN_SCALE_Y(tabRowY[cur / 4]);
+		float hw = w / 2.0f + SX(8.0f), h0 = SY(13.0f), t = SY(2.0f);
+		CSprite2d::Draw2DPolygon(cx - hw, cy - h0 + t, cx + hw, cy - h0 - t, cx - hw, cy + h0 + t, cx + hw, cy + h0 - t,
+			CRGBA(PS2_GREEN.r, PS2_GREEN.g, PS2_GREEN.b, alpha));
+	}
 	CFont::SetDropShadowPosition(2);
 	CFont::SetDropColor(CRGBA(0, 0, 0, alpha));
 	CFont::SetColor(CRGBA(PS2_TAB_TEXT.r, PS2_TAB_TEXT.g, PS2_TAB_TEXT.b, alpha));
 	for (int i = 0; i < (int)ARRAY_SIZE(tabs); i++)
-		CFont::PrintString(PX(tabs[i].x), PY(tabs[i].y - 24.0f), TheText.Get(tabs[i].name));
+		CFont::PrintString(SCALE_AND_CENTER_X(tabCX[i]), SCREEN_SCALE_Y(tabRowY[i / 4] - 9.0f), TheText.Get(tabs[i].name));
 	CFont::SetCentreOff();
 	CFont::SetDropShadowPosition(0);
 }
@@ -211,8 +217,11 @@ MenuSkinPS2Input(CMenuManager *m)
 void
 MenuSkinPS2Draw(CMenuManager *m, uint8 alpha, float cornerX, float cornerY)
 {
-	gCornerX = cornerX;
-	gCornerY = cornerY;
+	// The help box sits at the same place on every page (console: about (438,303)-(626,376) at
+	// 640x448), over the panel's bottom-right corner: placed from the Display page's corner.
+	(void)cornerX; (void)cornerY;
+	gCornerX = PX(1345.0f) + SX(5.0f);
+	gCornerY = PY(870.0f) - SY(5.0f);
 	if (!MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return;
 	DrawHelpBox(alpha);
