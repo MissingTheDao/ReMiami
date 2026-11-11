@@ -11,6 +11,5 @@
 #include "src/rwobjects.h"
 #include "src/rwanim.h"
 #include "src/rwplugins.h"
-#include "src/rwuserdata.h"
 #include "src/rwcharset.h"
 #include "src/wgpu/rwwgpu.h"

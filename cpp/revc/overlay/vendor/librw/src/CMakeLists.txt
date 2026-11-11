@@ -32,12 +32,9 @@ add_library(librw
     rwplg.h
     rwplugins.h
     rwrender.h
-    rwuserdata.h
     skin.cpp
     texture.cpp
     tga.cpp
-    userdata.cpp
-    uvanim.cpp
     world.cpp
 
     wgpu/rwwgpu.h
@@ -124,7 +121,6 @@ if(LIBRW_INSTALL)
             rwobjects.h
             rwanim.h
             rwplugins.h
-            rwuserdata.h
         DESTINATION "${LIBRW_INSTALL_INCLUDEDIR}/src"
     )
 
