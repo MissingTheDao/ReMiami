@@ -15,6 +15,7 @@
 #include "Pad.h"
 
 extern int8 gUiStyle;
+extern bool gGlyphPackLoaded;
 
 // Capture pixels (1440x1080) to the menu's 640x448 layout space, scaled and centred like the
 // PC menu (SCALE_AND_CENTER_X / SCREEN_SCALE_Y; the PS2 UI style lays out in 448 lines).
@@ -95,7 +96,11 @@ DrawHelpBox(uint8 alpha)
 		CRGBA(0, 0, 0, alpha));
 	CSprite2d::Draw2DPolygon(HX(975.0f), HY(742.0f), HX(1390.0f), HY(728.0f), HX(990.0f), HY(882.0f), HX(1418.0f), HY(910.0f),
 		CRGBA(PS2_GREEN.r, PS2_GREEN.g, PS2_GREEN.b, alpha));
-	static const char *keys[4] = { "~X~", "~T~", "RVC_HST", nil };
+	// Select/Back: the pad's buttons as outline-only glyphs in black, like the text (the PS2 UI
+	// style loads the glyph pack's outline variant, white line art, tinted here). Without the
+	// pack the game's own coloured button textures are drawn as they are.
+	static const int glyphs[2] = { BUTTON_CROSS, BUTTON_TRIANGLE };
+	static const char *keys[4] = { "", "", "RVC_HST", nil };
 	static const char *actions[4] = { "RVC_HSE", "RVC_HBA", "RVC_HRE", "RVC_HNA" };
 	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
 	CFont::SetScale(SX(0.41f), SY(0.68f));
@@ -109,14 +114,26 @@ DrawHelpBox(uint8 alpha)
 		// "<button> button" right-aligned before the dash, the action after it.
 		if (keys[i] == nil)
 			buf[0] = 0;	// the arrows, drawn below
-		else if (keys[i][0] == '~')
-			AsciiToUnicode(keys[i], buf);
+		else if (keys[i][0] == 0)
+			buf[0] = 0;
 		else
 			UnicodeStrcpy(buf, TheText.Get(keys[i]));
 		if (i < 3) {
 			int n = UnicodeStrlen(buf);
-			buf[n++] = ' ';
+			if (n > 0)
+				buf[n++] = ' ';
 			UnicodeStrcpy(buf + n, TheText.Get("RVC_HBT"));
+		}
+		if (i < 2) {
+			float sy = CFont::Details.scaleY;
+			float w = CFont::GetStringWidth(buf, true);
+			// a little larger than the font's glyph cell, like the PS2's symbols
+			float gs = 21.0f * sy;
+			float gx = HX(1205.0f) - w - sy * 4.0f - gs;
+			CSprite2d &g = CFont::ButtonSprite[glyphs[i]];
+			if (g.m_pTexture)
+				g.Draw(CRect(gx, y + 0.5f * sy, gx + gs, y + 0.5f * sy + gs),
+					gGlyphPackLoaded ? CRGBA(0, 0, 0, alpha) : CRGBA(255, 255, 255, alpha));
 		}
 		if (i < 3) {
 			CFont::SetRightJustifyOn();

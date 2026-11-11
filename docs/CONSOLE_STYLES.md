@@ -180,7 +180,9 @@ Finished (2026-11-11):
 - Help box: always on the background panel's bottom-right corner, covering and overhanging it as on
   the PS2 (the user noted this is deliberate); placed relative to the panel corner of each page, so
   it follows the panel's shape per page and on wide screens. It has the PS2's thick black outline
-  (about 8 capture pixels) and black text on the green. "Navigate" shows the PS2's four filled
+  (about 8 capture pixels) and black text on the green. Select/Back show the pad's buttons as outline-only
+  glyphs tinted black to match (user 2026-11-11); without the glyph pack the game's own coloured
+  button textures are drawn as they are. "Navigate" shows the PS2's four filled
   black arrows (not pad buttons); Select/Back keep the pad's glyphs (outline variant in the PS2 UI style).
 - Audio page: the radio picker sits lower left as on the PS2 (moved with the 2D offset, hover areas
   moved with it); the PC's helper line ("LEFT, RIGHT ... TO ADJUST") is hidden under the skin.

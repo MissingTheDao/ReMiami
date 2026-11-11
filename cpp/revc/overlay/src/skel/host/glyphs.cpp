@@ -111,6 +111,9 @@ FallbackTxd(int kind)
 int8 gButtonPromptsOverride = 0;
 // Graphics menu "UI STYLE" ([Graphics] UiStyle): 0 PC, 1 PS2, 2 Xbox (plan task 13).
 int8 gUiStyle = 0;
+// The button sprites come from the glyph pack (white line art in the console UI styles' outline
+// variant) rather than the game's coloured button TXDs; the PS2 menu skin tints them.
+bool gGlyphPackLoaded = false;
 
 static int LoadedGlyphSet = 0;
 static int GlyphSetsLoaded = 0;
@@ -127,7 +130,8 @@ HostUpdateButtonGlyphs(void)
 		return;	// no pad, or already loaded (keyboard use keeps the last pad's set)
 	LoadedGlyphSet = set;
 	GlyphSetsLoaded++;
-	if (!LoadGlyphSet())
+	gGlyphPackLoaded = LoadGlyphSet();
+	if (!gGlyphPackLoaded)
 		CFont::LoadButtons(FallbackTxd(((set - 1) >> 16) & 0xFF));
 }
 
@@ -139,6 +143,7 @@ revc_test_glyph_sets_loaded(void)
 #else
 int8 gButtonPromptsOverride = 0;
 int8 gUiStyle = 0;
+bool gGlyphPackLoaded = false;
 void HostUpdateButtonGlyphs(void) {}
 extern "C" int revc_test_glyph_sets_loaded(void) { return 0; }
 #endif // BUTTON_ICONS
