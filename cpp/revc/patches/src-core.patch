@@ -3077,7 +3077,7 @@
 +		pg.m_aEntries[n].m_Action = MENUACTION_LABEL;
 +		strncpy(pg.m_aEntries[n++].m_EntryName, "RVC_OSG", 8);	// "game:"
 +		pg.m_aEntries[n].m_Action = MENUACTION_CFO_DYNAMIC;
-+		strncpy(pg.m_aEntries[n].m_EntryName, "FEO_LAN", 8);
++		strncpy(pg.m_aEntries[n].m_EntryName, "RVC_LNG", 8);	// "language"
 +		pg.m_aEntries[n].m_CFODynamic = &languageOption;
 +		pg.m_aEntries[n++].m_Align = MENUALIGN_LEFT;
 +	}

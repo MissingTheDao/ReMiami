@@ -1010,7 +1010,7 @@
  #include "Timer.h"
  
  wchar WideErrorString[25];
-@@ -16,173 +15,244 @@
+@@ -16,173 +15,245 @@
  CText::CText(void)
  {
  	encoding = 'e';
@@ -1310,6 +1310,7 @@
 +	{ "RVC_OSA", "AUDIO:" },
 +	{ "RVC_OSC", "CONTROLS:" },
 +	{ "RVC_OSG", "GAME:" },
++	{ "RVC_LNG", "LANGUAGE" },
 +	{ "RVC_RCD", "RESET TO CONSOLE DEFAULTS" },
 +	{ "RVC_SCP", "SCREEN POSITION" },
 +	{ "RVC_NIY", "Nothing yet..." },
@@ -1386,7 +1387,7 @@
  }
  
  void
-@@ -201,297 +271,24 @@
+@@ -201,297 +272,24 @@
  }
  
  void
@@ -1689,7 +1690,7 @@
  	return aStr;
  }
  
-@@ -499,13 +296,7 @@
+@@ -499,13 +297,7 @@
  UnicodeToAsciiForSaveLoad(wchar *src)
  {
  	static char aStr[256];
@@ -1704,7 +1705,7 @@
  	return aStr;
  }
  
-@@ -513,13 +304,7 @@
+@@ -513,13 +305,7 @@
  UnicodeToAsciiForMemoryCard(wchar *src)
  {
  	static char aStr[256];
