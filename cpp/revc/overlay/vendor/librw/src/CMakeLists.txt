@@ -6,7 +6,6 @@ add_library(librw
     charset.cpp
     engine.cpp
     hanim.cpp
-    image.cpp
     matfx.cpp
     raster.cpp
     rwanim.h

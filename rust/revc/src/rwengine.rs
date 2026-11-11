@@ -225,6 +225,13 @@ pub static mut revc_debug_file: *mut c_char = null_mut();
 pub(crate) unsafe fn rw_malloc(sz: usize, hint: u32) -> *mut c_void {
     unsafe { (memfuncs().rwmalloc)(sz, hint) }
 }
+/// rwNew (exits when out of memory)
+///
+/// # Safety
+/// After the memory functions are set (they are from the start).
+pub(crate) unsafe fn rw_must_malloc(sz: usize, hint: u32) -> *mut c_void {
+    unsafe { (memfuncs().rwmustmalloc.expect("memfuncs"))(sz, hint) }
+}
 /// rwRealloc
 ///
 /// # Safety

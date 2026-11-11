@@ -2,7 +2,7 @@
 //! decompression (setPixelsDXT, used when a compressed raster is read back), hasAlpha,
 //! convertTo32, unpalettize, palettize with librw's octree colour quantizer (ColorQuant), and
 //! the mask functions readMasked uses (makeMask, applyMask) plus removeMask. rw::Image stays a
-//! C++ object; its memory stays with librw's allocator (hooks).
+//! C++ layout; since step 7d2 it is created, allocated and freed here too, with librw's allocator.
 //!
 //! Bit-identical to librw: the same integer arithmetic, the quantizer's tree, leaf order and
 //! reductions (including librw's habit of dropping the colours of deeper subtrees when it reduces
@@ -10,6 +10,8 @@
 //! where librw copies whatever was on its stack; nothing refers to those entries.
 //! Checked against tests/golden/rwimage.txt, recorded from the C++
 //! (tests/golden/recorders/rwimage).
+
+use std::ffi::c_void;
 
 /// rw::Image
 #[repr(C)]
@@ -42,8 +44,135 @@ pub struct Hooks {
 static mut HOOKS: Option<Hooks> = None;
 
 pub(crate) fn hooks() -> &'static Hooks {
-    // SAFETY: set once at startup, read-only afterwards.
-    unsafe { (*std::ptr::addr_of!(HOOKS)).as_ref().expect("revc_image_set_hooks not called") }
+    // SAFETY: set before use (tests), read-only afterwards; the game uses the defaults.
+    unsafe { (*std::ptr::addr_of!(HOOKS)).as_ref().unwrap_or(&DEFAULT_HOOKS) }
+}
+
+// ---------------------------------------------------------------- Image objects (7d2, image.cpp)
+
+const IMAGE_HINT: u32 = 0x30000 | 0x18; // MEMDUR_EVENT | ID_IMAGE
+
+/// Image::create: an image without pixels or palette yet.
+///
+/// # Safety
+/// After the memory functions are set.
+pub unsafe fn image_create(width: i32, height: i32, depth: i32) -> *mut Image {
+    unsafe {
+        let img = crate::rwengine::rw_malloc(size_of::<Image>(), IMAGE_HINT) as *mut Image;
+        if img.is_null() {
+            eprintln!("[RW] Couldn't allocate 0x{:X} bytes", size_of::<Image>());
+            return img;
+        }
+        *crate::rwplugin::alloc_count(crate::rwplugin::CLASS_IMAGE) += 1;
+        img.write(Image { flags: 0, width, height, depth, bpp: bpp_of(depth), stride: 0, pixels: std::ptr::null_mut(), palette: std::ptr::null_mut() });
+        img
+    }
+}
+
+/// Image::free: the pixels and palette the image allocated itself.
+///
+/// # Safety
+/// A live image.
+pub unsafe fn image_free(img: *mut Image) {
+    unsafe {
+        let i = &mut *img;
+        if i.flags & 1 != 0 {
+            crate::rwengine::rw_free(i.pixels as *mut c_void);
+            i.pixels = std::ptr::null_mut();
+        }
+        if i.flags & 2 != 0 {
+            crate::rwengine::rw_free(i.palette as *mut c_void);
+            i.palette = std::ptr::null_mut();
+        }
+        i.flags = 0;
+    }
+}
+
+/// Image::destroy
+///
+/// # Safety
+/// An image from image_create.
+pub unsafe fn image_destroy(img: *mut Image) {
+    unsafe {
+        image_free(img);
+        crate::rwengine::rw_free(img as *mut c_void);
+        *crate::rwplugin::alloc_count(crate::rwplugin::CLASS_IMAGE) -= 1;
+    }
+}
+
+/// Image::allocate: pixels (stride = width * bpp) and, for 4 and 8 bits, the palette, where
+/// missing. librw sets the palette flag even when no palette is needed.
+///
+/// # Safety
+/// A live image.
+pub unsafe fn image_allocate(img: *mut Image) {
+    unsafe {
+        let i = &mut *img;
+        if i.pixels.is_null() {
+            i.stride = i.width * i.bpp;
+            i.pixels = crate::rwengine::rw_must_malloc((i.stride * i.height) as usize, IMAGE_HINT) as *mut u8;
+            i.flags |= 1;
+        }
+        if i.palette.is_null() {
+            if i.depth == 4 || i.depth == 8 {
+                i.palette = crate::rwengine::rw_must_malloc(((1 << i.depth) * 4) as usize, IMAGE_HINT) as *mut u8;
+            }
+            i.flags |= 2;
+        }
+    }
+}
+
+mod defaults {
+    use super::*;
+    pub(super) unsafe extern "C" fn alloc(size: usize) -> *mut u8 {
+        unsafe { crate::rwengine::rw_must_malloc(size, IMAGE_HINT) as *mut u8 }
+    }
+    pub(super) unsafe extern "C" fn free(img: *mut Image) {
+        unsafe { image_free(img) }
+    }
+    pub(super) unsafe extern "C" fn allocate(img: *mut Image) {
+        unsafe { image_allocate(img) }
+    }
+    pub(super) unsafe extern "C" fn create(w: i32, h: i32, depth: i32) -> *mut Image {
+        unsafe { image_create(w, h, depth) }
+    }
+    pub(super) unsafe extern "C" fn destroy(img: *mut Image) {
+        unsafe { image_destroy(img) }
+    }
+}
+static DEFAULT_HOOKS: Hooks = Hooks { alloc: defaults::alloc, free: defaults::free, allocate: defaults::allocate, create: defaults::create, destroy: defaults::destroy };
+
+unsafe extern "C" fn image_module_open(o: *mut c_void, _: i32, _: i32) -> *mut c_void {
+    crate::rwimagefile::clear_file_formats();
+    o
+}
+const ID_IMAGEMODULE: u32 = 0x406;
+
+/// Image::registerModule: the module's engine plugin clears the formats and search path when
+/// the engine starts and stops.
+///
+/// # Safety
+/// During Engine::init.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_image_register_module() {
+    unsafe { crate::rwplugin::pl_register(crate::rwplugin::class_list(crate::rwplugin::CLASS_ENGINE), 0, ID_IMAGEMODULE, Some(image_module_open), Some(image_module_open), None) };
+}
+
+macro_rules! image_ffi {
+    ($($name:ident ( $($a:ident : $t:ty),* ) $(-> $r:ty)? => $body:expr;)*) => {
+        $(
+            /// # Safety
+            /// As the Rust function it forwards to.
+            #[unsafe(no_mangle)]
+            pub unsafe extern "C" fn $name($($a: $t),*) $(-> $r)? { unsafe { $body } }
+        )*
+    };
+}
+image_ffi! {
+    revc_image_create(w: i32, h: i32, depth: i32) -> *mut Image => image_create(w, h, depth);
+    revc_image_destroy(img: *mut Image) => image_destroy(img);
+    revc_image_allocate(img: *mut Image) => image_allocate(img);
+    revc_image_free(img: *mut Image) => image_free(img);
 }
 
 pub(crate) fn bpp_of(depth: i32) -> i32 {

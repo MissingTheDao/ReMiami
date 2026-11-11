@@ -1146,3 +1146,141 @@ registerNativeDataPlugin(void)
 }
 
 }
+
+// ---------------------------------------------------------------- Image (rwimage.rs, rwimagefile.rs)
+namespace rw {
+
+
+// revc (docs/RENDERER_PORT.md, stage 2 step 5b): the pixel functions are in Rust
+// (rust/revc/src/rwimage.rs): DXT decompression, hasAlpha, convertTo32, (un)palettize with the
+// octree quantizer, the masks; checked against tests/golden/rwimage.txt. Image objects and their
+// memory stay here (hooks). librw's DXT flipping, compressPalette, extractMask, setPalette and
+// printSearchPath had no callers and are gone.
+extern "C" {
+Image *revc_image_create(int32 w, int32 h, int32 depth);
+void revc_image_destroy(Image *img);
+void revc_image_allocate(Image *img);
+void revc_image_free(Image *img);
+void revc_image_register_module(void);
+void revc_image_set_pixels_dxt(Image *img, int32 type, const uint8 *src);
+int32 revc_image_has_alpha(const Image *img);
+void revc_image_unpalettize(Image *img, int32 forceAlpha);
+void revc_image_convert_to32(Image *img);
+void revc_image_palettize(Image *img, int32 depth);
+void revc_image_make_mask(Image *img);
+void revc_image_apply_mask(Image *img, const Image *mask);
+void revc_image_remove_mask(Image *img);
+}
+static_assert(sizeof(Image) == 40, "Image layout (rwimage.rs)");
+
+// Image formats are as follows:
+//  32 bit has 4 bytes: 8888 RGBA
+//  24 bit has 3 bytes: 888 RGB
+//  16 bit has 2 bytes: 1555 ARGB stored in platform native order (TODO?)
+// palettes always have 4 bytes: r, g, b, a
+//   8 bit has 1 byte: x
+//   4 bit has 1 byte per two pixels: 0xLR, where L and R are the left and right pixel resp.
+
+inline Image *Image::create(int32 width, int32 height, int32 depth) { return revc_image_create(width, height, depth); }
+inline void Image::destroy(void) { revc_image_destroy(this); }
+inline void Image::allocate(void) { revc_image_allocate(this); }
+inline void Image::free(void) { revc_image_free(this); }
+
+inline void
+Image::setPixels(uint8 *pixels)
+{
+	this->pixels = pixels;
+	this->flags |= 1;
+}
+
+inline void
+Image::setPixelsDXT(int32 type, uint8 *pixels)
+{
+	revc_image_set_pixels_dxt(this, type, pixels);
+}
+
+inline bool32
+Image::hasAlpha(void)
+{
+	return revc_image_has_alpha(this);
+}
+
+inline void
+Image::convertTo32(void)
+{
+	assert(this->pixels);
+	revc_image_convert_to32(this);
+}
+
+inline void
+Image::palettize(int32 depth)
+{
+	assert(depth <= 8);
+	revc_image_palettize(this, depth);
+}
+
+inline void
+Image::unpalettize(bool forceAlpha)
+{
+	revc_image_unpalettize(this, forceAlpha);
+}
+
+// Copy the biggest channel value to alpha
+inline void
+Image::makeMask(void)
+{
+	revc_image_make_mask(this);
+}
+
+inline void
+Image::applyMask(Image *mask)
+{
+	revc_image_apply_mask(this, mask);
+}
+
+inline void
+Image::removeMask(void)
+{
+	revc_image_remove_mask(this);
+}
+
+// revc (stage 2 step 5b): the search path and the file lookup (with makePath's case
+// correction) are in Rust (rust/revc/src/rwimagefile.rs)
+extern "C" {
+void revc_image_set_search_path(const char *path);
+int32 revc_image_get_filename(const char *name, char *out, size_t size);
+}
+
+inline void
+Image::setSearchPath(const char *path)
+{
+	revc_image_set_search_path(path);
+}
+
+inline char*
+Image::getFilename(const char *name)
+{
+	char buf[4096];
+	if(!revc_image_get_filename(name, buf, sizeof(buf)))
+		return nil;
+	return rwStrdup(buf, MEMDUR_EVENT);
+}
+
+// revc (stage 2 step 7d1): the file format registry, read and readMasked are in Rust
+// (rust/revc/src/rwimagefile.rs), checked against tests/golden/rwimageread.txt.
+extern "C" {
+int32 revc_image_register_file_format(const char *ext, Image::fileRead read, Image::fileWrite write);
+void revc_image_clear_file_formats(void);
+Image *revc_image_read(const char *name);
+Image *revc_image_read_masked(const char *name, const char *mask);
+}
+
+inline Image *Image::readMasked(const char *imageName, const char *maskName) { return revc_image_read_masked(imageName, maskName); }
+inline Image *Image::read(const char *imageName) { return revc_image_read(imageName); }
+inline bool32 Image::registerFileFormat(const char *ext, fileRead read, fileWrite write) { return revc_image_register_file_format(ext, read, write); }
+
+inline void Image::registerModule(void) { revc_image_register_module(); }
+
+
+
+}
