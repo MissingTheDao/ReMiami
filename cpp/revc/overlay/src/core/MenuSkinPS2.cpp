@@ -111,47 +111,65 @@ DrawHelpBox(uint8 alpha)
 	const CRGBA glyphColor = gGlyphPackLoaded ? CRGBA(0, 0, 0, alpha) : CRGBA(255, 255, 255, alpha);
 	const float sy = CFont::Details.scaleY;
 	const float gs = 21.0f * sy;	// a little larger than the font's glyph cell, like the PS2's symbols
-	wchar buf[64];
+	// The rows are centred in the box as a block: "<glyph> button" right-aligned before a common
+	// dash column, the actions after it (as on the PS2). Widths first, then the column position.
+	const float gap = sy * 4.0f;
+	const float dashGap = SCREEN_SCALE_X(10.0f * 640.0f / 1440.0f), actionGap = SCREEN_SCALE_X(40.0f * 640.0f / 1440.0f);
+	const bool dpadGlyphs = gGlyphPackLoaded && CFont::ButtonSprite[dpad[0]].m_pTexture;
+	wchar left[3][64];
+	float leftW[4], rightW = 0.0f, leftMax = 0.0f;
+	for (int i = 0; i < 3; i++) {
+		CSprite2d &g = CFont::ButtonSprite[glyphs[i]];
+		if (g.m_pTexture == nil && i == 2) {
+			// without a Start glyph: "START button"
+			UnicodeStrcpy(left[i], TheText.Get("RVC_HST"));
+			int n = UnicodeStrlen(left[i]);
+			left[i][n++] = ' ';
+			UnicodeStrcpy(left[i] + n, TheText.Get("RVC_HBT"));
+		} else
+			UnicodeStrcpy(left[i], TheText.Get("RVC_HBT"));
+		leftW[i] = CFont::GetStringWidth(left[i], true) + (g.m_pTexture ? gap + gs : 0.0f);
+	}
+	leftW[3] = dpadGlyphs ? 4.0f * gs + 3.0f * sy * 2.0f : HX(1202.0f) - HX(1068.0f);
+	for (int i = 0; i < 4; i++) {
+		leftMax = Max(leftMax, leftW[i]);
+		rightW = Max(rightW, CFont::GetStringWidth(TheText.Get(actions[i]), true));
+	}
+	// the box's centre (capture pixels, measured) and the dash column that centres the block
+	const float centre = HX(1196.0f);
+	const float column = centre - (leftMax + actionGap + rightW) / 2.0f + leftMax;
+
 	for (int i = 0; i < 4; i++) {
 		float y = HY(752.0f + 36.0f * i);
 		if (i < 3) {
-			// "<glyph> button", right-aligned before the dash; all rows use the pad's glyphs
-			// (Start too) so the box has one style. Without a Start glyph: "START button".
 			CSprite2d &g = CFont::ButtonSprite[glyphs[i]];
-			if (g.m_pTexture == nil && i == 2) {
-				UnicodeStrcpy(buf, TheText.Get("RVC_HST"));
-				int n = UnicodeStrlen(buf);
-				buf[n++] = ' ';
-				UnicodeStrcpy(buf + n, TheText.Get("RVC_HBT"));
-			} else
-				UnicodeStrcpy(buf, TheText.Get("RVC_HBT"));
-			float w = CFont::GetStringWidth(buf, true);
-			float gx = HX(1205.0f) - w - sy * 4.0f - gs;
+			float w = CFont::GetStringWidth(left[i], true);
+			float gx = column - w - gap - gs;
 			if (g.m_pTexture)
 				g.Draw(CRect(gx, y + 0.5f * sy, gx + gs, y + 0.5f * sy + gs), glyphColor);
 			CFont::SetRightJustifyOn();
-			CFont::PrintString(HX(1205.0f), y, buf);
+			CFont::PrintString(column, y, left[i]);
 			CFont::SetRightJustifyOff();
-		} else if (gGlyphPackLoaded && CFont::ButtonSprite[dpad[0]].m_pTexture) {
-			// Navigate: the pad's D-pad glyphs up, down, right, left (the PS2's order),
-			// right-aligned before the dash like the other rows.
-			float gx = HX(1205.0f) - 4.0f * gs - 3.0f * sy * 2.0f;
+		} else if (dpadGlyphs) {
+			// Navigate: the pad's D-pad glyphs up, down, right, left (the PS2's order).
+			float gx = column - leftW[3];
 			for (int k = 0; k < 4; k++, gx += gs + sy * 2.0f)
 				if (CFont::ButtonSprite[dpad[k]].m_pTexture)
 					CFont::ButtonSprite[dpad[k]].Draw(CRect(gx, y + 0.5f * sy, gx + gs, y + 0.5f * sy + gs), glyphColor);
 		} else {
-			// Without the glyph pack: the PS2's four filled black arrows, centred at these
-			// capture pixels.
+			// Without the glyph pack: the PS2's four filled black arrows (spacing as measured),
+			// ending at the column.
 			static const float cx[4] = { 1078.0f, 1118.0f, 1157.0f, 1192.0f };
-			const float cy = 873.0f, r = 10.0f;
+			const float cy = 873.0f, r = 10.0f, shift = column - HX(1202.0f);
 			CRGBA black(0, 0, 0, alpha);
-			CSprite2d::Draw2DPolygon(HX(cx[0]), HY(cy - r), HX(cx[0]), HY(cy - r), HX(cx[0] - r), HY(cy + r), HX(cx[0] + r), HY(cy + r), black);
-			CSprite2d::Draw2DPolygon(HX(cx[1] - r), HY(cy - r), HX(cx[1] + r), HY(cy - r), HX(cx[1]), HY(cy + r), HX(cx[1]), HY(cy + r), black);
-			CSprite2d::Draw2DPolygon(HX(cx[2] - r), HY(cy - r), HX(cx[2] + r), HY(cy), HX(cx[2] - r), HY(cy + r), HX(cx[2] + r), HY(cy), black);
-			CSprite2d::Draw2DPolygon(HX(cx[3] + r), HY(cy - r), HX(cx[3] - r), HY(cy), HX(cx[3] + r), HY(cy + r), HX(cx[3] - r), HY(cy), black);
+			auto X = [&](float x) { return HX(x) + shift; };
+			CSprite2d::Draw2DPolygon(X(cx[0]), HY(cy - r), X(cx[0]), HY(cy - r), X(cx[0] - r), HY(cy + r), X(cx[0] + r), HY(cy + r), black);
+			CSprite2d::Draw2DPolygon(X(cx[1] - r), HY(cy - r), X(cx[1] + r), HY(cy - r), X(cx[1]), HY(cy + r), X(cx[1]), HY(cy + r), black);
+			CSprite2d::Draw2DPolygon(X(cx[2] - r), HY(cy - r), X(cx[2] + r), HY(cy), X(cx[2] - r), HY(cy + r), X(cx[2] + r), HY(cy), black);
+			CSprite2d::Draw2DPolygon(X(cx[3] + r), HY(cy - r), X(cx[3] - r), HY(cy), X(cx[3] + r), HY(cy + r), X(cx[3] - r), HY(cy), black);
 		}
-		CFont::PrintString(HX(1215.0f), y, TheText.Get("RVC_HDA"));
-		CFont::PrintString(HX(1245.0f), y, TheText.Get(actions[i]));
+		CFont::PrintString(column + dashGap, y, TheText.Get("RVC_HDA"));
+		CFont::PrintString(column + actionGap, y, TheText.Get(actions[i]));
 	}
 }
 
