@@ -377,6 +377,84 @@ revc_test_menu_where(int *open, int *page, int *row)
 	return MenuSkinPS2PageFocus();
 }
 
+// Button sweep (REVC_TEST=menusweep): the states to visit, in order. idx -> page, row (-1 the
+// tab/icon bar focused), returns 0 past the end. Every tab page of the current UI style, its tab
+// bar and each selectable row, then the "advanced" options list's rows.
+}	// extern "C"
+extern int8 gUiStyle;
+bool MenuSkinPS2Active(int page, bool gameNotLoaded);
+bool MenuSkinXboxActive(int page, bool gameNotLoaded);
+int MenuSkinPS2TabPage(int i);
+int MenuSkinXboxTabPage(int i);
+void MenuSkinPS2SetFocus(int page, bool list);
+extern "C" void MenuSkinXboxSetBarFocus(int bar);
+extern "C" {
+int
+revc_test_sweep_state(int idx, int *page, int *row)
+{
+	static int pages[16], rows[16], n = -1, total;
+	if (n < 0) {
+		n = 0;
+		for (int i = 0; i < 12 && n < 15; i++) {
+			int p = gUiStyle == 1 ? MenuSkinPS2TabPage(i) : MenuSkinXboxTabPage(i);
+			if (p < 0)
+				break;
+			pages[n++] = p;
+		}
+		pages[n++] = MENUPAGE_CONSOLE_OPTIONS;
+		total = 0;
+		for (int k = 0; k < n; k++) {
+			int r = 0;
+			while (r < NUM_MENUROWS && aScreens[pages[k]].m_aEntries[r].m_Action != MENUACTION_NOTHING &&
+			       aScreens[pages[k]].m_aEntries[r].m_EntryName[0] != '\0')
+				r++;
+			rows[k] = Min(r, 12);	// (the options list is long: its first 12 rows)
+			total += 1 + rows[k];
+		}
+	}
+	for (int k = 0; k < n; k++) {
+		if (idx == 0) {
+			*page = pages[k];
+			*row = -1;
+			return 1;
+		}
+		idx--;
+		if (idx < rows[k]) {
+			if (aScreens[pages[k]].m_aEntries[idx].m_Action == MENUACTION_LABEL)
+				*row = -2;	// (a heading: skipped)
+			else
+				*row = idx;
+			*page = pages[k];
+			return 1;
+		}
+		idx -= rows[k];
+	}
+	return 0;
+}
+
+// Sets the focus for the sweep: the tab/icon bar (list 0) or the page's list (1).
+void
+revc_test_menu_set_focus(int page, int list)
+{
+	if (gUiStyle == 1)
+		MenuSkinPS2SetFocus(page, list != 0);
+	else
+		MenuSkinXboxSetBarFocus(list == 0);
+}
+
+// Where the menu ended up: open, page, row, whether the page belongs to the console style
+// (its skin draws it), and whether a fade or page change is still running.
+void
+revc_test_menu_status(int *open, int *page, int *row, int *skinned, int *fading)
+{
+	CMenuManager &m = FrontEndMenuManager;
+	*open = m.m_bMenuActive;
+	*page = m.m_nCurrScreen;
+	*row = m.m_nCurrOption;
+	*skinned = gUiStyle == 1 ? MenuSkinPS2Active(m.m_nCurrScreen, m.m_bGameNotLoaded) : MenuSkinXboxActive(m.m_nCurrScreen, m.m_bGameNotLoaded);
+	*fading = m.m_bMenuActive && (m.m_nMenuFadeAlpha < 255 || m.m_firstStartCounter < 255);
+}
+
 // Motion tests: one menu input of any kind (down, up, select, back, left/right change).
 void
 revc_test_menu_key(int down, int up, int select, int back, int change)

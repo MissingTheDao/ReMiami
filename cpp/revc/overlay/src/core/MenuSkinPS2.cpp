@@ -166,6 +166,8 @@ float ScreenPositionY(void) { return ((((uint8)gScreenPosition) & 15) - 8) * 2.0
 // Focus on the Map page: on the tab bar (the "map" tab boxed) until up/down moves it to the
 // legend item (then only the legend is boxed), as on the PS2.
 static int focusPage = -1;
+static bool audioEdit, audioOutput, loadColumn;	// (Audio and Load sub-focus: see MenuSkinPS2Input)
+static int loadRow;
 static bool pageFocus = false;
 
 static int
@@ -378,15 +380,11 @@ MenuSkinPS2PageFocus(void)
 // moves into the slots, triangle there comes back to the left column. loadRow: 0 load game,
 // 1 new game (entry 8), 2 console discs (entry 9).
 // Audio: the "output" cell (beside radio station) has focus; m_nCurrOption is the radio row.
-static bool audioOutput;
 bool MenuSkinPS2AudioOutputFocus(void) { return audioOutput; }
 // Audio edit mode: cross on a cell; the box grows over label and value, left/right change the
 // value, triangle goes straight to the tab bar.
-static bool audioEdit;
 bool MenuSkinPS2AudioEdit(void) { return audioEdit; }
 
-static bool loadColumn;
-static int loadRow;
 
 bool
 MenuSkinPS2LoadHeadingFocus(CMenuManager *m)
@@ -400,6 +398,17 @@ MenuSkinPS2SetFocus(int page, bool list)
 {
 	focusPage = page;
 	pageFocus = list;
+	audioEdit = false;
+	audioOutput = false;
+	loadColumn = list && page == MENUPAGE_CHOOSE_LOAD_SLOT;
+	loadRow = 0;
+}
+
+// Test sweep: the tab pages, in order (-1 past the end).
+int
+MenuSkinPS2TabPage(int i)
+{
+	return i >= 0 && i < (int)ARRAY_SIZE(tabs) ? tabs[i].page : -1;
 }
 
 // A tab's own page (the pages the tab bar switches to)?
@@ -525,6 +534,8 @@ MenuSkinPS2Input(CMenuManager *m)
 			return true;
 		}
 	}
+	if (pageFocus && cross && aScreens[m->m_nCurrScreen].m_aEntries[m->m_nCurrOption].m_Action == MENUACTION_GOBACK)
+		return true;	// (the PC's "back" rows: the PS2 goes back with triangle only; Brief/Stats have nothing to select)
 	if (pageFocus) {
 		if (IsTabPage(m->m_nCurrScreen) && tri) {
 			pageFocus = false;

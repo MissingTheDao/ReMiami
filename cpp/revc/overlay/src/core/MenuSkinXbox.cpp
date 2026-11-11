@@ -722,6 +722,15 @@ extern "C" void
 MenuSkinXboxSetBarFocus(int bar)
 {
 	barFocus = bar != 0;
+	dropOpen = false;
+	dropConfirm = false;
+}
+
+// Test sweep: the icon bar's pages, in order (-1 past the end).
+int
+MenuSkinXboxTabPage(int i)
+{
+	return i >= 0 && i < (int)ARRAY_SIZE(tabs) ? tabs[i].page : -1;
 }
 
 // A page the icon bar switches to (not a sub-page, dialog or "advanced" list).

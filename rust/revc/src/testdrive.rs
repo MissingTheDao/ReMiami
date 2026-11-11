@@ -87,6 +87,9 @@ unsafe extern "C" {
     fn revc_test_pad(on: i32, buttons: u32, lx: f32, ly: f32, rx: f32, ry: f32, l2: f32, r2: f32);
     fn revc_test_menu_where(open: *mut i32, page: *mut i32, row: *mut i32) -> i32;
     fn revc_test_world_start(kind: i32, x: f32, y: f32, heading: f32);
+    fn revc_test_sweep_state(idx: i32, page: *mut i32, row: *mut i32) -> i32;
+    fn revc_test_menu_set_focus(page: i32, list: i32);
+    fn revc_test_menu_status(open: *mut i32, page: *mut i32, row: *mut i32, skinned: *mut i32, fading: *mut i32);
     fn revc_test_telemetry(out: *mut f32, anim: *mut std::ffi::c_char, anim_len: i32, anim_time: *mut f32);
     fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
 }
@@ -113,6 +116,7 @@ enum Scenario {
     Scenes,
     Menus,
     PadScript,
+    MenuSweep,
 }
 
 #[derive(Debug)]
@@ -142,6 +146,8 @@ enum Phase {
     Scanner { t0: u32 },
     /// Pad script (REVC_TEST_PAD_SCRIPT): frames since the start state was set.
     PadScript { frame: u32 },
+    /// Button sweep: state `idx` (revc_test_sweep_state), pad button `button`, frames into it.
+    MenuSweep { idx: i32, button: u32, frame: u32, flagged: u32 },
     Done,
 }
 
@@ -642,6 +648,7 @@ pub fn init() -> Result<bool, String> {
         "scenes" => Scenario::Scenes,
         "menus" => Scenario::Menus,
         "padscript" => Scenario::PadScript,
+        "menusweep" => Scenario::MenuSweep,
         other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, scanner, scenes, menus, padscript)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
@@ -756,7 +763,7 @@ impl Driver {
                         self.phase = Phase::MenuShot { frames: 0 };
                         return false;
                     }
-                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::Scanner | Scenario::Scenes | Scenario::Menus | Scenario::PadScript => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::Scanner | Scenario::Scenes | Scenario::Menus | Scenario::PadScript | Scenario::MenuSweep => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -829,6 +836,13 @@ impl Driver {
                 }
                 if self.scenario == Scenario::Gamepad {
                     self.phase = Phase::Pads;
+                    return false;
+                }
+                if self.scenario == Scenario::MenuSweep {
+                    let (_, x, y, heading, hour, minute, weather) = SCENES[0];
+                    unsafe { revc_test_scene(x, y, heading, hour, minute, weather) };
+                    unsafe { revc_test_pad(1, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) };
+                    self.phase = Phase::MenuSweep { idx: 0, button: 0, frame: 0, flagged: 0 };
                     return false;
                 }
                 if self.scenario == Scenario::PadScript || (self.scenario == Scenario::Menus && motion_route().is_some()) {
@@ -1113,6 +1127,62 @@ impl Driver {
                         return self.finish();
                     }
                 }
+            }
+            Phase::MenuSweep { idx, button, frame, flagged } => {
+                // Every pad button on every menu state of the console UI style (the menu's tab
+                // pages, their tab/icon bar and each row, the "advanced" list): set the state,
+                // let it settle, press the button for 4 frames, look 40 frames later. One CSV line
+                // per press (REVC_TEST_SWEEP_OUT); flagged: a page the console style doesn't
+                // have, a fade still running, or the menu closed by a button that shouldn't.
+                use std::io::Write;
+                const BUTTONS: usize = crate::padscript::BUTTONS.len();
+                let (mut page, mut row) = (0i32, 0i32);
+                if unsafe { revc_test_sweep_state(idx, &mut page, &mut row) } == 0 {
+                    unsafe { revc_test_pad(0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) };
+                    log(format!("menu sweep: {idx} states x {BUTTONS} buttons, {flagged} flagged"));
+                    return self.finish();
+                }
+                let next = |button: u32| if button as usize + 1 < BUTTONS { (idx, button + 1) } else { (idx + 1, 0) };
+                if row == -2 {
+                    self.phase = Phase::MenuSweep { idx: idx + 1, button: 0, frame: 0, flagged };
+                    return false;
+                }
+                match frame {
+                    0 => {
+                        unsafe { revc_test_pad(1, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) };
+                        if unsafe { revc_test_menu_state(page, row.max(0), -1, -1, -1) } == 0 {
+                            return false;	// (opening the menu first)
+                        }
+                        unsafe { revc_test_menu_set_focus(page, (row >= 0) as i32) };
+                    }
+                    1..=29 => unsafe { revc_test_menu_set_focus(page, (row >= 0) as i32) },
+                    30 => unsafe { revc_test_pad(1, 1 << button, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) },
+                    34 => unsafe { revc_test_pad(1, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) },
+                    74 => {
+                        let (mut open, mut p2, mut r2, mut skinned, mut fading) = (0, 0, 0, 0, 0);
+                        unsafe { revc_test_menu_status(&mut open, &mut p2, &mut r2, &mut skinned, &mut fading) };
+                        let name = crate::padscript::BUTTONS[button as usize];
+                        let mut flag = String::new();
+                        if open != 0 && skinned == 0 {
+                            flag = "foreign_page".into();
+                        } else if fading != 0 {
+                            flag = "still_fading".into();
+                        } else if open == 0 && name != "start" && !(row < 0 && (name == "triangle" || name == "circle")) {
+                            flag = "closed".into();
+                        }
+                        let flagged = flagged + (!flag.is_empty()) as u32;
+                        if let Some(path) = std::env::var_os("REVC_TEST_SWEEP_OUT") {
+                            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+                                let _ = writeln!(f, "{page},{row},{name},{open},{p2},{r2},{skinned},{fading},{flag}");
+                            }
+                        }
+                        let (ni, nb) = next(button);
+                        self.phase = Phase::MenuSweep { idx: ni, button: nb, frame: 0, flagged };
+                        return false;
+                    }
+                    _ => {}
+                }
+                self.phase = Phase::MenuSweep { idx, button, frame: frame + 1, flagged };
             }
             Phase::PadScript { frame } => {
                 // A pad script (padscript.rs) from a named start state: menu_base = scene S1
