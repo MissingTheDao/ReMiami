@@ -232,8 +232,9 @@ native 640x480 xemu captures:
   in pink capitals, the two choices side by side with the mint box; the Load page's title stays.
   The PC menu's own choice texts (NO/YES) are kept.
 
-- Load list: the slot rows keep the PC layout; the selected slot gets the mint bar across the list.
-  (The Xbox's list box is a lighter, tilted blue with black text: not done.)
+- Load (and delete/save) slot lists: the Xbox's light-blue, slightly tilted list box, eight rows 35 px
+  apart, each slot name in black in the Xbox menu font with its date under it, the mint bar across
+  the selected one (all measured).
 
 - Controller picture page (Controls): keeps its own pad drawing and callouts with the Xbox title,
   logo and icon bar; the layout name moves under the title, the SHOW/context row sits between the
