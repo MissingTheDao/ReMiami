@@ -22,6 +22,7 @@ case "${1:-}" in
       # AI_RESUME_DELAY seconds (default 120) with no new hold; the first waiter to claim the marker wins.
       setsid bash -c '
         sleep "${AI_RESUME_DELAY:-120}"
+        for f in "$1"/hold/*; do [[ -e $f ]] && ! kill -0 "${f##*/}" 2>/dev/null && rm -f "$f"; done  # crashed runs
         [[ -z $(ls -A "$1/hold" 2>/dev/null) ]] || exit 0
         mv "$1/was-running" "$1/was-running.$$" 2>/dev/null || exit 0
         rm -f "$1/was-running.$$"
