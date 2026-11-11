@@ -718,6 +718,15 @@ there is logic, deletion where nothing calls it.
     static initialisation order), and their C++ definitions are gone. The lists start at the
     Rust layouts' sizes (asserted against `sizeof` on the C++ side) when Engine::init sets them
     up; the driver lists are rebuilt on every init as librw did.
+    **Part (b) plan and first phase (2026-11-11).** The hooks stay as Rust structs (the
+    golden tests inject their logging through them), but Rust installs default
+    implementations itself instead of C++ static initialisers, and librw's globals become Rust
+    statics behind C++ inline references. What can only be C++ until the game's own file and
+    stream code is ported (the trampolines that make virtual calls on the game's Stream
+    objects) goes into one glue file in the game tree for stages 4 and 5. Phase 1 done:
+    rw::engine, Engine::memfuncs, defaultMemfuncs, allocLocation, version, build, platform,
+    streamAppendFrames and debugFile are Rust statics (`rwengine.rs`); Engine::state is gone
+    (Rust keeps the state).
   - **7d3. librw's .cpp files go**: every remaining method becomes an inline forwarder in its
     header (calling `revc_*`); the librw CMake target is removed.
   - **7d4. fakerw goes**: fake.cpp's RW API (358 functions) is exported by Rust under the C

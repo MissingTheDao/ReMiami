@@ -629,11 +629,14 @@ enum Errors
 
 #undef ECODE
 
-extern int32 version;
-extern int32 build;
-extern int32 platform;
-extern bool32 streamAppendFrames;
-extern char *debugFile;
+// revc (stage 2 step 7d2): Rust statics (rust/revc/src/rwengine.rs)
+extern "C" int32 revc_version, revc_build, revc_platform, revc_stream_append_frames;
+extern "C" char *revc_debug_file;
+inline int32 &version = revc_version;
+inline int32 &build = revc_build;
+inline int32 &platform = revc_platform;
+inline bool32 &streamAppendFrames = revc_stream_append_frames;
+inline char *&debugFile = revc_debug_file;
 
 
 // 0x04000000	3.1

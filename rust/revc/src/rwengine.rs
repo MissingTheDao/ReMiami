@@ -59,10 +59,6 @@ const _: () = assert!(size_of::<Engine>() == 288 && size_of::<Driver>() == 88 &&
 /// format table.
 #[repr(C)]
 pub struct Hooks {
-    /// &rw::engine
-    pub engine: *mut *mut Engine,
-    /// &Engine::memfuncs
-    pub memfuncs: *mut MemoryFunctions,
     /// Frame/Image/Raster/Texture::registerModule, the numAllocated resets, then the wgpu
     /// driver's plugins (engine.cpp's "core plugin attach" and "driver plugin attach")
     pub register_modules: unsafe extern "C" fn(),
@@ -175,14 +171,14 @@ fn out_of_memory() -> ! {
     std::process::exit(1);
 }
 unsafe extern "C" fn mustmalloc_h(sz: usize, hint: u32) -> *mut c_void {
-    let r = unsafe { ((*hooks().memfuncs).rwmalloc)(sz, hint) };
+    let r = unsafe { (memfuncs().rwmalloc)(sz, hint) };
     if r.is_null() && sz != 0 {
         out_of_memory();
     }
     r
 }
 unsafe extern "C" fn mustrealloc_h(p: *mut c_void, sz: usize, hint: u32) -> *mut c_void {
-    let r = unsafe { ((*hooks().memfuncs).rwrealloc)(p, sz, hint) };
+    let r = unsafe { (memfuncs().rwrealloc)(p, sz, hint) };
     if r.is_null() && sz != 0 {
         out_of_memory();
     }
@@ -191,6 +187,36 @@ unsafe extern "C" fn mustrealloc_h(p: *mut c_void, sz: usize, hint: u32) -> *mut
 
 /// librw's defaultMemfuncs.
 pub const DEFAULT_MEMFUNCS: MemoryFunctions = MemoryFunctions { rwmalloc: malloc_h, rwrealloc: realloc_h, rwfree: free_h, rwmustmalloc: None, rwmustrealloc: None };
+
+// ---------------------------------------------------------------- librw's globals (7d2)
+// The C++ headers refer to these (rw::engine, Engine::memfuncs, rw::version, ...).
+
+/// rw::engine
+#[unsafe(no_mangle)]
+pub static mut revc_engine: *mut Engine = null_mut();
+/// Engine::memfuncs (usable before Engine::init, which librw's weren't)
+#[unsafe(no_mangle)]
+pub static mut revc_memfuncs: MemoryFunctions = MemoryFunctions { rwmustmalloc: Some(mustmalloc_h), rwmustrealloc: Some(mustrealloc_h), ..DEFAULT_MEMFUNCS };
+/// rw::defaultMemfuncs
+#[unsafe(no_mangle)]
+pub static mut revc_default_memfuncs: MemoryFunctions = DEFAULT_MEMFUNCS;
+/// rw::allocLocation (where the last rwMalloc came from)
+#[unsafe(no_mangle)]
+pub static mut revc_alloc_location: *const c_char = std::ptr::null();
+/// rw::version / rw::build: what chunk headers are written with
+#[unsafe(no_mangle)]
+pub static mut revc_version: i32 = 0x36003;
+#[unsafe(no_mangle)]
+pub static mut revc_build: i32 = 0xFFFF;
+/// rw::platform
+#[unsafe(no_mangle)]
+pub static mut revc_platform: i32 = 13;
+/// rw::streamAppendFrames
+#[unsafe(no_mangle)]
+pub static mut revc_stream_append_frames: i32 = 0;
+/// rw::debugFile
+#[unsafe(no_mangle)]
+pub static mut revc_debug_file: *mut c_char = null_mut();
 
 /// rwMalloc with librw's memory functions (the engine's, as Engine::init set them).
 ///
@@ -208,7 +234,7 @@ pub(crate) unsafe fn rw_free(p: *mut c_void) {
 }
 
 fn memfuncs() -> &'static MemoryFunctions {
-    unsafe { &*hooks().memfuncs }
+    unsafe { &*addr_of!(revc_memfuncs) }
 }
 unsafe fn rw_new(sz: usize) -> *mut c_void {
     const MEMDUR_GLOBAL: u32 = 0x40000;
@@ -258,7 +284,7 @@ fn set_state(s: State) {
     unsafe { *addr_of_mut!(STATE) = s };
 }
 fn engine() -> *mut Engine {
-    unsafe { *hooks().engine }
+    unsafe { *addr_of!(revc_engine) }
 }
 fn driver_list(i: usize) -> *mut PluginList {
     rwplugin::driver_list(i)
@@ -281,7 +307,7 @@ pub unsafe fn init(mf: *const MemoryFunctions) -> bool {
             rw_error(0, ERR_ENGINEINIT);
             return false;
         }
-        let m = &mut *hooks().memfuncs;
+        let m = &mut *addr_of_mut!(revc_memfuncs);
         *m = if mf.is_null() { DEFAULT_MEMFUNCS } else { *mf };
         if m.rwmustmalloc.is_none() {
             m.rwmustmalloc = Some(mustmalloc_h);
@@ -316,7 +342,7 @@ pub unsafe fn open(p: *mut c_void) -> bool {
             return false;
         }
         let e = rw_new((*engine_plugins()).size as usize) as *mut Engine;
-        *hooks().engine = e;
+        *addr_of_mut!(revc_engine) = e;
         (*e).current_camera = null_mut();
         (*e).current_world = null_mut();
         std::ptr::addr_of_mut!((*e).device).write(rwdevice::RENDER_DEVICE);
@@ -397,7 +423,7 @@ pub unsafe fn close() {
         }
         (hooks().pipeline_destroy)((*e).dummy_default_pipeline);
         (memfuncs().rwfree)(e as *mut c_void);
-        *hooks().engine = null_mut();
+        *addr_of_mut!(revc_engine) = null_mut();
         set_state(State::Initialized);
     }
 }
@@ -473,14 +499,6 @@ pub unsafe extern "C" fn revc_engine_term() {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn revc_engine_system(req: i32, arg: *mut c_void, n: i32) -> i32 {
     unsafe { system(req, arg, n) }
-}
-/// librw's defaultMemfuncs, for the C++ symbol.
-///
-/// # Safety
-/// `out` points at a MemoryFunctions.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn revc_default_memfuncs(out: *mut MemoryFunctions) {
-    unsafe { out.write(DEFAULT_MEMFUNCS) }
 }
 
 #[cfg(test)]

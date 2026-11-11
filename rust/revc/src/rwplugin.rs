@@ -1015,7 +1015,9 @@ mod golden {
 
 // ---------------------------------------------------------------- the class plugin lists (7d2)
 
-/// Indices of the classes' plugin lists and allocation counters (rwplg.h REVC_CLASS_*).
+/// Indices of the classes' plugin lists and allocation counters (rwplg.h REVC_CLASS_*); the
+/// modules use them as their hooks move to Rust.
+#[allow(dead_code)]
 pub const CLASS_FRAME: usize = 0;
 pub const CLASS_RASTER: usize = 1;
 pub const CLASS_TEXTURE: usize = 2;

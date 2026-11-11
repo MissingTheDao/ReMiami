@@ -120,6 +120,8 @@ struct MemoryFunctions
 	void *(*rwmustmalloc)(size_t sz, uint32 hint);
 	void *(*rwmustrealloc)(void *p, size_t sz, uint32 hint);
 };
+// revc (stage 2 step 7d2): Rust statics (rust/revc/src/rwengine.rs)
+extern "C" MemoryFunctions revc_memfuncs, revc_default_memfuncs;
 
 struct SubSystemInfo
 {
@@ -162,8 +164,7 @@ struct Engine
 	ObjPipeline *dummyDefaultPipeline;
 
 	// These must always be available
-	static MemoryFunctions memfuncs;
-	static State state;
+	static inline MemoryFunctions &memfuncs = revc_memfuncs;
 
 	static bool32 init(MemoryFunctions *memfuncs = nil);
 	static bool32 open(EngineOpenParams*);
@@ -193,13 +194,15 @@ struct Engine
 	}
 };
 
-extern Engine *engine;
+extern "C" Engine *revc_engine;
+inline Engine *&engine = revc_engine;
 
 #define RWTOSTR_(X) #X
 #define RWTOSTR(X) RWTOSTR_(X)
 #define RWHERE "file: " __FILE__ " line: " RWTOSTR(__LINE__)
 
-extern const char *allocLocation;
+extern "C" const char *revc_alloc_location;
+inline const char *&allocLocation = revc_alloc_location;
 
 inline void *malloc_LOC(size_t sz, uint32 hint, const char *here) { allocLocation = here; return rw::Engine::memfuncs.rwmalloc(sz,hint); }
 inline void *realloc_LOC(void *p, size_t sz, uint32 hint, const char *here) { allocLocation = here; return rw::Engine::memfuncs.rwrealloc(p,sz,hint); }
@@ -219,6 +222,6 @@ char *strdup_LOC(const char *s, uint32 hint, const char *here);
 #define rwResizeT(t, p, s, h) (t*)rw::mustrealloc_LOC(p,(s)*sizeof(t),h,RWHERE)
 #define rwStrdup(s, h) rw::strdup_LOC(s,h,RWHERE)
 
-extern MemoryFunctions defaultMemfuncs;
+inline MemoryFunctions &defaultMemfuncs = revc_default_memfuncs;
 
 }
