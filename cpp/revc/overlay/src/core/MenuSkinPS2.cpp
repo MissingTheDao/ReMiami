@@ -61,6 +61,16 @@ MenuSkinPS2GlideT(uint32 ms)
 	return step == 0 ? 0.0f : frac[step - 1];
 }
 
+// Focus from the tab into the list: one step with no box at all, then near-equal steps from the
+// tab to row 0 (measured: 8, 33, 57, 79, 100 %), 167 ms. Negative: no box this step.
+float
+MenuSkinPS2GlideTTab(uint32 ms)
+{
+	static const float frac[5] = { 0.08f, 0.33f, 0.57f, 0.79f, 1.0f };
+	int step = Min(5, (int)(ms / 33));
+	return step == 0 ? -1.0f : frac[step - 1];
+}
+
 // A short move (one row) first morphs the box a little for one step, then glides: 200 ms in all
 // (measured: ~10 % one step ahead of the travel).
 float
@@ -73,7 +83,8 @@ MenuSkinPS2GlideTLead(uint32 ms)
 // The PS2's highlight boxes glide: to a new item in 167 ms (the label's size morphing on the way),
 // and in from 190 px below when a page opens (measured on the v3.00 video). id: one box kind
 // (0 the tab bar, 1 the slot lists); returns the box to draw this frame.
-static struct { CRect from, to, cur; uint32 start; int page; bool init; } glides[4];
+static struct { CRect from, to, cur; uint32 start; int page; bool init, tab; } glides[4];
+float MenuSkinPS2GlideTTab(uint32 ms);
 float MenuSkinPS2GlideT(uint32 ms);
 
 // Start glide box `id` at r (its next target glides from there), on whatever page comes next.
@@ -85,6 +96,7 @@ MenuSkinPS2GlideSeed(int id, CRect r)
 	s.page = FrontEndMenuManager.m_nCurrScreen;
 	s.from = s.to = s.cur = r;
 	s.start = CTimer::GetTimeInMillisecondsPauseMode();
+	s.tab = true;	// the next glide is the focus glide from the tab
 }
 
 CRect
@@ -101,6 +113,8 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 		s.to = target;
 		s.start = now;
 	} else if (target.left != s.to.left || target.top != s.to.top || target.right != s.to.right || target.bottom != s.to.bottom) {
+		if (s.tab && s.to.left != s.from.left)
+			s.tab = false;	// (a later move: a normal glide)
 		s.from = s.cur;
 		s.to = target;
 		s.start = now;
@@ -108,7 +122,15 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 	float t;
 	if (s.from.top - s.to.top > SY(100.0f))
 		t = Min(1.0f, (now - s.start) / 100.0f);	// (the page-open sweep: 3 frames)
-	else
+	else if (s.tab) {
+		t = MenuSkinPS2GlideTTab(now - s.start);
+		if (t < 0.0f) {	// the blank step: nothing drawn
+			s.cur = s.from;
+			return CRect(-100.0f, -100.0f, -100.0f, -100.0f);
+		}
+		if (t >= 1.0f)
+			s.tab = false;
+	} else
 		t = MenuSkinPS2GlideT(now - s.start);
 	s.cur = CRect(s.from.left + (s.to.left - s.from.left) * t, s.from.top + (s.to.top - s.from.top) * t,
 		s.from.right + (s.to.right - s.from.right) * t, s.from.bottom + (s.to.bottom - s.from.bottom) * t);
