@@ -273,11 +273,11 @@ BriefListsDraw(int which, float x0, float x1, float cy, uint8 alpha)
 			if (!l.seen[e]) {
 				// "New" in the handwriting font, shadow then pink, left of the first line
 				CFont::SetFontStyle(FONT_LOCALE(FONT_BANK));
-				CFont::SetScale(MENU_X(0.72f), MENU_Y(1.1f));
+				CFont::SetScale(MENU_X(0.97f), MENU_Y(1.48f));	// glyphs about 22 px tall at 480 lines
 				CFont::SetColor(CRGBA(30, 30, 30, alpha * a));
-				CFont::PrintString(MENU_X_LEFT_ALIGNED(x0 - 45.0f + 1.5f), MENU_Y(y - 5.0f + 1.5f), TheText.Get("RVC_NEW"));
+				CFont::PrintString(MENU_X_LEFT_ALIGNED(x0 - 50.0f + 1.5f), MENU_Y(y - 8.0f + 1.5f), TheText.Get("RVC_NEW"));
 				CFont::SetColor(CRGBA(255, 150, 225, alpha * a));
-				CFont::PrintString(MENU_X_LEFT_ALIGNED(x0 - 45.0f), MENU_Y(y - 5.0f), TheText.Get("RVC_NEW"));
+				CFont::PrintString(MENU_X_LEFT_ALIGNED(x0 - 50.0f), MENU_Y(y - 8.0f), TheText.Get("RVC_NEW"));
 				CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
 				CFont::SetScale(MENU_X(MEDIUMTEXT_X_SCALE * 0.89f), MENU_Y(MEDIUMTEXT_Y_SCALE * 0.9f));
 			}

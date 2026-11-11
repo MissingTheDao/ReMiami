@@ -32,7 +32,7 @@ const CRGBA XBOX_PINK(255, 154, 227, 255);
 // The Xbox pause menu's seven pages in icon order, the PC page shown for each, the icon sprite.
 struct XboxTab { int page; int alt; const char *icon; };
 static const XboxTab tabs[] = {
-	{ MENUPAGE_CHOOSE_LOAD_SLOT, -1, "ui/r3_menu_238.dds" },	// disk: load
+	{ MENUPAGE_NEW_GAME, MENUPAGE_CHOOSE_LOAD_SLOT, "ui/r3_menu_238.dds" },	// disk: load ("new game / load game", then the slots)
 	{ MENUPAGE_MAP, -1, "ui/r3_menu_241.dds" },			// compass
 	{ MENUPAGE_BRIEFS, -1, "ui/r3_menu_243.dds" },		// tape
 	{ MENUPAGE_STATS, -1, "ui/r3_menu_246.dds" },			// computer
@@ -269,7 +269,7 @@ MenuSkinXboxTitle(wchar *title, uint8 alpha)
 {
 	// the Xbox's own names for these pages
 	int page = FrontEndMenuManager.m_nCurrScreen;
-	if (page == MENUPAGE_CHOOSE_LOAD_SLOT || MenuSkinXboxDialog(page))
+	if (page == MENUPAGE_CHOOSE_LOAD_SLOT || page == MENUPAGE_NEW_GAME || MenuSkinXboxDialog(page))
 		title = TheText.Get("RVC_XTL");
 	else if (page == MENUPAGE_CONTROLLER_PC)
 		title = TheText.Get("RVC_XTC");

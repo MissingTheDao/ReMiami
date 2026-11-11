@@ -213,6 +213,7 @@ const MENU_SHOTS_XBOX: &[MenuShot] = &[
     ("audio_sfx", "audio", 1, -1, -1, -1, 1000),
     ("audio_radio_vcpr", "audio", 2, -1, -1, -1, 1000),
     ("display", "console_display", 0, -1, -1, -1, 1000),
+    ("load_top", "new_game", 0, -1, -1, -1, 1000),
     ("load_slots", "load", 1, -1, -1, -1, 1000),
     ("load_confirm_new_game", "new_game_confirm", 1, -1, -1, -1, 1000),
     ("save_slots", "save", 1, -1, -1, -1, 1000),
