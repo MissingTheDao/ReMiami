@@ -46,7 +46,7 @@ static const float ICON_Y = 395.0f, ICON_SIZE = 50.0f, ICON_SELECTED = 80.0f;
 
 // Heap-allocated so nothing runs at program exit (after RenderWare is gone); freed with the menu's
 // own textures by MenuSkinXboxUnload.
-static CSprite2d *icons, *logoSprite, *glint;
+static CSprite2d *icons, *logoSprite, *glint, *tapeDeck;
 // Focus on the icon bar (the Xbox's top level): after LT/RT until the player moves in the page's
 // list. The current icon's green card and the help line's items follow it.
 static bool barFocus;
@@ -175,6 +175,7 @@ LoadSprites(void)
 			icons = new CSprite2d[7];
 			logoSprite = new CSprite2d;
 			glint = new CSprite2d[2];
+			tapeDeck = new CSprite2d;
 		}
 		bool ok = true;
 		for (int i = 0; i < 7; i++)
@@ -182,6 +183,7 @@ LoadSprites(void)
 		logo.m_pTexture = ImportTexture("ui/r3_menu_228.dds");
 		glint[0].m_pTexture = ImportTexture("ui/r3_menu_230.dds");
 		glint[1].m_pTexture = ImportTexture("ui/r3_menu_232.dds");
+		tapeDeck->m_pTexture = ImportTexture("ui/r3_menu_616.dds");	// the user's music in the radio strip
 		LoadFont(fontRW, "ui/fonts/rwsfarborcrestheavy.dds", "ui/fonts/rwsfarborcrestheavy.met");	// the help line's font
 		if (ok && logo.m_pTexture)
 			spritesState = 1;
@@ -200,10 +202,22 @@ MenuSkinXboxUnload(void)
 	logo.Delete();
 	glint[0].Delete();
 	glint[1].Delete();
+	tapeDeck->Delete();
 	if (fontRW.sprite)
 		fontRW.sprite->Delete();
 	fontRW.ok = false;
 	spritesState = 0;
+}
+
+// The radio strip's last icon, the user's music: the Xbox's stack of tapes (r3_menu_616). False
+// without it (the caller draws the PC's MP3 logo).
+bool
+MenuSkinXboxTapeDeck(const CRect &r, const CRGBA &col)
+{
+	if (tapeDeck == nil || tapeDeck->m_pTexture == nil)
+		return false;
+	tapeDeck->Draw(r, col);
+	return true;
 }
 
 // The confirmation dialogs reached from the Load page: drawn as the Xbox's layered blue dialog

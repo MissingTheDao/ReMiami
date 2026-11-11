@@ -49,6 +49,14 @@ static const Ps2Tab tabs[] = {
 	{ MENUPAGE_LANGUAGE_SETTINGS, -1, 1043.0f, 995.0f, "RVC_PT7" },
 };
 
+// "screen position" (PS2 Display page): the picture's offset for TVs that crop it, as on the PS2.
+// Packed in one ini value ([Display] ScreenPosition): x and y, -8..7 steps of 2 menu pixels each.
+// X on the row starts adjusting with the arrows; X or triangle ends it.
+int8 gScreenPosition = (int8)0x88;	// x 0, y 0
+bool gScreenPositionAdjust = false;
+float ScreenPositionX(void) { return ((((uint8)gScreenPosition) >> 4) - 8) * 2.0f; }
+float ScreenPositionY(void) { return ((((uint8)gScreenPosition) & 15) - 8) * 2.0f; }
+
 // Focus on the Map page: on the tab bar (the "map" tab boxed) until up/down moves it to the
 // legend item (then only the legend is boxed), as on the PS2.
 static int focusPage = -1;
@@ -247,6 +255,24 @@ MenuSkinPS2PageFocus(void)
 bool
 MenuSkinPS2Input(CMenuManager *m)
 {
+	if (gScreenPositionAdjust) {
+		CPad *p = CPad::GetPad(0);
+		if (m->m_nCurrScreen != MENUPAGE_CONSOLE_DISPLAY || p->GetCrossJustDown() || p->GetTriangleJustDown() || p->GetEnterJustDown() ||
+		    p->GetEscapeJustDown()) {
+			gScreenPositionAdjust = false;
+			m->SaveSettings();
+			return true;
+		}
+		int x = (((uint8)gScreenPosition) >> 4) - 8, y = (((uint8)gScreenPosition) & 15) - 8;
+		if (p->GetDPadLeftJustDown() || p->GetLeftJustDown()) x--;
+		if (p->GetDPadRightJustDown() || p->GetRightJustDown()) x++;
+		if (p->GetDPadUpJustDown() || p->GetUpJustDown()) y--;
+		if (p->GetDPadDownJustDown() || p->GetDownJustDown()) y++;
+		x = Clamp(x, -8, 7);
+		y = Clamp(y, -8, 7);
+		gScreenPosition = (int8)(((x + 8) << 4) | (y + 8));
+		return true;
+	}
 	if (m->m_nCurrScreen != focusPage) {
 		focusPage = m->m_nCurrScreen;
 		pageFocus = false;

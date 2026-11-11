@@ -188,6 +188,7 @@ const MENU_SHOTS_PS2: &[MenuShot] = &[
     ("audio_radio", "audio", 2, -1, -1, -1, 1000),
     ("display", "console_display", 0, -1, -1, -1, 1000),
     ("display_2", "console_display", 1, -1, -1, -1, 1000),
+    ("display_screen_position", "console_display", 6, -1, -1, -1, 1000),
     ("save_slots", "save", 1, -1, -1, -1, 1000),
     ("load_confirm", "load_confirm", 1, -1, -1, -1, 1000),
     ("new_game_confirm", "new_game_confirm", 1, -1, -1, -1, 1000),
