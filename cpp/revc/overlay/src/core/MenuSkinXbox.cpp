@@ -633,11 +633,25 @@ DrawSubTabs(int page, uint8 alpha)
 	CFont::SetWrapx(SCREEN_WIDTH);
 	float w = CFont::GetStringWidth(TheText.Get(names[cur]), true);
 	float bx0 = X(lx[cur] - 8.0f), bx1 = Max(X(lx[cur]) + w + W(60.0f), X(lx[cur] + 172.0f)), tilt = W(5.0f);
+	// the dark block at the bar's outer end; after a switch it slides behind the bar from the
+	// other end to the outer end over ~330 ms (Xbox autopad, xbox_subtab_change_v2)
+	static int lastTab = -1, lastPage = -1;
+	static uint32 switchedAt;
+	uint32 now = CTimer::GetTimeInMillisecondsPauseMode();
+	if (page == lastPage && cur != lastTab)
+		switchedAt = now;
+	lastTab = cur;
+	lastPage = page;
+	// (gone from the old side at the jump; grows in at the outer end from ~frame 6 to frame 20)
+	float t = Clamp(((int)(now - switchedAt) - 100) / 233.0f, 0.0f, 1.0f);
+	float sw = W(15.0f) * t;
 	CSprite2d::Draw2DPolygon(bx0 + tilt, y0, bx1 + tilt, y0, bx0, y1, bx1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
-	if (cur == 0)	// the dark block at the bar's outer end
-		CSprite2d::Draw2DPolygon(bx0 - W(15.0f) + tilt, y0, bx0 + tilt, y0, bx0 - W(15.0f), y1, bx0, y1, CRGBA(40, 40, 40, alpha));
-	else
-		CSprite2d::Draw2DPolygon(bx1 + tilt, y0, bx1 + W(15.0f) + tilt, y0, bx1, y1, bx1 + W(15.0f), y1, CRGBA(40, 40, 40, alpha));
+	if (sw > 0.0f) {
+		if (cur == 0)
+			CSprite2d::Draw2DPolygon(bx0 - sw + tilt, y0, bx0 + tilt, y0, bx0 - sw, y1, bx0, y1, CRGBA(40, 40, 40, alpha));
+		else
+			CSprite2d::Draw2DPolygon(bx1 + tilt, y0, bx1 + sw + tilt, y0, bx1, y1, bx1 + sw, y1, CRGBA(40, 40, 40, alpha));
+	}
 	CFont::SetDropShadowPosition(2);
 	CFont::SetDropColor(CRGBA(0, 0, 0, alpha));
 	CFont::SetColor(CRGBA(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha));
