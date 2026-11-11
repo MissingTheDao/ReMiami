@@ -29,6 +29,7 @@ static bool HasSubTabs(int page);
 static bool IsTabPage(int page);
 void ConsoleAudioRows(bool);	// (core/MenuScreensCustom.cpp)
 static bool SettingsSubTabs(int page);
+int MenuSkinXboxSubTab(int page);
 const CRGBA XBOX_MINT(0, 210, 141, 255);
 const CRGBA XBOX_PINK(255, 154, 227, 255);
 
@@ -526,6 +527,25 @@ ReadBarShapes(void)
 		barShapes = 0;	// all five or none
 }
 
+// The selection (page, row, sub-tab) as last drawn; a change steps the bar's outline and restarts
+// the pulse (selectedAt), as the Xbox's states that move the selection do.
+static int selScreen = -1, selOption = -1, selSub = -1;
+static uint32 selectedAt;
+static void
+NoteSelection(void)
+{
+	int screen = FrontEndMenuManager.m_nCurrScreen, option = FrontEndMenuManager.m_nCurrOption;
+	int sub = HasSubTabs(screen) ? MenuSkinXboxSubTab(screen) : -1;
+	if (screen == selScreen && option == selOption && sub == selSub)
+		return;
+	if (selScreen >= 0)
+		barShapeIndex = (barShapeIndex + 1) % 5;
+	selScreen = screen;
+	selOption = option;
+	selSub = sub;
+	selectedAt = CTimer::GetTimeInMillisecondsPauseMode();
+}
+
 // Draws the current outline over x0..x1 x y0..y1 (the quad's extent mapped onto the bar's box).
 static bool
 DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col, bool advance = true)
@@ -534,14 +554,11 @@ DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col, bool adva
 		ReadBarShapes();
 	if (barShapes == 0)
 		return false;
-	// a new place for the bar: the next outline (0 -> 4, then again)
-	static float lastX0 = -1.0f, lastY0 = -1.0f;
-	if (advance && (x0 != lastX0 || y0 != lastY0)) {
-		if (lastX0 >= 0.0f)
-			barShapeIndex = (barShapeIndex + 1) % 5;
-		lastX0 = x0;
-		lastY0 = y0;
-	}
+	// the selection moved: the next outline (0 -> 4, then again). Only a move steps it, never a
+	// left/right value change, which leaves the bar as it is (Xbox autopad set 1, radio left/right:
+	// the corners fixed within 1 px; R3_Menu.anm anim 3 just shows the next shape).
+	if (advance)
+		NoteSelection();
 	const float (*q)[2] = barShape[barShapeIndex];
 	float minx = q[0][0], maxx = q[0][0], miny = q[0][1], maxy = q[0][1];
 	for (int k = 1; k < 4; k++) {
@@ -579,11 +596,13 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 	}
 	float tilt = W(5.0f), tailW = W(16.0f);
 	// the pulse (R3_Menu.anm anims 1, 2, 16...): a white copy of the current outline scaled about
-	// the bar's centre while it fades, 5 keyframes 0.2 s apart, looping every 0.8 s, in 30 Hz steps.
+	// the bar's centre while it fades, 5 keyframes 0.2 s apart, looping every 0.8 s, in 30 Hz steps,
+	// from the last selection move (value changes don't restart it; autopad set 1).
 	// Behind the bar, so it shows mostly past the bar's ends (x up to 1.157, y only 1.081).
 	static const float key[5][3] = { { 0.900f, 0.900f, 0.500f }, { 0.940f, 0.928f, 0.430f }, { 0.996f, 0.968f, 0.336f },
 		{ 1.069f, 1.019f, 0.211f }, { 1.157f, 1.081f, 0.059f } };
-	float t = ((CTimer::GetTimeInMillisecondsPauseMode() % 800) * 3 / 100) / 30.0f;	// 0..0.8 s
+	NoteSelection();
+	float t = (((CTimer::GetTimeInMillisecondsPauseMode() - selectedAt) % 800) * 3 / 100) / 30.0f;	// 0..0.8 s
 	int k = Min((int)(t / 0.2f), 3);
 	float f = Min((t - k * 0.2f) / 0.2f, 1.0f);
 	float sx = key[k][0] + (key[k + 1][0] - key[k][0]) * f, sy = key[k][1] + (key[k + 1][1] - key[k][1]) * f;
