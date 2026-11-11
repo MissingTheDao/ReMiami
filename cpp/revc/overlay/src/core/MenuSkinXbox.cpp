@@ -34,7 +34,7 @@ static const XboxTab tabs[] = {
 	{ MENUPAGE_MAP, -1, "ui/r3_menu_241.dds" },			// compass
 	{ MENUPAGE_BRIEFS, -1, "ui/r3_menu_243.dds" },		// tape
 	{ MENUPAGE_STATS, -1, "ui/r3_menu_246.dds" },			// computer
-	{ MENUPAGE_CONTROLLER_PC, -1, "ui/r3_menu_249.dds" },	// pad
+	{ MENUPAGE_CONTROLLER_PC, MENUPAGE_PAD_PICTURE, "ui/r3_menu_249.dds" },	// pad (and the controller picture)
 	{ MENUPAGE_SOUND_SETTINGS, -1, "ui/r3_menu_252.dds" },	// boombox
 	{ MENUPAGE_DISPLAY_SETTINGS, MENUPAGE_GRAPHICS_SETTINGS, "ui/r3_menu_255.dds" },	// TV
 };

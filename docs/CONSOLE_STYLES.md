@@ -235,9 +235,12 @@ native 640x480 xemu captures:
 - Load list: the slot rows keep the PC layout; the selected slot gets the mint bar across the list.
   (The Xbox's list box is a lighter, tilted blue with black text: not done.)
 
+- Controller picture page (Controls): keeps its own pad drawing and callouts with the Xbox title,
+  logo and icon bar; the layout name moves under the title, the SHOW/context row sits between the
+  pad and the icon bar on the mint bar, BACK is hidden.
+
 Still to do: the Xbox per-page panel shapes,
-the Xbox fonts (RWFont/RWSFArborcrestHeavy), dialogs (blue layered panels), the controls page's
-pad drawing with callout lines, the Load list and Stats in the Xbox style, checking every page
+the Xbox fonts (RWFont/RWSFArborcrestHeavy), dialogs (blue layered panels), the Load list and Stats in the Xbox style, checking every page
 against the captures.
 
 ## 13i: texture packs per UI style

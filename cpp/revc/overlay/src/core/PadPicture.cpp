@@ -164,7 +164,10 @@ DrawPadPicture(void)
 	CFont::SetCentreOn();
 	CFont::SetCentreSize(SCREEN_WIDTH);
 	CFont::SetColor(CRGBA(MENUOPTION_COLOR.r, MENUOPTION_COLOR.g, MENUOPTION_COLOR.b, FrontEndMenuManager.FadeIn(255)));
-	CFont::PrintString(MENU_X_LEFT_ALIGNED(320), MENU_Y(72),
+	// the Xbox skin's title runs long at the top left: the layout name goes under it
+	extern bool MenuSkinXboxActive(int page, bool gameNotLoaded);
+	bool xbox = MenuSkinXboxActive(FrontEndMenuManager.m_nCurrScreen, FrontEndMenuManager.m_bGameNotLoaded);
+	CFont::PrintString(MENU_X_LEFT_ALIGNED(320), MENU_Y(xbox ? 86 : 72),
 		TheText.Get(layout == 0 ? "RVC_PLS" : layout == 1 ? "RVC_PLC" : layout == 2 ? "RVC_PLO" : "RVC_PLX"));
 
 	// One callout per control that does something in this context.
