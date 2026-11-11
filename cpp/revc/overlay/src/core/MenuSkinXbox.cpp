@@ -459,7 +459,7 @@ ReadBarShapes(void)
 
 // Draws the current outline over x0..x1 x y0..y1 (the quad's extent mapped onto the bar's box).
 static bool
-DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col)
+DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col, bool advance = true)
 {
 	if (barShapes < 0)
 		ReadBarShapes();
@@ -467,7 +467,7 @@ DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col)
 		return false;
 	// a new place for the bar: the next outline (0 -> 4, then again)
 	static float lastX0 = -1.0f, lastY0 = -1.0f;
-	if (x0 != lastX0 || y0 != lastY0) {
+	if (advance && (x0 != lastX0 || y0 != lastY0)) {
 		if (lastX0 >= 0.0f)
 			barShapeIndex = (barShapeIndex + 1) % 5;
 		lastX0 = x0;
@@ -509,14 +509,23 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 		y1 = cy + hh;
 	}
 	float tilt = W(5.0f), tailW = W(16.0f);
-	// the pulse: a white glow growing 0.9 -> 1.157 x 1.081 while fading 0.5 -> 0.059, every 0.8 s
-	// in 30 Hz steps (R3_Menu.anm). Drawn behind the bar, so the bar stays solid and only the glow's
-	// edge shows; never wider than the bar (a grey box where the bar meets black, rounds 7-8).
-	float t = ((CTimer::GetTimeInMillisecondsPauseMode() % 800) * 3 / 100) / 24.0f;
-	float sx = 0.9f + (1.157f - 0.9f) * t, sy = 0.9f + (1.081f - 0.9f) * t;
-	float a = 0.5f + (0.059f - 0.5f) * t;
-	float cx = (x0 + x1) / 2.0f, cy = (y0 + y1) / 2.0f, hw = Min((x1 - x0) / 2.0f * sx, (x1 - x0) / 2.0f), hh = (y1 - y0) / 2.0f * sy;
-	CSprite2d::DrawRect(CRect(cx - hw, cy - hh, cx + hw, cy + hh), CRGBA(255, 255, 255, (uint8)(a * alpha)));
+	// the pulse (R3_Menu.anm anims 1, 2, 16...): a white copy of the current outline scaled about
+	// the bar's centre while it fades, 5 keyframes 0.2 s apart, looping every 0.8 s, in 30 Hz steps.
+	// Behind the bar, so it shows mostly past the bar's ends (x up to 1.157, y only 1.081).
+	static const float key[5][3] = { { 0.900f, 0.900f, 0.500f }, { 0.940f, 0.928f, 0.430f }, { 0.996f, 0.968f, 0.336f },
+		{ 1.069f, 1.019f, 0.211f }, { 1.157f, 1.081f, 0.059f } };
+	float t = ((CTimer::GetTimeInMillisecondsPauseMode() % 800) * 3 / 100) / 30.0f;	// 0..0.8 s
+	int k = Min((int)(t / 0.2f), 3);
+	float f = Min((t - k * 0.2f) / 0.2f, 1.0f);
+	float sx = key[k][0] + (key[k + 1][0] - key[k][0]) * f, sy = key[k][1] + (key[k + 1][1] - key[k][1]) * f;
+	float a = key[k][2] + (key[k + 1][2] - key[k][2]) * f;
+	{
+		float bx1 = tail ? x1 - tailW : x1;
+		float cx = (x0 + bx1) / 2.0f, cy = (y0 + y1) / 2.0f, hw = (bx1 - x0) / 2.0f * sx, hh = (y1 - y0) / 2.0f * sy;
+		CRGBA glow(255, 255, 255, (uint8)(a * alpha));
+		if (!DrawBarShape(cx - hw, cy - hh, cx + hw, cy + hh, glow, false))
+			CSprite2d::DrawRect(CRect(cx - hw, cy - hh, cx + hw, cy + hh), glow);
+	}
 	if (DrawBarShape(x0, y0, tail ? x1 - tailW : x1, y1, CRGBA(0, 207, 133, alpha))) {
 		// the console's own outline (its colour from the shape's brush: 0, 207, 133), with the
 		// dark block at its end kept (round 22)
