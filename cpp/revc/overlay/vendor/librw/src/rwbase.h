@@ -1,3 +1,4 @@
+#pragma once
 #ifndef RW_PS2
 #include <stdint.h>
 #endif

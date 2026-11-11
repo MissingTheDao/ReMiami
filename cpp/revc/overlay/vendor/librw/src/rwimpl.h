@@ -3,8 +3,19 @@
 #pragma once
 #include <assert.h>
 #include <stdio.h>
+#include "rwbase.h"
 #include "rwerror.h"
+#include "rwplg.h"
+#include "rwrender.h"
+#include "rwengine.h"
+#include "rwpipeline.h"
+#include "rwobjects.h"
+#include "rwanim.h"
+#include "rwplugins.h"
+#include "rwcharset.h"
+#include "wgpu/rwwgpu.h"
 #include "rwscene_ffi.h"
+#include "rwplugins_ffi.h"
 
 // RWERROR without the including file's PLUGIN_ID
 #define RWERROR_HDR(ecode) do{ rw::Error _e; _e.plugin = 0; _e.code = _ERRORCODE ecode; \
@@ -593,6 +604,282 @@ Camera::setFOV(float32 hfov, float32 ratio)
 	this->setViewWindow(&v);
 	v.set(0.0f, 0.0f);
 	this->setViewOffset(&v);
+}
+
+}
+
+// ---------------------------------------------------------------- image files (rwimagefile.rs)
+extern "C" {
+rw::Image *revc_read_png(const char *filename);
+rw::int32 revc_write_png(rw::Image *image, const char *filename);
+rw::Image *revc_read_bmp(const char *filename);
+rw::int32 revc_write_bmp(rw::Image *image, const char *filename);
+rw::Image *revc_read_tga(const char *filename);
+rw::int32 revc_write_tga(rw::Image *image, const char *filename);
+}
+namespace rw {
+inline Image *readPNG(const char *filename) { return revc_read_png(filename); }
+inline void writePNG(Image *image, const char *filename) { if(!revc_write_png(image, filename)) RWERROR_HDR((ERR_FILE, filename)); }
+inline Image *readBMP(const char *filename) { return revc_read_bmp(filename); }
+inline void writeBMP(Image *image, const char *filename) { if(!revc_write_bmp(image, filename)) RWERROR_HDR((ERR_FILE, filename)); }
+inline Image *readTGA(const char *filename) { return revc_read_tga(filename); }
+inline void writeTGA(Image *image, const char *filename) { if(!revc_write_tga(image, filename)) RWERROR_HDR((ERR_FILE, filename)); }
+}
+
+// ---------------------------------------------------------------- ObjPipeline
+namespace rw {
+
+inline void revcNothingCB(ObjPipeline *, Atomic*) {}
+
+inline void
+ObjPipeline::init(uint32 platform)
+{
+	Pipeline::init(platform);
+	this->impl.instance = revcNothingCB;
+	this->impl.uninstance = revcNothingCB;
+	this->impl.render = revcNothingCB;
+}
+
+inline ObjPipeline*
+ObjPipeline::create(void)
+{
+	ObjPipeline *pipe = rwNewT(ObjPipeline, 1, MEMDUR_GLOBAL);
+	pipe->init(PLATFORM_NULL);
+	return pipe;
+}
+
+inline void
+ObjPipeline::destroy(void)
+{
+	rwFree(this);
+}
+
+}
+
+// ---------------------------------------------------------------- render states, Im2D, Im3D (the device, rwdevice.rs)
+namespace rw {
+
+inline void SetRenderState(int32 state, uint32 value){
+	engine->device.setRenderState(state, (void*)(uintptr)value); }
+
+inline void SetRenderStatePtr(int32 state, void *value){
+	engine->device.setRenderState(state, value); }
+
+inline uint32 GetRenderState(int32 state){
+	return (uint32)(uintptr)engine->device.getRenderState(state); }
+
+inline void *GetRenderStatePtr(int32 state){
+	return engine->device.getRenderState(state); }
+
+// Im2D
+
+namespace im2d {
+
+inline float32 GetNearZ(void) { return engine->device.zNear; }
+inline float32 GetFarZ(void) { return engine->device.zFar; }
+inline void
+RenderLine(void *verts, int32 numVerts, int32 vert1, int32 vert2)
+{
+	engine->device.im2DRenderLine(verts, numVerts, vert1, vert2);
+}
+inline void
+RenderTriangle(void *verts, int32 numVerts, int32 vert1, int32 vert2, int32 vert3)
+{
+	engine->device.im2DRenderTriangle(verts, numVerts, vert1, vert2, vert3);
+}
+inline void
+RenderIndexedPrimitive(PrimitiveType type, void *verts, int32 numVerts, void *indices, int32 numIndices)
+{
+	engine->device.im2DRenderIndexedPrimitive(type, verts, numVerts, indices, numIndices);
+}
+inline void
+RenderPrimitive(PrimitiveType type, void *verts, int32 numVerts)
+{
+	engine->device.im2DRenderPrimitive(type, verts, numVerts);
+}
+
+}
+
+// Im3D
+
+namespace im3d {
+
+inline void
+Transform(void *vertices, int32 numVertices, Matrix *world, uint32 flags)
+{
+	engine->device.im3DTransform(vertices, numVertices, world, flags);
+}
+inline void
+RenderLine(int32 vert1, int32 vert2)
+{
+	int16 indices[2];
+	indices[0] = vert1;
+	indices[1] = vert2;
+	RenderIndexedPrimitive(rw::PRIMTYPELINELIST, indices, 2);
+}
+inline void
+RenderTriangle(int32 vert1, int32 vert2, int32 vert3)
+{
+	int16 indices[3];
+	indices[0] = vert1;
+	indices[1] = vert2;
+	indices[2] = vert3;
+	RenderIndexedPrimitive(rw::PRIMTYPETRILIST, indices, 3);
+}
+inline void
+RenderPrimitive(PrimitiveType primType)
+{
+	engine->device.im3DRenderPrimitive(primType);
+}
+inline void
+RenderIndexedPrimitive(PrimitiveType primType, void *indices, int32 numIndices)
+{
+	engine->device.im3DRenderIndexedPrimitive(primType, indices, numIndices);
+}
+inline void
+End(void)
+{
+	engine->device.im3DEnd();
+}
+
+}
+
+}
+
+// ---------------------------------------------------------------- plugin lists (rwplugin.rs)
+// Plugin lists live in Rust (rust/revc/src/rwplugin.rs), checked against
+// tests/golden/rwplugin.txt recorded from the original plg.cpp.
+
+
+namespace rw {
+
+static_assert(sizeof(PluginList) == 24, "PluginList layout");
+static_assert(offsetof(PluginList, plugins) == 8, "PluginList layout");
+static_assert(sizeof(Plugin) == 120, "Plugin layout");
+static_assert(offsetof(Plugin, constructor) == 16, "Plugin layout");
+static_assert(offsetof(Plugin, parentList) == 80, "Plugin layout");
+static_assert(offsetof(Plugin, inParentList) == 88, "Plugin layout");
+static_assert(offsetof(Plugin, inGlobalList) == 104, "Plugin layout");
+
+extern "C" {
+void revc_pl_open(void);
+void revc_pl_close(void);
+void revc_pl_construct(PluginList *l, void *o);
+void revc_pl_destruct(PluginList *l, void *o);
+void revc_pl_copy(PluginList *l, void *d, void *s);
+int32 revc_pl_stream_read(PluginList *l, Stream *s, void *o);
+void revc_pl_stream_write(PluginList *l, Stream *s, void *o);
+int32 revc_pl_stream_get_size(PluginList *l, void *o);
+void revc_pl_stream_skip(Stream *s);
+void revc_pl_assert_rights(PluginList *l, void *o, uint32 id, uint32 data);
+int32 revc_pl_register(PluginList *l, int32 size, uint32 id, Constructor c, Destructor d, CopyConstructor y);
+int32 revc_pl_register_stream(PluginList *l, uint32 id, StreamRead r, StreamWrite w, StreamGetSize g);
+int32 revc_pl_set_rights(PluginList *l, uint32 id, RightsCallback cb);
+int32 revc_pl_set_always(PluginList *l, uint32 id, AlwaysCallback cb);
+int32 revc_pl_get_offset(PluginList *l, uint32 id);
+}
+
+inline void PluginList::open(void) { revc_pl_open(); }
+inline void PluginList::close(void) { revc_pl_close(); }
+inline void PluginList::construct(void *o) { revc_pl_construct(this, o); }
+inline void PluginList::destruct(void *o) { revc_pl_destruct(this, o); }
+inline void PluginList::copy(void *dst, void *src) { revc_pl_copy(this, dst, src); }
+inline bool PluginList::streamRead(Stream *s, void *o) { return revc_pl_stream_read(this, s, o) != 0; }
+inline void PluginList::streamWrite(Stream *s, void *o) { revc_pl_stream_write(this, s, o); }
+inline int PluginList::streamGetSize(void *o) { return revc_pl_stream_get_size(this, o); }
+inline void PluginList::streamSkip(Stream *s) { revc_pl_stream_skip(s); }
+inline void PluginList::assertRights(void *o, uint32 id, uint32 data) { revc_pl_assert_rights(this, o, id, data); }
+
+inline int32
+PluginList::registerPlugin(int32 size, uint32 id, Constructor ctor, Destructor dtor, CopyConstructor copy)
+{
+	return revc_pl_register(this, size, id, ctor, dtor, copy);
+}
+
+inline int32
+PluginList::registerStream(uint32 id, StreamRead read, StreamWrite write, StreamGetSize getSize)
+{
+	return revc_pl_register_stream(this, id, read, write, getSize);
+}
+
+inline int32 PluginList::setStreamRightsCallback(uint32 id, RightsCallback cb) { return revc_pl_set_rights(this, id, cb); }
+inline int32 PluginList::setStreamAlwaysCallback(uint32 id, AlwaysCallback cb) { return revc_pl_set_always(this, id, cb); }
+inline int32 PluginList::getPluginOffset(uint32 id) { return revc_pl_get_offset(this, id); }
+
+}
+
+// ---------------------------------------------------------------- animations (rwhanim.rs)
+namespace rw {
+
+//
+// AnimInterpolatorInfo
+//
+
+// revc (stage 2 step 7d1): the interpolator registry and Animation's memory are in Rust
+// (rust/revc/src/rwhanim.rs).
+extern "C" {
+void revc_interp_register(AnimInterpolatorInfo *info);
+void revc_interp_unregister(AnimInterpolatorInfo *info);
+AnimInterpolatorInfo *revc_interp_find(int32 id);
+Animation *revc_animation_create(AnimInterpolatorInfo *info, int32 numFrames, int32 flags, float32 duration);
+void revc_animation_destroy(Animation *anim);
+}
+static_assert(sizeof(Animation) == 40 && sizeof(AnimInterpolatorInfo) == 80, "animation layouts (rwhanim.rs)");
+
+inline void AnimInterpolatorInfo::registerInterp(AnimInterpolatorInfo *info) { revc_interp_register(info); }
+inline void AnimInterpolatorInfo::unregisterInterp(AnimInterpolatorInfo *info) { revc_interp_unregister(info); }
+inline AnimInterpolatorInfo *AnimInterpolatorInfo::find(int32 id) { return revc_interp_find(id); }
+
+inline Animation*
+Animation::create(AnimInterpolatorInfo *interpInfo, int32 numFrames, int32 flags, float duration)
+{
+	return revc_animation_create(interpInfo, numFrames, flags, duration);
+}
+
+inline void Animation::destroy(void) { revc_animation_destroy(this); }
+
+//
+// AnimInterpolator
+//
+
+// revc (docs/RENDERER_PORT.md, stage 2 step 4b): setCurrentAnim and addTime are in Rust
+// (rust/revc/src/rwhanim.rs), checked against tests/golden/rwhanim.txt.
+extern "C" {
+int32 revc_anim_set_current_anim(AnimInterpolator *it, Animation *anim);
+void revc_anim_add_time(AnimInterpolator *it, float32 t);
+}
+static_assert(sizeof(AnimInterpolator) == 72 && sizeof(Animation) == 40 && sizeof(KeyFrameHeader) == 16,
+              "anim layouts (rwhanim.rs)");
+
+inline AnimInterpolator*
+AnimInterpolator::create(int32 numNodes, int32 maxFrameSize)
+{
+	AnimInterpolator *interp = revc_interp_create(numNodes, maxFrameSize);
+	if(interp == nil)
+		RWERROR_HDR((ERR_ALLOC, (int32)sizeof(AnimInterpolator)));
+	return interp;
+}
+
+inline void
+AnimInterpolator::destroy(void)
+{
+	revc_interp_destroy(this);
+}
+
+inline bool32
+AnimInterpolator::setCurrentAnim(Animation *anim)
+{
+	if(!revc_anim_set_current_anim(this, anim)){
+		RWERROR_HDR((ERR_GENERAL, "interpolation frame too big"));
+		return 0;
+	}
+	return 1;
+}
+
+inline void
+AnimInterpolator::addTime(float32 t)
+{
+	revc_anim_add_time(this, t);
 }
 
 }

@@ -2,9 +2,7 @@ add_library(librw
     "${PROJECT_SOURCE_DIR}/args.h"
     "${PROJECT_SOURCE_DIR}/rw.h"
 
-    anim.cpp
     base.cpp
-    bmp.cpp
     charset.cpp
     engine.cpp
     geometry.cpp
@@ -12,11 +10,7 @@ add_library(librw
     hanim.cpp
     image.cpp
     matfx.cpp
-    pipeline.cpp
-    plg.cpp
-    png.cpp
     raster.cpp
-    render.cpp
     rwanim.h
     rwengine.h
     rwerror.h
@@ -29,7 +23,6 @@ add_library(librw
     rwrender.h
     skin.cpp
     texture.cpp
-    tga.cpp
 
     wgpu/rwwgpu.h
     wgpu/wgpudevice.cpp
