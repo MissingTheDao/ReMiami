@@ -347,7 +347,7 @@ DrawIconBar(CMenuManager *m, uint8 alpha)
 		lastIcon = cur;
 		iconAt = now;
 	}
-	float grow = Min(1.0f, (now - iconAt) / 67.0f);
+	float grow = Min(1.0f, (now - iconAt) / 33.0f);	// (2 steps at 30 Hz)
 	if (prevIcon >= 0 && prevIcon != cur && grow < 1.0f) {
 		float px = iconX[prevIcon], ps = ICON_SELECTED + (ICON_SIZE - ICON_SELECTED) * grow;
 		icons[prevIcon].Draw(CRect(X(px) - W(ps / 2), Y(ICON_Y) - H(ps / 2), X(px) + W(ps / 2), Y(ICON_Y) + H(ps / 2)), CRGBA(140, 140, 140, alpha));
