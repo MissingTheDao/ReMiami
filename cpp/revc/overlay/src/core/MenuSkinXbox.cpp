@@ -593,22 +593,30 @@ ReadBarShapes(void)
 }
 
 // The selection (page, row, sub-tab) as last drawn; a change steps the bar's outline and restarts
-// the pulse (selectedAt), as the Xbox's states that move the selection do.
+// the pulse (selectedAt), as the Xbox's states that move the selection do. The bar jumps to the new
+// row at once and swaps to the next outline one 30 Hz game frame later (research, autopad
+// xbox_row_controls_slow: jump at 4015, next outline at 4018).
 static int selScreen = -1, selOption = -1, selSub = -1;
 static uint32 selectedAt;
+static bool outlinePending;
 static void
 NoteSelection(void)
 {
 	int screen = FrontEndMenuManager.m_nCurrScreen, option = FrontEndMenuManager.m_nCurrOption;
 	int sub = HasSubTabs(screen) ? MenuSkinXboxSubTab(screen) : -1;
+	uint32 now = CTimer::GetTimeInMillisecondsPauseMode();
+	if (outlinePending && now - selectedAt >= 33) {
+		barShapeIndex = (barShapeIndex + 1) % 5;
+		outlinePending = false;
+	}
 	if (screen == selScreen && option == selOption && sub == selSub)
 		return;
 	if (selScreen >= 0)
-		barShapeIndex = (barShapeIndex + 1) % 5;
+		outlinePending = true;
 	selScreen = screen;
 	selOption = option;
 	selSub = sub;
-	selectedAt = CTimer::GetTimeInMillisecondsPauseMode();
+	selectedAt = now;
 }
 
 // Draws the current outline over x0..x1 x y0..y1 (the quad's extent mapped onto the bar's box).

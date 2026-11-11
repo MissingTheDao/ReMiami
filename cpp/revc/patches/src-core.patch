@@ -3133,7 +3133,7 @@
  	#define POSTFX_SELECTORS
  #endif	
  
-@@ -107,31 +128,287 @@
+@@ -107,31 +128,293 @@
  	#define SELECT_CONTROLLER_TYPE
  #endif
  
@@ -3279,16 +3279,22 @@
 +	{ CPostFX::POSTFX_NORMAL, true, true, 1.0f, 2, true, CONTROL_CLASSIC, true, true, "RVC_VS2" },
 +	{ CPostFX::POSTFX_MOBILE, false, false, 0.0f, -1, false, -1, true, false, "RVC_VS3" },
 +};
-+// Turning vibration on gives a short rumble, as on the consoles (the original's GAMEPAD_MENU
-+// code: StartShake(350, 150), stopped after 500 ms by CMenuManager's TimeToStopPadShaking; the
-+// user noticed it on real hardware).
++// Turning vibration on gives a short rumble, as on the consoles (the user noticed it on real
++// hardware): the Xbox's StartShake(150, 150) that just runs out (XBE EVENT_DoChangeVibration,
++// research), the original PC/GAMEPAD_MENU code's StartShake(350, 150) stopped after 500 ms in the
++// other styles. The paused game's timer doesn't run a shake down, so the menu stops it
++// (TimeToStopPadShaking). Turning it off stops a shake at once.
 +extern uint32 TimeToStopPadShaking;
 +static void
 +VibrationAfterChange(int8 before, int8 after)
 +{
 +	if (after && !before) {
-+		CPad::GetPad(0)->StartShake(350, 150);
-+		TimeToStopPadShaking = CTimer::GetTimeInMillisecondsPauseMode() + 500;
++		bool xbox = gUiStyle == 2;
++		CPad::GetPad(0)->StartShake(xbox ? 150 : 350, 150);
++		TimeToStopPadShaking = CTimer::GetTimeInMillisecondsPauseMode() + (xbox ? 150 : 500);
++	} else if (!after && before) {
++		CPad::StopPadsShaking();
++		TimeToStopPadShaking = 0;
 +	}
 +}
 +
@@ -3432,7 +3438,7 @@
  		FrontEndMenuManager.m_PrefsVsyncDisp = true;
  		#ifdef LEGACY_MENU_OPTIONS
  			FrontEndMenuManager.m_PrefsVsync = true;
-@@ -306,7 +583,7 @@
+@@ -306,7 +589,7 @@
  
  wchar* DetectJoystickDraw(bool* disabled, bool userHovering) {
  
@@ -3441,7 +3447,7 @@
  	int numButtons;
  	int found = -1;
  	const char *joyname;
-@@ -420,13 +697,11 @@
+@@ -420,13 +703,11 @@
  		MENUACTION_MUSICVOLUME,		"FEA_MUS", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 40, 76, MENUALIGN_LEFT,
  		MENUACTION_SFXVOLUME,		"FEA_SFX", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		MENUACTION_MP3VOLUMEBOOST,	"FEA_MPB", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
@@ -3458,7 +3464,7 @@
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 367, MENUALIGN_CENTER,
  #else
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 327, MENUALIGN_CENTER,
-@@ -441,9 +716,8 @@
+@@ -441,9 +722,8 @@
  		MENUACTION_DRAWDIST,	"FEM_LOD", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		DENSITY_SLIDERS
  #ifdef LEGACY_MENU_OPTIONS
@@ -3469,7 +3475,7 @@
  #if defined LEGACY_MENU_OPTIONS && !defined EXTENDED_COLOURFILTER
  		MENUACTION_TRAILS,		"FED_TRA", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  #endif
-@@ -455,7 +729,6 @@
+@@ -455,7 +735,6 @@
  		MENUACTION_SCREENRES,	"FED_RES", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  		MULTISAMPLING_SELECTOR
@@ -3477,7 +3483,7 @@
  		DUALPASS_SELECTOR
  		CUTSCENE_BORDERS_TOGGLE
  		FREE_CAM_TOGGLE
-@@ -640,6 +913,8 @@
+@@ -640,6 +919,8 @@
  #ifdef DETECT_JOYSTICK_MENU
  		MENUACTION_CHANGEMENU,	"FEC_JOD", {nil, SAVESLOT_NONE, MENUPAGE_DETECT_JOYSTICK}, 0, 0, MENUALIGN_CENTER,
  #endif
@@ -3486,7 +3492,7 @@
  		MENUACTION_CHANGEMENU,	"FEC_MOU", {nil, SAVESLOT_NONE, MENUPAGE_MOUSE_CONTROLS}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_RESTOREDEF,	"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_CONTROLLER_PC}, 320, 0, MENUALIGN_CENTER,
  		MENUACTION_GOBACK,		"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 320, 0, MENUALIGN_CENTER,
-@@ -659,6 +934,7 @@
+@@ -659,6 +940,7 @@
  #endif
  		 MENUACTION_CHANGEMENU,		"FEO_LAN", {nil, SAVESLOT_NONE, MENUPAGE_LANGUAGE_SETTINGS}, 0, 0, MENUALIGN_CENTER,
  		 MENUACTION_PLAYERSETUP,	"FET_PS", {nil, SAVESLOT_NONE, MENUPAGE_SKIN_SELECT}, 0, 0, MENUALIGN_CENTER,
@@ -3494,7 +3500,7 @@
  		 MENUACTION_GOBACK,			"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -673,6 +949,7 @@
+@@ -673,6 +955,7 @@
  	{ "FEM_MM", MENUPAGE_DISABLED, nil, nil,
  		  MENUACTION_CHANGEMENU,	"FEP_STG",	{nil, SAVESLOT_NONE,	MENUPAGE_NEW_GAME}, 320, 170, MENUALIGN_CENTER,
  		  MENUACTION_CHANGEMENU,	"FEP_OPT",	{nil, SAVESLOT_NONE,	MENUPAGE_OPTIONS}, 0, 0, MENUALIGN_CENTER,
@@ -3502,7 +3508,7 @@
  		  MENUACTION_CHANGEMENU,	"FEP_QUI",	{nil, SAVESLOT_NONE,	MENUPAGE_EXIT}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -783,13 +1060,12 @@
+@@ -783,13 +1066,12 @@
  		MENUACTION_WIDESCREEN,	"FED_WIS", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  #ifdef LEGACY_MENU_OPTIONS
@@ -3518,7 +3524,7 @@
  		POSTFX_SELECTORS
  #elif defined LEGACY_MENU_OPTIONS
  		MENUACTION_TRAILS,		"FED_TRA", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
-@@ -809,6 +1085,46 @@
+@@ -809,6 +1091,46 @@
  	},
  #endif
  
@@ -3565,7 +3571,7 @@
  		
  #ifdef MISSION_REPLAY
  	// MENUPAGE_MISSION_RETRY = 57 on mobile
-@@ -826,3 +1142,268 @@
+@@ -826,3 +1148,268 @@
  
  #endif
  #endif

@@ -437,7 +437,7 @@ const MOTION_ROUTES: &[MotionRoute] = &[
     ("xbox_page_controls_to_audio", "start right right right right", "right", 60),
     ("xbox_page_change_right", "start left left", "right", 60),	// Audio -> Display
     ("xbox_page_change_left", "start left", "left", 60),	// Display -> Audio
-    ("xbox_subtab_change", "start right right right a", "right", 60),	// Stats: stats -> unlocked items
+    ("xbox_subtab_change", "start right right a", "right", 60),	// Brief: the sub-tabs (the _v2 reference is Brief, set 2)
     ("xbox_focus_icons_to_list", "start left left", "a", 60),	// Audio
     ("xbox_focus_list_to_icons", "start left left a", "b", 60),
     ("xbox_highlight_down", "start left left a", "down", 60),	// Audio: music -> SFX
