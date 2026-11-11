@@ -69,6 +69,7 @@ failed=0
 for s in "${SCENARIOS[@]}"; do
   log=$OUT/$s.log
   ini=$ROOT/tests/config/$s.ini; [[ -f "$ini" ]] || ini=$ROOT/tests/config/reVC.ini
+  [[ -n "${REVC_TEST_CONFIG:-}" ]] && ini=$REVC_TEST_CONFIG	# another config (menu shots per style)
   cp "$ini" "$T/reVC.ini"
   envs=(REVC_GAME_DIR="$T" REVC_TEST="$s")
   [[ "$s" == texmods ]] && cp -r "$ROOT/tests/mods" "$T/mods"
@@ -87,6 +88,9 @@ for s in "${SCENARIOS[@]}"; do
   fi
   # scenes (not in the default set): the console reference scenes at 640x480 (plan task 13), written
   # to $OUT/scenes/ for comparison with the PS2/Xbox captures (local only); no references.
+  if [[ "$s" == menus ]]; then
+    envs+=(REVC_TEST_SHOT_DIR="${REVC_TEST_SHOT_DIR:-$OUT}")
+  fi
   if [[ "$s" == scenes ]]; then
     mkdir -p "$OUT/scenes"
     envs+=(REVC_TEST_SHOT_DIR="$OUT/scenes")

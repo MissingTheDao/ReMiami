@@ -202,6 +202,46 @@ revc_test_scene(float x, float y, float heading, int hour, int minute, int weath
 	return pos.z;
 }
 
+// Menu comparison shots (plan task 13, REVC_TEST=menus): with the pause menu open over a loaded
+// game, sets one state: the page (switched as the menu does), the selected row, the controller
+// picture's context (0 foot, 1 car, 2 flying; -1 leave), the pad layout (-1 leave), the map legend
+// (-1 leave). Returns 0 if the menu isn't open yet.
+extern "C" void PadPictureSetContext(int context);
+int
+revc_test_menu_page_id(const char *name)
+{
+	static const struct { const char *n; int p; } pages[] = {
+		{ "stats", MENUPAGE_STATS }, { "brief", MENUPAGE_BRIEFS }, { "audio", MENUPAGE_SOUND_SETTINGS },
+		{ "display", MENUPAGE_DISPLAY_SETTINGS }, { "graphics", MENUPAGE_GRAPHICS_SETTINGS }, { "map", MENUPAGE_MAP },
+		{ "new_game_confirm", MENUPAGE_NEW_GAME_RELOAD }, { "load", MENUPAGE_CHOOSE_LOAD_SLOT },
+		{ "load_confirm", MENUPAGE_LOAD_SLOT_CONFIRM }, { "save", MENUPAGE_CHOOSE_SAVE_SLOT },
+		{ "controls", MENUPAGE_CONTROLLER_PC }, { "pad", MENUPAGE_PAD_PICTURE }, { "pause", MENUPAGE_PAUSE_MENU },
+	};
+	for (auto &e : pages)
+		if (strcmp(e.n, name) == 0)
+			return e.p;
+	return -1;
+}
+int
+revc_test_menu_state(int page, int option, int context, int layout, int legend)
+{
+	if (!FrontEndMenuManager.m_bMenuActive) {
+		if (!FrontEndMenuManager.m_bGameNotLoaded)
+			FrontEndMenuManager.m_bStartUpFrontEndRequested = true;
+		return 0;
+	}
+	if (layout >= 0)
+		PadLayoutApply(layout);
+	if (context >= 0)
+		PadPictureSetContext(context);
+	if (legend >= 0)
+		FrontEndMenuManager.m_PrefsShowLegends = legend;
+	if (FrontEndMenuManager.m_nCurrScreen != page)
+		FrontEndMenuManager.SwitchToNewScreen(page);
+	FrontEndMenuManager.m_nCurrOption = option;
+	return 1;
+}
+
 // Fixed-spot screenshots (plan task 3): puts the player at (x, y) on the main map (on the ground
 // when z <= -100) with nothing random around (no peds or traffic, fixed time and weather) and
 // points a fixed camera from player + (dx, dy, dz) at the player, with the HUD hidden, like the mission scripts do

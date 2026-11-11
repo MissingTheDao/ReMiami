@@ -273,3 +273,24 @@ Goal (research session, 2026-11-11): import the PS2 world textures as a style pa
 (`userfiles/import/ps2/packs/ps2-world.zip`, about 12,000 textures via a Rust port of the GS
 memory reader) with an option for exact PS2 versus PC textures in the PS2 style; texmods would
 index packs in the import cache too. Details: research notes `importer/IMPORT_LIST.md` (local).
+
+## Menu comparison shots
+
+`scripts/menu-shots.sh [out dir] [ps2|xbox ...]` runs `REVC_TEST=menus` (`rust/revc/src/testdrive.rs`,
+`MENU_SHOTS_PS2` / `MENU_SHOTS_XBOX`): a loaded game, the pause menu open, then each state (page,
+selected row, controller context, pad layout, map legend) captured one second after it is set,
+as `<set>_<id>.png` at the console size (PS2 640x448, shot at 640x480 and scaled since the game
+has no 448-line mode; Xbox 640x480) and `<set>_<id>_hi.png` at 1440x1080. The ids follow the
+research session's comparison list (`menu-compare/REQUEST.md`, local); states revc doesn't have
+are left out: the PS2's four controller setups (revc has Xbox Standard/Classic/Original PC
+layouts), DTS, widescreen and screen-position rows, the safehouse save flow, the Xbox tape-deck
+help and the controls-overwrite dialog. The Xbox set needs `REVC_IMPORT_DIR` (an import of the
+player's disc). Test hooks: `revc_test_menu_state`, `revc_test_menu_page_id`; `REVC_TEST_CONFIG`
+and `REVC_TEST_WINDOW` in `scripts/test.sh`.
+
+Goal (research session, from the user): the console menus at high resolution without changing
+their presentation (`menu-compare/HIRES_PRESENTATION.md`, local): mipmaps and linear-mip filtering
+for upscaled UI and font replacements (the HUD and fonts are drawn NEAREST and had no mips),
+rectangle edges and thin lines snapped to output pixels, every console offset scaled, optional
+30 Hz pacing of menu animations and optional UI softness. `compare.py` checks that the 1440x1080
+shot scaled down matches the native one.

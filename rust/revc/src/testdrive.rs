@@ -76,6 +76,8 @@ unsafe extern "C" {
     fn revc_test_pedhit_sample() -> i32;
     fn revc_test_pedhit_result(max_rise: *mut f32, car_dist: *mut f32);
     fn revc_test_pedhit_drawn(body_rise: *mut f32, head_rise: *mut f32, hit: *mut i32);
+    fn revc_test_menu_state(page: i32, option: i32, context: i32, layout: i32, legend: i32) -> i32;
+    fn revc_test_menu_page_id(name: *const std::ffi::c_char) -> i32;
     fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
     fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
 }
@@ -100,6 +102,7 @@ enum Scenario {
     PedHit,
     Scanner,
     Scenes,
+    Menus,
 }
 
 #[derive(Debug)]
@@ -118,6 +121,8 @@ enum Phase {
     /// and captured SPOT_WAIT_MS later, so wind, waves and the clock are at the same phase in every
     /// run whatever the frame rate (the simulation advances in exact 30 Hz steps).
     Spot { idx: usize, base: u32, stage: SpotStage },
+    /// Menu comparison shots (MENU_SHOTS): shot `idx`, frames since its state was set (0 = not yet).
+    Menus { idx: usize, frames: u32 },
     /// Console reference scenes (SCENES), same timing scheme as Spot.
     Scene { idx: usize, base: u32, stage: SpotStage },
     /// Motion capture: scripted walk since game time `t0`, `step` into MOTION_SCRIPT.
@@ -160,6 +165,63 @@ const SCENES: &[(&str, f32, f32, f32, i32, i32, i32)] = &[
 const MOONLITE: (f32, f32) = (257.0, -1250.0);
 const LIGHTHOUSE: (f32, f32) = (470.0, -1695.0);
 const SCENE_WAIT_MS: u32 = 2500;
+
+/// Menu comparison shots (plan task 13, research request menu-compare/REQUEST.md, local): (id,
+/// page name, selected row, controller context, pad layout, map legend, ms to wait). -1 leaves
+/// a setting as it is. REVC_TEST_MENU_SET=ps2|xbox picks the ids' set (the UI style comes from the
+/// config); shots go to REVC_TEST_SHOT_DIR/<set>_<id>.png. States revc doesn't have are left out
+/// (docs/CONSOLE_STYLES.md).
+type MenuShot = (&'static str, &'static str, i32, i32, i32, i32, u32);
+const MENU_SHOTS_PS2: &[MenuShot] = &[
+    ("map_legend_on", "map", 0, -1, -1, 1, 1000),
+    ("map_legend_off", "map", 0, -1, -1, 0, 1000),
+    ("brief", "brief", 0, -1, -1, -1, 1000),
+    ("load_slots", "load", 1, -1, -1, -1, 1000),
+    ("load_confirm", "load_confirm", 2, -1, -1, -1, 1000),
+    ("new_game_confirm", "new_game_confirm", 2, -1, -1, -1, 1000),
+    ("stats", "stats", 0, -1, -1, -1, 1000),
+    ("stats_2", "stats", 0, -1, -1, -1, 5000),
+    ("controls", "controls", 0, -1, -1, -1, 1000),
+    ("controls_on_foot", "pad", 0, 0, -1, -1, 1000),
+    ("controls_in_car", "pad", 0, 1, -1, -1, 1000),
+    ("controls_flying", "pad", 0, 2, -1, -1, 1000),
+    ("audio", "audio", 0, -1, -1, -1, 1000),
+    ("audio_radio", "audio", 4, -1, -1, -1, 1000),
+    ("display", "display", 0, -1, -1, -1, 1000),
+    ("display_2", "display", 1, -1, -1, -1, 1000),
+    ("save_slots", "save", 1, -1, -1, -1, 1000),
+];
+const MENU_SHOTS_XBOX: &[MenuShot] = &[
+    ("map_legend_on", "map", 0, -1, -1, 1, 1000),
+    ("map_legend_off", "map", 0, -1, -1, 0, 1000),
+    ("brief", "brief", 0, -1, -1, -1, 1000),
+    ("stats", "stats", 0, -1, -1, -1, 1000),
+    ("stats_scrolled", "stats", 0, -1, -1, -1, 5000),
+    ("controls", "controls", 0, -1, -1, -1, 1000),
+    ("controls_select", "controls", 3, -1, -1, -1, 1000),
+    ("controls_walking", "pad", 0, 0, 0, -1, 1000),
+    ("controls_driving", "pad", 0, 1, 0, -1, 1000),
+    ("controls_flying", "pad", 0, 2, 0, -1, 1000),
+    ("controls_classic_walking", "pad", 0, 0, 1, -1, 1000),
+    ("controls_classic_driving", "pad", 0, 1, 1, -1, 1000),
+    ("controls_classic_flying", "pad", 0, 2, 1, -1, 1000),
+    ("audio_music", "audio", 0, -1, -1, -1, 1000),
+    ("audio_sfx", "audio", 1, -1, -1, -1, 1000),
+    ("audio_radio_vcpr", "audio", 4, -1, -1, -1, 1000),
+    ("display", "display", 0, -1, -1, -1, 1000),
+    ("load_slots", "load", 1, -1, -1, -1, 1000),
+    ("load_confirm_new_game", "new_game_confirm", 2, -1, -1, -1, 1000),
+    ("save_slots", "save", 1, -1, -1, -1, 1000),
+];
+
+static MENU_SHOT_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+fn menu_shots() -> (&'static str, &'static [MenuShot]) {
+    match std::env::var("REVC_TEST_MENU_SET").as_deref() {
+        Ok("xbox") => ("xbox", MENU_SHOTS_XBOX),
+        _ => ("ps2", MENU_SHOTS_PS2),
+    }
+}
 const SCENE_PERIOD_MS: u32 = 5000;
 
 fn scene_list() -> Vec<(String, f32, f32, f32, i32, i32, i32)> {
@@ -272,7 +334,8 @@ pub fn init() -> Result<bool, String> {
         "pedhit" => Scenario::PedHit,
         "scanner" => Scenario::Scanner,
         "scenes" => Scenario::Scenes,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, scanner, scenes)")),
+        "menus" => Scenario::Menus,
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, scanner, scenes, menus)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -386,7 +449,7 @@ impl Driver {
                         self.phase = Phase::MenuShot { frames: 0 };
                         return false;
                     }
-                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::Scanner | Scenario::Scenes => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::Scanner | Scenario::Scenes | Scenario::Menus => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -459,6 +522,10 @@ impl Driver {
                 }
                 if self.scenario == Scenario::Gamepad {
                     self.phase = Phase::Pads;
+                    return false;
+                }
+                if self.scenario == Scenario::Menus {
+                    self.phase = Phase::Menus { idx: 0, frames: 0 };
                     return false;
                 }
                 if self.scenario == Scenario::Scenes {
@@ -616,6 +683,41 @@ impl Driver {
                         }
                     }
                     _ => {}
+                }
+            }
+            Phase::Menus { idx, frames } => {
+                let (set, shots) = menu_shots();
+                let (id, page, option, context, layout, legend, wait) = shots[idx];
+                if frames == 0 {
+                    let name = std::ffi::CString::new(page).unwrap();
+                    let p = unsafe { revc_test_menu_page_id(name.as_ptr()) };
+                    if unsafe { revc_test_menu_state(p, option, context, layout, legend) } != 0 {
+                        *MENU_SHOT_START.lock().unwrap() = Some(std::time::Instant::now());
+                        self.phase = Phase::Menus { idx, frames: 1 };
+                    }
+                } else if MENU_SHOT_START.lock().unwrap().is_none_or(|t| t.elapsed().as_millis() < wait as u128) {
+                    // keep the row selected (pages reset it on entry)
+                    let name = std::ffi::CString::new(page).unwrap();
+                    let p = unsafe { revc_test_menu_page_id(name.as_ptr()) };
+                    unsafe { revc_test_menu_state(p, option, -1, -1, -1) };
+                    self.phase = Phase::Menus { idx, frames: frames + 1 };
+                } else if frames < u32::MAX {
+                    // waited long enough (real time: page fades and the highlight have settled)
+                    crate::host::request_capture();
+                    self.phase = Phase::Menus { idx, frames: u32::MAX };
+                } else if let Some((w, h, rgba)) = crate::host::take_capture() {
+                    if let Some(dir) = std::env::var_os("REVC_TEST_SHOT_DIR") {
+                        let path = PathBuf::from(dir).join(format!("{set}_{id}.png"));
+                        if let Err(e) = write_png(&path, w, h, &rgba) {
+                            self.fail(format!("writing {}: {e}", path.display()));
+                        }
+                    }
+                    log(format!("menu {set}_{id}: captured {w}x{h}"));
+                    if idx + 1 < shots.len() {
+                        self.phase = Phase::Menus { idx: idx + 1, frames: 0 };
+                    } else {
+                        return self.finish();
+                    }
                 }
             }
             Phase::Scene { idx, base, stage } => {

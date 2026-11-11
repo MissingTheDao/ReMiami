@@ -41,6 +41,13 @@ PadPictureContextDraw(bool *disabled, bool userHovering)
 	return TheText.Get(padContext == 0 ? "RVC_PPF" : padContext == 1 ? "RVC_PPC" : "RVC_PPH");
 }
 
+// Tests (menu comparison shots): pick the context directly.
+extern "C" void
+PadPictureSetContext(int context)
+{
+	padContext = context % 3;
+}
+
 void
 PadPictureContextPress(int8 action)
 {
