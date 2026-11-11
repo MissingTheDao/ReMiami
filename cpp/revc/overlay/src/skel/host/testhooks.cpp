@@ -40,6 +40,10 @@ extern "C" void PadLayoutApply(int layout);
 #include "GenericGameStorage.h"
 #include "Messages.h"
 #include "Automobile.h"
+#include "Bike.h"
+#include "RpAnimBlend.h"
+#include "AnimBlendAssociation.h"
+#include "AnimBlendHierarchy.h"
 #include "OnscreenTimer.h"
 #include "User.h"
 
@@ -280,6 +284,63 @@ revc_test_menu_input(int down, int change)
 {
 	if (FrontEndMenuManager.m_bMenuActive)
 		FrontEndMenuManager.ProcessUserInput(down, 0, 0, 0, change);
+}
+
+// World start states for pad scripts (research autopad README): kind 0 on foot, 1 an Infernus,
+// 2 a PCJ-600, engine on, the player driving; at (x, y) on the ground facing `heading` degrees
+// (0 = north), noon, clear, no traffic or peds (revc_test_scene).
+void
+revc_test_world_start(int kind, float x, float y, float heading)
+{
+	revc_test_scene(x, y, heading, 12, 0, 0);
+	if (kind == 0)
+		return;
+	int mi = kind == 2 ? MI_PCJ600 : MI_INFERNUS;
+	CStreaming::RequestModel(mi, STREAMFLAGS_DEPENDENCY);
+	CStreaming::LoadAllRequestedModels(false);
+	CPlayerPed *ped = FindPlayerPed();
+	CVehicle *veh = kind == 2 ? (CVehicle*)new CBike(mi, MISSION_VEHICLE) : (CVehicle*)new CAutomobile(mi, MISSION_VEHICLE);
+	CVector pos = ped->GetPosition();
+	pos.z = CWorld::FindGroundZForCoord(pos.x, pos.y) + veh->GetDistanceFromCentreOfMassToBaseOfModel();
+	veh->SetPosition(pos);
+	veh->SetHeading(DEGTORAD(heading));
+	veh->SetStatus(STATUS_ABANDONED);
+	veh->bEngineOn = true;
+	CWorld::Add(veh);
+	ped->SetObjective(OBJECTIVE_ENTER_CAR_AS_DRIVER, veh);
+	ped->WarpPedIntoCar(veh);
+	TheCamera.RestoreWithJumpCut();
+	TheCamera.SetCameraDirectlyBehindForFollowPed_CamOnAString();
+}
+
+// Telemetry (REVC_TEST_TELEMETRY): out[0..11] = pos x y z, heading (degrees, 0 = north,
+// counter-clockwise), speed (m/s), vehicle model (-1 on foot), suspension spring ratio of the
+// four wheels (cars and bikes, -1 otherwise), gas pedal, steer angle; anim: the player's main
+// animation's name, *animTime its time in seconds.
+void
+revc_test_telemetry(float *out, char *anim, int animLen, float *animTime)
+{
+	CPlayerPed *ped = FindPlayerPed();
+	CVehicle *veh = ped->InVehicle() ? ped->m_pMyVehicle : nil;
+	CPhysical *e = veh ? (CPhysical*)veh : (CPhysical*)ped;
+	CVector p = e->GetPosition(), f = e->GetForward();
+	out[0] = p.x; out[1] = p.y; out[2] = p.z;
+	out[3] = RADTODEG(Atan2(-f.x, f.y));
+	out[4] = e->m_vecMoveSpeed.Magnitude() * 50.0f;
+	out[5] = veh ? veh->GetModelIndex() : -1.0f;
+	for (int i = 0; i < 4; i++)
+		out[6 + i] = veh && veh->IsCar() ? ((CAutomobile*)veh)->m_aSuspensionSpringRatio[i] :
+			veh && veh->IsBike() ? ((CBike*)veh)->m_aSuspensionSpringRatio[i] : -1.0f;
+	out[10] = veh ? veh->m_fGasPedal : 0.0f;
+	out[11] = veh ? veh->m_fSteerAngle : 0.0f;
+	anim[0] = '\0';
+	*animTime = 0.0f;
+	CAnimBlendAssociation *a = RpAnimBlendClumpGetMainAssociation(ped->GetClump(), nil, nil);
+	if (a && a->hierarchy) {
+		strncpy(anim, a->hierarchy->name, animLen - 1);
+		anim[animLen - 1] = '\0';
+		*animTime = a->currentTime;
+	}
 }
 
 // Pad scripts (REVC_TEST=padscript, rust padscript.rs): pad 0's state for this frame, as a

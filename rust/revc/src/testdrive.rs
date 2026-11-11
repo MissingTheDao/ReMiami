@@ -86,6 +86,8 @@ unsafe extern "C" {
     #[allow(clippy::too_many_arguments)]
     fn revc_test_pad(on: i32, buttons: u32, lx: f32, ly: f32, rx: f32, ry: f32, l2: f32, r2: f32);
     fn revc_test_menu_where(open: *mut i32, page: *mut i32, row: *mut i32) -> i32;
+    fn revc_test_world_start(kind: i32, x: f32, y: f32, heading: f32);
+    fn revc_test_telemetry(out: *mut f32, anim: *mut std::ffi::c_char, anim_len: i32, anim_time: *mut f32);
     fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
 }
 
@@ -311,6 +313,30 @@ const MOTIONS: &[Motion] = &[
     ("xbox_list_scroll", "brief", 0, 1, -1, "none", 630),
     ("xbox_confirm_open", "load", 1, -1, -1, "select", 90),
 ];
+
+/// REVC_TEST_TELEMETRY=<csv>: one line per frame of a pad script (frame, ms, position, heading,
+/// speed m/s, vehicle model, the four suspension ratios, gas, steer, the player's main animation and
+/// its time), for comparing car and ped motion with the console (read there from emulator memory).
+fn telemetry_line(frame: u32) {
+    use std::io::Write;
+    static F: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
+    let Some(path) = std::env::var_os("REVC_TEST_TELEMETRY") else { return };
+    let mut g = F.lock().unwrap();
+    if g.is_none() {
+        let Ok(mut f) = std::fs::File::create(&path) else { return };
+        let _ = writeln!(f, "frame,ms,x,y,z,heading,speed,vehicle,susp0,susp1,susp2,susp3,gas,steer,anim,anim_time");
+        *g = Some(f);
+    }
+    let mut v = [0f32; 12];
+    let mut name = [0 as std::ffi::c_char; 32];
+    let mut at = 0f32;
+    unsafe { revc_test_telemetry(v.as_mut_ptr(), name.as_mut_ptr(), name.len() as i32, &mut at) };
+    let anim = unsafe { std::ffi::CStr::from_ptr(name.as_ptr()) }.to_string_lossy();
+    let vals: Vec<String> = v.iter().map(|x| format!("{x:.4}")).collect();
+    if let Some(f) = g.as_mut() {
+        let _ = writeln!(f, "{frame},{:.1},{},{anim},{at:.4}", frame as f32 * 1000.0 / 60.0, vals.join(","));
+    }
+}
 
 /// The pad script of REVC_TEST_PAD_SCRIPT (a file), or of REVC_TEST_MOTION's route
 /// (MOTION_ROUTES, also written to REVC_TEST_PAD_OUT/<id>.pad.json), parsed once.
@@ -1092,12 +1118,20 @@ impl Driver {
                     }
                 };
                 if frame == 0 {
+                    // Start states (research autopad README): menu_base = scene S1; world motions
+                    // on foot / in an Infernus / on a PCJ-600 (testhooks.cpp revc_test_world_start)
                     let (_, x, y, heading, hour, minute, weather) = SCENES[0];
-                    if script.start != "menu_base" {
-                        self.fail(format!("pad script start state {:?} not known (menu_base)", script.start));
-                        return self.finish();
+                    match script.start.as_str() {
+                        "menu_base" => unsafe { revc_test_scene(x, y, heading, hour, minute, weather); },
+                        "foot_open" => unsafe { revc_test_world_start(0, 520.0, -1100.0, 0.0) },	// beach sand, flat
+                        "car_straight" => unsafe { revc_test_world_start(1, MOONLITE.0, MOONLITE.1, 0.0) },	// Ocean Drive, north
+                        "car_open" => unsafe { revc_test_world_start(1, -1450.0, -900.0, 0.0) },	// the airport
+                        "bike_straight" => unsafe { revc_test_world_start(2, MOONLITE.0, MOONLITE.1, 0.0) },
+                        other => {
+                            self.fail(format!("pad script start state {other:?} not known (menu_base, foot_open, car_straight, car_open, bike_straight)"));
+                            return self.finish();
+                        }
                     }
-                    unsafe { revc_test_scene(x, y, heading, hour, minute, weather) };
                     MENU_VIDEO_FRAME.store(0, Ordering::Relaxed);
                 }
                 let rec_start = script.mark("input").map_or(0, |f| f.saturating_sub(MOTION_INPUT_FRAME));
@@ -1113,6 +1147,7 @@ impl Driver {
                 }
                 if frame >= PAD_SETTLE {
                     let t = frame - PAD_SETTLE;
+                    telemetry_line(t);
                     let st = script.state_at(t);
                     let a = st.axes;
                     unsafe { revc_test_pad(1, st.buttons, a[0], a[1], a[2], a[3], a[4], a[5]) };
