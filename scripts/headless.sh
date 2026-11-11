@@ -7,12 +7,12 @@
 # usage: scripts/headless.sh [--size WxH] command [args ...]   (default size 4096x2304, room for a
 #        3840x2160 window with its decorations)
 set -u
-# Run in a memory-capped systemd scope of its own (REVC_RUN_MEM, default 3G; REVC_RUN_MEM=0 for
+# Run in a memory-capped systemd scope of its own (REVC_RUN_MEM, default 5G; REVC_RUN_MEM=0 for
 # none): a game run that grows can then only kill itself, never the session or app that started
 # it (systemd-oomd acts on the whole cgroup that runs out).
-if [[ -z ${REVC_IN_SCOPE:-} && ${REVC_RUN_MEM:-3G} != 0 ]] && command -v systemd-run > /dev/null; then
+if [[ -z ${REVC_IN_SCOPE:-} && ${REVC_RUN_MEM:-5G} != 0 ]] && command -v systemd-run > /dev/null; then
   export REVC_IN_SCOPE=1
-  exec systemd-run --user --scope --quiet --collect -p MemoryMax="${REVC_RUN_MEM:-3G}" -p MemorySwapMax=1G \
+  exec systemd-run --user --scope --quiet --collect -p MemoryMax="${REVC_RUN_MEM:-5G}" -p MemorySwapMax=1G \
     -p ManagedOOMMemoryPressure=kill -- "$0" "$@"
 fi
 # Temporary files on disk: /tmp is often RAM (tmpfs), and run frames and shots pushed into swap
