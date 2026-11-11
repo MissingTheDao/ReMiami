@@ -46,6 +46,10 @@ static const float ICON_Y = 395.0f, ICON_SIZE = 50.0f, ICON_SELECTED = 80.0f;
 // Heap-allocated so nothing runs at program exit (after RenderWare is gone); freed with the menu's
 // own textures by MenuSkinXboxUnload.
 static CSprite2d *icons, *logoSprite, *glint;
+// Focus on the icon bar (the Xbox's top level): after LT/RT until the player moves in the page's
+// list. The current icon's green card and the help line's items follow it.
+static bool barFocus;
+static int barFocusOption = -1;
 #define logo (*logoSprite)
 static int spritesState;	// 0 not tried, 1 loaded, -1 no import
 
@@ -241,6 +245,14 @@ MenuSkinXboxActive(int page, bool gameNotLoaded)
 void
 MenuSkinXboxTitle(wchar *title, uint8 alpha)
 {
+	// the Xbox's own names for these pages
+	int page = FrontEndMenuManager.m_nCurrScreen;
+	if (page == MENUPAGE_CHOOSE_LOAD_SLOT || MenuSkinXboxDialog(page))
+		title = TheText.Get("RVC_XTL");
+	else if (page == MENUPAGE_CONTROLLER_PC)
+		title = TheText.Get("RVC_XTC");
+	else if (page == MENUPAGE_PAD_PICTURE)
+		title = TheText.Get("RVC_XTD");
 	CFont::SetRightJustifyOff();
 	CFont::SetCentreOff();
 	CFont::SetColor(CRGBA(0, 0, 0, alpha));
@@ -285,50 +297,73 @@ DrawIconBar(CMenuManager *m, uint8 alpha)
 		if (i == cur)
 			continue;
 		float s = ICON_SIZE;
-		icons[i].Draw(CRect(X(iconX[i]) - W(s / 2), Y(ICON_Y) - H(s / 2), X(iconX[i]) + W(s / 2), Y(ICON_Y) + H(s / 2)), CRGBA(255, 255, 255, alpha));
+		// the other pages' icons in grey, about 55 % (measured)
+		icons[i].Draw(CRect(X(iconX[i]) - W(s / 2), Y(ICON_Y) - H(s / 2), X(iconX[i]) + W(s / 2), Y(ICON_Y) + H(s / 2)), CRGBA(140, 140, 140, alpha));
 	}
 	if (cur >= 0) {
 		// the current page's icon, enlarged on the mint box (measured 482..580 x 368..425 for the TV)
 		float cx = iconX[cur], s = ICON_SELECTED;
-		CSprite2d::Draw2DPolygon(X(cx - 48.0f), Y(370.0f), X(cx + 50.0f), Y(367.0f), X(cx - 46.0f), Y(426.0f), X(cx + 48.0f), Y(424.0f),
-			CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
+		if (barFocus)	// the green card only while the icon bar has focus
+			CSprite2d::Draw2DPolygon(X(cx - 48.0f), Y(370.0f), X(cx + 50.0f), Y(367.0f), X(cx - 46.0f), Y(426.0f), X(cx + 48.0f), Y(424.0f),
+				CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
 		icons[cur].Draw(CRect(X(cx) - W(s / 2), Y(ICON_Y + 2.0f) - H(s / 2), X(cx) + W(s / 2), Y(ICON_Y + 2.0f) + H(s / 2)), CRGBA(255, 255, 255, alpha));
 	}
 }
 
 // "START: resume game   <-/->: select   A: select   B: back" in pink under the icons: the pad's
 // glyphs (Xbox UI style: coloured) and the text in the Xbox's RWSFArborcrestHeavy (measured at y 427, 15 px).
-static void
-DrawHelpLine(uint8 alpha)
+// One help-line item: the pad's glyphs (up to two) or text, then ":" and the word.
+static float
+HelpItem(float x, float y, const int *glyphs, int ng, const char *pre, const char *word, uint8 alpha)
 {
-	static const int glyphs[4][2] = { { BUTTON_START, -1 }, { BUTTON_DPAD_LEFT, BUTTON_DPAD_RIGHT }, { BUTTON_CROSS, -1 }, { BUTTON_CIRCLE, -1 } };
-	static const char *texts[4] = { "RVC_XHR", "RVC_XHS", "RVC_XHS", "RVC_XHB" };
-	static const float px[4] = { 52.0f, 200.0f, 340.0f, 450.0f };
-	const float gh = H(14.0f), th = H(15.0f), y = Y(427.0f);
+	const float gh = H(14.0f), th = H(15.0f);
 	CRGBA pink(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha);
-	wchar buf[64];
-	for (int i = 0; i < 4; i++) {
-		float x = X(px[i]);
-		for (int k = 0; k < 2; k++) {
-			if (glyphs[i][k] < 0)
-				continue;
-			CSprite2d &g = CFont::ButtonSprite[glyphs[i][k]];
-			if (g.m_pTexture) {
-				g.Draw(CRect(x, y - H(1.0f), x + gh, y - H(1.0f) + gh), CRGBA(255, 255, 255, alpha));
-				x += gh + W(1.0f);
-			}
-		}
-		buf[0] = ':';
-		UnicodeStrcpy(buf + 1, TheText.Get(texts[i]));
-		if (fontRW.ok)
-			XboxFontPrint(fontRW, x, y, th, buf, pink);
-		else {
-			CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
-			CFont::SetScale(W(0.44f), H(0.74f));
-			CFont::SetColor(pink);
-			CFont::PrintString(x, y, buf);
+	for (int k = 0; k < ng; k++) {
+		CSprite2d &g = CFont::ButtonSprite[glyphs[k]];
+		if (g.m_pTexture) {
+			g.Draw(CRect(x, y - H(1.0f), x + gh, y - H(1.0f) + gh), CRGBA(255, 255, 255, alpha));
+			x += gh + W(1.0f);
 		}
 	}
+	wchar buf[64];
+	int n = 0;
+	if (pre) {
+		AsciiToUnicode(pre, buf);
+		n = UnicodeStrlen(buf);
+	}
+	buf[n++] = ':';
+	UnicodeStrcpy(buf + n, TheText.Get(word));
+	if (fontRW.ok)
+		XboxFontPrint(fontRW, x, y, th, buf, pink);
+	return x + (fontRW.ok ? XboxFontWidth(fontRW, buf, th) : 0.0f);
+}
+
+// The help line under the icons, per state as on the Xbox (measured slots at x 52, 200, 340,
+// 450): top level "START resume game, <-/-> select, A select"; in a list "START resume game, up/down
+// select, A select, B back"; display controls "START resume game, <-/-> change, B back"; the map
+// "A select, B back, thumbsticks move/zoom". The pad's glyphs, the text in RWSFArborcrestHeavy.
+static void
+DrawHelpLine(CMenuManager *m, uint8 alpha)
+{
+	const float y = Y(427.0f);
+	static const int start[1] = { BUTTON_START }, lr[2] = { BUTTON_DPAD_LEFT, BUTTON_DPAD_RIGHT }, ud[2] = { BUTTON_DPAD_UP, BUTTON_DPAD_DOWN };
+	static const int a[1] = { BUTTON_CROSS }, b[1] = { BUTTON_CIRCLE }, sticks[2] = { BUTTON_UP, BUTTON_RSTICK_UP };
+	if (m->m_nCurrScreen == MENUPAGE_MAP) {
+		HelpItem(X(52.0f), y, a, 1, nil, "RVC_XHS", alpha);
+		HelpItem(X(200.0f), y, b, 1, nil, "RVC_XHB", alpha);
+		HelpItem(X(340.0f), y, sticks, 2, nil, "RVC_XHM", alpha);
+		return;
+	}
+	HelpItem(X(52.0f), y, start, 1, nil, "RVC_XHR", alpha);
+	if (m->m_nCurrScreen == MENUPAGE_PAD_PICTURE) {
+		HelpItem(X(200.0f), y, lr, 2, nil, "RVC_XHC", alpha);
+		HelpItem(X(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
+		return;
+	}
+	HelpItem(X(200.0f), y, barFocus ? lr : ud, 2, nil, "RVC_XHS", alpha);
+	HelpItem(X(340.0f), y, a, 1, nil, "RVC_XHS", alpha);
+	if (!barFocus)
+		HelpItem(X(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
 }
 
 // The mint selection bar behind the current item, with the Xbox's pulse: a white glow over it
@@ -337,7 +372,14 @@ DrawHelpLine(uint8 alpha)
 void
 MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha)
 {
-	CSprite2d::DrawRect(CRect(x0, y0, x1, y1), CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
+	// Tilted with the panel (top edge leaning right), from the label's left edge to at least a
+	// fixed width, the last part a darker mint tail (measured on the Xbox's list pages).
+	x1 = Max(x1, x0 + W(150.0f));
+	float tilt = W(5.0f), tail = W(16.0f);
+	CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 - tail + tilt, y0, x0, y1, x1 - tail, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
+	CSprite2d::Draw2DPolygon(x1 - tail + tilt, y0, x1 + tilt, y0, x1 - tail, y1, x1, y1, CRGBA(0, 120, 80, alpha));
+	// the pulse: a white glow over the bar growing 0.9 -> 1.157 x 1.081 while fading 0.5 -> 0.059,
+	// every 0.8 s (R3_Menu.anm)
 	float t = (CTimer::GetTimeInMillisecondsPauseMode() % 800) / 800.0f;
 	float sx = 0.9f + (1.157f - 0.9f) * t, sy = 0.9f + (1.081f - 0.9f) * t;
 	float a = 0.5f + (0.059f - 0.5f) * t;
@@ -369,6 +411,8 @@ MenuSkinXboxInput(CMenuManager *m)
 		return false;
 	int n = ARRAY_SIZE(tabs);
 	m->SwitchToNewScreen(tabs[(CurrentTab(m->m_nCurrScreen) + step + n) % n].page);
+	barFocus = true;
+	barFocusOption = -1;
 	return true;
 }
 
@@ -378,7 +422,14 @@ MenuSkinXboxDraw(CMenuManager *m, uint8 alpha)
 {
 	if (!MenuSkinXboxActive(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return;
+	// focus leaves the icon bar once the player moves in the page's list
+	if (barFocus) {
+		if (barFocusOption < 0)
+			barFocusOption = m->m_nCurrOption;
+		else if (m->m_nCurrOption != barFocusOption)
+			barFocus = false;
+	}
 	DrawIconBar(m, alpha);
-	DrawHelpLine(alpha);
+	DrawHelpLine(m, alpha);
 	CFont::DrawFonts();
 }

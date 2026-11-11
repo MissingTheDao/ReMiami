@@ -306,9 +306,16 @@ local). Done:
   language too) with the active box just around its label; no PC scrollbar.
 - PS2 highlight: a box just around the selected label (not the PC's full-width bar).
 
-Next (in that order): the Xbox highlight (tilted mint bar with a dark tail), the icon-bar states
-(unselected icons grey; the green card only while the bar has focus), help lines per page, then the
-page contents per console. Plan for the extras (research, from the user's "add options without
+Round 2:
+- Xbox: the highlight is a mint bar tilted with the panel, from the label's left edge (at least 150
+  px), with a dark tail; other pages' icons grey (about 55 %); the green card only while the icon
+  bar has focus (after LT/RT, until the player moves in the list); the help line per state (list,
+  top level, display controls, map); titles "load", "controls", "display controls"; larger title.
+- PS2: the confirmations get the PS2 frame and the load tab; back entries hidden with their
+  highlight (no double highlights, no "back" on brief/stats/map); the criminal rating reads
+  "Citizen [0]"; the load page is titled "load".
+
+Next: the page contents per console (and the PS2 map position/legend item and 5-line help box). Plan for the extras (research, from the user's "add options without
 breaking cohesion", `menu-compare/OPTIONS_PLACEMENT.md`): console pages stay as on the console;
 revc's extra options go into patterns the consoles used: PS2 an "options" eighth tab (language
 becomes a row) with a Stats-style list; Xbox an "advanced" sub-tab on Display, Audio and
