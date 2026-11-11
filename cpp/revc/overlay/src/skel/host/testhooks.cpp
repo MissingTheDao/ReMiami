@@ -38,6 +38,10 @@ extern "C" void PadLayoutApply(int layout);
 #include "Hud.h"
 #include "Font.h"
 #include "GenericGameStorage.h"
+#include "Messages.h"
+#include "Automobile.h"
+#include "OnscreenTimer.h"
+#include "User.h"
 
 #ifdef AUDIO_OAL
 // Audio effects state (sampman_oal.cpp globals).
@@ -200,6 +204,68 @@ revc_test_scene(float x, float y, float heading, int hour, int minute, int weath
 	TheCamera.RestoreWithJumpCut();
 	TheCamera.SetCameraDirectlyBehindForFollowPed_CamOnAString();
 	return pos.z;
+}
+
+// HUD text comparison shots (plan task 13, REVC_TEST_HUD_TEXT): puts one kind of HUD text on
+// screen in a scene, with the game's own text keys and calls, as the scripts do: 0 zone name,
+// 1 vehicle name, 2 help box, 3 mission title, 4 odd-job title (TAXI DRIVER), 5 mission clock +
+// counter (taxi fares), 6 mission passed, 7 mission failed, 8 odd-job over + earnings, 9 speed
+// bonus, 10 wanted level, 11 subtitle line. The clock and counter use the last two global script
+// variables.
+void
+revc_test_hud_text(int kind)
+{
+	// kind + 100: the late part, called each frame from 1 s before the capture (once is enough):
+	// the odd-job result line slides in, holds 1.5 s and slides out, so it starts late.
+	static bool lateDone;
+	if (kind >= 100) {
+		if (lateDone)
+			return;
+		lateDone = true;
+		if (kind == 108)
+			CMessages::AddBigMessageWithNumber(TheText.Get("TSCORE"), 8000, 5, 0, -1, -1, -1, -1, -1);
+		return;
+	}
+	lateDone = false;
+	TheText.LoadMissionText((char*)"TAXI1");
+	int32 var = CTheScripts::GetSizeOfVariableSpace() - 8;
+	switch (kind) {
+	case 0: CHud::SetZoneName(TheText.Get("DTOWN")); break;
+	case 1: {	// the name shows while the player drives: an Infernus at his spot, him inside
+		CStreaming::RequestModel(MI_INFERNUS, STREAMFLAGS_DEPENDENCY);
+		CStreaming::LoadAllRequestedModels(false);
+		CPlayerPed *ped = FindPlayerPed();
+		CAutomobile *car = new CAutomobile(MI_INFERNUS, MISSION_VEHICLE);
+		CVector pos = ped->GetPosition();
+		pos.z = CWorld::FindGroundZForCoord(pos.x, pos.y) + car->GetDistanceFromCentreOfMassToBaseOfModel();
+		car->SetPosition(pos);
+		car->SetHeading(ped->m_fRotationCur);
+		car->SetStatus(STATUS_ABANDONED);
+		car->bEngineOn = false;
+		CWorld::Add(car);
+		ped->SetObjective(OBJECTIVE_ENTER_CAR_AS_DRIVER, car);
+		ped->WarpPedIntoCar(car);
+		TheCamera.RestoreWithJumpCut();
+		break;
+	}
+	case 2: CHud::SetHelpMessage(TheText.Get("TIMER"), false); break;
+	case 3: CMessages::AddBigMessage(TheText.Get("TAXI_1"), 8000, 1); break;
+	case 4: CMessages::AddBigMessage(TheText.Get("TAXI_M"), 8000, 4); break;
+	case 5:
+		*CTheScripts::GetPointerToScriptVariable(var) = 155000;
+		*CTheScripts::GetPointerToScriptVariable(var + 4) = 3;
+		CUserDisplay::OnscnTimer.AddClock(var, nil, true);
+		CUserDisplay::OnscnTimer.AddCounter(var + 4, 0, (char*)"FARES", 0);
+		break;
+	case 6: CMessages::AddBigMessageWithNumber(TheText.Get("M_PASS"), 8000, 0, 1000, -1, -1, -1, -1, -1); break;
+	case 7: CMessages::AddBigMessage(TheText.Get("M_FAIL"), 8000, 0); break;
+	case 8:
+		CMessages::AddBigMessage(TheText.Get("TAXI6"), 8000, 4);	// + the earnings line, late
+		break;
+	case 9: CMessages::AddBigMessage(TheText.Get("TAXI5"), 8000, 4); break;
+	case 10: FindPlayerPed()->SetWantedLevel(2); break;
+	case 11: CMessages::AddMessage(TheText.Get("NOTAXI"), 8000, 0); break;
+	}
 }
 
 // Menu comparison shots (plan task 13, REVC_TEST=menus): with the pause menu open over a loaded

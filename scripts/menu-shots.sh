@@ -2,7 +2,7 @@
 # Menu comparison shots (plan task 13): every menu page in the PS2 and Xbox UI styles, at the
 # consoles' sizes (PS2 640x448: shot at 640x480 and scaled, Xbox 640x480) and at 1440x1080 (<set>_<id>_hi.png), from a loaded
 # game with the pause menu open (REVC_TEST=menus, rust/revc/src/testdrive.rs MENU_SHOTS_*).
-# usage: scripts/menu-shots.sh [--clips] [out dir] [ps2|xbox|ps2_ws|xbox_ws|ps2_hud|xbox_hud|ps2_endgame|xbox_endgame ...]
+# usage: scripts/menu-shots.sh [--clips] [out dir] [ps2|xbox|ps2_ws|xbox_ws|ps2_hud|xbox_hud|ps2_hudtext|xbox_hudtext|ps2_endgame|xbox_endgame ...]
 #   *_endgame: Stats with a finished game, REVC_TEST_SAVE=<save file> as slot 1 (local file).
 #   --clips: instead, one 60 fps walk-through per style (<set>_walkthrough.mp4, needs ffmpeg): each
 #   state held 1.5 s, the highlight moving on row pages, the radio picker stepping.
@@ -41,15 +41,15 @@ for f in sys.argv[2:]:
     for f in "$TMP"/shots/*.png; do cp "$f" "$OUT/$(basename "${f%.png}")$5.png"; done
   fi
 }
-hud() {	# set, ui style, width, height, suffix: the HUD on foot (scene S1, noon) in that style
+hud() {	# set, ui style, width, height, suffix[, HUD text kind, shot id]: the HUD on foot (scene S1, noon) in that style
   local cfg=$TMP/hud.ini wrap=()
   # (scenes.ini has its own UiStyle line: replace it, an inserted one would lose to it)
   sed -e "s/^UiStyle=.*/UiStyle=$2/" -e "s/^Width=.*/Width=$3/" -e "s/^Height=.*/Height=$4/" \
     "$ROOT/tests/config/scenes.ini" > "$cfg"
   [[ "$3x$4" == 2560x1080 ]] && wrap=("$ROOT/scripts/headless.sh" --size "$3x$4")
-  REVC_TEST_CONFIG=$cfg REVC_SCENE_W=$3 REVC_SCENE_H=$4 REVC_TEST_SCENES=S1 \
+  REVC_TEST_HUD_TEXT=${6:-} REVC_TEST_CONFIG=$cfg REVC_SCENE_W=$3 REVC_SCENE_H=$4 REVC_TEST_SCENES=S1 \
     "${wrap[@]}" "$ROOT/scripts/test.sh" scenes || { echo "menu-shots: the scenes run FAILED ($1 $3x$4)" >&2; FAILED=1; }
-  cp "$ROOT/rust/target/test-output/scenes/S1_noon.png" "$OUT/${1}_hud_on_foot$5.png" 2>/dev/null || FAILED=1
+  cp "$ROOT/rust/target/test-output/scenes/S1_noon.png" "$OUT/${1}_${7:-hud_on_foot}$5.png" 2>/dev/null || FAILED=1
 }
 clip() {	# set, ui style, width, height
   local cfg=$TMP/menus.ini frames=$TMP/frames
@@ -85,6 +85,15 @@ for set in "${SETS[@]}"; do
         read -r w h sfx <<< "$size"; [[ $sfx == "''" ]] && sfx=""
         hud "${set%_hud}" $st "$w" "$h" "$sfx"
       done ;;
+    ps2_hudtext|xbox_hudtext)	# HUD texts (testhooks.cpp revc_test_hud_text kinds) at 4:3
+      if [[ $set == ps2_hudtext ]]; then
+        st=1; kinds=(0:hud_zone_name 1:hud_in_car 2:hud_help 5:hud_taxi_timer 4:hud_mission_title 8:hud_mission_over
+          9:hud_bonus 3:hud_title_small 6:hud_mission_passed 7:hud_mission_failed 10:hud_wanted 11:hud_subtitle)
+      else
+        st=2; kinds=(0:hud_zone_name 1:hud_vehicle_name 2:hud_help 3:hud_mission_title 5:hud_mission_timer
+          7:hud_mission_failed 10:hud_wanted 6:hud_mission_passed 4:hud_oddjob_title 11:hud_subtitle)
+      fi
+      for k in "${kinds[@]}"; do hud "${set%_hudtext}" $st 640 480 "" "${k%%:*}" "${k#*:}"; done ;;
     ps2_endgame|xbox_endgame)	# needs REVC_TEST_SAVE=<an endgame save>
       [[ -n "${REVC_TEST_SAVE:-}" ]] || { echo "$set needs REVC_TEST_SAVE" >&2; exit 2; }
       if [[ $set == ps2_endgame ]]; then shoot ps2_endgame 1 640 480 "" 448; else shoot xbox_endgame 2 640 480 ""; fi ;;

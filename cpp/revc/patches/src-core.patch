@@ -3307,8 +3307,8 @@
 +// (94x76 at 40/40 in 640x448), Xbox 102x94 at left 55, bottom 42 in 640x480 (measured on Xbox
 +// captures, docs/CONSOLE_STYLES.md).
 +extern int8 gUiStyle;
-+#define RADAR_LEFT (gUiStyle == 2 ? 55.0f : 40.0f)
-+#define RADAR_BOTTOM (gUiStyle == 2 ? 42.0f : 40.0f)
++#define RADAR_LEFT (gUiStyle == 2 ? 57.5f : 40.0f)
++#define RADAR_BOTTOM (gUiStyle == 2 ? 46.25f : 40.0f)
  
  #ifdef FIX_RADAR
  /*
@@ -3318,8 +3318,8 @@
  */
 -#define RADAR_WIDTH ((CDraw::ms_bFixRadar)  ? (82.0f) : (94.0f))	
 -#define RADAR_HEIGHT ((CDraw::ms_bFixRadar) ? (82.0f) : (76.0f))
-+#define RADAR_WIDTH (gUiStyle == 2 ? 102.0f : gUiStyle == 1 ? 94.0f : (CDraw::ms_bFixRadar)  ? (82.0f) : (94.0f))
-+#define RADAR_HEIGHT (gUiStyle == 2 ? 94.0f : gUiStyle == 1 ? 76.0f : (CDraw::ms_bFixRadar) ? (82.0f) : (76.0f))
++#define RADAR_WIDTH (gUiStyle == 2 ? 97.0f : gUiStyle == 1 ? 94.0f : (CDraw::ms_bFixRadar)  ? (82.0f) : (94.0f))
++#define RADAR_HEIGHT (gUiStyle == 2 ? 85.5f : gUiStyle == 1 ? 76.0f : (CDraw::ms_bFixRadar) ? (82.0f) : (76.0f))
  #else
  /*
  	broken since forever, someone tried to fix size for 640x512(PAL)

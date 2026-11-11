@@ -81,6 +81,7 @@ unsafe extern "C" {
     fn revc_test_menu_input(down: i32, change: i32);
     fn revc_test_map_zoom(dir: i32);
     fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
+    fn revc_test_hud_text(kind: i32);
     fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
 }
 
@@ -833,12 +834,21 @@ impl Driver {
                 match stage {
                     SpotStage::Travel if now >= visit => {
                         let z = unsafe { revc_test_scene(x, y, heading, hour, minute, weather) };
+                        // REVC_TEST_HUD_TEXT=n: one kind of HUD text on screen (testhooks.cpp)
+                        if let Some(k) = std::env::var("REVC_TEST_HUD_TEXT").ok().and_then(|v| v.parse().ok()) {
+                            unsafe { revc_test_hud_text(k) };
+                        }
                         log(format!("scene {name}: ({x}, {y}, {z:.2}) heading {heading} at {hour:02}:{minute:02} weather {weather}"));
                         self.phase = Phase::Scene { idx, base, stage: SpotStage::Settle };
                     }
                     SpotStage::Settle if now >= visit + SCENE_WAIT_MS && unsafe { revc_test_fading() } == 0 => {
                         crate::host::request_capture();
                         self.phase = Phase::Scene { idx, base, stage: SpotStage::Capturing };
+                    }
+                    SpotStage::Settle if now + 1000 >= visit + SCENE_WAIT_MS => {
+                        if let Some(k) = std::env::var("REVC_TEST_HUD_TEXT").ok().and_then(|v| v.parse::<i32>().ok()) {
+                            unsafe { revc_test_hud_text(k + 100) };
+                        }
                     }
                     SpotStage::Capturing => {
                         if let Some((w, h, rgba)) = crate::host::take_capture() {
