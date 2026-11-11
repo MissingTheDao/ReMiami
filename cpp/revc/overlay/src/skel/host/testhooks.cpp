@@ -207,6 +207,15 @@ revc_test_scene(float x, float y, float heading, int hour, int minute, int weath
 // picture's context (0 foot, 1 car, 2 flying; -1 leave), the pad layout (-1 leave), the map legend
 // (-1 leave). Returns 0 if the menu isn't open yet.
 extern "C" void PadPictureSetContext(int context);
+// Menu walk-through clips: one menu input as the player gives it (down: next row; change: left
+// or right on the row, e.g. the radio picker).
+void
+revc_test_menu_input(int down, int change)
+{
+	if (FrontEndMenuManager.m_bMenuActive)
+		FrontEndMenuManager.ProcessUserInput(down, 0, 0, 0, change);
+}
+
 int
 revc_test_menu_page_id(const char *name)
 {
@@ -238,7 +247,14 @@ revc_test_menu_state(int page, int option, int context, int layout, int legend)
 		FrontEndMenuManager.m_PrefsShowLegends = legend;
 	if (FrontEndMenuManager.m_nCurrScreen != page)
 		FrontEndMenuManager.SwitchToNewScreen(page);
-	FrontEndMenuManager.m_nCurrOption = option;
+	if (FrontEndMenuManager.m_nCurrOption != option) {
+		// from the top, moving down as the player does (so long pages scroll the row into view)
+		FrontEndMenuManager.m_nCurrOption = 0;
+		FrontEndMenuManager.m_nFirstVisibleRowOnList = 0;
+		for (int k = 0; k < 16 && FrontEndMenuManager.m_nCurrOption < option; k++)
+			FrontEndMenuManager.ProcessUserInput(1, 0, 0, 0, 0);
+		FrontEndMenuManager.m_nCurrOption = option;
+	}
 	return 1;
 }
 

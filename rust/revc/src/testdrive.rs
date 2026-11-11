@@ -78,6 +78,7 @@ unsafe extern "C" {
     fn revc_test_pedhit_drawn(body_rise: *mut f32, head_rise: *mut f32, hit: *mut i32);
     fn revc_test_menu_state(page: i32, option: i32, context: i32, layout: i32, legend: i32) -> i32;
     fn revc_test_menu_page_id(name: *const std::ffi::c_char) -> i32;
+    fn revc_test_menu_input(down: i32, change: i32);
     fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
     fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
 }
@@ -177,8 +178,6 @@ const MENU_SHOTS_PS2: &[MenuShot] = &[
     ("map_legend_off", "map", 0, -1, -1, 0, 1000),
     ("brief", "brief", 0, -1, -1, -1, 1000),
     ("load_slots", "load", 1, -1, -1, -1, 1000),
-    ("load_confirm", "load_confirm", 2, -1, -1, -1, 1000),
-    ("new_game_confirm", "new_game_confirm", 2, -1, -1, -1, 1000),
     ("stats", "stats", 0, -1, -1, -1, 1000),
     ("stats_2", "stats", 0, -1, -1, -1, 5000),
     ("controls", "controls", 0, -1, -1, -1, 1000),
@@ -190,6 +189,8 @@ const MENU_SHOTS_PS2: &[MenuShot] = &[
     ("display", "display", 0, -1, -1, -1, 1000),
     ("display_2", "display", 1, -1, -1, -1, 1000),
     ("save_slots", "save", 1, -1, -1, -1, 1000),
+    ("load_confirm", "load_confirm", 1, -1, -1, -1, 1000),
+    ("new_game_confirm", "new_game_confirm", 1, -1, -1, -1, 1000),
 ];
 const MENU_SHOTS_XBOX: &[MenuShot] = &[
     ("map_legend_on", "map", 0, -1, -1, 1, 1000),
@@ -210,11 +211,12 @@ const MENU_SHOTS_XBOX: &[MenuShot] = &[
     ("audio_radio_vcpr", "audio", 4, -1, -1, -1, 1000),
     ("display", "display", 0, -1, -1, -1, 1000),
     ("load_slots", "load", 1, -1, -1, -1, 1000),
-    ("load_confirm_new_game", "new_game_confirm", 2, -1, -1, -1, 1000),
+    ("load_confirm_new_game", "new_game_confirm", 1, -1, -1, -1, 1000),
     ("save_slots", "save", 1, -1, -1, -1, 1000),
 ];
 
 static MENU_SHOT_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+static MENU_VIDEO_FRAME: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 fn menu_shots() -> (&'static str, &'static [MenuShot]) {
     match std::env::var("REVC_TEST_MENU_SET").as_deref() {
@@ -684,6 +686,47 @@ impl Driver {
                     }
                     _ => {}
                 }
+            }
+            Phase::Menus { idx, frames } if self.video_dir.is_some() => {
+                // Walk-through clip (REVC_TEST_VIDEO_DIR, run at REVC_FIXED_FPS=60): every frame
+                // written; each state held 1.5 s; on row pages the highlight moves down at 0.5 s
+                // and back at 1 s, on the radio row the picker steps right and back.
+                let (_, shots) = menu_shots();
+                let (id, page, option, context, layout, legend, _) = shots[idx];
+                if let Some((w, h, rgba)) = crate::host::take_capture() {
+                    let n = MENU_VIDEO_FRAME.fetch_add(1, Ordering::Relaxed);
+                    let path = self.video_dir.as_ref().unwrap().join(format!("frame_{n:05}.png"));
+                    if let Err(e) = write_png(&path, w, h, &rgba) {
+                        self.fail(format!("writing {}: {e}", path.display()));
+                        return self.finish();
+                    }
+                }
+                let name = std::ffi::CString::new(page).unwrap();
+                let p = unsafe { revc_test_menu_page_id(name.as_ptr()) };
+                if frames == 0 {
+                    if unsafe { revc_test_menu_state(p, option, context, layout, legend) } != 0 {
+                        self.phase = Phase::Menus { idx, frames: 1 };
+                    }
+                    crate::host::request_capture();
+                    return false;
+                }
+                let radio = id.contains("radio");
+                match frames {
+                    30 if radio => unsafe { revc_test_menu_input(0, 1) },
+                    60 if radio => unsafe { revc_test_menu_input(0, -1) },
+                    30 if !id.contains("controls_") && !id.starts_with("map") => unsafe { revc_test_menu_input(1, 0) },
+                    _ => {}
+                }
+                if frames >= 90 {
+                    if idx + 1 < shots.len() {
+                        self.phase = Phase::Menus { idx: idx + 1, frames: 0 };
+                    } else {
+                        return self.finish();
+                    }
+                } else {
+                    self.phase = Phase::Menus { idx, frames: frames + 1 };
+                }
+                crate::host::request_capture();
             }
             Phase::Menus { idx, frames } => {
                 let (set, shots) = menu_shots();
