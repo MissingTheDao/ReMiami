@@ -245,8 +245,6 @@ struct Skin
 };
 
 Stream *readSkinSplitData(Stream *stream, Skin *skin);
-Stream *writeSkinSplitData(Stream *stream, Skin *skin);
-int32 skinSplitDataSize(Skin *skin);
 void registerSkinPlugin(void);
 
 }

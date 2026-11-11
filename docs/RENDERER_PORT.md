@@ -598,6 +598,15 @@ code nothing calls is deleted rather than ported.
   the game uses), matfx.cpp (effect setup per material: env map, bump, dual), hanim.cpp's
   frame plugin and HAnimHierarchy create/destroy/attach. uvanim.cpp and userdata.cpp are never
   registered or used by the game and are deleted.
+  **Done 2026-11-11:** `rust/revc/src/rwplugins.rs` (the HAnim hierarchy object and frame
+  plugin, AnimInterpolator create/destroy, Skin init/findNumWeights/findUsedBones and the
+  geometry plugin, all of MatFX's effect data and the material and atomic plugins); the skin
+  writers went with the model writers; uvanim.cpp, userdata.cpp and rwuserdata.h are deleted.
+  Picking the skin and MatFX pipelines and the old-format skin reader stay C++ for step 7.
+  Checked by `tests/golden/rwplugins.txt` (6,607 random operations over frames with HAnim data
+  and hierarchies, skinned geometries, materials with every effect combination and their
+  textures; the recorder runs librw's own register*Plugin functions on a small working plugin
+  list; `tests/golden/recorders/rwplugins`).
 
 Step 7 (outlook): the engine core (Engine open/start/stop, plugin lists, streams, pipelines,
 render state, errors), the debug charset, and the wgpu driver's remaining C++ glue; after that

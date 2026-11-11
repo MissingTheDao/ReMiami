@@ -21,6 +21,7 @@ mod rwimagefile;
 mod rwraster;
 mod rwgeomobj;
 mod rwscene;
+mod rwplugins;
 
 /// Tests that install process-wide hooks (librw object plugins) take this lock.
 #[cfg(test)]

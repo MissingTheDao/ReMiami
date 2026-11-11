@@ -28,6 +28,7 @@ add_library(librw
     rwerror.h
     rwobjects.h
     rwscene_ffi.h
+    rwplugins_ffi.h
     rwpipeline.h
     rwplg.h
     rwplugins.h
