@@ -298,6 +298,10 @@ MenuSkinPS2PageFocus(void)
 // discs") on the left, then the slots. Cross from the tab bar focuses "load game"; cross on it
 // moves into the slots, triangle there comes back to the left column. loadRow: 0 load game,
 // 1 new game (entry 8), 2 console discs (entry 9).
+// Audio: the "output" cell (beside radio station) has focus; m_nCurrOption is the radio row.
+static bool audioOutput;
+bool MenuSkinPS2AudioOutputFocus(void) { return audioOutput; }
+
 static bool loadColumn;
 static int loadRow;
 
@@ -358,6 +362,7 @@ MenuSkinPS2Input(CMenuManager *m)
 		focusPage = m->m_nCurrScreen;
 		pageFocus = !IsTabPage(m->m_nCurrScreen);
 		loadColumn = false;
+		audioOutput = false;
 	}
 	if (!MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return false;
@@ -397,18 +402,26 @@ MenuSkinPS2Input(CMenuManager *m)
 		}
 		return true;
 	}
-	if (pageFocus && m->m_nCurrScreen == MENUPAGE_SOUND_SETTINGS && (up || down)) {
-		// Audio is a grid on the PS2 (v1.40): music | SFX on top (left/right change the volume),
-		// radio station below; down from either goes to radio station, up from it to music.
-		// (revc: the output/stereo cell beside radio station isn't a row yet.)
-		int music = -1, radio = -1;
+	if (pageFocus && m->m_nCurrScreen == MENUPAGE_SOUND_SETTINGS) {
+		// Audio is a 2x2 grid on the PS2 (v1.40): music | SFX on top, radio station | output
+		// below; left/right and up/down move between the cells and wrap on both axes. (How the
+		// console changes a volume or the station isn't known yet: left/right only move here.)
+		const bool left = pad->GetDPadLeftJustDown() || pad->GetLeftJustDown(), right = pad->GetDPadRightJustDown() || pad->GetRightJustDown();
+		int music = -1, sfx = -1, radio = -1;
 		for (int i = 0; i < NUM_MENUROWS; i++) {
 			int a = aScreens[MENUPAGE_SOUND_SETTINGS].m_aEntries[i].m_Action;
 			if (a == MENUACTION_MUSICVOLUME) music = i;
+			if (a == MENUACTION_SFXVOLUME) sfx = i;
 			if (a == MENUACTION_RADIO) radio = i;
 		}
-		if (music >= 0 && radio >= 0) {
-			m->m_nCurrOption = m->m_nCurrOption == radio ? (up ? music : radio) : (down ? radio : m->m_nCurrOption);
+		if (music >= 0 && sfx >= 0 && radio >= 0 && (up || down || left || right)) {
+			int cell = m->m_nCurrOption == sfx ? 1 : m->m_nCurrOption == radio ? (audioOutput ? 3 : 2) : 0;
+			if (left || right)
+				cell ^= 1;
+			else
+				cell ^= 2;
+			audioOutput = cell == 3;
+			m->m_nCurrOption = cell == 0 ? music : cell == 1 ? sfx : radio;
 			return true;
 		}
 	}
@@ -430,6 +443,7 @@ MenuSkinPS2Input(CMenuManager *m)
 		pageFocus = true;
 		loadColumn = m->m_nCurrScreen == MENUPAGE_CHOOSE_LOAD_SLOT;
 		loadRow = 0;
+		audioOutput = false;
 		m->m_nCurrOption = aScreens[m->m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL ? 1 : 0;
 		m->m_nFirstVisibleRowOnList = 0;
 		return true;

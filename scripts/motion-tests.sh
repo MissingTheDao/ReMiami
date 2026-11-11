@@ -55,9 +55,11 @@ for m in ms:
             m[side]['video'] = os.path.join(base, m[side]['video'])
     if m['id'] in ran:
         d = os.path.join(out, m['id']); n = len([f for f in os.listdir(d) if f.startswith('frame_')])
-        r = m.get('revc', {}); run = m.get('revc_run', {})
-        m['revc'] = dict(video=d, fps=60, start=30 + run.get('start', -3), end=min(n, 30 + run.get('end', n - 30)),
-                         roi=run.get('roi', r.get('roi', m['ref']['roi'])))
+        r = dict(m.get('revc', {})); run = m.get('revc_run', {})
+        r.update({k: v for k, v in run.items() if k not in ('start', 'end')})	# (keeps key etc.)
+        r.update(video=d, fps=60, start=30 + run.get('start', -3), end=min(n, 30 + run.get('end', n - 30)),
+                 roi=run.get('roi', r.get('roi', m['ref']['roi'])))
+        m['revc'] = r
 json.dump(ms, open(os.path.join(out, 'motions.json'), 'w'), indent=1)
 EOF
 python3 "$(dirname "$JSON")/motiontest.py" "$OUT/motions.json" "${IDS[@]}" || FAILED=1
