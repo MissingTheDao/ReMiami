@@ -19,6 +19,14 @@ mod rwtexture;
 mod rwimage;
 mod rwimagefile;
 mod rwraster;
+mod rwgeomobj;
+
+/// Tests that install process-wide hooks (librw object plugins) take this lock.
+#[cfg(test)]
+pub fn testlock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
 mod messages;
 mod pager;
 mod savefile;

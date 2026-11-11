@@ -35,7 +35,6 @@ add_library(librw
     skin.cpp
     texture.cpp
     tga.cpp
-    tristrip.cpp
     userdata.cpp
     uvanim.cpp
     world.cpp

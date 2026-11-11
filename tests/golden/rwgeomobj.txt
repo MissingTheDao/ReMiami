@@ -1,0 +1,2321 @@
+newgeo 23 58 185 = 0 => 9da6df22f21c6e8a | cg0 | 1 0
+spheres 0 => 9da6df22f21c6e8a | | 1 0
+addmorph 0 2 => e47b5277aac847d8 | | 1 0
+addmorph 0 1 => 77feb961c88f791f | | 1 0
+fill 0 3262375965 => 1dec3f65935a7dde | | 1 0
+newmat = 0 color 6649e790 => 2ba7c922d793215c | cm0 | 1 1
+delmat 0 => 1dec3f65935a7dde | dm0 | 1 0
+delgeo 0 => cbf29ce484222325 | dg0 | 0 0
+newgeo 22 26 16777305 = 1 => db77fb547f10c6a3 | cg1 | 1 0
+allocdata 1 => ac94bac072431946 | | 1 0
+spheres 1 => ac94bac072431946 | | 1 0
+allocmeshes 1 2 129 0 => 96d1b9dcba0eda9d | | 1 0
+addrefgeo 1 => 36cc65e51044972e | | 1 0
+spheres 1 => 36cc65e51044972e | | 1 0
+guess 1 = 43 => 36cc65e51044972e | | 1 0
+addrefgeo 1 => d6c711ed667a53bf | | 1 0
+addmorph 1 0 => d6c711ed667a53bf | | 1 0
+lock 1 4095 => 78d147a47d865376 | | 1 0
+fill 1 3532579397 => 6603e2a0c71fcb2e | | 1 0
+spheres 1 => 4041aa224ac56e5c | | 1 0
+newgeo 15 22 95 = 2 => f08d7bfc552b5b1a | cg2 | 2 0
+spheres 1 => f08d7bfc552b5b1a | | 2 0
+newgeo 27 54 196617 = 3 => 5d5d12d02cec1ec2 | cg3 | 3 0
+spheres 1 => 5d5d12d02cec1ec2 | | 3 0
+spheres 1 => 5d5d12d02cec1ec2 | | 3 0
+newgeo 17 38 56 = 4 => 5342f3669bc8cc63 | cg4 | 4 0
+newmat = 1 color e3bdb0c7 => 54ba4449d69e0579 | cm1 | 4 1
+spheres 3 => 54ba4449d69e0579 | | 4 1
+allocmeshes 3 0 38 0 => fedcc90589f48450 | | 4 1
+newgeo 13 0 16777237 = 5 => 0d49cb2d6db20892 | cg5 | 5 1
+addmorph 3 2 => 28dd9da199b63416 | | 5 1
+newmat = 2 => 151e11fb93e253e0 | cm2 | 5 2
+append 1 2 = 0 => ca104d586c0e2d80 | | 5 2
+settex 1 -1 => ca104d586c0e2d80 | | 5 2
+addmorph 1 1 => 361cd514fdfd7fc3 | | 5 2
+find 3 2 = -1 => 361cd514fdfd7fc3 | | 5 2
+addmorph 1 2 => 4a8c12ef57c06c43 | | 5 2
+fill 1 172101448 => b7db569055ac1348 | | 5 2
+addrefgeo 1 => 49fe3bc0a33687eb | | 5 2
+spheres 1 => 6d10ef9f0e1e6484 | | 5 2
+settex 2 -1 => 6d10ef9f0e1e6484 | | 5 2
+newgeo 1 3 151 = 6 => 54080ba14465c5d3 | cg6 | 6 2
+addrefgeo 5 => 461a53978048c990 | | 6 2
+clonemat 1 = 3 => b4c4efff461a9ad8 | cm3 ym3,1 | 6 3
+spheres 2 => b4c4efff461a9ad8 | | 6 3
+delmat 1 => 78edf211e88150ce | dm1 | 6 2
+newgeo 1 0 41 = 7 => eea3cad211f00c4b | cg7 | 7 2
+append 4 2 = 0 => 3a18a80dab38bfa5 | | 7 2
+delgeo 5 => 886bfab1ad23e366 | | 7 2
+addmorph 1 1 => 31db8345fb51375e | | 7 2
+newgeo 7 18 262163 = 8 => bf01d4eb35bce585 | cg8 | 8 2
+addmorph 3 0 => bf01d4eb35bce585 | | 8 2
+addrefgeo 4 => 2ecc8c33578d896e | | 8 2
+delgeo 2 => c5f6368d13bf23c0 | dg2 | 7 2
+addmorph 8 0 => c5f6368d13bf23c0 | | 7 2
+append 6 3 = 0 => fb04f6b89fc5eb09 | | 7 2
+find 3 2 = -1 => fb04f6b89fc5eb09 | | 7 2
+delgeo 6 => af9340654521ef93 | dg6 | 6 2
+delgeo 8 => 3484022d82b87f18 | dg8 | 5 2
+newmat = 4 => 97fb2ce4a01f2758 | cm4 | 5 3
+find 1 4 = -1 => 97fb2ce4a01f2758 | | 5 3
+newgeo 11 26 161 = 9 => 08663784d9c96594 | cg9 | 6 3
+find 5 4 = -1 => 08663784d9c96594 | | 6 3
+addmorph 9 2 => ad5af991b1449c9d | | 6 3
+newgeo 12 42 63 = 10 => 23074f75a7905dac | cg10 | 7 3
+delgeo 5 => e643667f3cf6f35a | dg5 | 6 3
+spheres 1 => 246524287bcd00e2 | | 6 3
+settex 3 -1 => 246524287bcd00e2 | | 6 3
+find 4 3 = -1 => 246524287bcd00e2 | | 6 3
+append 9 3 = 0 => 7a81f1cdbfe22cbb | | 6 3
+addmorph 7 1 => 201cadd93687bd47 | | 6 3
+colored 1 = 0 => 201cadd93687bd47 | | 6 3
+fill 7 3318544014 => 83ac25b8d5593459 | | 6 3
+find 9 4 = -1 => 83ac25b8d5593459 | | 6 3
+addrefgeo 7 => a19f9281a3f191a2 | | 6 3
+newmat = 5 color 1a68ceaf => 653da7181fecd3a4 | cm5 | 6 4
+colored 3 = 0 => 653da7181fecd3a4 | | 6 4
+guess 3 = 12 => 653da7181fecd3a4 | | 6 4
+newgeo 9 42 65629 = 11 => f3483bc321a20246 | cg11 | 7 4
+delgeo 11 => 653da7181fecd3a4 | dg11 | 6 4
+lock 3 1650 => fa774127d8796510 | | 6 4
+colored 9 = 1 => fa774127d8796510 | | 6 4
+newgeo 18 44 262244 = 12 => ae2866bbe908713c | cg12 | 7 4
+newmat = 6 => fbd7a8278032f1ba | cm6 | 7 5
+delmat 4 => aa20c7ff4471af4e | dm4 | 7 4
+newgeo 30 0 262159 = 13 => 2ff1d2ace310a3d6 | cg13 | 8 4
+newgeo 28 3 22 = 14 => e055e0d2b3341622 | cg14 | 9 4
+find 10 5 = -1 => e055e0d2b3341622 | | 9 4
+spheres 9 => e055e0d2b3341622 | | 9 4
+addrefgeo 12 => 2805e0082bfaf001 | | 9 4
+append 12 2 = 0 => 1e9f8c9c19f331b9 | | 9 4
+spheres 7 => 34bed0cebec194a9 | | 9 4
+lock 13 2208 => cf4afef6b4d5c891 | | 9 4
+newgeo 12 51 196672 = 15 => 8eec8aa6e1053a88 | cg15 | 10 4
+lock 7 4095 => 60ee1716c465b222 | | 10 4
+newgeo 39 14 249 = 16 => 9c42c270c01f97f7 | cg16 | 11 4
+colored 10 = 0 => 9c42c270c01f97f7 | | 11 4
+newmat = 7 => 91c54aa717abba84 | cm7 | 11 5
+addrefgeo 12 => e45fdd9d6e48d2d9 | | 11 5
+append 14 7 = 0 => 39a47a55edb2defc | | 11 5
+delgeo 9 => b5dcb5bf5a85e5e0 | dg9 | 10 5
+newtex = 0 => 064c5cba120b1e71 | ct0 | 10 5
+addrefgeo 7 => 034c0497028df6f8 | | 10 5
+delmat 3 => 69af01952ae2e158 | dm3 | 10 4
+allocmeshes 16 1 173 0 => d20ec2fdc6dc71c2 | | 10 4
+delgeo 16 => 07b339bbbae4b091 | dg16 | 9 4
+lock 4 4095 => 2fc89fd40d047163 | | 9 4
+colored 1 = 0 => 2fc89fd40d047163 | | 9 4
+addrefmat 2 => 8fb5399fe2f50402 | | 9 4
+spheres 14 => 8fb5399fe2f50402 | | 9 4
+newgeo 6 33 262233 = 17 => 7ba167ba0b905b58 | cg17 | 10 4
+spheres 12 => 7ba167ba0b905b58 | | 10 4
+deltex 0 => 4f67475b54f064c9 | dt0 | 10 4
+allocmeshes 10 1 36 0 => e7eaa4b40be426c5 | | 10 4
+clonemat 7 = 8 => 2141bd9178fdcb49 | cm8 ym8,7 | 10 5
+append 13 8 = 0 => ce5e02f4830c0b23 | | 10 5
+settex 2 -1 => ce5e02f4830c0b23 | | 10 5
+newgeo 10 17 131310 = 18 => 353b261b92abfe50 | cg18 | 11 5
+settex 8 -1 => 353b261b92abfe50 | | 11 5
+newtex = 1 => b0f8c445e11875e0 | ct1 | 11 5
+delmat 6 => 9247b6290a2e8c26 | dm6 | 11 4
+addmorph 12 2 => f50186527baf7dbd | | 11 4
+delgeo 18 => 2085569e6feaaf1e | dg18 | 10 4
+allocmeshes 14 1 18 1 => 40f44572afe3c5cd | | 10 4
+fill 10 4166177558 => fb03c3ec7a86e24b | | 10 4
+spheres 15 => fb03c3ec7a86e24b | | 10 4
+addrefgeo 3 => 2ff7b2ae28d1f24c | | 10 4
+newgeo 0 33 8 = 19 => 63f8955b6ecc4106 | cg19 | 11 4
+newgeo 37 0 262190 = 20 => 27a83747fb71a8ad | cg20 | 12 4
+colored 3 = 0 => 27a83747fb71a8ad | | 12 4
+append 10 8 = 0 => cec34cdec0105051 | | 12 4
+append 7 8 = 0 => 10cef826a13f9757 | | 12 4
+find 12 7 = -1 => 10cef826a13f9757 | | 12 4
+append 15 7 = 0 => e9727344f2533b6c | | 12 4
+newgeo 27 35 458925 = 21 => 9e8012b702119f9f | cg21 | 13 4
+settex 5 -1 => 9e8012b702119f9f | | 13 4
+allocmeshes 15 1 129 1 => 3de9a8489860ea1c | | 13 4
+allocmeshes 10 0 125 0 => 8c2a7857d6704967 | | 13 4
+addrefgeo 14 => bcdc1ea2e6a5f7a0 | | 13 4
+newgeo 8 19 117 = 22 => edcbeef001287b44 | cg22 | 14 4
+addmorph 1 1 => 8f9f2772b2975ca7 | | 14 4
+newmat = 9 => d03d8e0d02231e66 | cm9 | 14 5
+newgeo 36 33 115 = 23 => 4193586856473ec8 | cg23 | 15 5
+clonemat 2 = 10 => 120d307c69b99f12 | cm10 ym10,2 | 15 6
+newmat = 11 => 16451156c2b1405d | cm11 | 15 7
+spheres 10 => 15d1a4066c01fe90 | | 15 7
+find 13 10 = -1 => 15d1a4066c01fe90 | | 15 7
+colored 13 = 0 => 15d1a4066c01fe90 | | 15 7
+settex 11 -1 => 15d1a4066c01fe90 | | 15 7
+settex 9 -1 => 15d1a4066c01fe90 | | 15 7
+colored 7 = 0 => 15d1a4066c01fe90 | | 15 7
+addmorph 20 1 => 3abacff0b7021a21 | | 15 7
+find 15 9 = -1 => 3abacff0b7021a21 | | 15 7
+find 17 5 = -1 => 3abacff0b7021a21 | | 15 7
+addmorph 3 1 => c6ece7a3f514a819 | | 15 7
+lock 1 466 => c6ece7a3f514a819 | | 15 7
+deltex 1 => 9992108fae124a89 | dt1 | 15 7
+delgeo 3 => 978963c88aac258a | | 15 7
+spheres 13 => 978963c88aac258a | | 15 7
+addmorph 15 0 => 978963c88aac258a | | 15 7
+unlock 1 => 6acb784cffec5d62 | | 15 7
+find 12 9 = -1 => 6acb784cffec5d62 | | 15 7
+newmat = 12 color 5530aaa6 => a762bb5a324c35fd | cm12 | 15 8
+guess 1 = 118 => a762bb5a324c35fd | | 15 8
+spheres 15 => a762bb5a324c35fd | | 15 8
+allocmeshes 10 1 279 0 => b141a86119917ec0 | | 15 8
+delgeo 12 => 6c1cce0db9b34299 | | 15 8
+newgeo 2 0 196683 = 24 => c8a72df1e6da8d86 | cg24 | 16 8
+find 13 8 = 0 => c8a72df1e6da8d86 | | 16 8
+lock 14 4095 => 3a6f37de11f8d9d7 | | 16 8
+allocmeshes 1 3 120 1 => 4fb3fb70f626d3c1 | | 16 8
+allocmeshes 14 3 145 1 => 0c09007408e73d82 | | 16 8
+guess 1 = 114 => 0c09007408e73d82 | | 16 8
+allocmeshes 19 2 209 1 => 3905dcdc1a4a5141 | | 16 8
+newgeo 4 15 16777267 = 25 => aea06480c0933bb2 | cg25 | 17 8
+settex 2 -1 => aea06480c0933bb2 | | 17 8
+delgeo 20 => e7defcf82d8f1b44 | dg20 | 16 8
+allocmeshes 23 2 151 0 => cb67168e27499b46 | | 16 8
+addrefmat 5 => 1a2b454d56fe1721 | | 16 8
+colored 10 = 0 => 1a2b454d56fe1721 | | 16 8
+colored 1 = 0 => 1a2b454d56fe1721 | | 16 8
+newgeo 23 7 47 = 26 => 83667bc19a6ba3e8 | cg26 | 17 8
+addrefgeo 7 => 6dc033a19848883b | | 17 8
+guess 1 = 114 => 6dc033a19848883b | | 17 8
+append 4 10 = 1 => f7c163e07c3752d5 | | 17 8
+find 17 2 = -1 => f7c163e07c3752d5 | | 17 8
+newmat = 13 => f5dc20ecfb0c169c | cm13 | 17 9
+addmorph 4 0 => f5dc20ecfb0c169c | | 17 9
+fill 19 3941122571 => f5dc20ecfb0c169c | | 17 9
+addmorph 1 1 => 053da255b9531aeb | | 17 9
+delgeo 26 => d95d7b31bf07aba2 | dg26 | 16 9
+colored 22 = 0 => d95d7b31bf07aba2 | | 16 9
+fill 22 3586245528 => 8ba9d72e46480560 | | 16 9
+allocmeshes 3 3 158 0 => d0ed07e476d545da | | 16 9
+allocmeshes 19 1 220 1 => 13f315100062c529 | | 16 9
+append 4 9 = 2 => ed7fd4efe515448e | | 16 9
+find 10 12 = -1 => ed7fd4efe515448e | | 16 9
+newmat = 14 color a32c3fa9 => 3bf2fe9c6f2216e9 | cm14 | 16 10
+colored 19 = 0 => 3bf2fe9c6f2216e9 | | 16 10
+newgeo 19 33 524340 = 27 => 1221119306cb2a51 | cg27 | 17 10
+newgeo 0 4 18 = 28 => 343798d1a2d6f486 | cg28 | 18 10
+clonemat 12 = 15 => 7ea424c2d4ec1882 | cm15 ym15,12 | 18 11
+fill 15 496132236 => 4c87868768930ecb | | 18 11
+newtex = 2 => 48d4f3964eac4558 | ct2 | 18 11
+delgeo 3 => fa3cd8f6b28bf7af | dg3 | 17 11
+newgeo 2 51 56 = 29 => 53766243624f2c52 | cg29 | 18 11
+newmat = 16 => de2b0adb5e18c4d6 | cm16 | 18 12
+guess 15 = 43 => de2b0adb5e18c4d6 | | 18 12
+lock 15 1677 => 22f961b926788d2e | | 18 12
+addmorph 15 2 => 3f5307ac6fcbb5ac | | 18 12
+colored 10 = 0 => 3f5307ac6fcbb5ac | | 18 12
+colored 12 = 0 => 3f5307ac6fcbb5ac | | 18 12
+spheres 12 => 3f5307ac6fcbb5ac | | 18 12
+append 1 11 = 1 => 50be8b94f90c6193 | | 18 12
+addrefgeo 14 => 1e90f741a35e06ca | | 18 12
+append 27 12 = 0 => 1919399bd64cc0c0 | | 18 12
+addmorph 28 2 => 8cc949ecc230533a | | 18 12
+append 10 15 = 1 => c8ae73e4409f01a1 | | 18 12
+deltex 2 => 37f44967654e4312 | dt2 | 18 12
+newgeo 2 4 20 = 30 => 6dab808f202bdb88 | cg30 | 19 12
+newmat = 17 color 08c897d5 => 81a99c0b7a1912c1 | cm17 | 19 13
+newgeo 15 0 21 = 31 => ea1d6030ec9326af | cg31 | 20 13
+delgeo 10 => 120be58ad94d3bbe | dg10 | 19 13
+spheres 13 => 120be58ad94d3bbe | | 19 13
+newtex = 3 => 06bef5c3277698cc | ct3 | 19 13
+addrefgeo 25 => 82b114926dfb96a3 | | 19 13
+newmat = 18 color 337bd9b4 => d7ac3f64df4947bc | cm18 | 19 14
+lock 24 639 => d33a4575a512b3ad | | 19 14
+newgeo 37 23 142 = 32 => 6a643ed4b5b2d8a0 | cg32 | 20 14
+newgeo 0 30 21 = 33 => 6a467572bbd8ccdb | cg33 | 21 14
+append 14 17 = 1 => 4dcacb6eb8e337aa | | 21 14
+find 24 18 = -1 => 4dcacb6eb8e337aa | | 21 14
+newgeo 15 36 160 = 34 => 130672ada97be7a2 | cg34 | 22 14
+delmat 15 => fa7ce990593c3596 | dm15 | 22 13
+clonemat 9 = 19 => 4192633db6cd91cd | cm19 ym19,9 | 22 14
+newgeo 19 23 72 = 35 => 3911e7bb35a4c4d6 | cg35 | 23 14
+find 28 10 = -1 => 3911e7bb35a4c4d6 | | 23 14
+newgeo 9 12 112 = 36 => a56f4d9ccd54ffb2 | cg36 | 24 14
+addrefmat 7 => 7a4de37ce7f7127d | | 24 14
+deltex 3 => d519369cf2ac106f | dt3 | 24 14
+addrefgeo 13 => f376cb59b997dd20 | | 24 14
+colored 17 = 0 => f376cb59b997dd20 | | 24 14
+settex 7 -1 => f376cb59b997dd20 | | 24 14
+newgeo 18 33 27 = 37 => 1121b8b6c108f537 | cg37 | 25 14
+delgeo 1 => f6fafe04afa430e8 | | 25 14
+find 25 16 = -1 => f6fafe04afa430e8 | | 25 14
+lock 4 4095 => f6fafe04afa430e8 | | 25 14
+newmat = 20 color 98e31fa9 => 00cdde8b9e38fa67 | cm20 | 25 15
+spheres 32 => 00cdde8b9e38fa67 | | 25 15
+newgeo 8 55 16777289 = 38 => 5c686f44e136d612 | cg38 | 26 15
+lock 28 4095 => 8eb9ee94b17c57d0 | | 26 15
+newmat = 21 color cdf02931 => 2d0b73d5d7b41398 | cm21 | 26 16
+addrefgeo 38 => 72f7ef126a66dd33 | | 26 16
+newmat = 22 color 934d2f04 => 25aaa383b88cb3f0 | cm22 | 26 17
+addrefgeo 31 => f0d4f1b4131bbe43 | | 26 17
+spheres 15 => 93f05969b771cbfa | | 26 17
+addmorph 22 1 => 839a13e3e055fe44 | | 26 17
+allocmeshes 28 0 90 1 => 8f84ea5a3be6da02 | | 26 17
+addrefmat 9 => eab57aef0cc46daf | | 26 17
+newgeo 10 57 12 = 39 => 90578bb032eb20d6 | cg39 | 27 17
+newmat = 23 color e97a3b93 => 866a8e332de15076 | cm23 | 27 18
+addmorph 38 1 => 8f45d4d2ef8e8d9b | | 27 18
+lock 25 4095 => d7e2085036ba531d | | 27 18
+lock 37 3886 => ab6870d58ad2095a | | 27 18
+addmorph 7 1 => 9febad731d33b764 | | 27 18
+newgeo 25 26 7 = 40 => f5f6ff04b7098158 | cg40 | 28 18
+addmorph 27 2 => a09934fdbd6f81cd | | 28 18
+newgeo 18 15 16777297 = 41 => 02aeb0f29e3f071a | cg41 | 29 18
+delmat 14 => 389e6734c7587065 | dm14 | 29 17
+fill 21 1661087234 => c101f790089268ee | | 29 17
+fill 36 3258522477 => 950a3ccf5dcb4aa1 | | 29 17
+addmorph 15 0 => 950a3ccf5dcb4aa1 | | 29 17
+fill 4 2511429120 => 36c147ccc35dbe6b | | 29 17
+guess 23 = 50 => 36c147ccc35dbe6b | | 29 17
+lock 23 3737 => 0bf9720e092f3796 | | 29 17
+newgeo 38 20 225 = 42 => 29fb56dec955e1ad | cg42 | 30 17
+find 14 12 = -1 => 29fb56dec955e1ad | | 30 17
+unlock 15 => f4f1a4909ad6aa33 | | 30 17
+spheres 13 => f4f1a4909ad6aa33 | | 30 17
+addrefgeo 40 => a39f43308e1b6c60 | | 30 17
+find 13 12 = -1 => a39f43308e1b6c60 | | 30 17
+spheres 7 => a45d4acb530ab99c | | 30 17
+newgeo 32 60 150 = 43 => e262f276f96d57ee | cg43 | 31 17
+newmat = 24 => 5bf51aebc1bdd37e | cm24 | 31 18
+allocdata 25 => 421d4ad81ec4f40a | | 31 18
+colored 1 = 0 => 421d4ad81ec4f40a | | 31 18
+newmat = 25 color f7218eee => a4249be7422a50ff | cm25 | 31 19
+colored 25 = 0 => a4249be7422a50ff | | 31 19
+newgeo 38 22 40 = 44 => ed04d79cf6fc67fa | cg44 | 32 19
+append 39 8 = 0 => 13df4b74fa04625c | | 32 19
+addrefgeo 24 => 0442d5bddac7eadf | | 32 19
+addrefgeo 30 => 68dc2842509227e4 | | 32 19
+addrefmat 9 => 9cafd517dfef7317 | | 32 19
+lock 12 195 => c512b23946f4c224 | | 32 19
+clonemat 10 = 26 => 7da77b41b8d64db6 | cm26 ym26,10 | 32 20
+colored 1 = 0 => 7da77b41b8d64db6 | | 32 20
+clonemat 22 = 27 => 8710a56cc20f1168 | cm27 ym27,22 | 32 21
+newmat = 28 color d6a2d9b9 => 101e6ebb75960cee | cm28 | 32 22
+lock 24 4095 => 4f6a0b755d740ca9 | | 32 22
+settex 22 -1 => 4f6a0b755d740ca9 | | 32 22
+fill 7 1150820625 => e7f4c597c4a7641a | | 32 22
+newmat = 29 => 9b1d341dd46ddd8f | cm29 | 32 23
+addmorph 29 0 => 9b1d341dd46ddd8f | | 32 23
+colored 4 = 0 => 9b1d341dd46ddd8f | | 32 23
+find 40 7 = -1 => 9b1d341dd46ddd8f | | 32 23
+newgeo 0 15 65582 = 45 => 4bd64a2493b96120 | cg45 | 33 23
+newmat = 30 color d2221f46 => ab7d23b1864f195d | cm30 | 33 24
+addrefmat 18 => 790411fa9bf6044a | | 33 24
+find 38 2 = -1 => 790411fa9bf6044a | | 33 24
+newgeo 39 4 131200 = 46 => 1afc64ff984d1fd9 | cg46 | 34 24
+settex 7 -1 => 1afc64ff984d1fd9 | | 34 24
+addmorph 44 0 => 1afc64ff984d1fd9 | | 34 24
+addrefmat 26 => 0621dba952280a96 | | 34 24
+spheres 36 => d30be07b6f24c3af | | 34 24
+find 45 28 = -1 => d30be07b6f24c3af | | 34 24
+newgeo 35 43 327694 = 47 => 6c24084d96a0f7d8 | cg47 | 35 24
+allocmeshes 35 0 280 0 => 2a7b7fe2957b97fd | | 35 24
+allocmeshes 28 0 81 0 => 7b3bd7d0de12716f | | 35 24
+newmat = 31 color 8419180e => 13744d6c866a4a57 | cm31 | 35 25
+addrefgeo 7 => cf3f999e3164b2f6 | | 35 25
+fill 24 3239181294 => 4e7c1a646f0129e9 | | 35 25
+addrefgeo 35 => 19b1f46ba19c94d6 | | 35 25
+delgeo 15 => 954a3f28545db0fd | dg15 | 34 25
+delgeo 30 => 606b27f584731dfa | | 34 25
+lock 21 4095 => 723f55824d1c0bd8 | | 34 25
+delgeo 36 => 2ff879a346ea2266 | dg36 | 33 25
+fill 24 2294206685 => ac67b133aa877e33 | | 33 25
+append 19 30 = 0 => c690b224603b4e07 | | 33 25
+colored 19 = 1 => c690b224603b4e07 | | 33 25
+newgeo 0 21 16777240 = 48 => d8941290297f2b35 | cg48 | 34 25
+fill 1 4065102735 => 697a0ffd951a6eeb | | 34 25
+colored 38 = 0 => 697a0ffd951a6eeb | | 34 25
+addmorph 37 0 => 697a0ffd951a6eeb | | 34 25
+colored 14 = 1 => 697a0ffd951a6eeb | | 34 25
+newmat = 32 color fe949251 => 44b3bb56eb0a4096 | cm32 | 34 26
+lock 4 4095 => 44b3bb56eb0a4096 | | 34 26
+append 27 7 = 1 => 97cb98f19ec5a9f9 | | 34 26
+addmorph 14 0 => 97cb98f19ec5a9f9 | | 34 26
+append 37 21 = 0 => b5e51d4759ac8b4e | | 34 26
+delmat 31 => 338ae3c69461f366 | dm31 | 34 25
+append 46 8 = 0 => adc8667e8b1db7f2 | | 34 25
+colored 38 = 0 => adc8667e8b1db7f2 | | 34 25
+lock 40 4086 => cd32fae5a8568be1 | | 34 25
+spheres 44 => cd32fae5a8568be1 | | 34 25
+settex 21 -1 => cd32fae5a8568be1 | | 34 25
+clonemat 13 = 33 => 4937a670bb94bab4 | cm33 ym33,13 | 34 26
+newmat = 34 => 74c38ea86f633ede | cm34 | 34 27
+newtex = 4 => f54349b793b1daab | ct4 | 34 27
+delgeo 19 => f9bb682ad5a8369d | dg19 | 33 27
+spheres 45 => 8ab7008bd2759b70 | | 33 27
+clonemat 10 = 35 => c787db9a7c8e54fb | cm35 ym35,10 | 33 28
+append 46 27 = 1 => 3ef1713ce1063e80 | | 33 28
+newtex = 5 => c8346ecf09d5c494 | ct5 | 33 28
+lock 12 2410 => cb838f531ffd5957 | | 33 28
+find 7 29 = -1 => cb838f531ffd5957 | | 33 28
+newgeo 22 31 524327 = 49 => 1cbc19dab2e302e3 | cg49 | 34 28
+newtex = 6 => 8cc4ddf7fdaed4f4 | ct6 | 34 28
+delgeo 14 => 68cd41a93690b615 | | 34 28
+addrefgeo 35 => 8288f1a28c80db14 | | 34 28
+settex 21 6 => f06904e0cb76aee9 | | 34 28
+find 25 18 = -1 => f06904e0cb76aee9 | | 34 28
+delmat 18 => c5702d5441a202a6 | | 34 28
+append 1 27 = 2 => 1e03cb35f8b5f639 | | 34 28
+newgeo 28 21 10 = 50 => 6323fa89511375a9 | cg50 | 35 28
+fill 17 624299856 => e5aa24a9a7e5eb52 | | 35 28
+fill 27 1621236308 => b782b28028a1b0c8 | | 35 28
+allocmeshes 22 3 150 1 => d695b3404dbf7c5d | | 35 28
+delgeo 45 => 95a782da05141b17 | dg45 | 34 28
+addmorph 30 1 => 920811461e040faa | | 34 28
+newtex = 7 => 30f6092b195b4abc | ct7 | 34 28
+fill 43 3494380129 => e25f37e4ea0d95e8 | | 34 28
+newgeo 4 22 181 = 51 => 9a684c9896fd6e5b | cg51 | 35 28
+spheres 42 => 9a684c9896fd6e5b | | 35 28
+clonemat 22 = 36 => 34b6cd9fcb1212ea | cm36 ym36,22 | 35 29
+addrefgeo 30 => aabab747e308325d | | 35 29
+addrefgeo 17 => fe727ac20eced18a | | 35 29
+addrefgeo 41 => 8d563a116eec4515 | | 35 29
+addmorph 43 1 => d7719fc9fcd073a1 | | 35 29
+append 7 18 = 1 => e207727b11c01aa7 | | 35 29
+deltex 4 => c8f602f07fa33572 | dt4 | 35 29
+addrefgeo 22 => 94d8d937901fb421 | | 35 29
+append 31 28 = 0 => 614683a6dcf04bef | | 35 29
+lock 17 4095 => 8a74ef2eba542a41 | | 35 29
+append 50 13 = 0 => 6031d38f7550fa76 | | 35 29
+addrefgeo 44 => bc4cf600ae74a9c1 | | 35 29
+deltex 5 => c002fd41d6ea40f5 | dt5 | 35 29
+addrefgeo 14 => 8e4380b634ff94f4 | | 35 29
+guess 22 = 50 => 8e4380b634ff94f4 | | 35 29
+fill 43 843041901 => 32e56584c65dcd36 | | 35 29
+addrefgeo 43 => b3ee22693199f749 | | 35 29
+allocmeshes 39 1 224 0 => 294c9878f04e2beb | | 35 29
+addmorph 51 0 => 294c9878f04e2beb | | 35 29
+settex 18 -1 => 294c9878f04e2beb | | 35 29
+newgeo 19 0 168 = 52 => 363772f98f1727ef | cg52 | 36 29
+spheres 23 => 363772f98f1727ef | | 36 29
+allocmeshes 46 0 138 0 => d1841dfea5c38003 | | 36 29
+settex 35 -1 => d1841dfea5c38003 | | 36 29
+settex 36 -1 => d1841dfea5c38003 | | 36 29
+allocmeshes 34 1 108 1 => d1d4702269399377 | | 36 29
+colored 32 = 0 => d1d4702269399377 | | 36 29
+newgeo 25 55 13 = 53 => e261e97dd50b143f | cg53 | 37 29
+newgeo 38 1 17 = 54 => da144f8c32cd29dd | cg54 | 38 29
+settex 34 7 => fc24f302dc18bea1 | | 38 29
+allocmeshes 23 0 14 1 => dd4c9e61083391e7 | | 38 29
+deltex 6 => a613f8b16a6cfb34 | | 38 29
+find 14 16 = -1 => a613f8b16a6cfb34 | | 38 29
+addrefmat 23 => 8b16cf7e33563b63 | | 38 29
+spheres 47 => 8b16cf7e33563b63 | | 38 29
+find 30 10 = -1 => 8b16cf7e33563b63 | | 38 29
+fill 28 2626944537 => 8b16cf7e33563b63 | | 38 29
+addrefgeo 43 => 8762d41a00d90f22 | | 38 29
+find 24 8 = -1 => 8762d41a00d90f22 | | 38 29
+newgeo 0 3 52 = 55 => 3478c78ad45a9147 | cg55 | 39 29
+delgeo 32 => 8bcd0de05d05c6b6 | dg32 | 38 29
+append 17 30 = 0 => 9689a12500624532 | | 38 29
+newgeo 25 39 69 = 56 => 1852b173c47088ec | cg56 | 39 29
+newgeo 29 28 124 = 57 => 6daf12b8c9a3ce09 | cg57 | 40 29
+newgeo 22 39 93 = 58 => 686a9a191b5deb10 | cg58 | 41 29
+delgeo 57 => c44bc6f9b8f65961 | dg57 | 40 29
+find 13 10 = -1 => c44bc6f9b8f65961 | | 40 29
+addmorph 44 2 => 1f795b4c0e1fde3d | | 40 29
+addrefgeo 25 => 6034692140fe0e9c | | 40 29
+delmat 24 => a7aa2ecb5856a2b4 | dm24 | 40 28
+addmorph 35 2 => a4ca3d08c5cae2fb | | 40 28
+append 4 11 = 3 => d7f8c456698a3586 | | 40 28
+append 39 29 = 1 => dd898b1175134ef3 | | 40 28
+spheres 21 => 785c5e184aa6779c | | 40 28
+spheres 33 => aee9366fe13a496d | | 40 28
+lock 30 3581 => 54eb2ed0f46c470f | | 40 28
+addmorph 4 2 => 782a7e457555be2f | | 40 28
+allocmeshes 46 2 0 0 => e8036f47b676cdd6 | | 40 28
+append 12 32 = 1 => c3eedbc6b7fa32b2 | | 40 28
+delgeo 55 => 5390fc6a9a99774f | dg55 | 39 28
+addmorph 38 1 => b5b63f39aa4890c0 | | 39 28
+find 47 36 = -1 => b5b63f39aa4890c0 | | 39 28
+colored 33 = 0 => b5b63f39aa4890c0 | | 39 28
+append 23 21 = 0 => 1f378e6d55f883e5 | | 39 28
+addrefgeo 29 => 93682bebeb7f1cca | | 39 28
+lock 29 4095 => 8ead57ec01393d38 | | 39 28
+unlock 4 => e2a718c41055b54e | | 39 28
+delgeo 1 => 504f373efd8de2df | | 39 28
+clonemat 7 = 37 => 241e40863c7ae3fe | cm37 ym37,7 | 39 29
+delgeo 29 => fefd9a1f73dd8a8d | | 39 29
+guess 39 = 74 => fefd9a1f73dd8a8d | | 39 29
+guess 4 = 38 => fefd9a1f73dd8a8d | | 39 29
+spheres 28 => ddd8d8183b2f34c8 | | 39 29
+fill 40 2377387191 => 8f4b4f909d0800e5 | | 39 29
+addmorph 30 2 => 1e1a464dc17603a3 | | 39 29
+addmorph 21 2 => 88eed10b219db402 | | 39 29
+settex 12 -1 => 88eed10b219db402 | | 39 29
+addmorph 35 1 => 73944cce4ad1dd4b | | 39 29
+fill 31 328017012 => 84acc0857cd92586 | | 39 29
+addrefmat 32 => 7d35ed09f86f6167 | | 39 29
+settex 5 7 => 7c95785a587d5875 | | 39 29
+deltex 7 => dc9acc5202479be4 | | 39 29
+guess 34 = 36 => dc9acc5202479be4 | | 39 29
+newgeo 16 39 104 = 59 => a546b68cc4bec103 | cg59 | 40 29
+newtex = 8 => 0d8504ffd17353da | ct8 | 40 29
+delgeo 34 => aff86b36e256e456 | dg34 | 39 29
+addrefgeo 13 => 85492ef92fd72aeb | | 39 29
+addrefgeo 47 => 828a7309c4b722c0 | | 39 29
+clonemat 2 = 38 => 530d5e8644ef01a2 | cm38 ym38,2 | 39 30
+newgeo 20 9 196776 = 60 => 9463df57c6ffb57f | cg60 | 40 30
+allocmeshes 46 3 49 0 => 154f12a568e04179 | | 40 30
+addmorph 13 1 => 194d64aa75d42cd8 | | 40 30
+lock 42 4095 => 0b1904d007c2b876 | | 40 30
+fill 41 3577780652 => 0b1904d007c2b876 | | 40 30
+spheres 40 => 26bd357af4a9cf0c | | 40 30
+settex 23 -1 => 26bd357af4a9cf0c | | 40 30
+newgeo 16 16 106 = 61 => b0b512f2d3efe853 | cg61 | 41 30
+allocmeshes 25 2 217 1 => be6035a793e2b57c | | 41 30
+addmorph 59 1 => 6adf75e7cc5f80d7 | | 41 30
+delmat 10 => 8ba40d3cd463e764 | | 41 30
+guess 35 = 93 => 8ba40d3cd463e764 | | 41 30
+settex 37 7 => cac654683a381b36 | | 41 30
+append 53 10 = 0 => 1286485a2c189ec6 | | 41 30
+colored 40 = 0 => 1286485a2c189ec6 | | 41 30
+newgeo 39 15 20 = 62 => 7404d3d039614573 | cg62 | 42 30
+spheres 21 => 324f032efed23edf | | 42 30
+deltex 8 => 60b6b308165ce486 | dt8 | 42 30
+newgeo 15 1 51 = 63 => 350982e21bebe8b4 | cg63 | 43 30
+lock 22 1280 => e5db3639bbf71f7f | | 43 30
+addrefgeo 52 => 89966921185ad630 | | 43 30
+find 43 32 = -1 => 89966921185ad630 | | 43 30
+newgeo 12 8 152 = 64 => ca1ec38a5b25363f | cg64 | 44 30
+find 42 9 = -1 => ca1ec38a5b25363f | | 44 30
+fill 4 2347330083 => 768ca5f9b669b239 | | 44 30
+fill 52 2627813259 => 185c7622df064657 | | 44 30
+delmat 29 => ce30640f44c6540c | | 44 30
+newgeo 7 45 233 = 65 => 8c0c5107b53db8c1 | cg65 | 45 30
+spheres 37 => 8c0c5107b53db8c1 | | 45 30
+lock 47 2710 => 48062c766d4e01fd | | 45 30
+allocmeshes 60 1 153 1 => d57e37c1ec5bc40e | | 45 30
+append 30 8 = 0 => 5815052477225ebc | | 45 30
+newmat = 39 color f537b575 => 41552fef7812958d | cm39 | 45 31
+append 28 18 = 0 => 08c147c40411a91b | | 45 31
+addrefgeo 54 => adc7777f728eb810 | | 45 31
+addrefmat 32 => cd0d6a6a2126ab03 | | 45 31
+addrefgeo 13 => 4f8e58dcab862994 | | 45 31
+delmat 13 => e318f2183d5c3fab | | 45 31
+clonemat 30 = 40 => 43b34c22cc66c4a8 | cm40 ym40,30 | 45 32
+newgeo 39 52 458804 = 66 => 9ccaf9324b3330d7 | cg66 | 46 32
+lock 13 4095 => cd9d0f11932a4a6d | | 46 32
+colored 22 = 0 => cd9d0f11932a4a6d | | 46 32
+addrefgeo 39 => 2eb084ffbe779702 | | 46 32
+find 41 26 = -1 => 2eb084ffbe779702 | | 46 32
+newmat = 41 => 322ed4996344554f | cm41 | 46 33
+find 56 9 = -1 => 322ed4996344554f | | 46 33
+delgeo 13 => 945060b3f7f4749c | | 46 33
+append 7 40 = 2 => 7096b03ed1d8847e | | 46 33
+addrefgeo 25 => 76fbb74051677a41 | | 46 33
+addrefgeo 23 => 4e6b2f8f018c146e | | 46 33
+addrefgeo 40 => 25e05535dffa57db | | 46 33
+find 66 22 = -1 => 25e05535dffa57db | | 46 33
+addmorph 58 2 => 46b5347d151409a9 | | 46 33
+append 64 30 = 0 => 07aa68f4baccc903 | | 46 33
+allocmeshes 12 1 68 0 => e7d698622075552c | | 46 33
+newgeo 21 53 65746 = 67 => 504609f1b28de55c | cg67 | 47 33
+find 31 20 = -1 => 504609f1b28de55c | | 47 33
+newmat = 42 => 32f257c512b65162 | cm42 | 47 34
+addrefmat 7 => f44fb3b068de6e6f | | 47 34
+settex 28 -1 => f44fb3b068de6e6f | | 47 34
+addmorph 67 1 => 2d273306c87cce2c | | 47 34
+spheres 63 => 2d273306c87cce2c | | 47 34
+colored 62 = 0 => 2d273306c87cce2c | | 47 34
+addmorph 42 2 => 88b3f03b17bd4590 | | 47 34
+allocmeshes 58 2 166 0 => 0b350a80a5063729 | | 47 34
+newmat = 43 color c2948a2c => 30dd25c9dc92f782 | cm43 | 47 35
+addrefmat 40 => 8150aaddcae6193b | | 47 35
+fill 66 3469850157 => e673e0653f651c16 | | 47 35
+allocmeshes 4 0 9 0 => f903727a60786d39 | | 47 35
+addrefgeo 66 => 0ee8d361477f807a | | 47 35
+clonemat 25 = 44 => 1ee48b1bde73da92 | cm44 ym44,25 | 47 36
+fill 48 464044374 => 1ee48b1bde73da92 | | 47 36
+addmorph 56 0 => 1ee48b1bde73da92 | | 47 36
+lock 35 4095 => a7dfe26b706e7041 | | 47 36
+addrefgeo 66 => f1df9b4d5351e4f4 | | 47 36
+allocmeshes 47 3 147 1 => 155395f7a0c92883 | | 47 36
+newgeo 22 0 124 = 68 => ae908b6a4535a5be | cg68 | 48 36
+spheres 54 => ae908b6a4535a5be | | 48 36
+newgeo 36 54 129 = 69 => 52776c4428bbe717 | cg69 | 49 36
+find 47 13 = -1 => 52776c4428bbe717 | | 49 36
+settex 34 -1 => 4121c0d2fef12369 | | 49 36
+newmat = 45 => 73c57829d26830ec | cm45 | 49 37
+addmorph 47 1 => 1258624658ac39f3 | | 49 37
+lock 22 1080 => 81ae816e0656a98b | | 49 37
+allocmeshes 64 2 243 0 => 3b7bcd995417789c | | 49 37
+find 61 34 = -1 => 3b7bcd995417789c | | 49 37
+addmorph 37 2 => 94a58d1263ad19f4 | | 49 37
+allocmeshes 39 0 128 1 => cb303169cf129cef | | 49 37
+newgeo 30 0 124 = 70 => ae724ca9b8cb773a | cg70 | 50 37
+fill 67 1559081092 => 594276c7127d7549 | | 50 37
+newgeo 27 27 6 = 71 => 9e172f2501e222fd | cg71 | 51 37
+append 62 12 = 0 => af7446c97ae34fa5 | | 51 37
+allocmeshes 17 3 127 0 => af33f42049a86279 | | 51 37
+addmorph 33 0 => af33f42049a86279 | | 51 37
+colored 13 = 0 => af33f42049a86279 | | 51 37
+delmat 40 => 98cdb9c5bbc62cf4 | | 51 37
+lock 62 4095 => 0be5e62d3ddb9b72 | | 51 37
+find 49 7 = -1 => 0be5e62d3ddb9b72 | | 51 37
+newgeo 37 0 183 = 72 => d3ffb4f756f67d3b | cg72 | 52 37
+settex 21 -1 => 4aaeffdb8d217ac6 | dt6 | 52 37
+delgeo 61 => a0d483bb8b606d51 | dg61 | 51 37
+colored 43 = 0 => a0d483bb8b606d51 | | 51 37
+newgeo 9 54 196691 = 73 => aabb91b1f180acf5 | cg73 | 52 37
+addmorph 40 1 => 3b2f63fd29d6aced | | 52 37
+append 47 7 = 0 => aaf9fee0abd90c84 | | 52 37
+settex 21 7 => ba21df6127a47ed2 | | 52 37
+addrefgeo 49 => 289ee6d854e21f4d | | 52 37
+colored 24 = 0 => 289ee6d854e21f4d | | 52 37
+clonemat 35 = 46 => ad87edd5bf786c8b | cm46 ym46,35 | 52 38
+settex 18 -1 => ad87edd5bf786c8b | | 52 38
+newtex = 9 => 37d1722b35774d53 | ct9 | 52 38
+fill 71 4034918317 => 690335b7796a932a | | 52 38
+find 29 13 = -1 => 690335b7796a932a | | 52 38
+newtex = 10 => f25132266659f3b1 | ct10 | 52 38
+delgeo 60 => 9ad379ebcd15e3af | dg60 | 51 38
+delmat 21 => 55408a42d6092752 | | 51 38
+newtex = 11 => 34e337aa1c6f0fe8 | ct11 | 51 38
+clonemat 45 = 47 => e063d0ea4666d9e7 | cm47 ym47,45 | 51 39
+delgeo 25 => 9672092a49e0516c | | 51 39
+newgeo 40 15 59 = 74 => 5dad044aa8190525 | cg74 | 52 39
+lock 63 1744 => 068ba845f1107cb7 | | 52 39
+newgeo 0 25 165 = 75 => 19c39673f37d60c1 | cg75 | 53 39
+newgeo 14 46 244 = 76 => c23a467e04337232 | cg76 | 54 39
+newmat = 48 => d6ca3c36023ee58a | cm48 | 54 40
+append 40 22 = 0 => 2ede9ae5a618a8f6 | | 54 40
+deltex 11 => 2a78f7c6c8d7caac | dt11 | 54 40
+append 74 26 = 0 => 2361503879993582 | | 54 40
+addmorph 14 1 => 22edf92eae5459c5 | | 54 40
+colored 1 = 1 => 22edf92eae5459c5 | | 54 40
+settex 27 -1 => 22edf92eae5459c5 | | 54 40
+fill 62 1965364883 => 534e2ccc619e8cb3 | | 54 40
+newmat = 49 => f6ace8f0d774be16 | cm49 | 54 41
+spheres 74 => f6ace8f0d774be16 | | 54 41
+newtex = 12 => 4d22ebb0597bc1eb | ct12 | 54 41
+newgeo 20 50 327696 = 77 => 7da931ce95323944 | cg77 | 55 41
+newmat = 50 color f0ea2274 => bd24fb42bc62922e | cm50 | 55 42
+newtex = 13 => b05313fd3d6a37f2 | ct13 | 55 42
+newgeo 0 6 458854 = 78 => bda05c5e130c851c | cg78 | 56 42
+settex 29 12 => 6f6531c437cb5a6f | | 56 42
+lock 17 1190 => 6f6531c437cb5a6f | | 56 42
+append 44 39 = 0 => 25290200773d5526 | | 56 42
+fill 54 972210957 => b5dd59c64ace5b40 | | 56 42
+find 67 11 = -1 => b5dd59c64ace5b40 | | 56 42
+newtex = 14 => f4e94e2deb060d9f | ct14 | 56 42
+newmat = 51 color d8fba907 => bb96babb788e2d8f | cm51 | 56 43
+spheres 29 => bb96babb788e2d8f | | 56 43
+newgeo 27 60 16777232 = 79 => 04bd00a6ee3117d7 | cg79 | 57 43
+deltex 14 => cc23648cb694ce88 | dt14 | 57 43
+addmorph 73 1 => c103915dce1b7bfe | | 57 43
+clonemat 29 = 52 => 6ff075b683f8bc7b | cm52 ym52,29 | 57 44
+addrefgeo 39 => 35c3402ed6e16e92 | | 57 44
+fill 79 415665292 => 35c3402ed6e16e92 | | 57 44
+find 65 43 = -1 => 35c3402ed6e16e92 | | 57 44
+allocmeshes 40 1 243 1 => e7aa562d597ca4e3 | | 57 44
+find 74 18 = -1 => e7aa562d597ca4e3 | | 57 44
+allocmeshes 27 1 28 0 => d7b8f2d5fc701970 | | 57 44
+deltex 10 => fd5680f740f9c8eb | dt10 | 57 44
+settex 10 -1 => fd5680f740f9c8eb | | 57 44
+append 50 28 = 1 => 92b1ea528796f839 | | 57 44
+fill 30 711820994 => 1d4e60d66d2bd646 | | 57 44
+newmat = 53 color 7988b18f => a2b4ccbb92cee7a0 | cm53 | 57 45
+settex 50 -1 => a2b4ccbb92cee7a0 | | 57 45
+deltex 13 => fa393c6da0b9b81c | dt13 | 57 45
+fill 56 1389640356 => 6bd270495b660e00 | | 57 45
+guess 58 = 55 => 6bd270495b660e00 | | 57 45
+newgeo 33 41 16973860 = 80 => 4b1d1e774328806c | cg80 | 58 45
+colored 14 = 1 => 4b1d1e774328806c | | 58 45
+addmorph 67 1 => 5c072fd6f98ecaba | | 58 45
+settex 46 12 => d2eb3fdd233a94d5 | | 58 45
+fill 21 1583021968 => 5468e074e693ae1b | | 58 45
+addmorph 27 2 => dd05f7531bf271ab | | 58 45
+newgeo 0 13 133 = 81 => ea5323b74fc0bf71 | cg81 | 59 45
+addrefgeo 30 => 2974ea8341ccd698 | | 59 45
+addrefgeo 80 => 7a7ee0eb7dd6a7ef | | 59 45
+colored 28 = 1 => 7a7ee0eb7dd6a7ef | | 59 45
+colored 21 = 0 => 7a7ee0eb7dd6a7ef | | 59 45
+fill 14 1955771404 => 370bb8fd22e9d046 | | 59 45
+allocmeshes 56 2 285 0 => ef0ab348ddc9fef3 | | 59 45
+settex 32 7 => 1d0ad69b3765ae53 | | 59 45
+colored 80 = 0 => 1d0ad69b3765ae53 | | 59 45
+allocdata 41 => 1ea7604a21f30068 | | 59 45
+fill 14 3221957951 => 116be15197a57372 | | 59 45
+deltex 12 => f15be56a9a46a925 | | 59 45
+deltex 9 => 84e031904677c95d | dt9 | 59 45
+delgeo 46 => 39d2ca769b65827a | dg46 | 58 45
+newmat = 54 => 4a0978f39853e5f8 | cm54 | 58 46
+find 71 27 = -1 => 4a0978f39853e5f8 | | 58 46
+newgeo 0 20 75 = 82 => f52f4be0edf06dee | cg82 | 59 46
+addrefmat 46 => 0844fbc8961f6121 | | 59 46
+lock 14 3669 => aa08b1205130d006 | | 59 46
+lock 65 4095 => c91b7d787a719720 | | 59 46
+newgeo 29 5 2 = 83 => 8dd694246512ffb9 | cg83 | 60 46
+delgeo 38 => 5f1738296802083e | | 60 46
+guess 64 = 81 => 5f1738296802083e | | 60 46
+newgeo 2 60 153 = 84 => 9ed6073cbf6d3771 | cg84 | 61 46
+spheres 75 => 6d002978898408bc | | 61 46
+fill 59 43319212 => 8f42ef866d37d265 | | 61 46
+allocmeshes 71 0 185 0 => 6601e9dc8b7de288 | | 61 46
+addrefgeo 31 => 6b496cb2547b79e5 | | 61 46
+colored 1 = 1 => 6b496cb2547b79e5 | | 61 46
+settex 11 12 => 07b7e9018ec9d112 | | 61 46
+fill 17 1796172045 => 267eb2e42094e804 | | 61 46
+newgeo 10 32 61 = 85 => 32a04783429ff31b | cg85 | 62 46
+addmorph 40 1 => 8c34bdf2ea411a9d | | 62 46
+append 52 23 = 0 => 85f64e9e23c03f9e | | 62 46
+settex 50 -1 => 85f64e9e23c03f9e | | 62 46
+clonemat 9 = 55 => 606593d55a1b0999 | cm55 ym55,9 | 62 47
+colored 1 = 1 => 606593d55a1b0999 | | 62 47
+find 56 44 = -1 => 606593d55a1b0999 | | 62 47
+colored 31 = 1 => 606593d55a1b0999 | | 62 47
+newmat = 56 color b547554c => b60fbf4483a7c822 | cm56 | 62 48
+colored 77 = 0 => b60fbf4483a7c822 | | 62 48
+newgeo 34 20 47 = 86 => 4e1d43f4cce38a1c | cg86 | 63 48
+lock 17 3459 => 69a7b102aecce6b8 | | 63 48
+lock 38 2886 => b311540e24fdca7b | | 63 48
+clonemat 56 = 57 => 0f2d6a634efcc3fd | cm57 ym57,56 | 63 49
+newgeo 40 0 23 = 87 => adc4d8bb37ef4668 | cg87 | 64 49
+addrefmat 23 => dec09955a1952507 | | 64 49
+fill 29 2529126068 => 99ee2131a4d1c4c2 | | 64 49
+append 1 46 = 3 => 1f3b3152e797face | | 64 49
+addrefgeo 75 => 06420f1b59b59815 | | 64 49
+append 41 56 = 0 => 8fcd2a1b687fc083 | | 64 49
+spheres 62 => 5c62b256e8139554 | | 64 49
+delgeo 52 => a320a5aa834c3763 | | 64 49
+guess 40 = 81 => a320a5aa834c3763 | | 64 49
+append 39 30 = 2 => 089d168cf2f1058f | | 64 49
+append 69 39 = 0 => 56359ed4acef7418 | | 64 49
+delgeo 13 => b1275ec91083fe9d | | 64 49
+fill 23 3903296495 => a8d9bd9735860beb | | 64 49
+addmorph 7 1 => 2fab141eb7f0f2d7 | | 64 49
+lock 78 4095 => 3e0e9c874e577991 | | 64 49
+newgeo 5 26 327845 = 88 => 5b5274572b8de88c | cg88 | 65 49
+addrefgeo 13 => 66a1864acb482329 | | 65 49
+guess 71 = 61 => 66a1864acb482329 | | 65 49
+newgeo 0 15 54 = 89 => 32035b659375330e | cg89 | 66 49
+append 50 30 = 2 => 15d65e20e67f438c | | 66 49
+newgeo 34 2 245 = 90 => c66c8b20836cb38e | cg90 | 67 49
+find 33 9 = -1 => c66c8b20836cb38e | | 67 49
+colored 43 = 0 => c66c8b20836cb38e | | 67 49
+newgeo 4 48 90 = 91 => 987a13be4b3fe222 | cg91 | 68 49
+fill 14 456553238 => 05d25c667a743482 | | 68 49
+newtex = 15 => adef2d129b98cb9c | ct15 | 68 49
+fill 39 354105829 => 9e6bb86715e47604 | | 68 49
+clonemat 23 = 58 => 7d293e0652bcb135 | cm58 ym58,23 | 68 50
+newmat = 59 => b3fbd80687e24e8e | cm59 | 68 51
+lock 25 4095 => 707b3363e48ae9f1 | | 68 51
+lock 90 446 => cb395b031285fd94 | | 68 51
+lock 64 4095 => ca54965a5a24782d | | 68 51
+deltex 15 => 0ea1b9f8c1aea013 | dt15 | 68 51
+addmorph 73 2 => 07e7384d08bff082 | | 68 51
+spheres 1 => 5009538143f9c289 | | 68 51
+newgeo 0 8 133 = 92 => 19268b26ffc2630c | cg92 | 69 51
+addmorph 88 0 => 19268b26ffc2630c | | 69 51
+delgeo 91 => fd8faab27ce1fa1c | dg91 | 68 51
+spheres 59 => 1d6629cc7b43af0c | | 68 51
+append 72 58 = 0 => 012cb65b38d424cc | | 68 51
+newmat = 60 => 15319f9c52313b90 | cm60 | 68 52
+fill 37 3430744717 => da693cfd71952e1f | | 68 52
+colored 56 = 0 => da693cfd71952e1f | | 68 52
+clonemat 13 = 61 => d9b1e532642cbba6 | cm61 ym61,13 | 68 53
+newmat = 62 => 952175eeefb13788 | cm62 | 68 54
+newgeo 36 53 101 = 93 => b9a71eb30793f6fd | cg93 | 69 54
+lock 59 4095 => 6e1b18f91995e943 | | 69 54
+spheres 75 => 6e1b18f91995e943 | | 69 54
+delgeo 41 => 9f25157d23e345c0 | | 69 54
+newmat = 63 => 59757e269b77f0cb | cm63 | 69 55
+addrefgeo 81 => 35afe43b104c4b9c | | 69 55
+newtex = 16 => d587d8757d95f19d | ct16 | 69 55
+fill 93 1696629962 => 387a8583e7a6cde9 | | 69 55
+newgeo 30 11 172 = 94 => ecc12ba28eee163a | cg94 | 70 55
+spheres 53 => ecc12ba28eee163a | | 70 55
+clonemat 41 = 64 => ebccfdeff5dbdaae | cm64 ym64,41 | 70 56
+addmorph 49 2 => fbfea3aa4ece4e19 | | 70 56
+colored 41 = 1 => fbfea3aa4ece4e19 | | 70 56
+lock 77 4095 => 6dc6841183bb0213 | | 70 56
+colored 88 = 0 => 6dc6841183bb0213 | | 70 56
+newtex = 17 => 5654ac1b53c392d3 | ct17 | 70 56
+newgeo 30 50 113 = 95 => eee5bbc078a97320 | cg95 | 71 56
+colored 84 = 0 => eee5bbc078a97320 | | 71 56
+allocmeshes 50 1 297 0 => 479586d3a8a37558 | | 71 56
+append 33 52 = 0 => 9a9bb246fb76b3da | | 71 56
+newgeo 23 41 99 = 96 => 2df0b6ab01c809a4 | cg96 | 72 56
+newgeo 7 52 190 = 97 => 104c1a8d2e00fa31 | cg97 | 73 56
+fill 87 2572066339 => 32190af9a632c783 | | 73 56
+allocmeshes 27 1 111 0 => 6f017ede5a58f7c8 | | 73 56
+colored 59 = 0 => 6f017ede5a58f7c8 | | 73 56
+newmat = 65 color d297669a => 9ba89f2702c96b40 | cm65 | 73 57
+newgeo 3 4 138 = 98 => 691fb2e56f421f0a | cg98 | 74 57
+colored 1 = 1 => 691fb2e56f421f0a | | 74 57
+allocdata 79 => 8e50b1cf75f723af | | 74 57
+colored 78 = 0 => 8e50b1cf75f723af | | 74 57
+spheres 87 => 35016c160474d3d9 | | 74 57
+find 38 26 = -1 => 35016c160474d3d9 | | 74 57
+fill 24 1256070188 => 6a30a20e096651e3 | | 74 57
+addrefmat 46 => 0953d31fd0eed4c0 | | 74 57
+fill 68 2706079775 => 78dd7c0cd8ad7b83 | | 74 57
+addrefgeo 21 => 9e7f7d92132cb004 | | 74 57
+lock 1 3071 => 47f3beec99cb2e92 | | 74 57
+newgeo 37 2 54 = 99 => 88397cf10c9df294 | cg99 | 75 57
+newgeo 3 42 65791 = 100 => 9d20ce26b2c7791a | cg100 | 76 57
+newgeo 0 44 16777393 = 101 => ef6699e530820476 | cg101 | 77 57
+lock 64 3086 => ef6699e530820476 | | 77 57
+addrefgeo 53 => 6f0c308fde19d2dd | | 77 57
+colored 40 = 1 => 6f0c308fde19d2dd | | 77 57
+addrefgeo 7 => 729c97da29a5b892 | | 77 57
+colored 72 = 1 => 729c97da29a5b892 | | 77 57
+lock 80 4095 => 1d71ccd5f33c7788 | | 77 57
+spheres 59 => 1d71ccd5f33c7788 | | 77 57
+find 74 48 = -1 => 1d71ccd5f33c7788 | | 77 57
+colored 81 = 0 => 1d71ccd5f33c7788 | | 77 57
+colored 25 = 0 => 1d71ccd5f33c7788 | | 77 57
+colored 63 = 0 => 1d71ccd5f33c7788 | | 77 57
+newgeo 8 0 60 = 102 => 1d91ebc432b60428 | cg102 | 78 57
+addmorph 58 2 => 82d2135a934383b5 | | 78 57
+deltex 17 => 086546d8193d0ab5 | dt17 | 78 57
+append 59 19 = 0 => 0a3d9f4b6e2a4254 | | 78 57
+unlock 17 => 1adc40c9eebc0b7e | | 78 57
+fill 72 1406164950 => f7b80440f30424e2 | | 78 57
+settex 48 16 => 6cbe4bf0a88c3795 | | 78 57
+addrefgeo 62 => 61defb2e2aaa703e | | 78 57
+allocmeshes 74 2 226 1 => 23a7ac1f417f87b5 | | 78 57
+colored 95 = 0 => 23a7ac1f417f87b5 | | 78 57
+newmat = 66 => c8dabf602ebd631f | cm66 | 78 58
+newgeo 35 0 55 = 103 => f82369d4ff1d747c | cg103 | 79 58
+addrefgeo 65 => 26827662113255ff | | 79 58
+append 12 9 = 2 => 656acd4c50e38ce2 | | 79 58
+spheres 88 => 656acd4c50e38ce2 | | 79 58
+lock 97 2121 => 1ccb22f1c20f6b03 | | 79 58
+append 51 25 = 0 => eacaa3bd8453c3e8 | | 79 58
+fill 69 2645848814 => 7cdd7a897c22f5b2 | | 79 58
+addmorph 13 1 => 95eb9942a4152a6b | | 79 58
+newgeo 18 16 16777224 = 104 => 910178f5760a407a | cg104 | 80 58
+lock 85 3603 => 7bb6bbee904d8c7b | | 80 58
+fill 48 2416505246 => 7bb6bbee904d8c7b | | 80 58
+spheres 75 => 7bb6bbee904d8c7b | | 80 58
+newgeo 35 55 524397 = 105 => 3575ea4f92ef177a | cg105 | 81 58
+newgeo 32 0 63 = 106 => 00c689673cd3187a | cg106 | 82 58
+delgeo 94 => f8ad8af0ab4be635 | dg94 | 81 58
+delmat 66 => 9b94ed499db97e13 | dm66 | 81 57
+addrefgeo 98 => 8b6f0ae8097fc308 | | 81 57
+lock 14 2870 => 8b6f0ae8097fc308 | | 81 57
+lock 75 4095 => f5d0d243e4a39d22 | | 81 57
+newgeo 29 44 16777334 = 107 => 2cb13e39ab6ba85b | cg107 | 82 57
+newmat = 67 color de6d126e => c12f9392945fd1a7 | cm67 | 82 58
+allocmeshes 49 1 158 0 => 8423ed60ff7f7b6e | | 82 58
+delmat 67 => 75ff3b22e26e75ea | dm67 | 82 57
+append 98 28 = 0 => 970d811ab432985c | | 82 57
+spheres 7 => 1cfde6e1df55f3f5 | | 82 57
+newmat = 68 => 9779a79736d694d5 | cm68 | 82 58
+spheres 88 => 9779a79736d694d5 | | 82 58
+append 35 29 = 0 => 45389fa4e8d9dd5e | | 82 58
+lock 82 4095 => a1715c9330c75fc8 | | 82 58
+delgeo 75 => 204355774106c85b | | 82 58
+newtex = 18 => 267f93dbd7b62ed8 | ct18 | 82 58
+lock 7 4095 => 267f93dbd7b62ed8 | | 82 58
+find 38 21 = -1 => 267f93dbd7b62ed8 | | 82 58
+newgeo 40 18 131 = 108 => b4d0f61340a818ed | cg108 | 83 58
+addmorph 90 0 => b4d0f61340a818ed | | 83 58
+lock 78 4095 => b4d0f61340a818ed | | 83 58
+addmorph 90 1 => 35b5639ab3036ae6 | | 83 58
+addrefgeo 100 => 11a4fe0dfe3d7db9 | | 83 58
+colored 35 = 0 => 11a4fe0dfe3d7db9 | | 83 58
+addrefmat 57 => 84d1791e0cfc825a | | 83 58
+addmorph 50 0 => 84d1791e0cfc825a | | 83 58
+newgeo 38 15 524466 = 109 => d076c3ef494642ec | cg109 | 84 58
+newgeo 30 25 69 = 110 => b49da231371c88f0 | cg110 | 85 58
+colored 12 = 1 => b49da231371c88f0 | | 85 58
+addmorph 65 0 => b49da231371c88f0 | | 85 58
+settex 45 18 => acf87511491b2609 | | 85 58
+delgeo 107 => 1a57fe9164621aa0 | dg107 | 84 58
+colored 66 = 0 => 1a57fe9164621aa0 | | 84 58
+settex 68 7 => 3c666a30c9be8c4e | | 84 58
+spheres 31 => b0d9cd7b6b247065 | | 84 58
+append 12 32 = 3 => 97270a4b2253271f | | 84 58
+guess 17 = 85 => 97270a4b2253271f | | 84 58
+clonemat 35 = 69 => 96f7386aa9e075aa | cm69 ym69,35 | 84 59
+delgeo 99 => f3bda137250f1384 | dg99 | 83 59
+addrefmat 25 => 7016dccca0152fd5 | | 83 59
+addmorph 50 0 => 7016dccca0152fd5 | | 83 59
+addrefmat 43 => f50a365d1a7e0696 | | 83 59
+deltex 16 => 1c6e3d9e34acc005 | | 83 59
+spheres 25 => 1c6e3d9e34acc005 | | 83 59
+unlock 37 => f2ff5f2af97ca98d | | 83 59
+delgeo 35 => de3781c6ad2f0be0 | | 83 59
+newmat = 70 color 7f6437b7 => 1187344f3c7cf121 | cm70 | 83 60
+find 31 25 = -1 => 1187344f3c7cf121 | | 83 60
+lock 81 2566 => eef5e5970534d9f9 | | 83 60
+addrefgeo 53 => fed63f7911327e38 | | 83 60
+addmorph 79 0 => fed63f7911327e38 | | 83 60
+colored 49 = 0 => fed63f7911327e38 | | 83 60
+colored 105 = 0 => fed63f7911327e38 | | 83 60
+colored 89 = 0 => fed63f7911327e38 | | 83 60
+spheres 42 => fed63f7911327e38 | | 83 60
+allocdata 48 => 3010131961439b4c | | 83 60
+lock 67 2422 => ca10f502f0556b2d | | 83 60
+fill 22 4065314460 => c531869f795cf880 | | 83 60
+newmat = 71 => dd7236ea6cf89fe3 | cm71 | 83 61
+fill 4 3300659135 => 164d605e0b8218b2 | | 83 61
+newgeo 8 0 27 = 111 => 0d963f2fa1cadc68 | cg111 | 84 61
+settex 16 -1 => 0d963f2fa1cadc68 | | 84 61
+delgeo 67 => f44703ec61047337 | dg67 | 83 61
+find 50 16 = -1 => f44703ec61047337 | | 83 61
+addrefmat 65 => ed73f3d8871f9024 | | 83 61
+spheres 84 => ed73f3d8871f9024 | | 83 61
+addmorph 4 1 => c3ca79b91825c125 | | 83 61
+newgeo 31 48 163 = 112 => 3205c63f2fad55df | cg112 | 84 61
+newgeo 25 31 16777286 = 113 => 6929ec7d5d07d10d | cg113 | 85 61
+fill 40 1351063075 => b93caf6fd761fbcc | | 85 61
+addmorph 105 0 => b93caf6fd761fbcc | | 85 61
+spheres 47 => b93caf6fd761fbcc | | 85 61
+newgeo 10 20 49 = 114 => 1e241ce52fe6dece | cg114 | 86 61
+newtex = 19 => 510bab5f454bdfec | ct19 | 86 61
+spheres 84 => 510bab5f454bdfec | | 86 61
+addrefgeo 69 => d30008faa8f169ef | | 86 61
+addmorph 13 2 => 56d3bfafa4af8659 | | 86 61
+delgeo 38 => ca84f040a36efd99 | dg38 | 85 61
+newtex = 20 => e3076b060906b49c | ct20 | 85 61
+spheres 35 => e3076b060906b49c | | 85 61
+newgeo 0 48 176 = 115 => 6884e9819f493577 | cg115 | 86 61
+lock 102 3514 => c85a5a0d72463626 | | 86 61
+fill 68 1224680237 => fc120d422b701fdc | | 86 61
+lock 53 4095 => 28a04f7a1272d212 | | 86 61
+lock 65 2427 => 28a04f7a1272d212 | | 86 61
+lock 49 910 => 3bd47899f4d160dd | | 86 61
+guess 17 = 85 => 3bd47899f4d160dd | | 86 61
+lock 109 3994 => ad85941b2400745a | | 86 61
+deltex 20 => d9dc3e99be44d19f | dt20 | 86 61
+newmat = 72 => 8f026ed379885e1f | cm72 | 86 62
+colored 40 = 1 => 8f026ed379885e1f | | 86 62
+addrefgeo 58 => 8f45d6fb6231aa14 | | 86 62
+newgeo 5 31 65581 = 116 => 07869bad66d86c82 | cg116 | 87 62
+delmat 39 => 0e83024a6b5bd977 | | 87 62
+addrefgeo 88 => 787f25607bddd8b4 | | 87 62
+deltex 18 => e07f69044142f187 | | 87 62
+fill 72 4082816192 => 33b82475d43a721d | | 87 62
+allocmeshes 85 2 219 0 => 516569af5db5c16f | | 87 62
+addrefgeo 116 => 79366d8ab5d2afc4 | | 87 62
+delgeo 27 => b8c2fccd98c3aa04 | dg27 | 86 62
+newgeo 0 14 24 = 117 => bc00cc47010f5833 | cg117 | 87 62
+colored 110 = 0 => bc00cc47010f5833 | | 87 62
+newgeo 20 0 187 = 118 => 5aa37480f4ca1ea8 | cg118 | 88 62
+fill 12 1710669789 => c7bdaea674dca08d | | 88 62
+append 12 11 = 4 => b22d5d50ad854eac | | 88 62
+newgeo 18 19 65705 = 119 => ca22534a945b08ce | cg119 | 89 62
+colored 108 = 0 => ca22534a945b08ce | | 89 62
+colored 101 = 0 => ca22534a945b08ce | | 89 62
+find 41 68 = -1 => ca22534a945b08ce | | 89 62
+colored 113 = 0 => ca22534a945b08ce | | 89 62
+delgeo 77 => a56b2fac15651d2b | dg77 | 88 62
+newtex = 21 => 55e6b51f0b946d8f | ct21 | 88 62
+newmat = 73 color f14a9bd9 => e7e8d3642a7f4063 | cm73 | 88 63
+newmat = 74 => 3ef55fcb5d016dc1 | cm74 | 88 64
+allocmeshes 54 0 90 0 => d7bd2677c7349e69 | | 88 64
+fill 65 490033136 => b8dbbb35c56449cf | | 88 64
+settex 26 18 => 231948955226354e | | 88 64
+newmat = 75 => 5b3d30ca02ebb721 | cm75 | 88 65
+lock 86 1214 => d528a90118689c3f | | 88 65
+addrefgeo 63 => fa9fecaaef988864 | | 88 65
+spheres 69 => 5edf1d592b3bc4e5 | | 88 65
+find 68 51 = -1 => 5edf1d592b3bc4e5 | | 88 65
+allocmeshes 92 1 206 0 => a29fd2cb5b7e4a27 | | 88 65
+colored 116 = 0 => a29fd2cb5b7e4a27 | | 88 65
+newgeo 11 50 16777319 = 120 => 6f40a210f5698c47 | cg120 | 89 65
+newgeo 30 35 458801 = 121 => 48848752e297fa17 | cg121 | 90 65
+delgeo 21 => d645319010d9500c | | 90 65
+clonemat 26 = 76 => 97a60ba8c31bbdef | cm76 ym76,26 | 90 66
+find 95 64 = -1 => 97a60ba8c31bbdef | | 90 66
+addrefgeo 64 => 3987545bfac6e258 | | 90 66
+addmorph 22 1 => 645ccbd60977a845 | | 90 66
+delgeo 31 => 143e667ef5296cd0 | | 90 66
+addrefgeo 62 => 306e8af839ef25ed | | 90 66
+clonemat 25 = 77 => 0f53411dbcc75fe8 | cm77 ym77,25 | 90 67
+addrefmat 9 => cb3153626147d1f7 | | 90 67
+delgeo 100 => 72c7bb21a2d9cec0 | | 90 67
+newgeo 17 27 196650 = 122 => 3591a757e614e17e | cg122 | 91 67
+deltex 19 => 4eb0c0cf9a2e567c | dt19 | 91 67
+find 31 34 = -1 => 4eb0c0cf9a2e567c | | 91 67
+settex 17 12 => eefc6d6e1f9cea8d | | 91 67
+delgeo 51 => 1d941d6999784523 | dg51 | 90 67
+settex 28 -1 => 1d941d6999784523 | | 90 67
+append 120 50 = 0 => 7ab4902cef05a497 | | 90 67
+find 56 69 = -1 => 7ab4902cef05a497 | | 90 67
+spheres 14 => 238a6bf7d777cc85 | | 90 67
+newgeo 2 12 185 = 123 => 80e98bc27e2cc741 | cg123 | 91 67
+addrefgeo 123 => 107d6c835ea876a2 | | 91 67
+addmorph 92 2 => d1a153af9ffcc3c4 | | 91 67
+addrefgeo 58 => a0f9836f6e5dafc9 | | 91 67
+lock 66 4095 => 7e5303dc1cec4443 | | 91 67
+delgeo 22 => 0f8663a46ed444cc | | 91 67
+settex 46 -1 => 285faf7f690053dd | | 91 67
+spheres 28 => 285faf7f690053dd | | 91 67
+guess 12 = 22 => 285faf7f690053dd | | 91 67
+newgeo 8 27 13 = 124 => fd90223598e79d3d | cg124 | 92 67
+find 44 55 = -1 => fd90223598e79d3d | | 92 67
+colored 97 = 0 => fd90223598e79d3d | | 92 67
+settex 41 -1 => fd90223598e79d3d | | 92 67
+settex 75 16 => 5b1c3330f113f51a | | 92 67
+addrefgeo 96 => 4de9fc3a990ade51 | | 92 67
+newmat = 78 => 9f2df6b6439aed8f | cm78 | 92 68
+settex 52 12 => 9f2df6b6439aed8f | | 92 68
+addmorph 64 2 => 04104d0efd67c410 | | 92 68
+addmorph 116 0 => 04104d0efd67c410 | | 92 68
+newmat = 79 => 4de1ddf11a1e9b0f | cm79 | 92 69
+newgeo 5 36 16777300 = 125 => c9091705125fb440 | cg125 | 93 69
+addmorph 68 1 => a6cee5cb0ede6359 | | 93 69
+addrefgeo 102 => ed45dc0045fa26c2 | | 93 69
+delgeo 62 => f37db57356c90533 | | 93 69
+allocmeshes 74 1 190 1 => 7588c1f24c03eac7 | | 93 69
+colored 111 = 0 => 7588c1f24c03eac7 | | 93 69
+newgeo 27 47 69 = 126 => fa6935402be0c0c7 | cg126 | 94 69
+fill 89 2841105436 => fa6935402be0c0c7 | | 94 69
+lock 121 4095 => 19702c935c3bb331 | | 94 69
+newgeo 0 25 16777350 = 127 => 38d94c22fbf654fc | cg127 | 95 69
+delgeo 48 => 5ca8a6269741a19a | dg48 | 94 69
+unlock 62 => 985261c8f30927c7 | | 94 69
+newmat = 80 => 70d962ab2bf60f37 | cm80 | 94 70
+fill 108 3558319561 => e608e3a62aba2e65 | | 94 70
+allocmeshes 62 0 102 1 => 39c7683dda2f1814 | | 94 70
+addrefmat 71 => 72e7e07a7cfbedaf | | 94 70
+addrefgeo 116 => a3af60478ffc9572 | | 94 70
+colored 84 = 0 => a3af60478ffc9572 | | 94 70
+append 111 2 = 0 => e8deb39dbbea7dfe | | 94 70
+newgeo 0 8 174 = 128 => fa3e09bd0e8f61ec | cg128 | 95 70
+newgeo 0 11 62 = 129 => a4c023e4cb5ccc4f | cg129 | 96 70
+lock 120 4031 => bdddd32fce78de29 | | 96 70
+addmorph 43 1 => 906885b5c7c4596f | | 96 70
+spheres 82 => 233f6e7ead9266c6 | | 96 70
+allocmeshes 121 3 148 0 => d7e3a1961cd3e020 | | 96 70
+allocmeshes 112 2 222 0 => 1454d9027fb884b4 | | 96 70
+allocmeshes 88 3 2 1 => 60e766c6acdefd32 | | 96 70
+delgeo 85 => cd4b7400111688c2 | dg85 | 95 70
+newgeo 10 6 131236 = 130 => 668a111b895bc9c1 | cg130 | 96 70
+delgeo 50 => 3a926ea137a6246a | dg50 dm13 | 95 69
+append 121 60 = 0 => 5fee1d3efeb6ff00 | | 95 69
+delmat 40 => d134a5ac482e07df | | 95 69
+find 98 35 = -1 => d134a5ac482e07df | | 95 69
+newgeo 21 10 393331 = 131 => 97865de969105051 | cg131 | 96 69
+addmorph 98 1 => 8e08e32447e2c4e8 | | 96 69
+newtex = 22 => ec9cc7d2fc848d4f | ct22 | 96 69
+allocmeshes 73 2 257 1 => 4b58f8becf05035d | | 96 69
+settex 45 -1 => 8da9fe8e3fa049e2 | | 96 69
+delgeo 105 => 529b91e96df0c4a7 | dg105 | 95 69
+append 82 39 = 0 => ef7d418714dd4c50 | | 95 69
+newgeo 13 7 46 = 132 => 2a6abeef5484f506 | cg132 | 96 69
+colored 128 = 0 => 2a6abeef5484f506 | | 96 69
+allocmeshes 131 2 105 0 => 1a400a562d2481b0 | | 96 69
+unlock 69 => 233eea9c52b9b8a8 | | 96 69
+lock 56 4095 => 11188f1cc2b4842b | | 96 69
+lock 65 679 => 11188f1cc2b4842b | | 96 69
+clonemat 48 = 81 => a75e33b1655d1b6b | cm81 ym81,48 | 96 70
+spheres 79 => a75e33b1655d1b6b | | 96 70
+find 78 16 = -1 => a75e33b1655d1b6b | | 96 70
+delgeo 74 => fc2209b86442be8f | dg74 | 95 70
+fill 49 1520176993 => 160e04e967a42f9b | | 95 70
+find 7 77 = -1 => 160e04e967a42f9b | | 95 70
+newgeo 0 35 254 = 133 => a63bb2d0ae7b43f8 | cg133 | 96 70
+addrefgeo 21 => 3e382207c30880f3 | | 96 70
+newgeo 24 53 138 = 134 => b6e45182d22d55de | cg134 | 97 70
+allocdata 127 => 53cabbeba3a78d8e | | 97 70
+fill 89 3920556456 => 53cabbeba3a78d8e | | 97 70
+lock 111 4095 => 2dae666dc1b8c410 | | 97 70
+colored 79 = 0 => 2dae666dc1b8c410 | | 97 70
+delgeo 114 => 7d0768a6ca7446da | dg114 | 96 70
+newgeo 8 27 132 = 135 => da35a7d506bdb21b | cg135 | 97 70
+newgeo 24 17 524345 = 136 => 86a3487c5bbcc7f3 | cg136 | 98 70
+delgeo 7 => aac8f339f36d3308 | | 98 70
+newgeo 26 8 65709 = 137 => d6dfcedd4572a803 | cg137 | 99 70
+allocmeshes 12 3 158 0 => c7f63e031b378623 | | 99 70
+newgeo 10 6 141 = 138 => 8c405c910c4b7d02 | cg138 | 100 70
+spheres 64 => 8c405c910c4b7d02 | | 100 70
+newgeo 10 30 100 = 139 => a1e6f186125fce72 | cg139 | 101 70
+allocmeshes 43 0 134 0 => 3fa49af986e45dcd | | 101 70
+spheres 31 => 3fa49af986e45dcd | | 101 70
+fill 64 692639781 => aa5984a8c4b25eca | | 101 70
+delmat 23 => 13a4f4eb00d4217d | | 101 70
+spheres 59 => 13a4f4eb00d4217d | | 101 70
+find 33 71 = -1 => 13a4f4eb00d4217d | | 101 70
+allocmeshes 33 0 194 1 => 3feb00d61425bdc7 | | 101 70
+colored 97 = 0 => 3feb00d61425bdc7 | | 101 70
+lock 134 4095 => 0e5388bb89193d01 | | 101 70
+lock 123 4095 => 6b26990f610e56ff | | 101 70
+newgeo 0 60 105 = 140 => fd192d1c4fe0e7ef | cg140 | 102 70
+addmorph 29 2 => 6230907a6ee02b69 | | 102 70
+allocmeshes 62 2 4 1 => ea57257e62f6b37c | | 102 70
+newmat = 82 => 083dce2b653c9e9a | cm82 | 102 71
+find 78 56 = -1 => 083dce2b653c9e9a | | 102 71
+clonemat 16 = 83 => 0d9a554d6cfc2699 | cm83 ym83,16 | 102 72
+fill 68 700935965 => 6ae6c0154d3e51da | | 102 72
+allocmeshes 62 2 173 0 => 8db836a990da565a | | 102 72
+addmorph 24 0 => 8db836a990da565a | | 102 72
+lock 25 4095 => 8db836a990da565a | | 102 72
+colored 14 = 1 => 8db836a990da565a | | 102 72
+clonemat 70 = 84 => d13dead1ba827f49 | cm84 ym84,70 | 102 73
+append 80 11 = 0 => 0af011babe45171e | | 102 73
+addmorph 58 0 => 0af011babe45171e | | 102 73
+find 4 61 = -1 => 0af011babe45171e | | 102 73
+settex 18 21 => cdf9e35e093db280 | | 102 73
+allocmeshes 140 1 101 1 => 39019d706f68844d | | 102 73
+settex 28 22 => dd49eac17d032314 | | 102 73
+delmat 52 => 42960a52994c6f9f | | 102 73
+append 129 81 = 0 => 44b2347450db025c | | 102 73
+newmat = 85 color d5b2f617 => 2ff3d25e4e6927bd | cm85 | 102 74
+addrefgeo 42 => 13eb095ee3d177e6 | | 102 74
+lock 83 4095 => 1b44f2ce8350db64 | | 102 74
+fill 72 3004135911 => 41cedc80fd2024a7 | | 102 74
+newtex = 23 => 24380e7562455741 | ct23 | 102 74
+settex 76 16 => 4bb018aa8ad292cf | | 102 74
+newgeo 0 58 179 = 141 => 92f7f80f68c22531 | cg141 | 103 74
+settex 82 -1 => 92f7f80f68c22531 | | 103 74
+newgeo 0 0 524461 = 142 => 6d3e9a4f6a8b3481 | cg142 | 104 74
+addrefmat 69 => e4821ba7d457c6da | | 104 74
+unlock 14 => a27e6e88baa811bc | | 104 74
+settex 12 -1 => a27e6e88baa811bc | | 104 74
+colored 23 = 1 => a27e6e88baa811bc | | 104 74
+spheres 68 => 74dfd4c342db2864 | | 104 74
+spheres 129 => 95c66a1f08d07a1d | | 104 74
+newmat = 86 color 74d4983e => 91576f5540fa8fe5 | cm86 | 104 75
+newgeo 12 0 27 = 143 => 35210c21aeecd373 | cg143 | 105 75
+spheres 7 => 35210c21aeecd373 | | 105 75
+addmorph 23 2 => 80bf14c15ee1fff4 | | 105 75
+settex 42 22 => 9b3bf7b9e3c3caeb | | 105 75
+append 122 77 = 0 => 95f6236623a19560 | | 105 75
+find 76 10 = -1 => 95f6236623a19560 | | 105 75
+delgeo 136 => 7f38a2d904931b9c | dg136 | 104 75
+fill 4 2443929445 => cbc4e85341bcab86 | | 104 75
+clonemat 48 = 87 => e7b66f963bd7e470 | cm87 ym87,48 | 104 76
+addrefgeo 103 => 923d7a269ced3feb | | 104 76
+newmat = 88 => 115cf39f8c929333 | cm88 | 104 77
+addmorph 98 1 => dcb5effce9293b48 | | 104 77
+spheres 63 => dcb5effce9293b48 | | 104 77
+addrefgeo 54 => 70c6dac8cdd2039d | | 104 77
+allocmeshes 128 2 272 0 => 40a3015b5422535f | | 104 77
+newgeo 17 36 229 = 144 => 83a21772a7dcef48 | cg144 | 105 77
+append 7 40 = 3 => 5566cba25d191aa8 | | 105 77
+append 30 40 = 1 => 80e9c206d80aca9e | | 105 77
+newmat = 89 color 85a01aa5 => d7610c730c8bb387 | cm89 | 105 78
+allocmeshes 116 1 174 0 => d12f6e13ba3af49e | | 105 78
+spheres 14 => d12f6e13ba3af49e | | 105 78
+append 89 87 = 0 => 5bc4436e98a6aebb | | 105 78
+addmorph 96 1 => a96a8d0c7a90958f | | 105 78
+guess 62 = 57 => a96a8d0c7a90958f | | 105 78
+append 64 82 = 1 => ae46eda27c8b3f79 | | 105 78
+lock 121 2465 => 4d1cd348778743fb | | 105 78
+lock 21 938 => 4d1cd348778743fb | | 105 78
+settex 63 16 => 111f5eb7c9a6f164 | | 105 78
+lock 111 2982 => 111f5eb7c9a6f164 | | 105 78
+clonemat 44 = 90 => bb5569408d7d493a | cm90 ym90,44 | 105 79
+newmat = 91 => 505111e4b565d081 | cm91 | 105 80
+colored 76 = 0 => 505111e4b565d081 | | 105 80
+allocmeshes 41 0 172 1 => 2657f860da78a450 | | 105 80
+spheres 88 => 2657f860da78a450 | | 105 80
+newgeo 0 53 54 = 145 => 92ad53d07d9299b9 | cg145 | 106 80
+colored 124 = 0 => 92ad53d07d9299b9 | | 106 80
+addrefgeo 72 => 70af3b1d03d65152 | | 106 80
+allocmeshes 81 0 163 0 => 5d0b27405e5e3721 | | 106 80
+lock 103 4095 => eca56883794c53eb | | 106 80
+newgeo 33 5 42 = 146 => 0e097c0b83784dc6 | cg146 | 107 80
+addrefgeo 115 => 672af5f34aa7889d | | 107 80
+allocmeshes 129 3 195 1 => 10083669ae50ad2a | | 107 80
+lock 31 2620 => 5c2b4be2752f2ff4 | | 107 80
+find 109 54 = -1 => 5c2b4be2752f2ff4 | | 107 80
+newgeo 10 31 3 = 147 => fc5dcabd890d559d | cg147 | 108 80
+addrefgeo 143 => 43fcec3c4889ead6 | | 108 80
+find 53 74 = -1 => 43fcec3c4889ead6 | | 108 80
+fill 143 1569310879 => 1ac1dd0ce4732c18 | | 108 80
+lock 49 4095 => ce4f022c4bdf0bf8 | | 108 80
+append 119 50 = 0 => be3508c74b1927e2 | | 108 80
+settex 12 18 => 0d4718e2020b9f1f | | 108 80
+addrefgeo 102 => 45af999fd8fd97b2 | | 108 80
+addmorph 93 1 => 4a3618851142c388 | | 108 80
+colored 37 = 1 => 4a3618851142c388 | | 108 80
+delgeo 119 => 1ed7245e4a6e5594 | dg119 | 107 80
+append 93 48 = 0 => 09e7735de065569e | | 107 80
+lock 100 4095 => 6f41087397bbbe50 | | 107 80
+fill 112 3531622179 => 338ef7a4680db0bc | | 107 80
+spheres 81 => bf3b433b86d65281 | | 107 80
+newmat = 92 => 73d48fed62751289 | cm92 | 107 81
+find 124 52 = -1 => 73d48fed62751289 | | 107 81
+newgeo 33 37 40 = 148 => f781756134aaa9bd | cg148 | 108 81
+find 123 52 = -1 => f781756134aaa9bd | | 108 81
+colored 73 = 0 => f781756134aaa9bd | | 108 81
+colored 121 = 0 => f781756134aaa9bd | | 108 81
+newgeo 16 25 113 = 149 => 5cc69259c3acaf0e | cg149 | 109 81
+spheres 25 => 5cc69259c3acaf0e | | 109 81
+fill 115 482977253 => 5cc69259c3acaf0e | | 109 81
+guess 37 = 111 => 5cc69259c3acaf0e | | 109 81
+newgeo 9 43 16777349 = 150 => dc8feb46a64a6763 | cg150 | 110 81
+newgeo 13 34 16777219 = 151 => 4ab576a97669e5e8 | cg151 | 111 81
+find 86 11 = -1 => 4ab576a97669e5e8 | | 111 81
+spheres 96 => 4ab576a97669e5e8 | | 111 81
+delmat 83 => 2313675eac480b97 | dm83 | 111 80
+newmat = 93 color 3497b28a => f586dccca41955dd | cm93 | 111 81
+newgeo 27 0 50 = 152 => 81b60b2c7dfb6f86 | cg152 | 112 81
+newgeo 0 11 196773 = 153 => 511c71ada4f5d730 | cg153 | 113 81
+delgeo 7 => 88747262cea90aa9 | | 113 81
+append 44 75 = 1 => b9b98cb4a042f1ba | | 113 81
+delgeo 23 => 5ffc13073e2c95b9 | | 113 81
+lock 39 4095 => 60f9e30dae0a8416 | | 113 81
+append 117 5 = 0 => 445cd5aac7b8ecf3 | | 113 81
+delgeo 142 => 3a96fdbd32de43ab | dg142 | 112 81
+allocmeshes 1 1 16 1 => 7ea0b1c11113ec10 | | 112 81
+spheres 81 => 7ea0b1c11113ec10 | | 112 81
+newmat = 94 => 30e00bd9fbf2d386 | cm94 | 112 82
+append 144 84 = 0 => 51fc3d2fe1995b54 | | 112 82
+settex 16 -1 => 51fc3d2fe1995b54 | | 112 82
+spheres 22 => 1c7088bd137fbdab | | 112 82
+newmat = 95 => 93d22502e731ee10 | cm95 | 112 83
+addrefgeo 80 => 13f04727ce1c8dad | | 112 83
+addrefmat 20 => 0cad0b01eb3d48ce | | 112 83
+colored 31 = 1 => 0cad0b01eb3d48ce | | 112 83
+newgeo 0 50 108 = 154 => a5fff2c7ff892658 | cg154 | 113 83
+addmorph 33 0 => a5fff2c7ff892658 | | 113 83
+newgeo 9 12 142 = 155 => e7575d372c7f6253 | cg155 | 114 83
+delgeo 125 => ec07e5bbb75b76d0 | dg125 | 113 83
+newgeo 14 5 126 = 156 => 266b6b1f52f189c7 | cg156 | 114 83
+addmorph 150 1 => facc2c366ed5e20e | | 114 83
+delgeo 93 => 6453e20193d070b7 | dg93 | 113 83
+addmorph 118 0 => 6453e20193d070b7 | | 113 83
+colored 37 = 1 => 6453e20193d070b7 | | 113 83
+deltex 21 => fa9979c974012a64 | | 113 83
+find 150 41 = -1 => fa9979c974012a64 | | 113 83
+allocmeshes 47 0 62 1 => 5c16584b0340c71c | | 113 83
+colored 1 = 1 => 5c16584b0340c71c | | 113 83
+lock 39 4095 => 5c16584b0340c71c | | 113 83
+addmorph 7 1 => c930d1fff01e8ec9 | | 113 83
+fill 137 3184489600 => 33f7cb9b2ed0d421 | | 113 83
+deltex 22 => 5d5b9cdadf8c7270 | | 113 83
+settex 57 16 => 7406c1eeb33757ed | | 113 83
+lock 100 2955 => 7406c1eeb33757ed | | 113 83
+newgeo 0 43 89 = 157 => 74605f9a474b658c | cg157 | 114 83
+guess 37 = 111 => 74605f9a474b658c | | 114 83
+spheres 135 => 74605f9a474b658c | | 114 83
+guess 140 = 33 => 74605f9a474b658c | | 114 83
+newgeo 20 0 125 = 158 => a52d3738a89e8f46 | cg158 | 115 83
+newgeo 25 0 16842836 = 159 => b3227dd41fc91401 | cg159 | 116 83
+newmat = 96 => c6baefdb53346ee1 | cm96 | 116 84
+addrefgeo 49 => 86e3e6043c3d076c | | 116 84
+colored 116 = 0 => 86e3e6043c3d076c | | 116 84
+addrefgeo 42 => 4da0574fcdd69cd5 | | 116 84
+append 31 45 = 1 => 2941513a83327838 | | 116 84
+newmat = 97 => b16dcdc493d8db09 | cm97 | 116 85
+allocmeshes 149 0 147 0 => 5631b0b4f30f4d3e | | 116 85
+addmorph 116 0 => 5631b0b4f30f4d3e | | 116 85
+find 89 89 = -1 => 5631b0b4f30f4d3e | | 116 85
+append 21 64 = 0 => 5da924378583ef34 | | 116 85
+settex 54 -1 => 5da924378583ef34 | | 116 85
+addrefgeo 21 => 0b29ad6800870281 | | 116 85
+newgeo 39 13 190 = 160 => 9d5cb106639ac0fb | cg160 | 117 85
+find 83 50 = -1 => 9d5cb106639ac0fb | | 117 85
+spheres 42 => 9d5cb106639ac0fb | | 117 85
+colored 129 = 0 => 9d5cb106639ac0fb | | 117 85
+delgeo 98 => bfb017ad1c10005c | | 117 85
+addrefmat 62 => 210d621d7a62175f | | 117 85
+lock 39 1800 => 210d621d7a62175f | | 117 85
+newgeo 39 16 7 = 161 => 4d0657e567aa81a3 | cg161 | 118 85
+fill 118 3273039797 => 34a91c2b0cff15e3 | | 118 85
+addrefmat 9 => cd3002db63087b36 | | 118 85
+addrefgeo 68 => 98e5e23bac578e99 | | 118 85
+fill 127 1505834093 => 98e5e23bac578e99 | | 118 85
+newmat = 98 => 8b9b6199540a9fcf | cm98 | 118 86
+allocmeshes 128 3 272 1 => aa39602979be8ee2 | | 118 86
+spheres 66 => a3d906123b849301 | | 118 86
+newgeo 14 41 2 = 162 => 90ab299c17cfaae7 | cg162 | 119 86
+allocmeshes 23 3 85 0 => 0d926112f810270d | | 119 86
+addmorph 53 1 => 7e2714d97ee131c8 | | 119 86
+lock 89 3543 => 4cff7dc46a05b2ec | | 119 86
+allocmeshes 83 2 268 0 => 33e33efa16eef644 | | 119 86
+addmorph 54 0 => 33e33efa16eef644 | | 119 86
+newgeo 0 16 163 = 163 => e51492a2396f7910 | cg163 | 120 86
+append 58 37 = 0 => 649ac5d66163dd43 | | 120 86
+newgeo 32 37 16777293 = 164 => 30355631374d028d | cg164 | 121 86
+newgeo 24 49 40 = 165 => 5900d9277641c980 | cg165 | 122 86
+addmorph 117 2 => 0e0b8b9a4e8a334e | | 122 86
+delmat 97 => 9752d37e50879c7f | dm97 | 122 85
+find 23 93 = -1 => 9752d37e50879c7f | | 122 85
+fill 17 1391486820 => a4733e3c23a7f1c9 | | 122 85
+deltex 23 => 8ed726366c663e2f | dt23 | 122 85
+settex 44 22 => 4cf8e9f814c68218 | | 122 85
+append 44 73 = 2 => 0aa4878782ecc7d3 | | 122 85
+fill 62 1313945334 => 164f404d7f6e0843 | | 122 85
+delgeo 14 => 6c17f4f9bdd56f02 | | 122 85
+spheres 68 => 6c17f4f9bdd56f02 | | 122 85
+colored 103 = 0 => 6c17f4f9bdd56f02 | | 122 85
+addrefgeo 59 => 68842fa39cc9a7f1 | | 122 85
+delgeo 112 => 2ed129e45c769db3 | dg112 | 121 85
+addmorph 144 0 => 2ed129e45c769db3 | | 121 85
+addrefgeo 147 => 04629ef98d75bbac | | 121 85
+addrefmat 50 => 0abd250569ffa9f5 | | 121 85
+newgeo 5 0 393375 = 166 => 56eae754205f1c28 | cg166 | 122 85
+lock 146 3471 => 837b54226772f578 | | 122 85
+settex 57 -1 => 950bd46a50d580f5 | | 122 85
+newmat = 99 => d576aad1eeea1fb6 | cm99 | 122 86
+newgeo 30 55 16777278 = 167 => 35b534c956fa20c3 | cg167 | 123 86
+newmat = 100 => 03082700a2e6dc27 | cm100 | 123 87
+fill 29 2960117758 => 6ccb5d268ee204d4 | | 123 87
+delgeo 81 => 70723238e99870c7 | | 123 87
+spheres 56 => f435053c3fc4583b | | 123 87
+addmorph 39 0 => f435053c3fc4583b | | 123 87
+colored 97 = 0 => f435053c3fc4583b | | 123 87
+settex 45 16 => 6b3fbf559c7981ce | | 123 87
+append 117 96 = 1 => 0788100cf446a046 | | 123 87
+lock 97 4095 => 42368cb93266e461 | | 123 87
+newmat = 101 color 078bcac4 => 901132933f2cefb8 | cm101 | 123 88
+allocmeshes 49 2 132 0 => 83ee6ae19b0c2c2e | | 123 88
+lock 135 4095 => 307ab03357b02734 | | 123 88
+find 131 40 = -1 => 307ab03357b02734 | | 123 88
+spheres 109 => 307ab03357b02734 | | 123 88
+addrefgeo 117 => 1339b590a2378ceb | | 123 88
+delgeo 81 => acbfb2013e1ef537 | dg81 | 122 88
+allocmeshes 12 3 165 1 => 69ef085778ed4b3d | | 122 88
+find 84 92 = -1 => 69ef085778ed4b3d | | 122 88
+addrefgeo 80 => b709261c7519a136 | | 122 88
+find 127 47 = -1 => b709261c7519a136 | | 122 88
+fill 28 1588501144 => af82c30e10ea1dbe | | 122 88
+addrefgeo 17 => 0ad018f8d4ebd1c7 | | 122 88
+delmat 71 => 7312d6561dfd7764 | | 122 88
+newgeo 9 27 24 = 168 => bff804e32b09164d | cg168 | 123 88
+addrefmat 87 => 38000856cdc12048 | | 123 88
+newtex = 24 => 5180cc12fa2206e1 | ct24 | 123 88
+colored 13 = 0 => 5180cc12fa2206e1 | | 123 88
+addrefgeo 158 => 62c1aebcb9392c1a | | 123 88
+colored 106 = 0 => 62c1aebcb9392c1a | | 123 88
+addmorph 63 1 => 115def0fba8ce6ec | | 123 88
+newgeo 27 15 17301543 = 169 => e7f69c11568ed27c | cg169 | 124 88
+find 30 16 = -1 => e7f69c11568ed27c | | 124 88
+lock 65 2682 => e7f69c11568ed27c | | 124 88
+newmat = 102 color 87bbcbed => f75ce4094b1804cc | cm102 | 124 89
+colored 128 = 0 => f75ce4094b1804cc | | 124 89
+addrefgeo 168 => dc22cac4b1941f43 | | 124 89
+newgeo 16 0 44 = 170 => 6c708dc12e5fd4ff | cg170 | 125 89
+delgeo 44 => 0042cbd0990b9ac0 | | 125 89
+allocdata 150 => 89787198a5fc059f | | 125 89
+allocmeshes 162 3 167 0 => 47dd1d7909895879 | | 125 89
+newmat = 103 color d8c5a04a => 5f0cd1987799e141 | cm103 | 125 90
+settex 19 24 => 9bcb9a16cfe26386 | | 125 90
+colored 7 = 1 => 9bcb9a16cfe26386 | | 125 90
+lock 128 1062 => 5f7d4a6a3110abf0 | | 125 90
+newmat = 104 color b1dda1a5 => 34fda846c2a297e8 | cm104 | 125 91
+newmat = 105 => 45a8c51adcdcaa09 | cm105 | 125 92
+settex 71 -1 => 45a8c51adcdcaa09 | | 125 92
+append 7 41 = 4 => f5b78cd0283961f2 | | 125 92
+allocmeshes 90 1 34 0 => dd3dc75a1c512b44 | | 125 92
+addmorph 109 2 => 95a777fdacefa926 | | 125 92
+append 139 93 = 0 => 339d138c483139e1 | | 125 92
+newgeo 3 55 74 = 171 => 687872634623325f | cg171 | 126 92
+newgeo 9 57 140 = 172 => 1dce0584aff2bde9 | cg172 | 127 92
+colored 14 = 1 => 1dce0584aff2bde9 | | 127 92
+delmat 46 => 4653fdadb9595002 | | 127 92
+spheres 53 => 4653fdadb9595002 | | 127 92
+addrefmat 47 => e4ee291103dd5211 | | 127 92
+delgeo 96 => 742eb8caaede7e36 | | 127 92
+allocmeshes 165 3 181 0 => b578836a4385a640 | | 127 92
+addrefgeo 47 => 98afda842ee05971 | | 127 92
+find 148 98 = -1 => 98afda842ee05971 | | 127 92
+allocmeshes 163 3 114 0 => fffe12344d28d3ef | | 127 92
+find 98 17 = -1 => fffe12344d28d3ef | | 127 92
+find 144 63 = -1 => fffe12344d28d3ef | | 127 92
+addrefgeo 168 => 6ea6e8b86bfe4b4e | | 127 92
+addrefmat 76 => 3a9c63b3a61b5815 | | 127 92
+addrefgeo 70 => 310f2009b1621502 | | 127 92
+lock 79 233 => b4d372c88d9ffe93 | | 127 92
+newmat = 106 color 8cf32421 => 4149370b7d514bdb | cm106 | 127 93
+find 96 42 = -1 => 4149370b7d514bdb | | 127 93
+newgeo 28 13 81 = 173 => c5dbd9f3903324e7 | cg173 | 128 93
+newgeo 16 57 106 = 174 => d21f58673fdcb3e8 | cg174 | 129 93
+newgeo 28 28 16777358 = 175 => 04ff0b3681fd2148 | cg175 | 130 93
+colored 47 = 0 => 04ff0b3681fd2148 | | 130 93
+find 78 51 = -1 => 04ff0b3681fd2148 | | 130 93
+find 158 57 = -1 => 04ff0b3681fd2148 | | 130 93
+find 73 92 = -1 => 04ff0b3681fd2148 | | 130 93
+spheres 121 => 04ff0b3681fd2148 | | 130 93
+lock 53 4095 => 04ff0b3681fd2148 | | 130 93
+find 29 19 = -1 => 04ff0b3681fd2148 | | 130 93
+settex 36 7 => 87c6be73fcd00a0c | | 130 93
+lock 56 4095 => 87c6be73fcd00a0c | | 130 93
+append 158 37 = 0 => 9589469216bde4bd | | 130 93
+guess 23 = 28 => 9589469216bde4bd | | 130 93
+append 124 60 = 0 => a83317a021386fc1 | | 130 93
+addrefmat 25 => c478756995ac5c44 | | 130 93
+addmorph 175 0 => c478756995ac5c44 | | 130 93
+newgeo 24 42 189 = 176 => e9586e6d56120234 | cg176 | 131 93
+spheres 66 => e9586e6d56120234 | | 131 93
+spheres 76 => e9586e6d56120234 | | 131 93
+addmorph 30 2 => a7c7ba2cad60a545 | | 131 93
+fill 137 3287423563 => 4fdc34db62a32418 | | 131 93
+settex 90 7 => 9bda36e50c0cd0fe | | 131 93
+addrefmat 5 => 7c6fb287db49665d | | 131 93
+addrefmat 54 => 9a2e2e18f6831f62 | | 131 93
+append 7 95 = 5 => 1b2534e6a9f2cbc5 | | 131 93
+allocmeshes 95 2 254 0 => fa1e68314180097f | | 131 93
+append 169 16 = 0 => 31bb17fde8ea5451 | | 131 93
+colored 56 = 0 => 31bb17fde8ea5451 | | 131 93
+allocmeshes 66 2 223 0 => 09cf2dafe4f5e57d | | 131 93
+lock 171 2568 => 1ad46d9bb3c5818f | | 131 93
+allocmeshes 73 0 93 0 => dafe805558930950 | | 131 93
+clonemat 2 = 107 => ad1d7a850f893793 | cm107 ym107,2 | 131 94
+lock 95 3433 => 1fbd16895ab731b7 | | 131 94
+newgeo 0 0 177 = 177 => 723b6352762ae1e9 | cg177 | 132 94
+delgeo 173 => 42c667ba6c1eed81 | dg173 | 131 94
+find 133 32 = -1 => 42c667ba6c1eed81 | | 131 94
+allocmeshes 172 1 235 0 => b3d2797612e248d8 | | 131 94
+delgeo 109 => 0e84cc957ff6743f | dg109 | 130 94
+delgeo 86 => 59da64d452a5f893 | dg86 | 129 94
+settex 59 -1 => 59da64d452a5f893 | | 129 94
+fill 47 2851325884 => 2060da1800c9f42c | | 129 94
+fill 96 720439245 => 4337d227f856aa98 | | 129 94
+fill 35 4265715389 => ca9e42d5a61853dc | | 129 94
+fill 73 2074486858 => d95d68cdb75ba57d | | 129 94
+settex 64 -1 => d95d68cdb75ba57d | | 129 94
+find 58 54 = -1 => d95d68cdb75ba57d | | 129 94
+newgeo 0 11 185 = 178 => 84f75d36253e4946 | cg178 | 130 94
+clonemat 89 = 108 => 873659b547198b5a | cm108 ym108,89 | 130 95
+find 82 23 = -1 => 873659b547198b5a | | 130 95
+delgeo 97 => 25b7ec4d98cdae09 | dg97 | 129 95
+settex 62 21 => 4a857368590eecef | | 129 95
+allocmeshes 25 3 282 0 => 40c86f79e759dc4b | | 129 95
+newmat = 109 color 370639c6 => 3b482802edf16e50 | cm109 | 129 96
+allocmeshes 65 3 28 0 => 1204e2351fae4cde | | 129 96
+newgeo 10 0 109 = 179 => a6565074195537f1 | cg179 | 130 96
+spheres 155 => a6565074195537f1 | | 130 96
+newgeo 39 49 107 = 180 => 462e45691df1eea4 | cg180 | 131 96
+newgeo 0 37 191 = 181 => a5b0cc4938b260a8 | cg181 | 132 96
+delgeo 70 => b22a227d9eea519f | | 132 96
+newgeo 24 59 16777299 = 182 => 0c40b10c0d8bc83c | cg182 | 133 96
+addrefgeo 174 => ab56665fd964accb | | 133 96
+allocmeshes 155 0 73 0 => 617fba1f76196b76 | | 133 96
+spheres 158 => 617fba1f76196b76 | | 133 96
+addrefgeo 1 => 97444e2d5ae186eb | | 133 96
+lock 87 4095 => 9a8b0b0e0e296111 | | 133 96
+spheres 170 => 9a8b0b0e0e296111 | | 133 96
+clonemat 36 = 110 => fe1676bad9388d22 | cm110 ym110,36 | 133 97
+newmat = 111 => 226dd4d74df4d5f9 | cm111 | 133 98
+newmat = 112 color 56d28a2c => 3dc0f656dc6226ef | cm112 | 133 99
+allocmeshes 110 1 26 0 => b39be4782ba2cc7f | | 133 99
+newgeo 14 45 16777279 = 183 => 439272cc2cc15801 | cg183 | 134 99
+newgeo 0 52 5 = 184 => 55690e29a8946d68 | cg184 | 135 99
+append 153 96 = 0 => cb1c7214bba792e0 | | 135 99
+newgeo 18 31 15 = 185 => 27d36e99abc8a3ef | cg185 | 136 99
+addrefmat 73 => 05ac1a220c0be58a | | 136 99
+newgeo 21 41 18 = 186 => a017309babf892c0 | cg186 | 137 99
+guess 14 = 3 => a017309babf892c0 | | 137 99
+addmorph 53 1 => ecb06b8d8a8fea2e | | 137 99
+lock 179 4095 => a28cb86b1db0ae6c | | 137 99
+addmorph 75 0 => a28cb86b1db0ae6c | | 137 99
+newmat = 113 => 7dc0e137008ce4e9 | cm113 | 137 100
+find 156 93 = -1 => 7dc0e137008ce4e9 | | 137 100
+colored 147 = 0 => 7dc0e137008ce4e9 | | 137 100
+settex 75 -1 => 0af39b22a009e814 | | 137 100
+fill 66 1962397734 => a58392364264c58d | | 137 100
+addrefgeo 185 => c02054583ead8982 | | 137 100
+find 65 7 = -1 => c02054583ead8982 | | 137 100
+spheres 96 => f1d54a86ec4f23c5 | | 137 100
+newgeo 15 26 130 = 187 => 9770e23571da255a | cg187 | 138 100
+find 131 42 = -1 => 9770e23571da255a | | 138 100
+append 73 102 = 0 => 2c1acff3b2d25986 | | 138 100
+colored 152 = 0 => 2c1acff3b2d25986 | | 138 100
+lock 172 4095 => 3260a8d35d75cd45 | | 138 100
+addrefgeo 54 => a095736e9106caa2 | | 138 100
+addrefmat 17 => 6c884a543c842fbf | | 138 100
+unlock 35 => 73e24046d45d7166 | | 138 100
+fill 160 3157721502 => a1614f2353c44cd6 | | 138 100
+guess 1 = 5 => a1614f2353c44cd6 | | 138 100
+settex 11 21 => d8640eaaf0117f1d | | 138 100
+addrefmat 61 => 50d7fcd38a44d5a6 | | 138 100
+delmat 87 => f61b687ad3e72c1f | | 138 100
+settex 7 -1 => f61b687ad3e72c1f | | 138 100
+spheres 144 => f61b687ad3e72c1f | | 138 100
+addmorph 168 1 => d9dc1a734962ca90 | | 138 100
+colored 29 = 0 => d9dc1a734962ca90 | | 138 100
+fill 90 467070921 => 84f77da3a7f560f5 | | 138 100
+fill 56 2734661142 => 05e17dec7062fa91 | | 138 100
+lock 183 4095 => 3fbcc1bfd22eb51f | | 138 100
+settex 64 16 => 7d3e3c6e126f954a | | 138 100
+delgeo 100 => d796017c95b43c5a | dg100 | 137 100
+lock 104 3150 => c2fcc14932cd4488 | | 137 100
+addmorph 104 1 => c4358544fe26934f | | 137 100
+settex 93 -1 => c4358544fe26934f | | 137 100
+spheres 172 => c4358544fe26934f | | 137 100
+delmat 111 => 3fef221e530d9348 | dm111 | 137 99
+fill 178 1269935869 => 3fef221e530d9348 | | 137 99
+newmat = 114 => 2b3524d6979d0f0e | cm114 | 137 100
+newtex = 25 => ee7f327b97dedb66 | ct25 | 137 100
+delgeo 154 => 5d9940d9649430dc | dg154 | 136 100
+newtex = 26 => 96d9305868434217 | ct26 | 136 100
+delgeo 62 => 8d99b1e79cb72238 | | 136 100
+fill 167 723050912 => 8d99b1e79cb72238 | | 136 100
+spheres 178 => b9bdc372f49adff1 | | 136 100
+allocmeshes 59 0 134 0 => 518ee63a3dbb843e | | 136 100
+newgeo 16 0 35 = 188 => 2b4b4e8ac3b012b0 | cg188 | 137 100
+fill 164 573729304 => 2b4b4e8ac3b012b0 | | 137 100
+allocmeshes 64 0 93 0 => 27d3586dbaea816d | | 137 100
+colored 187 = 0 => 27d3586dbaea816d | | 137 100
+append 162 64 = 0 => b73471612f9eac41 | | 137 100
+delmat 2 => 766e437ad0e4e8ee | | 137 100
+spheres 58 => 766e437ad0e4e8ee | | 137 100
+allocmeshes 180 2 271 0 => bc617f178caab48b | | 137 100
+lock 87 4095 => bc617f178caab48b | | 137 100
+addmorph 82 2 => b409be19306bce89 | | 137 100
+newmat = 115 => 272713b59c76c592 | cm115 | 137 101
+addrefgeo 63 => 675bc543b1a26e97 | | 137 101
+colored 76 = 0 => 675bc543b1a26e97 | | 137 101
+newmat = 116 color e5438d20 => 5951de708ba2b0b0 | cm116 | 137 102
+addmorph 138 2 => c0a10153e59f93d5 | | 137 102
+newgeo 38 7 121 = 189 => 37f71b4a5b066ea5 | cg189 | 138 102
+find 103 112 = -1 => 37f71b4a5b066ea5 | | 138 102
+lock 133 4095 => da0b2c4921616ba3 | | 138 102
+newtex = 27 => d2a54ebc8dafcf49 | ct27 | 138 102
+allocmeshes 53 0 284 1 => 2ec7a010c1184838 | | 138 102
+newgeo 4 9 31 = 190 => 7bc4e7b14298dddc | cg190 | 139 102
+append 186 85 = 0 => 90d7cfee138a63d3 | | 139 102
+newmat = 117 => 4a4a12108faa1652 | cm117 | 139 103
+newgeo 31 36 65589 = 191 => 26fa1f1ed3106a28 | cg191 | 140 103
+addmorph 43 2 => 19a1a9663ed3f948 | | 140 103
+newgeo 30 21 92 = 192 => 99dda501136ebb6d | cg192 | 141 103
+colored 31 = 1 => 99dda501136ebb6d | | 141 103
+guess 33 = 64 => 99dda501136ebb6d | | 141 103
+spheres 111 => 99dda501136ebb6d | | 141 103
+deltex 24 => d4860a5d9615a7fe | | 141 103
+colored 14 = 1 => d4860a5d9615a7fe | | 141 103
+fill 116 1725673990 => ff5b469670ae5dfe | | 141 103
+append 158 46 = 1 => a825af5b4251d0b4 | | 141 103
+fill 72 3122463318 => ff4d6789146d992a | | 141 103
+addrefgeo 171 => 84802e9980cf1285 | | 141 103
+clonemat 77 = 118 => c8f303fa0b806037 | cm118 ym118,77 | 141 104
+settex 48 -1 => f11f3e66031409ba | | 141 104
+newgeo 17 56 181 = 193 => 52a9e7a64bb3daa5 | cg193 | 142 104
+fill 148 1783323475 => 31fd17945230eafb | | 142 104
+addmorph 47 2 => 727024e64d874f41 | | 142 104
+find 175 18 = -1 => 727024e64d874f41 | | 142 104
+allocmeshes 160 2 10 0 => fe97d181722ab90c | | 142 104
+spheres 174 => fe97d181722ab90c | | 142 104
+find 147 103 = -1 => fe97d181722ab90c | | 142 104
+addrefgeo 184 => 8cbe4ae75967866b | | 142 104
+colored 73 = 1 => 8cbe4ae75967866b | | 142 104
+addmorph 157 2 => e14293ec88abfd99 | | 142 104
+fill 70 4201271143 => ca48c066453721df | | 142 104
+guess 22 = 50 => ca48c066453721df | | 142 104
+append 127 68 = 0 => 7dafb3d46f74806d | | 142 104
+allocmeshes 163 2 115 0 => c570599a479d186a | | 142 104
+addrefgeo 92 => 2a3863d174668469 | | 142 104
+newmat = 119 => 207145bbe1a6049e | cm119 | 142 105
+delgeo 69 => 4d20809c728e97e9 | | 142 105
+delgeo 52 => 1e2da8f0dd1df344 | dg52 | 141 105
+newtex = 28 => da5ba38f1e918ae9 | ct28 | 141 105
+addrefgeo 83 => bde32b874be3b6c2 | | 141 105
+colored 4 = 0 => bde32b874be3b6c2 | | 141 105
+append 23 47 = 1 => 443afbf35511bc47 | | 141 105
+find 70 50 = -1 => 443afbf35511bc47 | | 141 105
+append 92 48 = 0 => 7fb8edb6e887aa51 | | 141 105
+allocmeshes 128 0 224 0 => e438ac233abb17ed | | 141 105
+addrefgeo 190 => 3356aa56a07d6096 | | 141 105
+guess 128 = 74 => 3356aa56a07d6096 | | 141 105
+delgeo 168 => 74fc4232d42779c3 | | 141 105
+lock 177 4095 => 3b4050b44662f165 | | 141 105
+addrefgeo 164 => da7a4170223384e6 | | 141 105
+newgeo 37 36 2 = 194 => 472400dd1c4a2048 | cg194 | 142 105
+find 73 33 = -1 => 472400dd1c4a2048 | | 142 105
+newgeo 14 0 19 = 195 => 5949842a51b5f2f8 | cg195 | 143 105
+fill 39 551407336 => 840c007306d4a434 | | 143 105
+allocmeshes 186 0 23 0 => 659bd1a878c33191 | | 143 105
+newmat = 120 => 3b89e2df45db033d | cm120 | 143 106
+lock 7 4095 => 3b89e2df45db033d | | 143 106
+addrefgeo 106 => 20b57c3abbfeed8e | | 143 106
+fill 95 1230835184 => 76d9a8b9adcfbe06 | | 143 106
+fill 1 3319650661 => 49979fe01789906b | | 143 106
+fill 88 719225415 => c442ab828e013198 | | 143 106
+fill 90 726610755 => 990b9a96657abd6d | | 143 106
+spheres 191 => 990b9a96657abd6d | | 143 106
+delgeo 63 => fb7cd01cf5025748 | | 143 106
+colored 155 = 0 => fb7cd01cf5025748 | | 143 106
+newmat = 121 => a504bb0d7763e415 | cm121 | 143 107
+append 4 55 = 4 => 495f2a85d5a00614 | | 143 107
+newgeo 31 0 18 = 196 => 5bd21e5ac2e1528b | cg196 | 144 107
+newgeo 0 0 2 = 197 => b18cfbdedb256360 | cg197 | 145 107
+newmat = 122 color bf911d99 => 314364fd018fee98 | cm122 | 145 108
+guess 23 = 28 => 314364fd018fee98 | | 145 108
+deltex 25 => b035e236048eaf90 | dt25 | 145 108
+spheres 28 => b035e236048eaf90 | | 145 108
+append 68 39 = 0 => 2ff3ec206ef15675 | | 145 108
+addrefgeo 63 => 09a208d37eddc430 | | 145 108
+guess 88 = 0 => 09a208d37eddc430 | | 145 108
+newtex = 29 => a81a953007188f3c | ct29 | 145 108
+newgeo 40 50 40 = 198 => ffa6b3acc7259a44 | cg198 | 146 108
+newgeo 35 0 17 = 199 => 180c15cec29c1628 | cg199 | 147 108
+colored 25 = 0 => 180c15cec29c1628 | | 147 108
+clonemat 74 = 123 => 1633fc102e83be7b | cm123 ym123,74 | 147 109
+fill 171 2426715902 => 0ca61eb2b61607ec | | 147 109
+allocmeshes 190 0 214 0 => 9ee70f4369115fd7 | | 147 109
+delgeo 166 => 42db38b22f5b249a | dg166 | 146 109
+newgeo 9 26 21 = 200 => 465fc599d0da0048 | cg200 | 147 109
+colored 167 = 0 => 465fc599d0da0048 | | 147 109
+newmat = 124 => 5563251a16f4ee50 | cm124 | 147 110
+find 118 122 = -1 => 5563251a16f4ee50 | | 147 110
+fill 101 2112429262 => 5563251a16f4ee50 | | 147 110
+newgeo 33 44 89 = 201 => e8e2947fdb087089 | cg201 | 148 110
+settex 87 -1 => 1b8a6f4ad0584436 | | 148 110
+newmat = 125 => 17b7c2547e0c0c7f | cm125 | 148 111
+newmat = 126 color 0f6dbbdb => 37138ea628654953 | cm126 | 148 112
+addrefgeo 39 => 86f057cd10e0d7bc | | 148 112
+delmat 36 => b5b20f3cf48fac9d | dm36 | 148 111
+newgeo 14 39 16777358 = 202 => e8eb43b6e9cd9f8c | cg202 | 149 111
+find 121 48 = -1 => e8eb43b6e9cd9f8c | | 149 111
+allocmeshes 56 0 37 0 => 6f37ab415642b289 | | 149 111
+find 180 116 = -1 => 6f37ab415642b289 | | 149 111
+append 141 84 = 0 => 6c9c79f9bacda389 | | 149 111
+delgeo 152 => 84df79c827f9f6ee | dg152 | 148 111
+addmorph 42 2 => 3b505971871f59b3 | | 148 111
+settex 117 18 => c52c77618a49a0c0 | | 148 111
+addrefgeo 96 => 3f93d3833276124b | | 148 111
+colored 150 = 0 => 3f93d3833276124b | | 148 111
+newgeo 13 59 196734 = 203 => 59601157fa38e84e | cg203 | 149 111
+newgeo 0 36 0 = 204 => db671faeda367d7b | cg204 | 150 111
+lock 145 3454 => 72bdc37168e815f2 | | 150 111
+newgeo 27 18 164 = 205 => 68a921f4575ea17b | cg205 | 151 111
+newgeo 1 51 63 = 206 => 4c141bd82938ba24 | cg206 | 152 111
+guess 33 = 64 => 4c141bd82938ba24 | | 152 111
+addrefmat 123 => 79aa7a551e77b713 | | 152 111
+newtex = 30 => 49365d1e99459e1c | ct30 | 152 111
+newtex = 31 => d2b4e07d2e3d7fd2 | ct31 | 152 111
+newgeo 13 19 393288 = 207 => dd827def08f86e83 | cg207 | 153 111
+deltex 30 => 20d67ece531618ac | dt30 | 153 111
+append 7 121 = 6 => 6e4eb8ef9c464a6f | | 153 111
+append 170 49 = 0 => 038444f03d161f94 | | 153 111
+newmat = 127 => b48da7b3500069df | cm127 | 153 112
+allocmeshes 71 3 153 1 => 263ab891938081a7 | | 153 112
+allocmeshes 66 0 102 0 => bcad5b6f16efe287 | | 153 112
+newmat = 128 color 02d9947e => a1abf815d58c1126 | cm128 | 153 113
+unlock 170 => 854d3bcf8395a063 | | 153 113
+settex 82 21 => 03eaacc7d1c4bb91 | | 153 113
+delgeo 14 => 954846500372faa6 | | 153 113
+delmat 121 => 82bf9f3fdd224081 | | 153 113
+newmat = 129 => 63fe4d43f131c7e4 | cm129 | 153 114
+newmat = 130 color 018116d6 => 80faef66c12f78c8 | cm130 | 153 115
+newtex = 32 => 42390a51e6df6279 | ct32 | 153 115
+guess 163 = 38 => 42390a51e6df6279 | | 153 115
+allocmeshes 126 1 19 0 => 67b3a500ee3d6b87 | | 153 115
+newgeo 7 34 187 = 208 => 7548acbf911ec239 | cg208 | 154 115
+spheres 84 => 7548acbf911ec239 | | 154 115
+newgeo 0 36 458772 = 209 => b4aef962b81c5bf3 | cg209 | 155 115
+colored 66 = 0 => b4aef962b81c5bf3 | | 155 115
+allocmeshes 150 0 24 0 => 24f829145d37bd8c | | 155 115
+lock 90 4095 => 77d4d80fd3170c75 | | 155 115
+spheres 106 => 77d4d80fd3170c75 | | 155 115
+colored 106 = 0 => 77d4d80fd3170c75 | | 155 115
+delgeo 139 => 8928bfa7ed6a420e | dg139 | 154 115
+deltex 28 => aa16e013106bbb83 | dt28 | 154 115
+addrefgeo 101 => 71a31d6056b0b8dc | | 154 115
+colored 43 = 0 => 71a31d6056b0b8dc | | 154 115
+spheres 148 => 475ed6d28e14a012 | | 154 115
+addmorph 122 1 => 4db0b84eacb4800c | | 154 115
+append 96 28 = 0 => f048fcb1b618e7c2 | | 154 115
+newgeo 0 37 17236159 = 210 => a2a5a09a8aceac74 | cg210 | 155 115
+addrefgeo 156 => 78a18a16339d67df | | 155 115
+fill 146 1018303241 => be329f431843ab6b | | 155 115
+colored 155 = 0 => be329f431843ab6b | | 155 115
+addrefgeo 163 => b4e2e506285c6a2c | | 155 115
+guess 65 = 9 => b4e2e506285c6a2c | | 155 115
+find 130 32 = -1 => b4e2e506285c6a2c | | 155 115
+newtex = 33 => ae2dc14e187eb11c | ct33 | 155 115
+allocmeshes 110 0 81 0 => aeead688a46bad8f | | 155 115
+settex 112 32 => 8f79bd053361dca8 | | 155 115
+colored 103 = 0 => 8f79bd053361dca8 | | 155 115
+deltex 33 => a0a6db49e5e5dc38 | dt33 | 155 115
+lock 108 4095 => 386e4d14aa5d83ee | | 155 115
+lock 169 4095 => ab89b639cd003e84 | | 155 115
+addrefgeo 187 => 4aab91a12a3b8fbf | | 155 115
+allocmeshes 130 0 261 0 => ac720988224c5eac | | 155 115
+addrefgeo 117 => c321034a1b773259 | | 155 115
+find 83 12 = -1 => c321034a1b773259 | | 155 115
+addrefgeo 146 => 13ef6448962b96fa | | 155 115
+addmorph 202 2 => e5e5c3f3bc8bbc58 | | 155 115
+fill 121 460313969 => 5db0fafe9322a89d | | 155 115
+fill 124 3444192730 => e5877bf40271bdf6 | | 155 115
+allocmeshes 141 3 284 0 => 0623f945aa18b242 | | 155 115
+find 130 34 = -1 => 0623f945aa18b242 | | 155 115
+allocmeshes 84 2 113 1 => f70209f003e2cef2 | | 155 115
+append 25 62 = 0 => 8270d1c7aaee75b0 | | 155 115
+allocmeshes 84 3 129 0 => d57d6fa3f1f1668c | | 155 115
+addmorph 141 0 => d57d6fa3f1f1668c | | 155 115
+newgeo 0 28 28 = 211 => 1f49f99cfe110348 | cg211 | 156 115
+addrefgeo 95 => b99acf31c31f10f7 | | 156 115
+fill 211 3243819432 => b99acf31c31f10f7 | | 156 115
+find 165 49 = -1 => b99acf31c31f10f7 | | 156 115
+colored 160 = 0 => b99acf31c31f10f7 | | 156 115
+allocmeshes 203 3 93 0 => a0ee8f70296cecf4 | | 156 115
+find 58 106 = -1 => a0ee8f70296cecf4 | | 156 115
+newmat = 131 color 1d129fc8 => 390cd0fac91e987f | cm131 | 156 116
+clonemat 27 = 132 => ea11b2874a8f896e | cm132 ym132,27 | 156 117
+addmorph 164 1 => e02f704a4028ac75 | | 156 117
+lock 143 1823 => 34cb0b51767214bf | | 156 117
+clonemat 34 = 133 => 52766691561759be | cm133 ym133,34 | 156 118
+append 147 29 = 0 => d87d3a9c0609c187 | | 156 118
+delgeo 197 => 5977c22883e15c94 | dg197 | 155 118
+settex 64 18 => 86265d05c78ddd5c | | 155 118
+newgeo 31 0 119 = 212 => 45bf38797c8006c3 | cg212 | 156 118
+newmat = 134 => 0389dfa142fb1371 | cm134 | 156 119
+settex 78 -1 => 0389dfa142fb1371 | | 156 119
+newgeo 31 59 117 = 213 => 2af8fed787d55a82 | cg213 | 157 119
+append 198 72 = 0 => 97d3c3f14cbbb3fc | | 157 119
+newmat = 135 color 67a2175d => c577b4149efdc088 | cm135 | 157 120
+spheres 133 => 564713e88be90111 | | 157 120
+newgeo 13 0 17039376 = 214 => 2db86d0edf932a9b | cg214 | 158 120
+find 195 25 = -1 => 2db86d0edf932a9b | | 158 120
+lock 144 4095 => 4a15e4cd175beb01 | | 158 120
+newtex = 34 => df8efa632248b0f2 | ct34 | 158 120
+delgeo 25 => 2a7077374236d027 | | 158 120
+addrefgeo 206 => 400208b3ef53f848 | | 158 120
+delgeo 213 => 0403c3b73487aa77 | dg213 | 157 120
+newgeo 0 0 129 = 215 => 1667319adc0f60dd | cg215 | 158 120
+find 96 73 = -1 => 1667319adc0f60dd | | 158 120
+guess 28 = 27 => 1667319adc0f60dd | | 158 120
+newgeo 0 38 75 = 216 => a6cd6b015317a469 | cg216 | 159 120
+delgeo 216 => 1667319adc0f60dd | dg216 | 158 120
+settex 127 32 => cbde64420aa4fda8 | | 158 120
+newmat = 136 => ceeed8837758cd30 | cm136 | 158 121
+newgeo 0 51 192 = 217 => 24bd9361d4489682 | cg217 | 159 121
+delgeo 170 => 10d4393fcd1d0dd0 | dg170 | 158 121
+guess 37 = 111 => 10d4393fcd1d0dd0 | | 158 121
+addmorph 132 2 => 81040274e6b19962 | | 158 121
+fill 17 1663817877 => 4f156fb074e492f2 | | 158 121
+colored 110 = 0 => 4f156fb074e492f2 | | 158 121
+settex 55 18 => 7974bb18849395d9 | | 158 121
+guess 49 = 44 => 7974bb18849395d9 | | 158 121
+newgeo 28 17 393227 = 218 => 8e56d5704056c6c1 | cg218 | 159 121
+delgeo 71 => c6b22ac8d5f74bed | dg71 | 158 121
+newmat = 137 color 4aa26591 => 3bc4c44a82e962a6 | cm137 | 158 122
+guess 116 = 58 => 3bc4c44a82e962a6 | | 158 122
+addrefgeo 164 => 55e0f3117b96127b | | 158 122
+append 44 61 = 3 => 8234039331bc9d1c | | 158 122
+newgeo 6 8 67 = 219 => f8d50552f29f6190 | cg219 | 159 122
+addrefgeo 128 => ca0784a71bafec83 | | 159 122
+addrefgeo 89 => 07f9bd4fc5d6a654 | | 159 122
+spheres 79 => 07f9bd4fc5d6a654 | | 159 122
+newtex = 35 => c54c3b8545ad1ec6 | ct35 | 159 122
+addmorph 65 2 => 9c58a82c7a0b51c5 | | 159 122
+delgeo 151 => 17a514d85e7cbdba | dg151 | 158 122
+append 72 11 = 1 => 9c8ba8bc32ce8e39 | | 158 122
+fill 132 1883151681 => 15d5e572e80e6aa7 | | 158 122
+lock 44 4095 => 4dbaf702215268c5 | | 158 122
+deltex 31 => 063b37bab0827f0b | dt31 | 158 122
+newgeo 23 27 126 = 220 => 219f6f17d7e1421b | cg220 | 159 122
+append 161 19 = 0 => 0836b75afebef498 | | 159 122
+newmat = 138 => 047138b2af4be576 | cm138 | 159 123
+newmat = 139 => 73477d031512c10d | cm139 | 159 124
+find 103 135 = -1 => 73477d031512c10d | | 159 124
+newgeo 12 26 53 = 221 => 915954ec8e505bde | cg221 | 160 124
+lock 177 4095 => 915954ec8e505bde | | 160 124
+addmorph 129 2 => 39af083616353154 | | 160 124
+addrefgeo 4 => 80d788f8e3ddd30d | | 160 124
+lock 102 1128 => 0da5962c5531514d | | 160 124
+guess 49 = 44 => 0da5962c5531514d | | 160 124
+guess 4 = 3 => 0da5962c5531514d | | 160 124
+append 156 49 = 0 => c90046549f7dd16a | | 160 124
+fill 122 124100510 => 56f0330b352a23ec | | 160 124
+append 176 137 = 0 => f00e1f01866577bb | | 160 124
+append 212 59 = 0 => 8b4804d41358deaa | | 160 124
+find 43 86 = -1 => 8b4804d41358deaa | | 160 124
+addmorph 163 2 => 3eafe6f6d3cc5dc8 | | 160 124
+newgeo 29 6 524336 = 222 => daf758ef2304a85e | cg222 | 161 124
+delgeo 210 => 1abc281e2118ddb4 | dg210 | 160 124
+colored 68 = 1 => 1abc281e2118ddb4 | | 160 124
+colored 158 = 0 => 1abc281e2118ddb4 | | 160 124
+find 209 127 = -1 => 1abc281e2118ddb4 | | 160 124
+addrefgeo 69 => 19f5107d492f659b | | 160 124
+newmat = 140 => 9800eb02f9954d13 | cm140 | 160 125
+lock 167 3046 => df954ef893ae9d98 | | 160 125
+addrefgeo 127 => 63389c16fe5e3037 | | 160 125
+addrefgeo 209 => 181b57902c586d98 | | 160 125
+colored 37 = 1 => 181b57902c586d98 | | 160 125
+colored 80 = 0 => 181b57902c586d98 | | 160 125
+find 204 44 = -1 => 181b57902c586d98 | | 160 125
+spheres 201 => 181b57902c586d98 | | 160 125
+addrefgeo 209 => 13e8ae580f262911 | | 160 125
+lock 146 4095 => f08f116eb836e467 | | 160 125
+delgeo 203 => 8f76d6a295521cb9 | dg203 | 159 125
+newgeo 30 26 131138 = 223 => 9935c19c4ca4358b | cg223 | 160 125
+lock 13 4095 => 9935c19c4ca4358b | | 160 125
+lock 58 2269 => 865aa8bf83ef2363 | | 160 125
+fill 169 3467531205 => 865aa8bf83ef2363 | | 160 125
+allocdata 202 => d6337f7f28451c7b | | 160 125
+lock 146 4095 => d6337f7f28451c7b | | 160 125
+find 121 113 = -1 => d6337f7f28451c7b | | 160 125
+allocmeshes 222 1 282 0 => 960ee7724d5be133 | | 160 125
+fill 192 1003236069 => 1aac32153e304d8f | | 160 125
+settex 17 29 => 5076987aefd2f050 | | 160 125
+append 145 10 = 0 => 04d2a3022f3dd2ae | | 160 125
+spheres 132 => e4b0cfa93a457753 | | 160 125
+fill 23 2579689548 => 479f0d7d50e20715 | | 160 125
+newgeo 34 0 327753 = 224 => 9aaee09001726afe | cg224 | 161 125
+allocmeshes 117 0 189 1 => 10a7a88049c0bea4 | | 161 125
+addmorph 88 0 => 10a7a88049c0bea4 | | 161 125
+newgeo 1 49 99 = 225 => 961b305a5f2c70d8 | cg225 | 162 125
+append 28 131 = 1 => 7b9b51164a819f7b | | 162 125
+append 102 28 = 0 => ecf99fb5a2060bab | | 162 125
+lock 212 4095 => 5d4bf34d94970461 | | 162 125
+addmorph 165 2 => 650f0f632c5f889e | | 162 125
+lock 79 4095 => fe2ce144167fa735 | | 162 125
+deltex 26 => 3aa53910fd64bdde | dt26 | 162 125
+newmat = 141 => 5aaffa7a7dad4c67 | cm141 | 162 126
+append 168 135 = 0 => a43374f1e251c5b2 | | 162 126
+newgeo 2 23 42 = 226 => 22a07260866280f6 | cg226 | 163 126
+clonemat 68 = 142 => 3f078a6e5f0d5270 | cm142 ym142,68 | 163 127
+find 88 26 = -1 => 3f078a6e5f0d5270 | | 163 127
+lock 211 192 => 8dbb6a5b86d8d3b0 | | 163 127
+addrefgeo 204 => 332ced09b31e68d7 | | 163 127
+fill 160 1839507674 => e8c0a136359e9759 | | 163 127
+spheres 199 => e8c0a136359e9759 | | 163 127
+newgeo 5 5 32 = 227 => 9915a9433a6859ae | cg227 | 164 127
+unlock 124 => caf027c938388cf9 | | 164 127
+spheres 70 => 6d29b06847369777 | | 164 127
+find 218 134 = -1 => 6d29b06847369777 | | 164 127
+lock 96 2688 => 0dd3e0168d7f437d | | 164 127
+delgeo 87 => 23a6d5c421648166 | dg87 | 163 127
+lock 96 4095 => 1f0be50ea12b310a | | 163 127
+find 82 106 = -1 => 1f0be50ea12b310a | | 163 127
+find 196 10 = -1 => 1f0be50ea12b310a | | 163 127
+newgeo 26 1 255 = 228 => 0b779b11ef422a3f | cg228 | 164 127
+clonemat 100 = 143 => 36c8e0218097b054 | cm143 ym143,100 | 164 128
+allocmeshes 200 3 231 0 => 6a5eeb761b370cfc | | 164 128
+delgeo 204 => 96d91dc80baed0a7 | | 164 128
+addmorph 146 2 => 6bc84fc6e1ff4a92 | | 164 128
+colored 178 = 0 => 6bc84fc6e1ff4a92 | | 164 128
+newmat = 144 => 7f88eaf28e172282 | cm144 | 164 129
+delgeo 95 => 8b88d1bce1a463ed | | 164 129
+deltex 27 => cb679bb109b3c887 | dt27 | 164 129
+delgeo 199 => 851a1da5863e755f | dg199 | 163 129
+fill 146 1800610328 => 07e02ad126773c38 | | 163 129
+spheres 128 => 5a357dea943f7c9d | | 163 129
+allocdata 113 => 468ee6d0c553cbf9 | | 163 129
+find 41 70 = -1 => 468ee6d0c553cbf9 | | 163 129
+newmat = 145 => 3f3c7a78f61c0928 | cm145 | 163 130
+delgeo 195 => c1e9c81d836ef350 | dg195 | 162 130
+delgeo 174 => b6edc5964ba51197 | | 162 130
+colored 159 = 0 => b6edc5964ba51197 | | 162 130
+find 49 109 = -1 => b6edc5964ba51197 | | 162 130
+colored 88 = 0 => b6edc5964ba51197 | | 162 130
+newgeo 35 1 227 = 229 => 08eddf0c08f1aaa8 | cg229 | 163 130
+guess 222 = 94 => 08eddf0c08f1aaa8 | | 163 130
+append 21 93 = 1 => 2703edb4d9994b91 | | 163 130
+delmat 145 => 8fef14cd4fbc22b0 | dm145 | 163 129
+append 229 140 = 0 => 66e4a229846f2e96 | | 163 129
+fill 148 145431833 => bdbda6cfc8ca262a | | 163 129
+settex 30 34 => 70247e0cef6aeeeb | | 163 129
+colored 204 = 0 => 70247e0cef6aeeeb | | 163 129
+newgeo 30 23 185 = 230 => 347c7195c885d128 | cg230 | 164 129
+addrefgeo 162 => b0b20caaf16c3a13 | | 164 129
+delgeo 145 => 30194fe0177ae725 | dg145 | 163 129
+fill 24 2540772313 => 11b2594c0ef147df | | 163 129
+newmat = 146 color 34c29fa7 => 48e5b6f97b3bd885 | cm146 | 163 130
+delgeo 88 => a37eff727ec4f96e | | 163 130
+addrefgeo 83 => 0e396e4ce902ef87 | | 163 130
+fill 75 4221240574 => 0e396e4ce902ef87 | | 163 130
+lock 130 434 => c9e8fe3ad40c25f6 | | 163 130
+allocmeshes 73 3 74 0 => b5ca96cabc6f4cf9 | | 163 130
+find 120 106 = -1 => b5ca96cabc6f4cf9 | | 163 130
+addrefgeo 75 => 342f9dd51f35d8f2 | | 163 130
+spheres 130 => 342f9dd51f35d8f2 | | 163 130
+spheres 163 => 16e24b66e3ca9beb | | 163 130
+addrefgeo 183 => 91c0614a3c897fa8 | | 163 130
+newmat = 147 => fdd993ebb3cf943b | cm147 | 163 131
+addrefgeo 176 => f05e46ee55c3f0b0 | | 163 131
+guess 129 = 65 => f05e46ee55c3f0b0 | | 163 131
+addrefmat 25 => c2117c4f005c2b7b | | 163 131
+newtex = 36 => bbb47f568de650ae | ct36 | 163 131
+append 70 85 = 0 => 813ccc86de559fdf | | 163 131
+lock 217 3884 => f56d7c079d9f91f6 | | 163 131
+addmorph 95 2 => 437a9a4ed7b3b2f9 | | 163 131
+spheres 126 => 437a9a4ed7b3b2f9 | | 163 131
+addmorph 192 0 => 437a9a4ed7b3b2f9 | | 163 131
+settex 23 -1 => 437a9a4ed7b3b2f9 | | 163 131
+guess 25 = 94 => 437a9a4ed7b3b2f9 | | 163 131
+fill 206 1854440723 => 51b8f38870a53bed | | 163 131
+newmat = 148 color 0cb313c8 => ac81c49c2dcf242b | cm148 | 163 132
+lock 157 4095 => 2d72188788dda919 | | 163 132
+find 120 28 = -1 => 2d72188788dda919 | | 163 132
+addrefmat 85 => 932cae0c6ce814ea | | 163 132
+delgeo 127 => 06c4f56ad5eae7c9 | | 163 132
+newgeo 0 29 16777350 = 231 => b9015cea442f04ec | cg231 | 164 132
+lock 160 4095 => a6bafbcefd35cdef | | 164 132
+newgeo 29 0 32 = 232 => 887ef6b136d52ceb | cg232 | 165 132
+fill 186 385224748 => 2328e1973aa00408 | | 165 132
+addrefgeo 178 => c58bb483dd06c027 | | 165 132
+find 64 25 = -1 => c58bb483dd06c027 | | 165 132
+delgeo 123 => 8862ad9afd59868c | | 165 132
+spheres 206 => 10b04f203d0bb1f7 | | 165 132
+lock 156 4095 => fd22ec6364ace4d5 | | 165 132
+fill 147 1378435570 => 612d38816997dd59 | | 165 132
+lock 182 450 => 8cfd71b6f51b7484 | | 165 132
+newtex = 37 => d7cc07405e59d630 | ct37 | 165 132
+deltex 29 => 89e44c4881fb6c03 | | 165 132
+spheres 90 => f789f77836ffb0b8 | | 165 132
+newmat = 149 color 87cb8c64 => 4afe0783ca3b269b | cm149 | 165 133
+fill 158 3959849193 => d594d481329d77ab | | 165 133
+delgeo 128 => 3de06808dbc9adb4 | | 165 133
+delmat 102 => de254b60c0d7a603 | | 165 133
+colored 149 = 0 => de254b60c0d7a603 | | 165 133
+addmorph 63 0 => de254b60c0d7a603 | | 165 133
+find 192 59 = -1 => de254b60c0d7a603 | | 165 133
+find 196 17 = -1 => de254b60c0d7a603 | | 165 133
+newmat = 150 => f3e14a4b1240a81d | cm150 | 165 134
+allocmeshes 69 2 236 0 => 4bee5f1c31e6763f | | 165 134
+deltex 35 => 0cdb820c08f9be4d | dt35 | 165 134
+clonemat 96 = 151 => 90efdf5d3461c25a | cm151 ym151,96 | 165 135
+newgeo 38 9 115 = 233 => 424eedf9377b0bae | cg233 | 166 135
+allocmeshes 76 3 51 0 => 13bb074e5033b0af | | 166 135
+colored 118 = 0 => 13bb074e5033b0af | | 166 135
+newgeo 23 52 170 = 234 => 5805e75cf83d9aeb | cg234 | 167 135
+newmat = 152 => 136c7e65ef5210c3 | cm152 | 167 136
+delmat 58 => 4a2a5e1a8d813658 | | 167 136
+addmorph 47 0 => 4a2a5e1a8d813658 | | 167 136
+addmorph 63 1 => f2df9fabae10205a | | 167 136
+newgeo 29 0 65640 = 235 => 9254815af0ae4817 | cg235 | 168 136
+spheres 28 => 9254815af0ae4817 | | 168 136
+append 133 95 = 0 => b89bc02266b4951c | | 168 136
+addrefgeo 89 => 5af716779c0d67a9 | | 168 136
+newtex = 38 => f7bfd014ebf4f2de | ct38 | 168 136
+deltex 37 => 77f21382106fccea | dt37 | 168 136
+newtex = 39 => 9d42b5114ec9ebdc | ct39 | 168 136
+deltex 36 => bafdb3f5ac5903e9 | dt36 | 168 136
+addrefgeo 129 => 36ef9bfa98913812 | | 168 136
+newmat = 153 => 761f7d987e72ce4b | cm153 | 168 137
+addmorph 12 1 => 20d2c036943cbdb2 | | 168 137
+delmat 105 => a591e7b74b0a8d8f | dm105 | 168 136
+append 147 102 = 1 => c1b472cb19750401 | | 168 136
+addmorph 220 2 => 7e983d0c3c643b8f | | 168 136
+newgeo 35 0 65555 = 236 => ad511ad005e9f614 | cg236 | 169 136
+newgeo 14 2 181 = 237 => 3bff225bd4f8e285 | cg237 | 170 136
+addrefgeo 219 => d7435673ce754cfe | | 170 136
+clonemat 39 = 154 => 6be6d139ecafcbea | cm154 ym154,39 | 170 137
+colored 24 = 0 => 6be6d139ecafcbea | | 170 137
+colored 179 = 0 => 6be6d139ecafcbea | | 170 137
+colored 215 = 0 => 6be6d139ecafcbea | | 170 137
+delgeo 110 => d3e04e392be594ed | dg110 | 169 137
+delmat 138 => abd6f9989a413a57 | dm138 | 169 136
+fill 177 336836643 => abd6f9989a413a57 | | 169 136
+newmat = 155 color 4d168c55 => b93c36fc59d42d68 | cm155 | 169 137
+newgeo 25 40 201 = 238 => e2fbb565fb866d9d | cg238 | 170 137
+newtex = 40 => 6ab3d1f86fcfb9c4 | ct40 | 170 137
+addrefgeo 178 => 7422d8242fa9b371 | | 170 137
+fill 98 1761831690 => 6dda3f02b473f052 | | 170 137
+newgeo 32 1 56 = 239 => 9e9b7eb475e4e06b | cg239 | 171 137
+settex 144 34 => 01790bf95cd07e48 | | 171 137
+spheres 188 => 01790bf95cd07e48 | | 171 137
+settex 94 12 => 0bfbe43b2ed73839 | | 171 137
+spheres 236 => 0bfbe43b2ed73839 | | 171 137
+addmorph 24 2 => ea14801f1febbca3 | | 171 137
+fill 179 2732799872 => 31342a5873caa8d3 | | 171 137
+newgeo 17 43 249 = 240 => 80421aab748713eb | cg240 | 172 137
+lock 220 2430 => 624555c41cd4aef2 | | 172 137
+addrefmat 16 => 6414334a2b988d6b | | 172 137
+delgeo 73 => 61b8647e36f1e4ef | dg73 | 171 137
+deltex 34 => 1c60e93b77ef911e | | 171 137
+find 1 93 = -1 => 1c60e93b77ef911e | | 171 137
+newgeo 8 53 6 = 241 => dc01bc965e2a29d4 | cg241 | 172 137
+addrefgeo 96 => 491486256c743961 | | 172 137
+find 138 153 = -1 => 491486256c743961 | | 172 137
+newgeo 25 56 25 = 242 => 2318dc693b36ec10 | cg242 | 173 137
+delmat 120 => 4a0dde28d2fb9b1c | dm120 | 173 136
+lock 33 4095 => 24cd275a12a21ba8 | | 173 136
+find 68 103 = -1 => 24cd275a12a21ba8 | | 173 136
+spheres 192 => 6210dda02804fa0d | | 173 136
+colored 169 = 0 => 6210dda02804fa0d | | 173 136
+colored 205 = 0 => 6210dda02804fa0d | | 173 136
+guess 116 = 58 => 6210dda02804fa0d | | 173 136
+find 14 38 = -1 => 6210dda02804fa0d | | 173 136
+newgeo 21 19 229 = 243 => 55b353347f543ce8 | cg243 | 174 136
+clonemat 118 = 156 => 967dccad3162cea0 | cm156 ym156,118 | 174 137
+addmorph 130 1 => ee6c01b2ddae3d3d | | 174 137
+allocmeshes 95 2 288 0 => 18a9df83b3ce13f8 | | 174 137
+colored 209 = 0 => 18a9df83b3ce13f8 | | 174 137
+fill 103 2499177974 => d98ed84f7c18dbf1 | | 174 137
+append 222 49 = 0 => c260e147ed7cdd50 | | 174 137
+allocdata 214 => e6a73bcc670edee1 | | 174 137
+newmat = 157 => 3e1dae5d3cd3fa68 | cm157 | 174 138
+fill 230 4198381662 => 6728c96ab9034a03 | | 174 138
+newgeo 29 51 17170459 = 244 => d179d5625c6b8e1b | cg244 | 175 138
+find 202 98 = -1 => d179d5625c6b8e1b | | 175 138
+append 211 69 = 0 => e4af868b83508c1a | | 175 138
+guess 128 = 74 => e4af868b83508c1a | | 175 138
+deltex 39 => b3f0e40a293027ac | dt39 | 175 138
+addrefgeo 123 => 95fd9773f443fa8f | | 175 138
+newgeo 14 42 32 = 245 => b0346ff90f86f0aa | cg245 | 176 138
+find 211 73 = -1 => b0346ff90f86f0aa | | 176 138
+addmorph 47 2 => 70a15096e7d77e32 | | 176 138
+newmat = 158 color cb06fd7f => 1ff567ed1637264b | cm158 | 176 139
+addrefgeo 25 => fec32167c79173de | | 176 139
+append 133 122 = 1 => ca22fa6c6a267e8c | | 176 139
+newgeo 0 48 131104 = 246 => aea871506501dbd3 | cg246 | 177 139
+newgeo 40 56 16777275 = 247 => 8682e9e79c7a491f | cg247 | 178 139
+delmat 64 => 018ddb839e15568a | | 178 139
+addmorph 126 2 => c58da895ba4f399a | | 178 139
+newgeo 34 15 95 = 248 => d9f4873df01907ae | cg248 | 179 139
+newgeo 1 37 8 = 249 => e9a254b283e53cde | cg249 | 180 139
+guess 25 = 94 => e9a254b283e53cde | | 180 139
+delgeo 116 => 9b12390a1cfd3a13 | | 180 139
+find 183 123 = -1 => 9b12390a1cfd3a13 | | 180 139
+newtex = 41 => 0d320970e5d5020b | ct41 | 180 139
+lock 129 4095 => fe85d863c6fedd9a | | 180 139
+addrefmat 19 => 661d1fd26d008be9 | | 180 139
+settex 114 -1 => 661d1fd26d008be9 | | 180 139
+addmorph 102 2 => ebfa5c461948317a | | 180 139
+newgeo 29 0 17170474 = 250 => 5013cf1055a6912c | cg250 | 181 139
+addrefgeo 14 => 006fb12735295e1f | | 181 139
+colored 205 = 0 => 006fb12735295e1f | | 181 139
+newtex = 42 => dfc0418d7ed5ba44 | ct42 | 181 139
+fill 39 1920513343 => 0b8ee08ea3073bcd | | 181 139
+allocmeshes 35 3 69 1 => 25a1fcd2a7ca442d | | 181 139
+addmorph 68 1 => 139e299ad6c1be92 | | 181 139
+deltex 42 => 9feea20f915984e9 | dt42 | 181 139
+addmorph 89 0 => 9feea20f915984e9 | | 181 139
+find 64 53 = -1 => 9feea20f915984e9 | | 181 139
+spheres 140 => 07f898650fe2e954 | | 181 139
+settex 130 29 => 0ab200d8c039cac6 | | 181 139
+deltex 41 => 9685e6b94bc5d25e | dt41 | 181 139
+find 228 77 = -1 => 9685e6b94bc5d25e | | 181 139
+settex 133 -1 => 9685e6b94bc5d25e | | 181 139
+delgeo 164 => 93ffb008f7403d8b | | 181 139
+allocmeshes 133 1 242 0 => dba4d65b0fb89a1e | | 181 139
+newgeo 0 38 7 = 251 => 24a560090c4aae07 | cg251 | 182 139
+allocmeshes 227 0 135 1 => b6686bcda8edb335 | | 182 139
+addmorph 180 2 => 4350ae197a45f1d5 | | 182 139
+guess 126 = 6 => 4350ae197a45f1d5 | | 182 139
+allocdata 120 => 65fec6916c6648d4 | | 182 139
+fill 153 3074822370 => 1b3cb4f2d732bc7e | | 182 139
+spheres 138 => 1b3cb4f2d732bc7e | | 182 139
+fill 59 1681993658 => eb55c923fd6592ce | | 182 139
+newgeo 8 0 262274 = 252 => 07c65926aadd0ac1 | cg252 | 183 139
+spheres 230 => 6402a2c45520f6f2 | | 183 139
+allocmeshes 69 3 236 1 => 3e2413130eac2469 | | 183 139
+addmorph 53 2 => dc0be4a307eca003 | | 183 139
+addrefgeo 178 => ba3f2d946680eda8 | | 183 139
+colored 96 = 1 => ba3f2d946680eda8 | | 183 139
+fill 172 2039129292 => 3b31770896d55cf6 | | 183 139
+newgeo 5 52 131322 = 253 => 45253f1b5d599145 | cg253 | 184 139
+find 40 133 = -1 => 45253f1b5d599145 | | 184 139
+append 90 57 = 0 => adbc9620b5248470 | | 184 139
+spheres 232 => adbc9620b5248470 | | 184 139
+addmorph 120 1 => 5dc97f2b1647eb7b | | 184 139
+settex 91 -1 => 5dc97f2b1647eb7b | | 184 139
+newgeo 8 16 9 = 254 => daf44867862a7727 | cg254 | 185 139
+allocmeshes 122 3 250 1 => 000d41905f8f8c9d | | 185 139
+fill 228 2042836585 => 0170f86259798398 | | 185 139
+lock 235 4095 => 1a646d34703087ea | | 185 139
+colored 68 = 1 => 1a646d34703087ea | | 185 139
+settex 90 16 => 2a32b7ad8ce866e7 | | 185 139
+newmat = 159 => f5b8ba6951ed7718 | cm159 | 185 140
+delgeo 237 => a1ac1c66cbac2691 | dg237 | 184 140
+newgeo 37 45 196670 = 255 => a85fdbf30b3d98ad | cg255 | 185 140
+fill 249 1085895471 => ceb00d36305d331c | | 185 140
+fill 192 2389014317 => 391aeb5d240f3038 | | 185 140
+addmorph 130 2 => 03b1eec7dc649900 | | 185 140
+clonemat 48 = 160 => 7bd078835bbb3530 | cm160 ym160,48 | 185 141
+lock 72 2367 => 38be72371733b1a4 | | 185 141
+addmorph 222 2 => cfc86a6296060181 | | 185 141
+lock 159 4095 => 55c45d48d6844fe7 | | 185 141
+settex 9 38 => fdf790554b623296 | | 185 141
+delgeo 135 => 99edd24d62e34f75 | dg135 | 184 141
+newgeo 34 45 10 = 256 => 94e7dbeffdafeb30 | cg256 | 185 141
+addrefmat 23 => 457f77795293ebc1 | | 185 141
+append 30 121 = 2 => 48999bf1e9ac28da | | 185 141
+lock 246 4095 => 2c00635a5d62ac20 | | 185 141
+colored 204 = 0 => 2c00635a5d62ac20 | | 185 141
+lock 250 2267 => abdd18069eaf58ff | | 185 141
+find 191 92 = -1 => abdd18069eaf58ff | | 185 141
+colored 177 = 0 => abdd18069eaf58ff | | 185 141
+allocmeshes 17 0 148 0 => 76feab0d32a38642 | | 185 141
+settex 44 -1 => 642e6737cf7ff521 | | 185 141
+colored 253 = 0 => 642e6737cf7ff521 | | 185 141
+find 42 52 = -1 => 642e6737cf7ff521 | | 185 141
+newgeo 15 24 185 = 257 => 7cdb1f44fdebac87 | cg257 | 186 141
+fill 232 3838113428 => 7dae78ec35942f6f | | 186 141
+lock 102 391 => 1a1acfc052a9eeae | | 186 141
+addrefgeo 28 => a69833d705aff1e1 | | 186 141
+addrefgeo 183 => 32d825f331f79c8c | | 186 141
+colored 43 = 0 => 32d825f331f79c8c | | 186 141
+addrefgeo 244 => 68acd1ae3eeb5d4f | | 186 141
+addmorph 29 1 => 0a44095c9bca7cc6 | | 186 141
+spheres 180 => 0a44095c9bca7cc6 | | 186 141
+colored 83 = 0 => 0a44095c9bca7cc6 | | 186 141
+colored 21 = 1 => 0a44095c9bca7cc6 | | 186 141
+find 160 9 = -1 => 0a44095c9bca7cc6 | | 186 141
+newmat = 161 color 2fba9e38 => cd155ae40c1eb99e | cm161 | 186 142
+newmat = 162 => 6d59f6c7f4c09718 | cm162 | 186 143
+newmat = 163 color a2e1b844 => f9fee8c5db994420 | cm163 | 186 144
+append 17 58 = 1 => b1800e0cf47ab652 | | 186 144
+fill 42 753654652 => d508eea73da7c7a6 | | 186 144
+newgeo 0 0 60 = 258 => 68ac9078ba69959e | cg258 | 187 144
+addmorph 175 1 => 9ee083e084441ab2 | | 187 144
+colored 41 = 1 => 9ee083e084441ab2 | | 187 144
+newmat = 164 color 846b9632 => 8f56b8b8b8483041 | cm164 | 187 145
+newgeo 38 49 16 = 259 => 5798da1a0e859ad2 | cg259 | 188 145
+append 23 2 = 2 => 81448ba654d1b7c6 | | 188 145
+fill 148 1292221156 => 45a1f64c1183366a | | 188 145
+find 150 119 = -1 => 45a1f64c1183366a | | 188 145
+allocmeshes 201 0 90 1 => 88da50ea7a83fcd9 | | 188 145
+append 255 108 = 0 => 06f53390c4a13333 | | 188 145
+fill 160 1935287974 => 54209abbaaafd04c | | 188 145
+addmorph 4 2 => 6bb6ea6e2271ec28 | | 188 145
+addrefgeo 113 => 68b8c9be395c67c3 | | 188 145
+append 131 134 = 0 => 1e96d158051370eb | | 188 145
+addmorph 53 1 => caaa0b5d304bd9ca | | 188 145
+fill 196 921395826 => 74541199d59787fc | | 188 145
+newmat = 165 => 16819fe524bc89bd | cm165 | 188 146
+clonemat 117 = 166 => 6610c88093c2523a | cm166 ym166,117 | 188 147
+colored 236 = 0 => 6610c88093c2523a | | 188 147
+spheres 243 => 6610c88093c2523a | | 188 147
+addrefgeo 14 => a80bb8b1ece4f77b | | 188 147
+newgeo 0 26 262233 = 260 => c526a75c556f8079 | cg260 | 189 147
+find 159 34 = -1 => c526a75c556f8079 | | 189 147
+clonemat 101 = 167 => a2060dc447d3e336 | cm167 ym167,101 | 189 148
+addmorph 96 1 => 77bab6088840cae1 | | 189 148
+lock 118 1443 => 772828b82988e615 | | 189 148
+guess 49 = 44 => 772828b82988e615 | | 189 148
+addrefgeo 138 => ef4ce6f290b400aa | | 189 148
+colored 189 = 0 => ef4ce6f290b400aa | | 189 148
+addmorph 248 0 => ef4ce6f290b400aa | | 189 148
+spheres 39 => 48ea5542e9f37be1 | | 189 148
+newgeo 10 35 17301599 = 261 => b04d9219caea811c | cg261 | 190 148
+newgeo 22 10 131126 = 262 => 99f0c5bf472de715 | cg262 | 191 148
+find 178 55 = -1 => 99f0c5bf472de715 | | 191 148
+unlock 68 => 84bd9154559ff663 | | 191 148
+find 123 148 = -1 => 84bd9154559ff663 | | 191 148
+guess 4 = 3 => 84bd9154559ff663 | | 191 148
+addrefgeo 182 => 257a97832a9dca50 | | 191 148
+spheres 76 => 257a97832a9dca50 | | 191 148
+lock 223 1556 => 36707b28876147d2 | | 191 148
+newtex = 43 => 50c732b627998488 | ct43 | 191 148
+newtex = 44 => 8e94fa3b0e733db5 | ct44 | 191 148
+lock 238 4095 => bd01e1190e68a5b3 | | 191 148
+append 238 87 = 0 => fc2421464d483d0c | | 191 148
+newgeo 26 55 101 = 263 => 82e7d66ef35920ad | cg263 | 192 148
+newgeo 20 13 80 = 264 => 5b5c4cfa74c0af08 | cg264 | 193 148
+settex 119 -1 => 5b5c4cfa74c0af08 | | 193 148
+spheres 106 => 5b5c4cfa74c0af08 | | 193 148
+colored 181 = 0 => 5b5c4cfa74c0af08 | | 193 148
+fill 226 4161290394 => 2c6f8f62f47c7c36 | | 193 148
+fill 214 2817617138 => 3f9e6584899823b5 | | 193 148
+newgeo 13 51 16777271 = 265 => 88b1e46b48fa59b2 | cg265 | 194 148
+fill 156 1631430972 => ec711fe974e13a96 | | 194 148
+newgeo 8 3 36 = 266 => c0429df3475e56c3 | cg266 | 195 148
+allocmeshes 238 0 202 0 => 593ae0731b377d3e | | 195 148
+allocmeshes 54 2 148 0 => e56a4e7d2a091e2e | | 195 148
+lock 261 49 => 66377650ddc32707 | | 195 148
+addrefmat 167 => 47430eb9e0e47414 | | 195 148
+addmorph 149 2 => 7c530ee5dffc262d | | 195 148
+newgeo 14 6 210 = 267 => 7d61d457a9e751a4 | cg267 | 196 148
+allocmeshes 64 2 10 1 => 43372830247d0708 | | 196 148
+newgeo 19 49 458933 = 268 => 792cc3e8cc975244 | cg268 | 197 148
+append 4 149 = 5 => 2b454810afc19f51 | | 197 148
+allocmeshes 221 2 81 0 => b4b29b126df11bda | | 197 148
+newmat = 168 => aede61c00e50977a | cm168 | 197 149
+addrefgeo 263 => 5160ff86fdce0f35 | | 197 149
+delgeo 259 => d6f3013079a14266 | dg259 | 196 149
+addrefgeo 248 => 07f0e5475a1c3c25 | | 196 149
+newgeo 7 25 123 = 269 => 18cdf4624a0d5b93 | cg269 | 197 149
+spheres 129 => acdd83e9e9b90a4b | | 197 149
+spheres 4 => eb5eb7c48f92a076 | | 197 149
+append 162 27 = 1 => 6aedbc6d81b16ddb | | 197 149
+spheres 205 => 6aedbc6d81b16ddb | | 197 149
+settex 87 43 => bd6cef2af94cb26b | | 197 149
+delgeo 223 => 0402a912414606f3 | dg223 | 196 149
+newgeo 36 9 67 = 270 => 7d7c67bea28f2126 | cg270 | 197 149
+allocmeshes 205 0 125 1 => 7e0ff6c5f59b400c | | 197 149
+newmat = 169 color c48a7632 => b0632a68489cdc3b | cm169 | 197 150
+addmorph 196 2 => fac4f68e361cf868 | | 197 150
+newgeo 17 59 37 = 271 => 86f376689c6d2c0e | cg271 | 198 150
+addrefgeo 41 => 5c881c86bb6d3345 | | 198 150
+lock 143 2540 => 2d0de5832fe68d6d | | 198 150
+addrefmat 166 => 85a5c5fd252aaa0e | | 198 150
+newgeo 5 56 327901 = 272 => 6674007a6da931f3 | cg272 | 199 150
+addrefgeo 241 => ffe94ed019d6bba4 | | 199 150
+delgeo 64 => 482fb58c8fd6884b | | 199 150
+newmat = 170 => d6275e9ac7c59f29 | cm170 | 199 151
+allocmeshes 208 3 106 0 => ebaff7a61fed3ec6 | | 199 151
+find 128 150 = -1 => ebaff7a61fed3ec6 | | 199 151
+newgeo 30 34 18 = 273 => 2c043aa7a4b70d26 | cg273 | 200 151
+colored 83 = 0 => 2c043aa7a4b70d26 | | 200 151
+addrefmat 49 => f8aa13e83827c6f9 | | 200 151
+addmorph 58 0 => f8aa13e83827c6f9 | | 200 151
+lock 95 4095 => bb0a5e8239c8145c | | 200 151
+delgeo 84 => 6cac6a9d018efa6f | dg84 | 199 151
+addrefgeo 252 => 6563a7878bf96874 | | 199 151
+newgeo 18 39 62 = 274 => 65fc9b6ba7a315de | cg274 | 200 151
+append 128 163 = 0 => 2fd760d9abb503c3 | | 200 151
+newmat = 171 color 58859f11 => 714a51e621514fc9 | cm171 | 200 152
+addmorph 234 0 => 714a51e621514fc9 | | 200 152
+addmorph 68 1 => 75121afe8c6295f6 | | 200 152
+deltex 40 => 921ce5da59b82eef | dt40 | 200 152
+newmat = 172 color c3e0c50d => 8f8e069042d06198 | cm172 | 200 153
+append 56 77 = 0 => 6634753dd9370c3d | | 200 153
+settex 128 34 => a48f1e59b7d0b04e | | 200 153
+newgeo 9 11 458767 = 275 => 5fff4a2dbed37a6d | cg275 | 201 153
+newmat = 173 => 26f327e66fd2c8a8 | cm173 | 201 154
+newgeo 40 21 96 = 276 => 22d10bf5d75d22b6 | cg276 | 202 154
+lock 162 4095 => 91cab096c3cc669e | | 202 154
+settex 121 -1 => 91cab096c3cc669e | | 202 154
+fill 146 2806968554 => 575edf07677d902c | | 202 154
+newmat = 174 => 447cfbd2e35de266 | cm174 | 202 155
+fill 113 1031285353 => 4441c2593b177057 | | 202 155
+spheres 59 => d8b6eb9d7f418d22 | | 202 155
+delgeo 242 => a76311e1f2f127df | dg242 | 201 155
+newgeo 0 37 262181 = 277 => 4035ce7a893e4b78 | cg277 | 202 155
+append 205 75 = 0 => c83f6c2903f8bf73 | | 202 155
+settex 43 16 => d6113fa184f498b4 | | 202 155
+newmat = 175 color 559695e1 => 3cbbacf5c2912098 | cm175 | 202 156
+spheres 201 => 3cbbacf5c2912098 | | 202 156
+delgeo 274 => 04e80ef2e3ae83c6 | dg274 | 201 156
+lock 106 369 => 61718f3699359304 | | 201 156
+addmorph 252 1 => fcf0713274d4b073 | | 201 156
+spheres 241 => fcf0713274d4b073 | | 201 156
+allocmeshes 59 0 217 1 => 3676e193e4898adc | | 201 156
+append 144 143 = 1 => 9145af1fb478e2d3 | | 201 156
+colored 178 = 0 => 9145af1fb478e2d3 | | 201 156
+addrefgeo 222 => fc02c8286feebd0c | | 201 156
+spheres 12 => a7e2651548f04dab | | 201 156
+newmat = 176 color ea79d32d => 581a1e07013e9eb4 | cm176 | 201 157
+guess 141 = 94 => 581a1e07013e9eb4 | | 201 157
+delgeo 162 => 504dbae7b79fdf4f | | 201 157
+settex 16 7 => dc49c94d61fa729b | | 201 157
+lock 165 4095 => cb95187edc53aadb | | 201 157
+addmorph 186 0 => cb95187edc53aadb | | 201 157
+newgeo 11 0 42 = 278 => 783e45ae6d7f8d47 | cg278 | 202 157
+addmorph 4 2 => 4a99a2f1354a2621 | | 202 157
+find 122 28 = -1 => 4a99a2f1354a2621 | | 202 157
+newmat = 177 => 9d0012e1bd4cf8c0 | cm177 | 202 158
+lock 263 2283 => 15811b69eadbf60b | | 202 158
+settex 113 34 => 68c71e6507775502 | | 202 158
+newgeo 31 58 5 = 279 => cff61db2b0218781 | cg279 | 203 158
+delgeo 13 => 1e109d95d8f09704 | | 203 158
+addrefgeo 162 => a3dfa9ea44a7c4b7 | | 203 158
+newgeo 28 11 16777330 = 280 => 72ceeb8547163969 | cg280 | 204 158
+newgeo 0 24 251 = 281 => 675b9c89f41e5eb5 | cg281 | 205 158
+allocmeshes 21 2 160 1 => ae94deb9be54b677 | | 205 158
+addrefgeo 277 => 43df6c030a5e67f4 | | 205 158
+clonemat 23 = 178 => b640afd3dd63a3b1 | cm178 ym178,23 | 205 159
+allocmeshes 29 3 168 0 => cfb385260e61cd99 | | 205 159
+settex 22 -1 => cfb385260e61cd99 | | 205 159
+addrefmat 102 => fdb64175f3e01b5a | | 205 159
+newtex = 45 => 0885c4262bb733c6 | ct45 | 205 159
+newgeo 14 0 150 = 282 => 6c9278c2d73cc7ce | cg282 | 206 159
+append 158 11 = 2 => e2f368bffc078f11 | | 206 159
+newgeo 8 31 200 = 283 => 5319670e564184d7 | cg283 | 207 159
+newgeo 6 20 73 = 284 => 802885b223a044a9 | cg284 | 208 159
+addrefgeo 106 => 15e66a7e0c9ece6c | | 208 159
+addmorph 116 0 => 15e66a7e0c9ece6c | | 208 159
+addrefmat 55 => 5b6eb39e6743e69d | | 208 159
+spheres 224 => 5b6eb39e6743e69d | | 208 159
+addmorph 104 2 => c48e7d4c1c269d43 | | 208 159
+addrefgeo 159 => a7f1d98818a7aa60 | | 208 159
+newgeo 17 12 16777427 = 285 => bd3c9b9749b45ef7 | cg285 | 209 159
+addrefgeo 162 => de5a2b56169fb776 | | 209 159
+newgeo 7 0 21 = 286 => 0e887234d3a04b8c | cg286 | 210 159
+settex 175 22 => 2d65385ed329edb3 | | 210 159
+delgeo 227 => bd0721c16f0a7886 | dg227 | 209 159
+newmat = 179 color 1415bb58 => f646da138f07913d | cm179 | 209 160
+newmat = 180 => f4e52448e775887d | cm180 | 209 161
+allocdata 80 => 8baae771750b8289 | | 209 161
+append 275 102 = 0 => a9ab1360f38751db | | 209 161
+find 208 44 = -1 => a9ab1360f38751db | | 209 161
+addrefgeo 277 => 7304bc575bde0676 | | 209 161
+newgeo 1 26 16777227 = 287 => b6b17edfefe562d9 | cg287 | 210 161
+fill 208 3018024945 => d5464315e82c6d8d | | 210 161
+spheres 192 => b02ce4ec4aeee560 | | 210 161
+newgeo 11 7 16 = 288 => f55f9d42fcc1e6bf | cg288 | 211 161
+settex 178 32 => ebd9613011f33534 | | 211 161
+newmat = 181 color 091aa770 => de4fcc0cfb9418d5 | cm181 | 211 162
+addrefgeo 201 => b7f0c14b8db29416 | | 211 162
+newgeo 23 45 393239 = 289 => e08fa9e5142832dc | cg289 | 212 162
+addmorph 42 2 => 95863f490b17765b | | 212 162
+newmat = 182 => 153f568c70100efd | cm182 | 212 163
+addrefgeo 14 => 09452c1c7cde65fe | | 212 163
+addmorph 278 2 => 9b64457b70665e9f | | 212 163
+allocmeshes 49 1 116 0 => cf1e73bb8feda126 | | 212 163
+newmat = 183 color 6babd933 => 7b76d42703ebd78b | cm183 | 212 164
+newgeo 35 59 16777297 = 290 => 3581a0322d3e8cd9 | cg290 | 213 164
+lock 253 4095 => eaaf0e38ffcba97b | | 213 164
+newtex = 46 => 5db36dfeea58a964 | ct46 | 213 164
+delgeo 138 => 0b1ef2400db37eef | | 213 164
+find 205 57 = -1 => 0b1ef2400db37eef | | 213 164
+find 200 84 = -1 => 0b1ef2400db37eef | | 213 164
+addrefgeo 225 => 5043f2b090d82fdc | | 213 164
+append 262 54 = 0 => 7f964977f7ccff4e | | 213 164
+lock 138 4095 => 9e7721fba5924280 | | 213 164
+delmat 131 => f91ed6bd4ca24223 | | 213 164
+lock 41 4095 => 98683a32de48d8f0 | | 213 164
+colored 153 = 0 => 98683a32de48d8f0 | | 213 164
+fill 205 1849850219 => 273ec7006d55237e | | 213 164
+fill 160 177577187 => 9ac7ad3832fe8b9d | | 213 164
+addrefgeo 104 => b1a5e9f400694a92 | | 213 164
+lock 258 4095 => d694b3523eabc55c | | 213 164
+find 222 17 = -1 => d694b3523eabc55c | | 213 164
+newgeo 9 49 131157 = 291 => 6f1347d5072bc398 | cg291 | 214 164
+fill 233 2599473458 => 08a9eac375945b7f | | 214 164
+allocmeshes 217 3 105 1 => 632301d1b13ff268 | | 214 164
+newgeo 0 32 181 = 292 => 31fca8c0563e12f9 | cg292 | 215 164
+settex 88 -1 => 31fca8c0563e12f9 | | 215 164
+addmorph 258 0 => 31fca8c0563e12f9 | | 215 164
+delmat 96 => aa6caf3d7fd3040c | | 215 164
+allocmeshes 174 2 279 0 => e1c8a8bf944cf8d2 | | 215 164
+addrefgeo 78 => 4ed14cd736e1bc91 | | 215 164
+newmat = 184 => f73835522330488d | cm184 | 215 165
+newmat = 185 color a9e72366 => 4b1d85661c884f0b | cm185 | 215 166
+addmorph 207 2 => dc330ee2e89206fd | | 215 166
+fill 62 3823281466 => 3812696fbc080688 | | 215 166
+append 29 96 = 0 => 33f9498a047f580c | | 215 166
+newgeo 1 31 21 = 293 => 9bd1ceeaf17afa39 | cg293 | 216 166
+addmorph 290 2 => af490a7f3a2c9ea3 | | 216 166
+colored 239 = 0 => af490a7f3a2c9ea3 | | 216 166
+delmat 168 => 7a41f8f85fa4d39b | dm168 | 216 165
+lock 280 4095 => a1b18bc2179c28e5 | | 216 165
+spheres 194 => a1b18bc2179c28e5 | | 216 165
+newgeo 28 36 17301536 = 294 => 1e561acd36e85faa | cg294 | 217 165
+delgeo 76 => 2d71e369115288b8 | dg76 | 216 165
+newmat = 186 => 67f3c28f5d92b6d2 | cm186 | 216 166
+clonemat 118 = 187 => 6b4d440b8e236491 | cm187 ym187,118 | 216 167
+unlock 98 => 6c4a2d6438946493 | | 216 167
+append 134 134 = 0 => fd212070849b7151 | | 216 167
+delmat 45 => e06038fd5a365f16 | | 216 167
+addrefgeo 193 => d6d04128a9566be9 | | 216 167
+settex 80 38 => 2f850e9331403396 | | 216 167
+find 241 42 = -1 => 2f850e9331403396 | | 216 167
+find 118 5 = -1 => 2f850e9331403396 | | 216 167
+colored 218 = 0 => 2f850e9331403396 | | 216 167
+delgeo 39 => beeaa7b90bba1cc5 | | 216 167
+allocmeshes 42 2 195 0 => e5d026028e09ab06 | | 216 167
+newmat = 188 color 22ab91a3 => fbeb7f8f1d11a38b | cm188 | 216 168
+lock 225 2865 => 946d162e4455a0e7 | | 216 168
+addrefgeo 193 => bef824275b24debe | | 216 168
+clonemat 20 = 189 => 6a8f90d3f9fad7b0 | cm189 ym189,20 | 216 169
+newgeo 31 22 10 = 295 => 896d918a7f146672 | cg295 | 217 169
+delgeo 59 => 7f84538976dd7a11 | | 217 169
+fill 283 2294694038 => de3efcdd545d772b | | 217 169
+find 260 117 = -1 => de3efcdd545d772b | | 217 169
+append 179 88 = 0 => c1b683b3af240585 | | 217 169
+colored 143 = 0 => c1b683b3af240585 | | 217 169
+lock 271 4095 => 3a0220ce33f8054f | | 217 169
+addrefgeo 70 => 845b345d23f3d0a8 | | 217 169
+fill 63 1012032072 => e6212e055061b25b | | 217 169
+newtex = 47 => b018723612af4585 | ct47 | 217 169
+fill 150 4062452559 => 080310ddbac000b3 | | 217 169
+clonemat 185 = 190 => 0ad3107a46dce2de | cm190 ym190,185 | 217 170
+settex 50 -1 => 0ad3107a46dce2de | | 217 170
+addmorph 172 2 => 0b4bb912bba7d5f7 | | 217 170
+newmat = 191 color ae411a55 => af6ba485d18a3f30 | cm191 | 217 171
+colored 69 = 1 => af6ba485d18a3f30 | | 217 171
+addrefgeo 72 => b3e0c964cb517445 | | 217 171
+spheres 72 => 86fb60b3a378b278 | | 217 171
+colored 108 = 0 => 86fb60b3a378b278 | | 217 171
+newtex = 48 => 1892a19e8d8587d9 | ct48 | 217 171
+addrefgeo 189 => ae03faf25e08966a | | 217 171
+newgeo 34 30 262144 = 296 => 13d580e473b6a848 | cg296 | 218 171
+newtex = 49 => aa26203a63fff508 | ct49 | 218 171
+spheres 65 => 078a4385e1df5589 | | 218 171
+addmorph 200 1 => 39136b3b335c735a | | 218 171
+fill 75 1358603626 => 39136b3b335c735a | | 218 171
+addrefgeo 25 => db77c68a856cda95 | | 218 171
+newgeo 32 45 262197 = 297 => 9616222cfda1b265 | cg297 | 219 171
+addrefgeo 187 => b74c4d37de47cb28 | | 219 171
+find 290 78 = -1 => b74c4d37de47cb28 | | 219 171

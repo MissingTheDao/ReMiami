@@ -2,7 +2,8 @@
 //! the atomics' world bounding spheres), MorphTarget::calculateBoundingSphere, and the mesh
 //! indices Geometry::buildMeshes makes from the triangle list: per-material lists, or triangle
 //! strips (tristrip.cpp: the dual graph, the simple strips and their stitching; librw's tunnel
-//! pass is disabled there and here). The game builds strips for the water at start-up.
+//! pass is disabled there and here). The game builds strips for the water at start-up;
+//! rwgeomobj's buildMeshes and buildTristrips use these.
 //!
 //! Bit-identical to librw compiled like the game; the strips come out index for index. Checked
 //! against tests/golden/rwgeometry.txt, recorded from the C++ (tests/golden/recorders/rwgeometry).
@@ -321,35 +322,6 @@ pub unsafe extern "C" fn revc_v3d_transform_vectors(out: *mut V3, vs: *const V3,
 pub unsafe extern "C" fn revc_geo_bounding_sphere(verts: *const V3, n: i32, out: *mut Sphere) {
     let verts = if n > 0 { unsafe { std::slice::from_raw_parts(verts, n as usize) } } else { &[] };
     unsafe { *out = bounding_sphere(verts) };
-}
-
-/// The meshes buildMeshes made, until the C++ copies them into its MeshHeader.
-pub struct MeshBuild(Vec<Vec<u16>>);
-
-/// # Safety
-/// `ntris` triangles whose material ids are below `nmats`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn revc_geo_build_meshes(tris: *const Triangle, ntris: i32, nmats: i32, tristrip: i32) -> *mut MeshBuild {
-    let tris = if ntris > 0 { unsafe { std::slice::from_raw_parts(tris, ntris as usize) } } else { &[] };
-    let n = nmats.max(0) as usize;
-    let meshes = if tristrip != 0 { strip_meshes(tris, n) } else { list_meshes(tris, n) };
-    Box::into_raw(Box::new(MeshBuild(meshes)))
-}
-
-/// # Safety
-/// `b` from revc_geo_build_meshes; `i` below its material count.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn revc_geo_mesh_indices(b: *const MeshBuild, i: i32, count: *mut u32) -> *const u16 {
-    let m = unsafe { &(&(*b).0)[i as usize] };
-    unsafe { *count = m.len() as u32 };
-    m.as_ptr()
-}
-
-/// # Safety
-/// `b` from revc_geo_build_meshes, not used afterwards.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn revc_geo_build_free(b: *mut MeshBuild) {
-    drop(unsafe { Box::from_raw(b) });
 }
 
 #[cfg(test)]

@@ -572,6 +572,16 @@ code nothing calls is deleted rather than ported.
   create/clone/destroy/setTexture with their reference counts. The stream writers and the
   tool-only functions (generateTriangles, correctTristripWinding, removeUnusedMaterials) have no
   callers and go.
+  **Done 2026-11-11:** `rust/revc/src/rwgeomobj.rs` (Rust objects on librw's layouts, librw's
+  allocator and plugin lists through hooks; tristrip.cpp is gone, its verifyMesh moved too).
+  Before it, a clean-up commit deleted every model writer (Clump, Atomic, FrameList, Geometry,
+  MaterialList, Material, Light, Camera, Texture, MatFX) and the tool-only functions: the game
+  writes no models (its only stream write is the TXD conversion, which keeps its writer).
+  Checked by `tests/golden/rwgeomobj.txt` (2,321 random operations over geometries, materials,
+  textures and mesh headers, every plugin call in order; `tests/golden/recorders/rwgeomobj`).
+  The local model (bin/ask-local.py) drafted the functions and the test; both drafts needed
+  real fixes (a missed material release, a wrong-direction byte move, flags parsed as hex), so
+  the module was finished by hand.
 - **6b. Atomics, clumps, lights, world.** clump.cpp, light.cpp and world.cpp: Atomic create/
   clone/destroy/setGeometry, the world bounding sphere's dirty logic, the frame sync callbacks;
   Clump create/clone/destroy and its atomic, light and camera lists; Light create/destroy and

@@ -511,6 +511,7 @@ mod golden {
 
     #[test]
     fn matches_librw_golden() {
+        let _guard = crate::testlock();
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/golden/rwtexture.txt");
         let text = std::fs::read_to_string(path).expect("tests/golden/rwtexture.txt");
         unsafe {
