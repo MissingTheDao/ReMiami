@@ -847,12 +847,29 @@ pub extern "C" fn revc_glyph_set_id() -> c_int {
     }
 }
 
+/// Whether the pad actually in use has Nintendo's face layout (B at the bottom, A on the right),
+/// whatever the BUTTON PROMPTS setting shows. Menus then confirm with A and go back with B in every
+/// UI style (user decision 2026-11-12), so CPad::Update swaps the roles while a menu is open.
+fn real_pad_nintendo() -> bool {
+    with(|h| {
+        let slot = h.active_pad.filter(|&s| h.joysticks.present(s)).or_else(|| (0..16).find(|&s| h.joysticks.present(s)));
+        slot.and_then(|s| h.joysticks.face_labels(s)).is_some_and(|l| l[0] == SDL_GAMEPAD_BUTTON_LABEL_B)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_pad_menu_nintendo() -> c_int {
+    real_pad_nintendo() as c_int
+}
+
 /// The name of a button of the pad in use, as the console styles' help lines print it (research
 /// glyph-research/CONSOLE_STYLE_GLYPHS.md 4): `pos` 0-3 the face buttons south, east, west,
 /// north (their printed label: "A", "B", ...; PlayStation shapes as "cross", "circle", "square",
 /// "triangle" for the caller to draw), 4 start, 5 select (the pad's own word: "START", "MENU",
-/// "OPTIONS", "+", ...). Written NUL-terminated into `buf`; returns the length, 0 without a pad
-/// (keyboard) or for an unknown position.
+/// "OPTIONS", "+", ...). `pos` is the menu role's position: on a Nintendo pad the menus confirm
+/// with east (A) and go back with south (B), so 0 names east and the back role (1, or 3 in the
+/// PS2 style, whose back is triangle) names south. Written NUL-terminated into `buf`; returns the
+/// length, 0 without a pad (keyboard) or for an unknown position.
 ///
 /// # Safety
 /// `buf` holds `len` bytes.
@@ -861,6 +878,16 @@ pub unsafe extern "C" fn revc_pad_button_name(pos: c_int, buf: *mut c_char, len:
     let Some((kind, labels)) = glyph_pad() else { return 0 };
     if kind == PadKind::KeyboardMouse || buf.is_null() || len <= 1 {
         return 0;
+    }
+    let mut pos = pos;
+    if real_pad_nintendo() {
+        let back = if ui_style() == glyphs::UiStyle::Ps2 { 3 } else { 1 };
+        pos = match pos {
+            0 => 1,
+            p if p == back => 0,
+            1 => 3,	// (PS2 style: circle takes north, as CPad::Update swaps them)
+            p => p,
+        };
     }
     let name: &str = match pos {
         0..=3 => match labels[pos as usize] {

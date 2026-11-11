@@ -3800,7 +3800,13 @@
  #include "Game.h"
  #include "CutsceneMgr.h"
  #include "Font.h"
-@@ -1713,6 +1716,14 @@
+@@ -1710,9 +1713,20 @@
+ 	;
+ }
+ 
++extern "C" int revc_pad_menu_nintendo(void);
++extern int8 gUiStyle;
++
  void CPad::Update(int16 pad)
  {
  	OldState = NewState;
@@ -3815,7 +3821,7 @@
  
  #ifdef GTA_PS2
  	bObsoleteControllerMessage = false;
-@@ -1978,6 +1989,21 @@
+@@ -1978,6 +1992,32 @@
  		NewState = ReconcileTwoControllersInput(PCTempKeyState, PCTempJoyState);
  		NewState = ReconcileTwoControllersInput(PCTempMouseState, NewState);
  	}
@@ -3826,6 +3832,17 @@
 +		extern CControllerState gRevcTestPad;
 +		if (gRevcTestPadOn)
 +			NewState = gRevcTestPad;
++		// revc: a Nintendo-layout pad confirms with A (east) and goes back with B (south) in the
++		// menus of every UI style (user decision 2026-11-12); gameplay keeps the positions.
++		if (pad == 0 && FrontEndMenuManager.m_bMenuActive && !gRevcTestPadOn && revc_pad_menu_nintendo()) {
++			int16 south = NewState.Cross, east = NewState.Circle, north = NewState.Triangle;
++			NewState.Cross = east;
++			if (gUiStyle == 1) {	// (the PS2 style goes back with triangle)
++				NewState.Triangle = south;
++				NewState.Circle = north;
++			} else
++				NewState.Circle = south;
++		}
 +		// revc: the console UI styles play like the consoles with a pad: the player turns to face
 +		// the stick's direction (the PC's mouse camera strafes; the PS2 has no strafe animations).
 +		// With the mouse, the menu's control method stays (plan task 13, autopad telemetry).
@@ -3837,7 +3854,7 @@
  
  	PCTempJoyState.Clear();
  	PCTempKeyState.Clear();
-@@ -3293,11 +3319,17 @@
+@@ -3293,11 +3333,17 @@
  	return 0;
  }
  
