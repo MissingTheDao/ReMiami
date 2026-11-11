@@ -131,7 +131,8 @@ pub fn styled_file(file: &str, b: Button, ui: UiStyle) -> Option<String> {
         UiStyle::Pc => None,
         UiStyle::Xbox if face => Some(format!("{}.png", stem.replacen("_button_", "_button_color_", 1))),
         UiStyle::Xbox if dpad => Some(format!("{}.png", stem.replacen("_dpad_", "_dpad_round_", 1))),
-        UiStyle::Ps2 if face || dpad => Some(format!("{stem}_outline.png")),
+        // Select/Start too: the PS2 style's help box shows them next to the face buttons.
+        UiStyle::Ps2 if face || dpad || matches!(b, Select | Start) => Some(format!("{stem}_outline.png")),
         _ => None,
     }
 }
@@ -301,6 +302,7 @@ mod tests {
         assert_eq!(styled_file("playstation_button_cross.png", Button::South, Ps2).as_deref(), Some("playstation_button_cross_outline.png"));
         assert_eq!(styled_file("playstation_dpad_left.png", Button::DpadLeft, Ps2).as_deref(), Some("playstation_dpad_left_outline.png"));
         assert_eq!(styled_file("xbox_lt.png", Button::L2, Xbox), None);
+        assert_eq!(styled_file("xbox_button_menu.png", Button::Start, Ps2).as_deref(), Some("xbox_button_menu_outline.png"));
         assert_eq!(styled_file("xbox_button_a.png", Button::South, Pc), None);
     }
 

@@ -99,8 +99,8 @@ DrawHelpBox(uint8 alpha)
 	// Select/Back: the pad's buttons as outline-only glyphs in black, like the text (the PS2 UI
 	// style loads the glyph pack's outline variant, white line art, tinted here). Without the
 	// pack the game's own coloured button textures are drawn as they are.
-	static const int glyphs[2] = { BUTTON_CROSS, BUTTON_TRIANGLE };
-	static const char *keys[4] = { "", "", "RVC_HST", nil };
+	static const int glyphs[3] = { BUTTON_CROSS, BUTTON_TRIANGLE, BUTTON_START };
+	static const int dpad[4] = { BUTTON_DPAD_UP, BUTTON_DPAD_DOWN, BUTTON_DPAD_RIGHT, BUTTON_DPAD_LEFT };
 	static const char *actions[4] = { "RVC_HSE", "RVC_HBA", "RVC_HRE", "RVC_HNA" };
 	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
 	CFont::SetScale(SX(0.41f), SY(0.68f));
@@ -108,40 +108,40 @@ DrawHelpBox(uint8 alpha)
 	CFont::SetBackgroundOff();
 	CFont::SetDropShadowPosition(0);
 	CFont::SetColor(CRGBA(0, 0, 0, alpha));	// black text on the green, as on the PS2
+	const CRGBA glyphColor = gGlyphPackLoaded ? CRGBA(0, 0, 0, alpha) : CRGBA(255, 255, 255, alpha);
+	const float sy = CFont::Details.scaleY;
+	const float gs = 21.0f * sy;	// a little larger than the font's glyph cell, like the PS2's symbols
 	wchar buf[64];
 	for (int i = 0; i < 4; i++) {
 		float y = HY(752.0f + 36.0f * i);
-		// "<button> button" right-aligned before the dash, the action after it.
-		if (keys[i] == nil)
-			buf[0] = 0;	// the arrows, drawn below
-		else if (keys[i][0] == 0)
-			buf[0] = 0;
-		else
-			UnicodeStrcpy(buf, TheText.Get(keys[i]));
 		if (i < 3) {
-			int n = UnicodeStrlen(buf);
-			if (n > 0)
-				buf[n++] = ' ';
-			UnicodeStrcpy(buf + n, TheText.Get("RVC_HBT"));
-		}
-		if (i < 2) {
-			float sy = CFont::Details.scaleY;
-			float w = CFont::GetStringWidth(buf, true);
-			// a little larger than the font's glyph cell, like the PS2's symbols
-			float gs = 21.0f * sy;
-			float gx = HX(1205.0f) - w - sy * 4.0f - gs;
+			// "<glyph> button", right-aligned before the dash; all rows use the pad's glyphs
+			// (Start too) so the box has one style. Without a Start glyph: "START button".
 			CSprite2d &g = CFont::ButtonSprite[glyphs[i]];
+			if (g.m_pTexture == nil && i == 2) {
+				UnicodeStrcpy(buf, TheText.Get("RVC_HST"));
+				int n = UnicodeStrlen(buf);
+				buf[n++] = ' ';
+				UnicodeStrcpy(buf + n, TheText.Get("RVC_HBT"));
+			} else
+				UnicodeStrcpy(buf, TheText.Get("RVC_HBT"));
+			float w = CFont::GetStringWidth(buf, true);
+			float gx = HX(1205.0f) - w - sy * 4.0f - gs;
 			if (g.m_pTexture)
-				g.Draw(CRect(gx, y + 0.5f * sy, gx + gs, y + 0.5f * sy + gs),
-					gGlyphPackLoaded ? CRGBA(0, 0, 0, alpha) : CRGBA(255, 255, 255, alpha));
-		}
-		if (i < 3) {
+				g.Draw(CRect(gx, y + 0.5f * sy, gx + gs, y + 0.5f * sy + gs), glyphColor);
 			CFont::SetRightJustifyOn();
 			CFont::PrintString(HX(1205.0f), y, buf);
 			CFont::SetRightJustifyOff();
+		} else if (gGlyphPackLoaded && CFont::ButtonSprite[dpad[0]].m_pTexture) {
+			// Navigate: the pad's D-pad glyphs up, down, right, left (the PS2's order),
+			// right-aligned before the dash like the other rows.
+			float gx = HX(1205.0f) - 4.0f * gs - 3.0f * sy * 2.0f;
+			for (int k = 0; k < 4; k++, gx += gs + sy * 2.0f)
+				if (CFont::ButtonSprite[dpad[k]].m_pTexture)
+					CFont::ButtonSprite[dpad[k]].Draw(CRect(gx, y + 0.5f * sy, gx + gs, y + 0.5f * sy + gs), glyphColor);
 		} else {
-			// The PS2 shows four filled black arrows here (not pad buttons): up, down, right,
-			// left, centred at these capture pixels.
+			// Without the glyph pack: the PS2's four filled black arrows, centred at these
+			// capture pixels.
 			static const float cx[4] = { 1078.0f, 1118.0f, 1157.0f, 1192.0f };
 			const float cy = 873.0f, r = 10.0f;
 			CRGBA black(0, 0, 0, alpha);
