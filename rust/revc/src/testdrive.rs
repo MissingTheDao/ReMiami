@@ -472,6 +472,14 @@ impl Driver {
                     self.phase = Phase::Spot { idx: 0, base, stage: SpotStage::Travel };
                     return false;
                 }
+                // REVC_TEST_MENU_INGAME=1 (with REVC_TEST_MENU_PAGE): capture that menu page over
+                // the loaded game instead (menu skins, plan task 13g); no reference.
+                if std::env::var_os("REVC_TEST_MENU_INGAME").is_some() {
+                    self.reference = None;
+                    unsafe { revc_test_show_controls_menu() };
+                    self.phase = Phase::MenuShot { frames: 0 };
+                    return false;
+                }
                 log(format!("captured after {elapsed} ms game time, {frames} frames"));
                 self.check_audio();
                 self.check_player();
@@ -649,7 +657,10 @@ impl Driver {
                 }
             }
             Phase::MenuShot { frames } => {
-                if frames < 30 {
+                if frames == 15 && std::env::var_os("REVC_TEST_MENU_INGAME").is_some() {
+                    unsafe { revc_test_show_controls_menu() }; // the pause menu is open now: pick the page
+                }
+                if frames < 90 {
                     self.phase = Phase::MenuShot { frames: frames + 1 };
                 } else {
                     crate::host::request_capture();

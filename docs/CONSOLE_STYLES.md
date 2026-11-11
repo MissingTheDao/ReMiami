@@ -15,7 +15,7 @@ content and stay outside the repo; this file records what the code does and why.
 | 13d | Style settings: fixed LOD 1.0, Classic camera and movement, 4:3 option, PS2 time cycle from an imported disc | LOD, camera, time cycle done |
 | 13e | HUD per style (Xbox safe-area shift and rounder radar), console UI scaled by screen height | done (measured elements) |
 | 13f | Button glyph variants per UI style | done |
-| 13g | PS2 menu look and animations | started: tabs and help box |
+| 13g | PS2 menu look and animations | done |
 | 13h | Xbox menu (Maestro) look and animations, controller page | |
 | 13i | Console data from an imported disc (Xbox maps and flames, PS2 animations), texture packs from zips | zip packs done |
 
@@ -176,7 +176,19 @@ a glyph pack).
 Then: sliders start right after their label (x 311) with the label right-aligned before them,
 other labels without a value are centred, long labels no longer wrap.
 
-Still to do: the Audio page (its radio picker and the PC helper line sit where the PS2 help box
-is: it needs its own PS2 layout); the menu-open fade (234 ms, the page fade is used for now) and the
-highlight slide (133-200 ms); the row spacing (PS2 ~30 px at 448 lines);
-checking the other pages against their captures; the tab names are English built-in texts.
+Finished (2026-11-11):
+- Help box: always on the background panel's bottom-right corner, covering and overhanging it as on
+  the PS2 (the user noted this is deliberate); placed relative to the panel corner of each page, so
+  it follows the panel's shape per page and on wide screens. "Navigate" shows the PS2's four filled
+  black arrows (not pad buttons); Select/Back keep the pad's glyphs (outline variant in the PS2 UI style).
+- Audio page: the radio picker sits lower left as on the PS2 (moved with the 2D offset, hover areas
+  moved with it); the PC's helper line ("LEFT, RIGHT ... TO ADJUST") is hidden under the skin.
+- Fades and highlight (measured): opening the menu 234 ms, a page change 167 ms, the highlight
+  slide 167 ms (PS2 133-200 ms); the PC keeps ~390 ms and ~100 ms.
+- Nothing is drawn in the tab area (the Map page's BACK; the triangle button goes back).
+- Tab names MAP, BRIEF, STATS from the game's own texts; LOAD, CONTROLS, AUDIO, DISPLAY, LANGUAGE
+  built-in English (the PC text has no short names for those).
+- All eight tab pages checked in game (`REVC_TEST_MENU_INGAME=1 REVC_TEST_MENU_PAGE=n` with the
+  saveload scenario opens the pause menu on that page).
+- Kept from the PC menu on purpose: row spacing (25 px at 448 lines vs the PS2's ~30, so 7 rows fit
+  above the tabs) and the PC page contents (revc's options), which the PS2 menu doesn't have.

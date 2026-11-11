@@ -281,6 +281,10 @@ revc_test_show_controls_menu(void)
 	}
 	FrontEndMenuManager.m_nCurrScreen = !page ? MENUPAGE_CONTROLLER_PC : strcmp(page, "pad") == 0 ? MENUPAGE_PAD_PICTURE : strcmp(page, "graphics") == 0 ? MENUPAGE_GRAPHICS_SETTINGS : atoi(page);
 	FrontEndMenuManager.m_nCurrOption = option ? atoi(option) : 0;
+	// In a game (REVC_TEST_MENU_INGAME): open the pause menu first; the driver calls this again
+	// once it is open to pick the page.
+	if (!FrontEndMenuManager.m_bMenuActive && !FrontEndMenuManager.m_bGameNotLoaded)
+		FrontEndMenuManager.m_bStartUpFrontEndRequested = true;
 }
 
 // 1 if the Controls page has the BUTTON PROMPTS entry and its label text resolves (boot scenario).

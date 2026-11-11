@@ -21,6 +21,14 @@ extern int8 gUiStyle;
 static float PX(float x) { return SCALE_AND_CENTER_X(x * 640.0f / 1440.0f); }
 static float PY(float y) { return SCREEN_SCALE_Y(y * 448.0f / 1080.0f); }
 static float SX(float s) { return SCREEN_SCALE_X(s); }
+
+// The help box sits on the background panel's bottom-right corner on every PS2 page (on purpose:
+// it covers the corner and overhangs it). The panel changes shape per page and stretches to wide
+// screens, so the box is placed relative to that corner: capture pixels relative to the PS2
+// Display page's corner (1345, 870), scaled like the rest.
+static float gCornerX, gCornerY;
+static float HX(float x) { return gCornerX + SCREEN_SCALE_X((x - 1345.0f) * 640.0f / 1440.0f); }
+static float HY(float y) { return gCornerY + SCREEN_SCALE_Y((y - 870.0f) * 448.0f / 1080.0f); }
 static float SY(float s) { return SCREEN_SCALE_Y(s); }
 
 static const CRGBA PS2_GREEN(25, 130, 70, 255);
@@ -30,10 +38,10 @@ static const CRGBA PS2_TAB_TEXT(211, 211, 211, 255);
 // each; centres of the tab labels in capture pixels.
 struct Ps2Tab { int page; int alt; float x, y; const char *name; };
 static const Ps2Tab tabs[] = {
-	{ MENUPAGE_MAP, -1, 400.0f, 942.0f, "RVC_PT0" },
-	{ MENUPAGE_BRIEFS, -1, 577.0f, 942.0f, "RVC_PT1" },
+	{ MENUPAGE_MAP, -1, 400.0f, 942.0f, "FEH_MAP" },
+	{ MENUPAGE_BRIEFS, -1, 577.0f, 942.0f, "FEH_BRI" },
 	{ MENUPAGE_CHOOSE_LOAD_SLOT, -1, 755.0f, 942.0f, "RVC_PT2" },
-	{ MENUPAGE_STATS, -1, 946.0f, 942.0f, "RVC_PT3" },
+	{ MENUPAGE_STATS, -1, 946.0f, 942.0f, "FEP_STA" },
 	{ MENUPAGE_CONTROLLER_PC, -1, 332.0f, 995.0f, "RVC_PT4" },
 	{ MENUPAGE_SOUND_SETTINGS, -1, 568.0f, 995.0f, "RVC_PT5" },
 	{ MENUPAGE_DISPLAY_SETTINGS, MENUPAGE_GRAPHICS_SETTINGS, 785.0f, 995.0f, "RVC_PT6" },
@@ -81,21 +89,23 @@ DrawTabs(CMenuManager *m, uint8 alpha)
 static void
 DrawHelpBox(uint8 alpha)
 {
-	CSprite2d::Draw2DPolygon(PX(975.0f), PY(742.0f), PX(1390.0f), PY(728.0f), PX(990.0f), PY(882.0f), PX(1418.0f), PY(910.0f),
+	CSprite2d::Draw2DPolygon(HX(975.0f), HY(742.0f), HX(1390.0f), HY(728.0f), HX(990.0f), HY(882.0f), HX(1418.0f), HY(910.0f),
 		CRGBA(PS2_GREEN.r, PS2_GREEN.g, PS2_GREEN.b, alpha));
-	static const char *keys[4] = { "~X~", "~T~", "RVC_HST", "~E~ ~G~ ~F~ ~I~" };
+	static const char *keys[4] = { "~X~", "~T~", "RVC_HST", nil };
 	static const char *actions[4] = { "RVC_HSE", "RVC_HBA", "RVC_HRE", "RVC_HNA" };
 	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
-	CFont::SetScale(SX(0.42f), SY(0.7f));
+	CFont::SetScale(SX(0.38f), SY(0.64f));
 	CFont::SetPropOn();
 	CFont::SetBackgroundOff();
 	CFont::SetDropShadowPosition(0);
 	CFont::SetColor(CRGBA(255, 255, 255, alpha));
 	wchar buf[64];
 	for (int i = 0; i < 4; i++) {
-		float y = PY(752.0f + 36.0f * i);
+		float y = HY(752.0f + 36.0f * i);
 		// "<button> button" right-aligned before the dash, the action after it.
-		if (keys[i][0] == '~')
+		if (keys[i] == nil)
+			buf[0] = 0;	// the arrows, drawn below
+		else if (keys[i][0] == '~')
 			AsciiToUnicode(keys[i], buf);
 		else
 			UnicodeStrcpy(buf, TheText.Get(keys[i]));
@@ -106,15 +116,21 @@ DrawHelpBox(uint8 alpha)
 		}
 		if (i < 3) {
 			CFont::SetRightJustifyOn();
-			CFont::PrintString(PX(1205.0f), y, buf);
+			CFont::PrintString(HX(1205.0f), y, buf);
 			CFont::SetRightJustifyOff();
 		} else {
-			// glyphs only: the font's string width doesn't count button sprites, so they are
-			// placed from the left where the PS2 draws its arrows
-			CFont::PrintString(PX(1040.0f), y, buf);
+			// The PS2 shows four filled black arrows here (not pad buttons): up, down, right,
+			// left, centred at these capture pixels.
+			static const float cx[4] = { 1078.0f, 1118.0f, 1157.0f, 1192.0f };
+			const float cy = 873.0f, r = 10.0f;
+			CRGBA black(0, 0, 0, alpha);
+			CSprite2d::Draw2DPolygon(HX(cx[0]), HY(cy - r), HX(cx[0]), HY(cy - r), HX(cx[0] - r), HY(cy + r), HX(cx[0] + r), HY(cy + r), black);
+			CSprite2d::Draw2DPolygon(HX(cx[1] - r), HY(cy - r), HX(cx[1] + r), HY(cy - r), HX(cx[1]), HY(cy + r), HX(cx[1]), HY(cy + r), black);
+			CSprite2d::Draw2DPolygon(HX(cx[2] - r), HY(cy - r), HX(cx[2] + r), HY(cy), HX(cx[2] - r), HY(cy + r), HX(cx[2] + r), HY(cy), black);
+			CSprite2d::Draw2DPolygon(HX(cx[3] + r), HY(cy - r), HX(cx[3] - r), HY(cy), HX(cx[3] + r), HY(cy + r), HX(cx[3] - r), HY(cy), black);
 		}
-		CFont::PrintString(PX(1215.0f), y, TheText.Get("RVC_HDA"));
-		CFont::PrintString(PX(1245.0f), y, TheText.Get(actions[i]));
+		CFont::PrintString(HX(1215.0f), y, TheText.Get("RVC_HDA"));
+		CFont::PrintString(HX(1245.0f), y, TheText.Get(actions[i]));
 	}
 }
 
@@ -147,8 +163,10 @@ MenuSkinPS2Input(CMenuManager *m)
 
 // Called by CMenuManager::DrawBackground after the page; draws nothing unless UI STYLE is PS2.
 void
-MenuSkinPS2Draw(CMenuManager *m, uint8 alpha)
+MenuSkinPS2Draw(CMenuManager *m, uint8 alpha, float cornerX, float cornerY)
 {
+	gCornerX = cornerX;
+	gCornerY = cornerY;
 	if (!MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return;
 	DrawHelpBox(alpha);
