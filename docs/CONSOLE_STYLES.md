@@ -185,7 +185,8 @@ Finished (2026-11-11):
   up, down, right, left for Navigate. The PS2 UI style now also takes the outline variant of
   Select/Start. Without the glyph pack: the game's own button textures untinted, "START button" as
   text and the PS2's black arrows. The rows are centred in the box as one block around a common
-  dash column (widths measured at run time, so other glyphs and languages stay centred). (Glyphs: see below.)
+  dash column (widths measured at run time, so other glyphs and languages stay centred), and
+  vertically on the box's centre. (Glyphs: see below.)
 - Audio page: the radio picker sits lower left as on the PS2 (moved with the 2D offset, hover areas
   moved with it); the PC's helper line ("LEFT, RIGHT ... TO ADJUST") is hidden under the skin.
 - Fades and highlight (measured): opening the menu 234 ms, a page change 167 ms, the highlight

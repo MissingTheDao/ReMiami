@@ -139,8 +139,13 @@ DrawHelpBox(uint8 alpha)
 	const float centre = HX(1196.0f);
 	const float column = centre - (leftMax + actionGap + rightW) / 2.0f + leftMax;
 
+	// vertically too: the four rows (36 capture pixels apart, glyph-high) centred on the box's
+	// centre, the average of its corners (y 815.5)
+	const float step = SCREEN_SCALE_Y(36.0f * 448.0f / 1080.0f);
+	const float top = HY(815.5f) - (3.0f * step + gs) / 2.0f;
+
 	for (int i = 0; i < 4; i++) {
-		float y = HY(752.0f + 36.0f * i);
+		float y = top + step * i;
 		if (i < 3) {
 			CSprite2d &g = CFont::ButtonSprite[glyphs[i]];
 			float w = CFont::GetStringWidth(left[i], true);
@@ -161,6 +166,8 @@ DrawHelpBox(uint8 alpha)
 			// ending at the column.
 			static const float cx[4] = { 1078.0f, 1118.0f, 1157.0f, 1192.0f };
 			const float cy = 873.0f, r = 10.0f, shift = column - HX(1202.0f);
+			const float yshift = (y + gs / 2.0f) - HY(cy);	// centred on this row
+			auto HY = [&](float v) { return gCornerY + SCREEN_SCALE_Y((v - 870.0f) * 448.0f / 1080.0f) + yshift; };
 			CRGBA black(0, 0, 0, alpha);
 			auto X = [&](float x) { return HX(x) + shift; };
 			CSprite2d::Draw2DPolygon(X(cx[0]), HY(cy - r), X(cx[0]), HY(cy - r), X(cx[0] - r), HY(cy + r), X(cx[0] + r), HY(cy + r), black);
