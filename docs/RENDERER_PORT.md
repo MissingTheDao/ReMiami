@@ -659,6 +659,14 @@ there is logic, deletion where nothing calls it.
   wrappers over the device table) goes with fakerw in 7d.
 - **7c. The debug font.** charset.cpp (RtCharset, used by the debug menu and debug text):
   ported, or redrawn with the Rust text code if that gives the same pixels.
+  **Done 2026-11-11:** ported as is: `rust/revc/src/rwcharset.rs` (open/close, create,
+  setColors, destroy, print, printBuffered, flushBuffer; the font bitmap is read from librw's
+  vgafont.inc). Checked by `tests/golden/rwcharset.txt` (6,000 random operations: charsets in
+  random colours, strings with spaces hidden or not, batches past the 100-character limit,
+  raster changes, render states saved and restored, near plane and near Z changes; every Im2D
+  batch hashed bit for bit; `tests/golden/recorders/rwcharset`). The game creates the debug
+  font at startup, so the suites run the raster path; the debug menu's text itself is not in
+  a scenario.
 - **7d. librw and fakerw go.** The RW API becomes a Rust C ABI: fakerw's headers declare the
   Rw*/Rp*/Rt* functions extern "C" and Rust exports them (generated from the headers, a good
   job for the local model, then reviewed); fake.cpp and every librw .cpp are deleted. librw's
