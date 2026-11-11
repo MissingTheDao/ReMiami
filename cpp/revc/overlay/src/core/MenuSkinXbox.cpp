@@ -107,9 +107,19 @@ MenuSkinXboxUnload(void)
 	spritesState = 0;
 }
 
+// The confirmation dialogs reached from the Load page: drawn as the Xbox's layered blue dialog
+// over the dimmed Load page.
+bool
+MenuSkinXboxDialog(int page)
+{
+	return page == MENUPAGE_NEW_GAME_RELOAD || page == MENUPAGE_LOAD_SLOT_CONFIRM || page == MENUPAGE_DELETE_SLOT_CONFIRM;
+}
+
 static int
 CurrentTab(int page)
 {
+	if (MenuSkinXboxDialog(page))
+		return 0;
 	for (int i = 0; i < (int)ARRAY_SIZE(tabs); i++)
 		if (tabs[i].page == page || tabs[i].alt == page)
 			return i;
@@ -224,6 +234,18 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha)
 	float a = 0.5f + (0.059f - 0.5f) * t;
 	float cx = (x0 + x1) / 2.0f, cy = (y0 + y1) / 2.0f, hw = (x1 - x0) / 2.0f * sx, hh = (y1 - y0) / 2.0f * sy;
 	CSprite2d::DrawRect(CRect(cx - hw, cy - hh, cx + hw, cy + hh), CRGBA(255, 255, 255, (uint8)(a * alpha)));
+}
+
+// A dialog's background, drawn before the page's own text (CMenuManager::DrawStandardMenus): the
+// menu behind dimmed, then its layers as measured on the new-game dialog: a steel-blue layer
+// behind, offset down-right, a dark edge, and the light-blue panel.
+void
+MenuSkinXboxDialogBack(uint8 alpha)
+{
+	CSprite2d::DrawRect(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(0, 0, 0, alpha / 2));
+	CSprite2d::Draw2DPolygon(X(118.0f), Y(152.0f), X(560.0f), Y(136.0f), X(118.0f), Y(352.0f), X(538.0f), Y(347.0f), CRGBA(70, 118, 145, alpha));
+	CSprite2d::Draw2DPolygon(X(498.0f), Y(126.0f), X(520.0f), Y(124.0f), X(484.0f), Y(352.0f), X(506.0f), Y(352.0f), CRGBA(20, 40, 60, alpha));
+	CSprite2d::Draw2DPolygon(X(85.0f), Y(138.0f), X(520.0f), Y(118.0f), X(100.0f), Y(337.0f), X(505.0f), Y(333.0f), CRGBA(105, 198, 247, alpha));
 }
 
 // LT/RT step through the pages, as on the Xbox pause menu. True when it switched.

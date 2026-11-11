@@ -226,6 +226,11 @@ native 640x480 xemu captures:
 - Panel: the PC menu's panel already moves its corners on a page change in ~380 ms (Xbox ~400 ms);
   the Xbox's own per-page panel shapes are not decoded yet (anim 0 holds them as 45 states).
 
+- Dialogs (new game, load, delete confirmations): the Load page dimmed behind, the Xbox's layered
+  blue dialog (steel-blue layer, dark edge, light-blue panel as measured), the question centred
+  in pink capitals, the two choices side by side with the mint box; the Load page's title stays.
+  The PC menu's own choice texts (NO/YES) are kept.
+
 Still to do: the Xbox per-page panel shapes,
 the Xbox fonts (RWFont/RWSFArborcrestHeavy), dialogs (blue layered panels), the controls page's
 pad drawing with callout lines, the Load list and Stats in the Xbox style, checking every page
