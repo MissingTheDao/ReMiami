@@ -8,6 +8,7 @@
 //! Claude outputs/xbox-research/XBOX_RESEARCH.md for what the discs hold.
 
 pub mod iso9660;
+pub mod xboxlm;
 pub mod xdvdfs;
 
 use std::fs::File;
@@ -76,6 +77,15 @@ impl Disc {
     pub fn read(&mut self, e: &Entry) -> std::io::Result<Vec<u8>> {
         let mut data = vec![0u8; e.size as usize];
         self.file.seek(SeekFrom::Start(e.offset))?;
+        self.file.read_exact(&mut data)?;
+        Ok(data)
+    }
+
+    /// `size` bytes at `offset` inside the file `e` (clamped to its end).
+    pub fn read_range(&mut self, e: &Entry, offset: u64, size: usize) -> std::io::Result<Vec<u8>> {
+        let size = size.min(e.size.saturating_sub(offset) as usize);
+        let mut data = vec![0u8; size];
+        self.file.seek(SeekFrom::Start(e.offset + offset))?;
         self.file.read_exact(&mut data)?;
         Ok(data)
     }
@@ -156,6 +166,23 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
         std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
         report.written.push(dest);
     }
+    if disc.kind == DiscKind::Xbox {
+        // World lightmaps (the textures of the Xbox's MatFX dual pass, `<model>@`, and the second
+        // coordinates; xboxlm)
+        // (skipped if the disc has no gta3.img: not a full game disc)
+        let lightmaps = match (disc.find("models/gta3.dir").cloned(), disc.find("models/gta3.img").cloned()) {
+            (Some(d), Some(i)) => vec![xbox_lightmaps(disc, &d, &i)?],
+            _ => Vec::new(),
+        };
+        for (bin, txd) in lightmaps {
+        for (file, data) in [("lightmaps.bin", bin), ("lightmaps.txd", txd)] {
+            let dest = root.join("models").join(file);
+            std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
+            std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+            report.written.push(dest);
+        }
+        }
+    }
     let marker = format!(
         "imported from {}\nfiles {}\n(from the player's own disc; not for redistribution)\n",
         image.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
@@ -163,6 +190,18 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
     );
     std::fs::write(root.join("IMPORTED.txt"), marker).map_err(|e| e.to_string())?;
     Ok(report)
+}
+
+/// The Xbox world lightmap sidecar and TXD (xboxlm) from the disc's models/gta3.dir, gta3.img and
+/// generic.txd.
+fn xbox_lightmaps(disc: &mut Disc, dir_e: &Entry, img_e: &Entry) -> Result<(Vec<u8>, Vec<u8>), String> {
+    let dir = disc.read(dir_e).map_err(|e| format!("gta3.dir: {e}"))?;
+    let generic = match disc.find("models/generic.txd").cloned() {
+        Some(e) => disc.read(&e).map_err(|err| format!("generic.txd: {err}"))?,
+        None => Vec::new(),
+    };
+    let (bin, txd, _) = xboxlm::img_sidecar(&dir, &[&generic], |off, size| disc.read_range(img_e, off, size))?;
+    Ok((bin, txd))
 }
 
 /// Whether `cache` holds a complete import from this kind of disc.

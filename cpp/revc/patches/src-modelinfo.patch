@@ -1,3 +1,21 @@
+--- a/src/modelinfo/SimpleModelInfo.cpp
++++ b/src/modelinfo/SimpleModelInfo.cpp
+@@ -6,6 +6,7 @@
+ #include "ModelInfo.h"
+ #include "AnimManager.h"
+ #include "custompipes.h"
++#include "XboxLightmaps.h"
+ 
+ void
+ CSimpleModelInfo::DeleteRwObject(void)
+@@ -88,6 +89,7 @@
+ 		debug("%s has %d polys\n", m_name, RpGeometryGetNumTriangles(geo));
+ 
+ #ifdef EXTENDED_PIPELINES
++	XboxLightmaps::Attach(GetModelName(), n, atomic);
+ 	if(m_wetRoadReflection)
+ 		CustomPipes::AttachGlossPipe(atomic);
+ 	else
 --- a/src/modelinfo/VehicleModelInfo.cpp
 +++ b/src/modelinfo/VehicleModelInfo.cpp
 @@ -236,6 +236,11 @@

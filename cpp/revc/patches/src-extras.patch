@@ -1,6 +1,30 @@
 --- a/src/extras/custompipes.cpp
 +++ b/src/extras/custompipes.cpp
-@@ -502,9 +502,6 @@
+@@ -12,6 +12,7 @@
+ #include "Weather.h"
+ #include "TxdStore.h"
+ #include "Renderer.h"
++#include "XboxLightmaps.h"
+ #include "World.h"
+ #include "custompipes.h"
+ 
+@@ -476,6 +477,7 @@
+ 	}
+ 
+ 	EnvMapInit();
++	XboxLightmaps::Init();
+ 
+ 	CreateVehiclePipe();
+ 	CreateWorldPipe();
+@@ -492,6 +494,7 @@
+ 	DestroyRimLightPipes();
+ 
+ 	EnvMapShutdown();
++	XboxLightmaps::Shutdown();
+ 
+ 	if(neoTxd){
+ 		neoTxd->destroy();
+@@ -502,9 +505,6 @@
  void
  CustomPipeRegister(void)
  {

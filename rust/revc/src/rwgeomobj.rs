@@ -424,6 +424,126 @@ pub unsafe fn geo_has_colored_material(geo: *const Geometry) -> bool {
     }
 }
 
+/// One Xbox vertex of the lightmap sidecar: its key (revc_import::xboxlm::vertex_key) and second
+/// texture coordinates.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct KeyedUv {
+    pub key: u32,
+    pub uv: [f32; 2],
+}
+
+/// Adds the Xbox lightmap coordinates (core/XboxLightmaps.cpp): each vertex gets the coordinates
+/// of the Xbox vertex with its key (position and first coordinates). The PC release moved a few
+/// vertices of some models by up to ~0.3 m (oceanrda05_dy: 5 of 466); up to 1 in 20 vertices
+/// without a key take the coordinates of a matched vertex they share a triangle with (preferring
+/// one with the same first coordinates), as lightmaps change slowly. False, with nothing changed,
+/// if more are missing or one has no matched neighbour (another model, or a mod's).
+///
+/// # Safety
+/// A live geometry; `xbox` holds `n` entries (any alignment).
+pub unsafe fn geo_add_lightmap_coords(geo: *mut Geometry, xbox: *const KeyedUv, n: i32) -> bool {
+    unsafe {
+        let g = &*geo;
+        let nv = g.num_vertices.max(0) as usize;
+        if nv == 0 || n <= 0 || g.num_tex_coord_sets < 1 || g.morph_targets.is_null() || g.flags & NATIVE != 0 {
+            return false;
+        }
+        let pos = (*g.morph_targets).vertices;
+        let uv0 = g.tex_coords[0];
+        if pos.is_null() || uv0.is_null() {
+            return false;
+        }
+        // (the sidecar's entries needn't be aligned)
+        let mut map = std::collections::HashMap::with_capacity(n as usize);
+        for i in 0..n as usize {
+            let x = std::ptr::read_unaligned(xbox.add(i));
+            map.entry(x.key).or_insert(x.uv);
+        }
+        let mut uv1: Vec<Option<[f32; 2]>> = (0..nv)
+            .map(|i| {
+                let p = *pos.add(i);
+                map.get(&revc_import::xboxlm::vertex_key([p.x, p.y, p.z], *uv0.add(i))).copied()
+            })
+            .collect();
+        let missing: Vec<usize> = (0..nv).filter(|&i| uv1[i].is_none()).collect();
+        if missing.len() * 20 > nv {
+            return false;
+        }
+        if !missing.is_empty() {
+            let tris = std::slice::from_raw_parts(g.triangles, g.num_triangles.max(0) as usize);
+            for &i in &missing {
+                let mut pick: Option<usize> = None;
+                for t in tris.iter().filter(|t| t.v.contains(&(i as u16))) {
+                    for &k in &t.v {
+                        let k = k as usize;
+                        if k >= nv || k == i || missing.contains(&k) {
+                            continue;
+                        }
+                        if *uv0.add(k) == *uv0.add(i) {
+                            pick = Some(k);
+                            break;
+                        }
+                        pick.get_or_insert(k);
+                    }
+                }
+                match pick {
+                    Some(k) => uv1[i] = uv1[k],
+                    None => return false,
+                }
+            }
+        }
+        let uv1: Vec<[f32; 2]> = uv1.into_iter().map(|u| u.unwrap()).collect();
+        geo_add_tex_coord_set(geo, uv1.as_ptr(), nv as i32)
+    }
+}
+
+/// Adds a texture coordinate set (Xbox world lightmaps, geo_add_lightmap_coords): a new data
+/// block with the triangles, colours and existing sets plus `uv`, the old one freed, and the
+/// geometry marked for re-instancing. False (nothing changed) if the vertex count differs, the
+/// geometry is native or already has 8 sets.
+///
+/// # Safety
+/// A live geometry; `uv` holds `nv` pairs.
+pub unsafe fn geo_add_tex_coord_set(geo: *mut Geometry, uv: *const [f32; 2], nv: i32) -> bool {
+    unsafe {
+        let g = &mut *geo;
+        if nv != g.num_vertices || g.flags & NATIVE != 0 || g.num_tex_coord_sets >= 8 || g.triangles.is_null() {
+            return false;
+        }
+        let nt = g.num_triangles as usize;
+        let nv = nv as usize;
+        let sets = g.num_tex_coord_sets as usize;
+        let prelit = g.flags & PRELIT != 0 && !g.colors.is_null();
+        let tsz = nt * size_of::<Triangle>();
+        let csz = if prelit { nv * size_of::<Rgba>() } else { 0 };
+        let old = g.triangles as *mut u8;
+        let mut data = alloc(tsz + csz + (sets + 1) * nv * 8);
+        std::ptr::copy_nonoverlapping(old, data, tsz);
+        g.triangles = data as *mut Triangle;
+        data = data.add(tsz);
+        if prelit {
+            std::ptr::copy_nonoverlapping(g.colors as *const u8, data, csz);
+            g.colors = data as *mut Rgba;
+            data = data.add(csz);
+        }
+        for i in 0..sets {
+            std::ptr::copy_nonoverlapping(g.tex_coords[i] as *const u8, data, nv * 8);
+            g.tex_coords[i] = data as *mut [f32; 2];
+            data = data.add(nv * 8);
+        }
+        std::ptr::copy_nonoverlapping(uv as *const u8, data, nv * 8);
+        g.tex_coords[sets] = data as *mut [f32; 2];
+        g.num_tex_coord_sets = sets as i32 + 1;
+        if g.num_tex_coord_sets >= 2 {
+            g.flags |= TEXTURED2;
+        }
+        free(old);
+        g.locked_since_inst |= 0x0FFF; // rw::Geometry::LOCKALL
+        true
+    }
+}
+
 /// Geometry::allocateData: the attribute and vertex blocks even when the geometry is native
 /// (the bounding spheres are kept by the reallocation).
 ///
@@ -833,6 +953,8 @@ ffi! {
     revc_geo_calculate_bounding_sphere(g: *mut Geometry) => geo_calculate_bounding_sphere(g);
     revc_geo_has_colored_material(g: *const Geometry) -> i32 => geo_has_colored_material(g) as i32;
     revc_geo_allocate_data(g: *mut Geometry) => geo_allocate_data(g);
+    revc_geo_add_tex_coord_set(g: *mut Geometry, uv: *const [f32; 2], nv: i32) -> i32 => geo_add_tex_coord_set(g, uv, nv) as i32;
+    revc_geo_add_lightmap_coords(g: *mut Geometry, xbox: *const KeyedUv, n: i32) -> i32 => geo_add_lightmap_coords(g, xbox, n) as i32;
     revc_geo_build_meshes_obj(g: *mut Geometry) => geo_build_meshes(g);
     revc_geo_build_tristrips(g: *mut Geometry) => geo_build_tristrips(g);
     revc_geo_allocate_meshes(g: *mut Geometry, n: i32, idx: u32, no: i32) -> *mut MeshHeader => geo_allocate_meshes(g, n, idx, no != 0);

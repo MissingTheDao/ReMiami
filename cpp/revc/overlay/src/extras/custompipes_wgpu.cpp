@@ -17,6 +17,9 @@
 #include "Renderer.h"
 #include "World.h"
 #include "custompipes.h"
+#include "XboxLightmaps.h"
+
+extern int8 gUiStyle;
 
 #ifdef EXTENDED_PIPELINES
 
@@ -158,6 +161,9 @@ worldMeshes(rw::ObjPipeline *pipe, Atomic *atomic, WgpuHeader *header)
 		float32 f = 0.0f;
 		if(MatFX::getEffects(m) == MatFX::DUAL){
 			dualtex = MatFX::get(m)->getDualTexture();
+			// revc: the imported Xbox lightmaps only in the Xbox style (XboxLightmaps.cpp)
+			if(dualtex && dualtex->dict == XboxLightmaps::txd && gUiStyle != 2)
+				dualtex = nil;
 			if(dualtex)
 				f = WorldLightmapBlend.Get()*LightmapMult;
 		}
