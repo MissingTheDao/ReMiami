@@ -387,7 +387,7 @@ DrawPs2SetupCallouts(int context, uint8 alpha, const CRect &pad)
 	const Ps2Anchor *anchors = car ? ps2CarAnchors : ps2FootAnchors;
 	int n = car ? ARRAY_SIZE(ps2CarAnchors) : ARRAY_SIZE(ps2FootAnchors);
 	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
-	CFont::SetScale(MENU_X(0.32f), MENU_Y(0.62f));
+	CFont::SetScale(MENU_X(0.4564f), MENU_Y(0.63f));	// re3's CONTR_DESCR_NEW_TEXTSCALE (the PS2's)
 	CFont::SetPropOn();
 	CFont::SetDropShadowPosition(1);
 	CFont::SetDropColor(CRGBA(0, 0, 0, alpha));
