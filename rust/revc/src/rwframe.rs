@@ -858,6 +858,7 @@ mod lifecycle_golden {
 
     #[test]
     fn matches_librw_golden() {
+        let _guard = crate::testlock();
         unsafe {
             revc_frame_set_hooks(Hooks { size: h_size, construct: h_construct, destruct: h_destruct, copy: h_copy, allocated: h_allocated });
         }

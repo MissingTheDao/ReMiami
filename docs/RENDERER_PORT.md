@@ -586,6 +586,14 @@ code nothing calls is deleted rather than ported.
   clone/destroy/setGeometry, the world bounding sphere's dirty logic, the frame sync callbacks;
   Clump create/clone/destroy and its atomic, light and camera lists; Light create/destroy and
   its parameters; World add/remove and the object lists the renderer walks.
+  **Done 2026-11-11:** `rust/revc/src/rwscene.rs` (clumps, atomics, lights, worlds and the
+  camera object; the sync callbacks; enumerateLights). Pipelines, instancing and the default
+  render callback stay C++ until step 7; the camera's device callbacks are hooks. Checked by
+  `tests/golden/rwscene.txt` (5,160 random operations over frames, geometries, atomics, clumps,
+  lights, cameras and worlds: hierarchies, clones, world membership, frame syncs, world
+  bounding spheres, light enumeration and render order; `tests/golden/recorders/rwscene`). The
+  local model drafted the functions; its list walks, setFrame, clone frames and flag values
+  were wrong and were rewritten.
 - **6c. Plugin data.** skin.cpp (skin weights and bone data: create, copy, destroy, the setters
   the game uses), matfx.cpp (effect setup per material: env map, bump, dual), hanim.cpp's
   frame plugin and HAnimHierarchy create/destroy/attach. uvanim.cpp and userdata.cpp are never
