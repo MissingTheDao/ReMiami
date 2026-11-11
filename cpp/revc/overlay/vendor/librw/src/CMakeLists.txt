@@ -9,7 +9,6 @@ add_library(librw
     charset.cpp
     clump.cpp
     engine.cpp
-    frame.cpp
     geometry.cpp
     geoplg.cpp
     hanim.cpp

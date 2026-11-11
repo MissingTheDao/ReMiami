@@ -13,3 +13,4 @@
 #include "src/rwplugins.h"
 #include "src/rwcharset.h"
 #include "src/wgpu/rwwgpu.h"
+#include "src/rwimpl.h"

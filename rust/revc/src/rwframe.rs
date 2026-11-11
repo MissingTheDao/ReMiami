@@ -310,8 +310,45 @@ pub struct Hooks {
 static mut HOOKS: Option<Hooks> = None;
 
 fn hooks() -> &'static Hooks {
-    // SAFETY: set once at startup (before any frame exists), read-only afterwards.
-    unsafe { (*std::ptr::addr_of!(HOOKS)).as_ref().expect("revc_frame_set_hooks not called") }
+    // SAFETY: set before any frame exists (tests), read-only afterwards; the game uses the defaults.
+    unsafe { (*std::ptr::addr_of!(HOOKS)).as_ref().unwrap_or(&DEFAULT_HOOKS) }
+}
+
+// The game's hooks (stage 2 step 7d2): Frame's plugin list and counter (rwplugin.rs).
+unsafe extern "C" fn default_size() -> usize {
+    unsafe { (*crate::rwplugin::class_list(crate::rwplugin::CLASS_FRAME)).size as usize }
+}
+unsafe extern "C" fn default_construct(f: *mut Frame) {
+    unsafe { crate::rwplugin::pl_construct(crate::rwplugin::class_list(crate::rwplugin::CLASS_FRAME), f as *mut c_void) }
+}
+unsafe extern "C" fn default_destruct(f: *mut Frame) {
+    unsafe { crate::rwplugin::pl_destruct(crate::rwplugin::class_list(crate::rwplugin::CLASS_FRAME), f as *mut c_void) }
+}
+unsafe extern "C" fn default_copy(dst: *mut Frame, src: *mut Frame) {
+    unsafe { crate::rwplugin::pl_copy(crate::rwplugin::class_list(crate::rwplugin::CLASS_FRAME), dst as *mut c_void, src as *mut c_void) }
+}
+unsafe extern "C" fn default_allocated(n: i32) {
+    unsafe { *crate::rwplugin::alloc_count(crate::rwplugin::CLASS_FRAME) += n }
+}
+static DEFAULT_HOOKS: Hooks = Hooks { size: default_size, construct: default_construct, destruct: default_destruct, copy: default_copy, allocated: default_allocated };
+
+// Frame::registerModule: the frame module's engine plugin sets up the dirty list.
+unsafe extern "C" fn frame_open(o: *mut c_void, _: i32, _: i32) -> *mut c_void {
+    unsafe { list_init(&mut (*(o as *mut crate::rwengine::Engine)).frame_dirty_list) };
+    o
+}
+unsafe extern "C" fn frame_close(o: *mut c_void, _: i32, _: i32) -> *mut c_void {
+    o
+}
+const ID_FRAMEMODULE: u32 = 0x403;
+
+/// Frame::registerModule
+///
+/// # Safety
+/// During Engine::init.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_frame_register_module() {
+    unsafe { crate::rwplugin::pl_register(crate::rwplugin::class_list(crate::rwplugin::CLASS_ENGINE), 0, ID_FRAMEMODULE, Some(frame_open), Some(frame_close), None) };
 }
 
 /// Frames (with their plugin data) are allocated here; the size is fixed once the plugins are
