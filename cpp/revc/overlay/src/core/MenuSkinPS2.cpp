@@ -531,6 +531,13 @@ MenuSkinPS2Input(CMenuManager *m)
 			MenuSkinPS2GlideSeed(0, gRowRect);	// the box glides from the row back to the tab
 			return true;
 		}
+		int tab = CurrentTab(m->m_nCurrScreen);
+		if (tri && tab >= 0 && !IsTabPage(m->m_nCurrScreen)) {
+			// a confirmation or sub-page: back to its tab's page, the tab bar focused (the PC's
+			// "previous page" of the confirmations is its own New Game page)
+			m->SwitchToNewScreen(SWITCH_TO_PAGE(tabs[tab].page));
+			return true;
+		}
 		return false;
 	}
 	if (!IsTabPage(m->m_nCurrScreen))

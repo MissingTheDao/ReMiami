@@ -431,7 +431,8 @@ const MOTION_ROUTES: &[MotionRoute] = &[
 /// The pad script for a routed motion (MOTION_ROUTES).
 fn route_script(r: &MotionRoute) -> Result<crate::padscript::PadScript, String> {
     let (id, route, input, hold) = *r;
-    let mut p = crate::padscript::PadScript::new(id, id.split('_').next().unwrap_or(""), "menu_base");
+    let full = std::env::var("REVC_TEST_MOTION").unwrap_or_else(|_| id.to_string());
+    let mut p = crate::padscript::PadScript::new(&full, id.split('_').next().unwrap_or(""), "menu_base");
     let mut f = 0u32;
     let mut first = true;
     let press = |p: &mut crate::padscript::PadScript, f: u32, op: &str| -> Result<u32, String> {
@@ -469,7 +470,9 @@ fn route_script(r: &MotionRoute) -> Result<crate::padscript::PadScript, String> 
 /// REVC_TEST_MOTION's route, if it has one.
 fn motion_route() -> Option<&'static MotionRoute> {
     let id = std::env::var("REVC_TEST_MOTION").ok()?;
-    MOTION_ROUTES.iter().find(|m| m.0 == id)
+    // (the research catalogue's newer references carry a version suffix: same motion, same route)
+    let base = id.strip_suffix("_v140").unwrap_or(&id);
+    MOTION_ROUTES.iter().find(|m| m.0 == base)
 }
 
 fn motion() -> Option<&'static Motion> {
