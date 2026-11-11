@@ -120,9 +120,7 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 		s.start = now;
 	}
 	float t;
-	if (s.from.top - s.to.top > SY(100.0f))
-		t = Min(1.0f, (now - s.start) / 100.0f);	// (the page-open sweep: 3 frames)
-	else if (s.tab) {
+	if (s.tab) {	// (before the sweep: from the tab bar into the list is a long move up too)
 		t = MenuSkinPS2GlideTTab(now - s.start);
 		if (t < 0.0f) {	// the blank step: nothing drawn
 			s.cur = s.from;
@@ -130,7 +128,9 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 		}
 		if (t >= 1.0f)
 			s.tab = false;
-	} else
+	} else if (s.from.top - s.to.top > SY(100.0f))
+		t = Min(1.0f, (now - s.start) / 100.0f);	// (the page-open sweep: 3 frames)
+	else
 		t = MenuSkinPS2GlideT(now - s.start);
 	s.cur = CRect(s.from.left + (s.to.left - s.from.left) * t, s.from.top + (s.to.top - s.from.top) * t,
 		s.from.right + (s.to.right - s.from.right) * t, s.from.bottom + (s.to.bottom - s.from.bottom) * t);
@@ -167,6 +167,7 @@ float ScreenPositionY(void) { return ((((uint8)gScreenPosition) & 15) - 8) * 2.0
 // legend item (then only the legend is boxed), as on the PS2.
 static int focusPage = -1;
 static bool audioEdit, audioOutput, loadColumn;	// (Audio and Load sub-focus: see MenuSkinPS2Input)
+static bool controlsEdit;	// (Controls: the configuration row's edit mode)
 static int loadRow;
 static bool pageFocus = false;
 
@@ -384,6 +385,7 @@ bool MenuSkinPS2AudioOutputFocus(void) { return audioOutput; }
 // Audio edit mode: cross on a cell; the box grows over label and value, left/right change the
 // value, triangle goes straight to the tab bar.
 bool MenuSkinPS2AudioEdit(void) { return audioEdit; }
+bool MenuSkinPS2ControlsEdit(void) { return controlsEdit; }
 
 
 bool
@@ -399,6 +401,7 @@ MenuSkinPS2SetFocus(int page, bool list)
 	focusPage = page;
 	pageFocus = list;
 	audioEdit = false;
+	controlsEdit = false;
 	audioOutput = false;
 	loadColumn = list && page == MENUPAGE_CHOOSE_LOAD_SLOT;
 	loadRow = 0;
@@ -456,6 +459,7 @@ MenuSkinPS2Input(CMenuManager *m)
 		loadColumn = false;
 		audioOutput = false;
 		audioEdit = false;
+		controlsEdit = false;
 	}
 	if (!MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return false;
@@ -534,6 +538,39 @@ MenuSkinPS2Input(CMenuManager *m)
 			return true;
 		}
 	}
+	if (pageFocus && m->m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS) {
+		// The PS2's Controls page (v1.40, autopad runs ps2_rowbox_test 1-2): on "configuration"
+		// left/right do nothing until cross enters its edit mode (the box widens over the value),
+		// then they cycle the setups; triangle leaves the list for the tab bar, up/down leave the
+		// edit mode with the move. Vibration and invert look toggle with cross; right/left do
+		// nothing there. Controller display changes with left/right as usual.
+		const bool left = pad->GetDPadLeftJustDown() || pad->GetLeftJustDown(), right = pad->GetDPadRightJustDown() || pad->GetRightJustDown();
+		int row = m->m_nCurrOption;
+		if (row == 0) {
+			if (controlsEdit) {
+				if (tri) {
+					controlsEdit = false;
+					pageFocus = false;
+					MenuSkinPS2GlideSeed(0, gRowRect);
+					return true;
+				}
+				if (up || down)
+					controlsEdit = false;	// (and the PC menu moves)
+				return false;
+			}
+			if (cross) {
+				controlsEdit = true;
+				return true;
+			}
+			if (left || right)
+				return true;
+		} else if (row == 2 || row == 3) {
+			if (left || right)
+				return true;
+			if (cross)
+				return false;	// the PC menu's select cycles the value
+		}
+	}
 	if (pageFocus && cross && aScreens[m->m_nCurrScreen].m_aEntries[m->m_nCurrOption].m_Action == MENUACTION_GOBACK)
 		return true;	// (the PC's "back" rows: the PS2 goes back with triangle only; Brief/Stats have nothing to select)
 	if (pageFocus) {
@@ -569,6 +606,7 @@ MenuSkinPS2Input(CMenuManager *m)
 		loadRow = 0;
 		audioOutput = false;
 		audioEdit = false;
+		controlsEdit = false;
 		m->m_nCurrOption = aScreens[m->m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL ? 1 : 0;
 		m->m_nFirstVisibleRowOnList = 0;
 		return true;
