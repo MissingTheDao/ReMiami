@@ -26,6 +26,8 @@ static float W(float w) { return SCREEN_SCALE_X(w); }
 static float H(float h) { return SCREEN_SCALE_Y(h); }
 
 static bool HasSubTabs(int page);
+void ConsoleAudioRows(bool);	// (core/MenuScreensCustom.cpp)
+static bool SettingsSubTabs(int page);
 const CRGBA XBOX_MINT(0, 210, 141, 255);
 const CRGBA XBOX_PINK(255, 154, 227, 255);
 
@@ -235,11 +237,18 @@ DialogDim(uint8 alpha)
 	return MenuSkinXboxDialog(FrontEndMenuManager.m_nCurrScreen) ? alpha * 45 / 100 : alpha;
 }
 
+// The "advanced" sub-tab (MENUPAGE_CONSOLE_OPTIONS) belongs to the page it was opened from.
+static int optionsOrigin = MENUPAGE_CONSOLE_DISPLAY;
+// Focus on the sub-tab bar of Display / Audio / Controls (down from their last row; up leaves).
+static bool subBarFocus;
+
 static int
 CurrentTab(int page)
 {
 	if (MenuSkinXboxDialog(page))
 		return 0;
+	if (page == MENUPAGE_CONSOLE_OPTIONS)
+		page = optionsOrigin;
 	for (int i = 0; i < (int)ARRAY_SIZE(tabs); i++)
 		if (tabs[i].page == page || tabs[i].alt == page)
 			return i;
@@ -269,6 +278,8 @@ MenuSkinXboxTitle(wchar *title, uint8 alpha)
 {
 	// the Xbox's own names for these pages
 	int page = FrontEndMenuManager.m_nCurrScreen;
+	if (page == MENUPAGE_CONSOLE_OPTIONS)	// "advanced": the title of the page it belongs to
+		page = optionsOrigin, title = TheText.Get(aScreens[optionsOrigin].m_ScreenName);
 	if (page == MENUPAGE_CHOOSE_LOAD_SLOT || page == MENUPAGE_NEW_GAME || MenuSkinXboxDialog(page))
 		title = TheText.Get("RVC_XTL");
 	else if (page == MENUPAGE_CONTROLLER_PC)
@@ -379,7 +390,7 @@ DrawHelpLine(CMenuManager *m, uint8 alpha)
 		return;
 	}
 	HelpItem(X(52.0f), y, start, 1, nil, "RVC_XHR", alpha);
-	if (HasSubTabs(m->m_nCurrScreen)) {	// "START:resume game  <-/->:select  B:back" (the sub-tabs)
+	if (HasSubTabs(m->m_nCurrScreen) && (!SettingsSubTabs(m->m_nCurrScreen) || subBarFocus)) {	// "START:resume game  <-/->:select  B:back" (the sub-tabs)
 		HelpItem(X(200.0f), y, lr, 2, nil, "RVC_XHS", alpha);
 		HelpItem(X(340.0f), y, b, 1, nil, "RVC_XHB", alpha);
 		return;
@@ -460,15 +471,33 @@ MenuSkinXboxWedge(float y, float progress, uint8 alpha)
 static int subTab = 0, subTabPage = -1;
 
 static bool
+SettingsSubTabs(int page)
+{
+	return page == MENUPAGE_CONSOLE_DISPLAY || page == MENUPAGE_SOUND_SETTINGS || page == MENUPAGE_CONSOLE_CONTROLS || page == MENUPAGE_CONSOLE_OPTIONS;
+}
+
+static bool
 HasSubTabs(int page)
 {
-	return page == MENUPAGE_STATS || page == MENUPAGE_BRIEFS;
+	return page == MENUPAGE_STATS || page == MENUPAGE_BRIEFS || SettingsSubTabs(page);
 }
 
 int
 MenuSkinXboxSubTab(int page)
 {
+	if (SettingsSubTabs(page))
+		return page == MENUPAGE_CONSOLE_OPTIONS ? 1 : 0;
 	return page == subTabPage ? subTab : 0;
+}
+
+// Test: the "advanced" list of a section (0 display, 1 audio, 2 controls) as if opened from its page.
+extern "C" void
+MenuSkinXboxOptionsFor(int section)
+{
+	extern int gConsoleOptionsSection;
+	optionsOrigin = section == 1 ? MENUPAGE_SOUND_SETTINGS : section == 2 ? MENUPAGE_CONSOLE_CONTROLS : MENUPAGE_CONSOLE_DISPLAY;
+	gConsoleOptionsSection = section;
+	ConsoleAudioRows(true);
 }
 
 extern "C" void	// (C linkage: called from skel/host/testhooks.cpp)
@@ -483,7 +512,13 @@ DrawSubTabs(int page, uint8 alpha)
 {
 	const bool stats = page == MENUPAGE_STATS;
 	const char *names[2] = { stats ? "RVC_XS1" : "RVC_XB1", stats ? "RVC_XS2" : "RVC_XB2" };
-	const float lx[2] = { 68.0f, stats ? 248.0f : 308.0f };
+	float lx[2] = { 68.0f, stats ? 248.0f : 308.0f };
+	if (SettingsSubTabs(page)) {	// "display | advanced" and so on (OPTIONS_PLACEMENT)
+		int origin = page == MENUPAGE_CONSOLE_OPTIONS ? optionsOrigin : page;
+		names[0] = origin == MENUPAGE_SOUND_SETTINGS ? "RVC_XAU" : origin == MENUPAGE_CONSOLE_CONTROLS ? "RVC_XCO" : "RVC_XDI";
+		names[1] = "RVC_XAD";
+		lx[1] = 248.0f;
+	}
 	const float ty = 350.0f * 448.0f / 480.0f, y0 = Y(340.0f * 448.0f / 480.0f), y1 = Y(375.0f * 448.0f / 480.0f);
 	int cur = MenuSkinXboxSubTab(page);
 	CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
@@ -514,7 +549,40 @@ MenuSkinXboxInput(CMenuManager *m)
 	if (!MenuSkinXboxActive(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return false;
 	CPad *pad = CPad::GetPad(0);
-	if (HasSubTabs(m->m_nCurrScreen) && (pad->GetDPadLeftJustDown() || pad->GetDPadRightJustDown() || pad->GetLeftJustDown() || pad->GetRightJustDown())) {
+	const bool left = pad->GetDPadLeftJustDown() || pad->GetLeftJustDown(), right = pad->GetDPadRightJustDown() || pad->GetRightJustDown();
+	const bool up = pad->GetDPadUpJustDown() || pad->GetUpJustDown(), down = pad->GetDPadDownJustDown() || pad->GetDownJustDown();
+	if (SettingsSubTabs(m->m_nCurrScreen)) {
+		if (subBarFocus) {
+			if (left || right) {
+				if (m->m_nCurrScreen == MENUPAGE_CONSOLE_OPTIONS)
+					m->SwitchToNewScreen(optionsOrigin);
+				else {
+					extern int gConsoleOptionsSection;
+					optionsOrigin = m->m_nCurrScreen;
+					gConsoleOptionsSection = optionsOrigin == MENUPAGE_SOUND_SETTINGS ? 1 : optionsOrigin == MENUPAGE_CONSOLE_CONTROLS ? 2 : 0;
+					void ConsoleAudioRows(bool);
+					ConsoleAudioRows(true);
+					m->SwitchToNewScreen(MENUPAGE_CONSOLE_OPTIONS);
+				}
+				return true;
+			}
+			if (up)
+				subBarFocus = false;
+			return up || down;
+		}
+		if (down) {	// down from the last row: onto the sub-tab bar
+			int last = -1;
+			for (int e = 0; e < NUM_MENUROWS && aScreens[m->m_nCurrScreen].m_aEntries[e].m_Action != MENUACTION_NOTHING; e++)
+				if (aScreens[m->m_nCurrScreen].m_aEntries[e].m_Action != MENUACTION_GOBACK && aScreens[m->m_nCurrScreen].m_aEntries[e].m_Action != MENUACTION_LABEL)
+					last = e;
+			if (m->m_nCurrOption >= last) {
+				subBarFocus = true;
+				return true;
+			}
+		}
+	} else
+		subBarFocus = false;
+	if (HasSubTabs(m->m_nCurrScreen) && !SettingsSubTabs(m->m_nCurrScreen) && (pad->GetDPadLeftJustDown() || pad->GetDPadRightJustDown() || pad->GetLeftJustDown() || pad->GetRightJustDown())) {
 		MenuSkinXboxSetSubTab(m->m_nCurrScreen, 1 - MenuSkinXboxSubTab(m->m_nCurrScreen));
 		barFocus = false;
 		return true;

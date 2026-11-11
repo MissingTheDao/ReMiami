@@ -227,6 +227,7 @@ revc_test_menu_page_id(const char *name)
 		{ "controls", MENUPAGE_CONTROLLER_PC }, { "pad", MENUPAGE_PAD_PICTURE }, { "pause", MENUPAGE_PAUSE_MENU },
 		{ "console_display", MENUPAGE_CONSOLE_DISPLAY }, { "console_controls", MENUPAGE_CONSOLE_CONTROLS },
 		{ "new_game", MENUPAGE_NEW_GAME },
+		{ "console_options", MENUPAGE_CONSOLE_OPTIONS },
 	};
 	for (auto &e : pages)
 		if (strcmp(e.n, name) == 0)
@@ -250,8 +251,11 @@ revc_test_menu_state(int page, int option, int context, int layout, int legend)
 		PadLayoutApply(layout);
 	// context: the controller picture's context, or on Stats/Brief the Xbox sub-tab
 	void MenuSkinXboxSetSubTab(int page, int tab);
+	void MenuSkinXboxOptionsFor(int section);
 	if (context >= 0 && (page == MENUPAGE_STATS || page == MENUPAGE_BRIEFS))
 		MenuSkinXboxSetSubTab(page, context);
+	else if (context >= 0 && page == MENUPAGE_CONSOLE_OPTIONS)	// the Xbox's "advanced" list of a section
+		MenuSkinXboxOptionsFor(context);
 	else if (context >= 0)
 		PadPictureSetContext(context);
 	if (legend >= 0)

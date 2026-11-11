@@ -46,7 +46,7 @@ static const Ps2Tab tabs[] = {
 	{ MENUPAGE_CONSOLE_CONTROLS, MENUPAGE_PAD_PICTURE, 332.0f, 995.0f, "RVC_PT4" },	// the console's controls page
 	{ MENUPAGE_SOUND_SETTINGS, -1, 568.0f, 995.0f, "RVC_PT5" },
 	{ MENUPAGE_CONSOLE_DISPLAY, -1, 785.0f, 995.0f, "RVC_PT6" },	// the console's display page
-	{ MENUPAGE_LANGUAGE_SETTINGS, -1, 1043.0f, 995.0f, "RVC_PT7" },
+	{ MENUPAGE_CONSOLE_OPTIONS, MENUPAGE_LANGUAGE_SETTINGS, 1043.0f, 995.0f, "RVC_PT8" },	// revc: "options" in the EU discs' "language" place
 };
 
 // "screen position" (PS2 Display page): the picture's offset for TVs that crop it, as on the PS2.
