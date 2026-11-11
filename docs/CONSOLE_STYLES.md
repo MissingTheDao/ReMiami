@@ -16,7 +16,7 @@ content and stay outside the repo; this file records what the code does and why.
 | 13e | HUD per style (Xbox safe-area shift and rounder radar), console UI scaled by screen height | done (measured elements) |
 | 13f | Button glyph variants per UI style | done |
 | 13g | PS2 menu look and animations | done |
-| 13h | Xbox menu (Maestro) look and animations, controller page | |
+| 13h | Xbox menu (Maestro) look and animations, controller page | in progress: layout, icon bar, help line, selection pulse |
 | 13i | Console data from an imported disc (Xbox maps and flames, PS2 animations), texture packs from zips | zip packs done |
 
 ## 13a: reference scenes
@@ -198,3 +198,29 @@ Finished (2026-11-11):
   saveload scenario opens the pause menu on that page).
 - Kept from the PC menu on purpose: row spacing (25 px at 448 lines vs the PS2's ~30, so 7 rows fit
   above the tabs) and the PC page contents (revc's options), which the PS2 menu doesn't have.
+
+## 13h: Xbox menu skin (in progress)
+
+`core/MenuSkinXbox.cpp`, with UI STYLE = Xbox during a game, on the seven pages the Xbox pause menu
+has (load, map, brief, stats, controls, audio, display/graphics), when the Xbox menu sprites are
+imported from the player's disc (`neo/UserInterface`); otherwise the PC look stays. Measured on
+native 640x480 xemu captures:
+- Page title top left (52, 48), the Xbox's Vice City logo (`r3_menu_228`) top right.
+- Items: labels at x 139, values at x 331 (pushed right after a longer label), rows 44.5 px apart
+  from y 150, 5 rows (3 on Audio, whose radio picker sits under them at y 283); no scrollbar.
+  The menu's own y units are 448 lines, so the row positions are converted.
+- Mint selection bar (0, 210, 141) behind the current label with the Xbox's pulse: a white glow
+  growing 0.9 to 1.157 x 1.081 while fading 0.5 to 0.059, every 0.8 s (R3_Menu.anm).
+- Icon bar: disk, compass, tape, computer, pad, boombox, TV (`r3_menu_238` ... `255`) at the
+  measured x, the current page's icon enlarged on a mint box.
+- Help line in pink under it with the pad's glyphs (Xbox UI style: coloured): Start resume game,
+  left/right select, A select, B back. BACK entries are hidden (B goes back); LT/RT switch pages.
+- Sprites go through the texture mods: a loose file or pack entry `textures/ui/r3_menu_241.png`
+  replaces the imported `ui/r3_menu_241.dds` (the 4x remake pack works this way); the controller
+  page's picture too. `cargo run -p revc-import --example import -- <disc> <dir>` imports a disc
+  outside the game (with `REVC_IMPORT_DIR=<dir>` for tests).
+
+Still to do: the panel's tilt/move animation (~400 ms on page change), the logo glint (3.8 s),
+the Xbox fonts (RWFont/RWSFArborcrestHeavy), dialogs (blue layered panels), the controls page's
+pad drawing with callout lines, the Load list and Stats in the Xbox style, checking every page
+against the captures.

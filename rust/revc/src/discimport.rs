@@ -92,6 +92,47 @@ pub unsafe extern "C" fn revc_import_read(kind: c_int, rel: *const c_char, buf: 
     n as isize
 }
 
+/// An imported image decoded to RGBA; a texture mod or pack for (folder, name), e.g.
+/// ("ui", "r3_menu_241"), wins: remakes at a higher resolution (callers size sprites by layout,
+/// not by pixels).
+fn decode_imported(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
+    let folder = path.parent().and_then(|p| p.file_name()).map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+    let stem = path.file_stem().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+    match crate::texmods::find_rgba(&folder, &stem) {
+        Some(img) => Ok(img),
+        None => crate::texmods::decode(path),
+    }
+}
+
+/// An imported image (DDS or PNG; `rel` inside the kind's folder, e.g. "ui/r3_menu_241.dds")
+/// decoded to RGBA8, top row first; free with revc_texmod_free. 0 if missing or unreadable.
+///
+/// # Safety
+/// `rel` is a NUL-terminated string; the out pointers must be valid.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_import_rgba(kind: c_int, rel: *const c_char, width: *mut c_int, height: *mut c_int, rgba: *mut *mut u8) -> c_int {
+    let kind = if kind == 1 { DiscKind::Ps2 } else { DiscKind::Xbox };
+    if rel.is_null() || !revc_import::imported(&cache_dir(), kind) {
+        return 0;
+    }
+    let rel = unsafe { CStr::from_ptr(rel) }.to_string_lossy().into_owned();
+    let path = cache_dir().join(kind.dir()).join(&rel);
+    match decode_imported(&path) {
+        Ok((w, h, px)) => {
+            unsafe {
+                *width = w as c_int;
+                *height = h as c_int;
+                *rgba = Box::into_raw(px.into_boxed_slice()) as *mut u8;
+            }
+            1
+        }
+        Err(e) => {
+            eprintln!("revc: import {rel}: {e}");
+            0
+        }
+    }
+}
+
 /// 1 while a file dialog or an import is running.
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_import_busy() -> c_int {
@@ -138,7 +179,7 @@ pub unsafe extern "C" fn revc_import_image(rel: *const c_char, width: *mut c_int
         return 0;
     }
     let rel = unsafe { CStr::from_ptr(rel) }.to_string_lossy().into_owned();
-    match crate::texmods::decode(&cache_dir().join(rel)) {
+    match decode_imported(&cache_dir().join(rel)) {
         Ok((w, h, px)) => {
             unsafe {
                 *width = w as c_int;

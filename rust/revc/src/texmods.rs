@@ -218,6 +218,19 @@ fn decode_png(data: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
     Ok((w, h, rgba))
 }
 
+/// An override for (folder, name) decoded to RGBA (loose file or pack): used for imported console
+/// art (`ui/r3_menu_241` ...) so a pack can replace it like a texture.
+pub fn find_rgba(txd: &str, tex: &str) -> Option<(u32, u32, Vec<u8>)> {
+    let src = index().get(&(txd.to_ascii_lowercase(), tex.to_ascii_lowercase()))?;
+    match src.read().and_then(|d| decode_bytes(&d)) {
+        Ok(img) => Some(img),
+        Err(e) => {
+            eprintln!("texmods: {src}: {e}; using the imported original");
+            None
+        }
+    }
+}
+
 fn lookup(txd: &str, tex: &str) -> Option<&'static Source> {
     let idx = index();
     idx.get(&(txd.to_ascii_lowercase(), tex.to_ascii_lowercase()))
