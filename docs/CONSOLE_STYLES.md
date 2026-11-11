@@ -173,6 +173,10 @@ cross-fade takes 167 ms (measured on the PS2) instead of the PC's ~390 ms; the D
 glyphs now load from the game's button TXDs too (they were never set, so they were missing without
 a glyph pack).
 
-Still to do: the menu-open fade (234 ms) and the highlight slide (133-200 ms); sliders next to their
-label as on the PS2; labels without a value centred; the row spacing (PS2 ~30 px at 448 lines);
+Then: sliders start right after their label (x 311) with the label right-aligned before them,
+other labels without a value are centred, long labels no longer wrap.
+
+Still to do: the Audio page (its radio picker and the PC helper line sit where the PS2 help box
+is: it needs its own PS2 layout); the menu-open fade (234 ms, the page fade is used for now) and the
+highlight slide (133-200 ms); the row spacing (PS2 ~30 px at 448 lines);
 checking the other pages against their captures; the tab names are English built-in texts.
