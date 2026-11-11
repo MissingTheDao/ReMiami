@@ -11,7 +11,7 @@ content and stay outside the repo; this file records what the code does and why.
 |---|---|---|
 | 13a | Reference scenes: the `scenes` test scenario stands the player at the console capture spots (time, weather, follow camera, HUD on) and writes 640x480 frames; `scripts/scene_colours.py` measures them | done |
 | 13b | World colours per style (lighting, colour filter, PS2 highlight clipping), checked against the captures with the same measurements | PS2 checked; Xbox lightmaps and gamma open |
-| 13c | Trails: console persistence (30/128 per 30 Hz frame), frame-rate and resolution independent, on in both console styles | |
+| 13c | Trails: console persistence, frame-rate and resolution independent, on in both console styles | done |
 | 13d | Style settings: fixed LOD 1.0, Classic camera and movement, 4:3 option, PS2 time cycle from an imported disc | LOD done |
 | 13e | HUD per style (Xbox safe-area shift and rounder radar), console UI scaled by screen height | done (measured elements) |
 | 13f | Button glyph variants per UI style | done |
@@ -110,3 +110,19 @@ How the Xbox draws it (reverse-engineered from the Xbox executable; local notes
   frame at the pixel, T0 one row up (PC: three passes with a +2,+2 px offset). Trails off draws
   nothing.
 - A hardware gamma ramp: at the default brightness the output is x^0.909.
+
+## 13c: trails
+
+Both consoles default to trails on, and both draw them as the PC does with its Trails option (the
+Xbox in one shader pass with the same weights, see 13b): the previous displayed frame, shifted,
+blended in with the time cycle's blur colour, feeding back. The per-channel persistence is about
+(2 + 2k) x BlurRGB/255 (noon: R 0.49, G 0.32, B 0.14), which matches the 0.25-0.32 measured on the
+console videos. revc's Motion Blur option draws exactly this (`CPostFX::RenderOverlayBlur`); for
+the console look:
+
+- The PS2 and Xbox presets turn it on (`MotionBlur`).
+- The previous frame is kept once per game step (30 Hz, `CTimer::GetFrameCounter`), as on the
+  consoles: frames drawn in between blend with the same image, so trail length and colour are the
+  same at 30, 60 or 144 fps.
+- The shift is 2 px at 448 lines, scaled with the screen height (was 2 px at any resolution and
+  only with the debug menu's Blur switch).
