@@ -14,6 +14,20 @@ UNIT=revc-ai
 systemctl --user stop "$UNIT" 2>/dev/null || true
 systemctl --user reset-failed "$UNIT" 2>/dev/null || true
 [[ "${1:-}" == stop ]] && { echo "stopped"; exit 0; }
+# Never alongside a game or emulator, nor without room: on 2026-11-11 23:25 the model (4 GB),
+# test runs and the Claude app (6 GB plus swap) together filled the 15 GB and systemd-oomd killed
+# the Claude app again. The model came up between runs from a delayed restart. AI_FORCE=1 skips
+# these checks.
+if [[ -z "${AI_FORCE:-}" ]]; then
+  if pgrep -x 'revc|xemu|pcsx2|pcsx2-qt' > /dev/null; then
+    echo "revc-ai not started: a game or emulator is running" >&2; exit 3
+  fi
+  AVAIL_GIB=$(awk '/^MemAvailable:/ {print int($2 / 1048576)}' /proc/meminfo)
+  NEED_GIB=$(( ${DEF_MAX%G} + 2 ))	# its hard limit plus headroom
+  if (( AVAIL_GIB < NEED_GIB )); then
+    echo "revc-ai not started: ${AVAIL_GIB} GiB available, ${NEED_GIB} needed" >&2; exit 3
+  fi
+fi
 systemd-run --user --unit="$UNIT" --collect \
   -p MemoryHigh="${MEMHIGH:-$DEF_HIGH}" -p MemoryMax="${MEMMAX:-$DEF_MAX}" -p MemorySwapMax=1G \
   --setenv=PROFILE="${PROFILE:-}" --setenv=MODEL="${MODEL:-}" --setenv=NCPUMOE="${NCPUMOE:-}" --setenv=CTX="${CTX:-}" \
