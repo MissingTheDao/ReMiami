@@ -214,6 +214,13 @@ CurrentTab(int page)
 	return -1;
 }
 
+// The Xbox page (icon) a menu page belongs to, -1 if none.
+int
+MenuSkinXboxTab(int page)
+{
+	return CurrentTab(page);
+}
+
 // Whether the skin draws on this page: Xbox UI style, a game running, a page the Xbox pause menu
 // has, and the Xbox menu sprites imported.
 bool

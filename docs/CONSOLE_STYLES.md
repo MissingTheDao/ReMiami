@@ -224,8 +224,10 @@ native 640x480 xemu captures:
 - Logo glint: a white flash over "city" (`r3_menu_230`) then "Vice" (`232`), 200 ms each from
   3.4 s after a page starts, every 3.8 s (anim 4); placed from the menu video, slightly fainter than
   the Xbox's. `REVC_TEST_GLINT=1|2` shows a stage for screenshots.
-- Panel: the PC menu's panel already moves its corners on a page change in ~380 ms (Xbox ~400 ms);
-  the Xbox's own per-page panel shapes are not decoded yet (anim 0 holds them as 45 states).
+- Panel: per page the Xbox's panel corners (estimated from the extreme points of the camo area in
+  each page's capture; bottom edge under the icon bar at y 378), moved on a page change by the PC
+  menu's ~380 ms corner animation (Xbox ~400 ms). The exact values are in R3_Menu.anm anim 0 (45
+  states), not decoded; not yet compared at 640x480 (the in-game menu capture runs at 1280x720).
 
 - Dialogs (new game, load, delete confirmations): the Load page dimmed behind, the Xbox's layered
   blue dialog (steel-blue layer, dark edge, light-blue panel as measured), the question centred
@@ -250,7 +252,7 @@ native 640x480 xemu captures:
   the Xbox's green with teal lines (measured). Titles and items stay in the game's heading font,
   which is what the Xbox shows there too.
 
-Still to do: the Xbox per-page panel shapes,
+Still to do:
 the Xbox fonts (RWFont/RWSFArborcrestHeavy), dialogs (blue layered panels), the Load list and Stats in the Xbox style, checking every page
 against the captures.
 
