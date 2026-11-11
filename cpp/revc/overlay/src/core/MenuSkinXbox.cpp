@@ -503,26 +503,31 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 	// Tilted with the panel (top edge leaning right), from the label's left edge to at least a
 	// fixed width, the last part a darker mint tail (measured on the Xbox's list pages).
 	x1 = Max(x1, x0 + W(minWidth));	// (dialog buttons: tight, minWidth 0)
-	float tilt = W(5.0f), tailW = W(16.0f);
-	if (DrawBarShape(x0, y0, x1, y1, CRGBA(0, 207, 133, alpha))) {
-		// the console's own outline (its colour from the shape's brush: 0, 207, 133)
-	} else if (!tail) {	// whole-row bars (the radio station) have no tail
-		CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 + tilt, y0, x0, y1, x1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
-	} else {
-	CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 - tailW + tilt, y0, x0, y1, x1 - tailW, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
-	CSprite2d::Draw2DPolygon(x1 - tailW + tilt, y0, x1 + tilt, y0, x1 - tailW, y1, x1, y1, CRGBA(0, 120, 80, alpha));
+	if (!tail) {	// whole-row bars (the radio station): the outline's own height, ~39 px, centred
+		float cy = (y0 + y1) / 2.0f, hh = H(39.0f * 448.0f / 480.0f) / 2.0f;
+		y0 = cy - hh;
+		y1 = cy + hh;
 	}
-	// the pulse: a white glow over the bar growing 0.9 -> 1.157 x 1.081 while fading 0.5 -> 0.059,
-	// every 0.8 s (R3_Menu.anm)
-	// in 30 Hz steps, as the Xbox updates its menu (R3_Menu.anm keyframes at 30 fps)
+	float tilt = W(5.0f), tailW = W(16.0f);
+	// the pulse: a white glow growing 0.9 -> 1.157 x 1.081 while fading 0.5 -> 0.059, every 0.8 s
+	// in 30 Hz steps (R3_Menu.anm). Drawn behind the bar, so the bar stays solid and only the glow's
+	// edge shows; never wider than the bar (a grey box where the bar meets black, rounds 7-8).
 	float t = ((CTimer::GetTimeInMillisecondsPauseMode() % 800) * 3 / 100) / 24.0f;
 	float sx = 0.9f + (1.157f - 0.9f) * t, sy = 0.9f + (1.081f - 0.9f) * t;
 	float a = 0.5f + (0.059f - 0.5f) * t;
-	float cx = (x0 + x1) / 2.0f, cy = (y0 + y1) / 2.0f, hw = (x1 - x0) / 2.0f * sx, hh = (y1 - y0) / 2.0f * sy;
-	// the glow grows only vertically past the bar: wider, it shows as a grey box where the bar
-	// meets black (the radio row, the map legend; rounds 7-8)
-	hw = Min(hw, (x1 - x0) / 2.0f);
+	float cx = (x0 + x1) / 2.0f, cy = (y0 + y1) / 2.0f, hw = Min((x1 - x0) / 2.0f * sx, (x1 - x0) / 2.0f), hh = (y1 - y0) / 2.0f * sy;
 	CSprite2d::DrawRect(CRect(cx - hw, cy - hh, cx + hw, cy + hh), CRGBA(255, 255, 255, (uint8)(a * alpha)));
+	if (DrawBarShape(x0, y0, tail ? x1 - tailW : x1, y1, CRGBA(0, 207, 133, alpha))) {
+		// the console's own outline (its colour from the shape's brush: 0, 207, 133), with the
+		// dark block at its end kept (round 22)
+		if (tail)
+			CSprite2d::Draw2DPolygon(x1 - tailW + tilt, y0, x1 + tilt, y0, x1 - tailW, y1, x1, y1, CRGBA(0, 120, 80, alpha));
+	} else if (!tail) {
+		CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 + tilt, y0, x0, y1, x1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
+	} else {
+		CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 - tailW + tilt, y0, x0, y1, x1 - tailW, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
+		CSprite2d::Draw2DPolygon(x1 - tailW + tilt, y0, x1 + tilt, y0, x1 - tailW, y1, x1, y1, CRGBA(0, 120, 80, alpha));
+	}
 }
 
 // A dialog's background, drawn before the page's own text (CMenuManager::DrawStandardMenus): the
