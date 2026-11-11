@@ -252,9 +252,8 @@ native 640x480 xemu captures:
   the Xbox's green with teal lines (measured). Titles and items stay in the game's heading font,
   which is what the Xbox shows there too.
 
-Still to do:
-the Xbox fonts (RWFont/RWSFArborcrestHeavy), dialogs (blue layered panels), the Load list and Stats in the Xbox style, checking every page
-against the captures.
+Still to do: the Stats page in the Xbox layout (a stats/unlocked-items pair of tabs), the
+panel shapes compared at 640x480, the Xbox's "Fire missiles" callout, every page checked in play.
 
 ## 13i: texture packs per UI style
 
