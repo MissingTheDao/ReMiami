@@ -325,7 +325,7 @@ revc_test_telemetry(float *out, char *anim, int animLen, float *animTime)
 	CPhysical *e = veh ? (CPhysical*)veh : (CPhysical*)ped;
 	CVector p = e->GetPosition(), f = e->GetForward();
 	out[0] = p.x; out[1] = p.y; out[2] = p.z;
-	out[3] = RADTODEG(Atan2(-f.x, f.y));
+	out[3] = veh ? RADTODEG(Atan2(-f.x, f.y)) : RADTODEG(ped->m_fRotationCur);	// (a ped's matrix lags its rotation)
 	out[4] = e->m_vecMoveSpeed.Magnitude() * 50.0f;
 	out[5] = veh ? veh->GetModelIndex() : -1.0f;
 	for (int i = 0; i < 4; i++)

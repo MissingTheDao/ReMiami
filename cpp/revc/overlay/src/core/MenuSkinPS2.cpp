@@ -93,7 +93,7 @@ MenuSkinPS2GlideSeed(int id, CRect r)
 {
 	auto &s = glides[id];
 	s.init = true;
-	s.page = FrontEndMenuManager.m_nCurrScreen;
+	s.page = id == 0 ? 0 : FrontEndMenuManager.m_nCurrScreen;	// (the tab bar's glide is one box for all pages)
 	s.from = s.to = s.cur = r;
 	s.start = CTimer::GetTimeInMillisecondsPauseMode();
 	s.tab = true;	// the next glide is the focus glide from the tab
@@ -139,8 +139,10 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 
 // Focus from the tab bar into a list: the box leaves the tab and glides to row 0 (measured).
 // gTabRect: the tab box as last drawn; Seed starts a glide box there.
-static CRect gTabRect;
+static CRect gTabRect, gRowRect;
 static bool gTabSweep;
+// The list's highlight box as last drawn (Frontend.cpp): triangle glides the tab box from it.
+void MenuSkinPS2NoteRowRect(const CRect &r) { gRowRect = r; }
 void
 MenuSkinPS2GlideSeed(int id, CRect r);
 bool
@@ -465,6 +467,7 @@ MenuSkinPS2Input(CMenuManager *m)
 		if (tri) {
 			pageFocus = false;
 			loadColumn = false;
+			MenuSkinPS2GlideSeed(0, gRowRect);
 			return true;
 		}
 		if (up || down) {
@@ -500,6 +503,7 @@ MenuSkinPS2Input(CMenuManager *m)
 			if (tri) {
 				audioEdit = false;
 				pageFocus = false;
+				MenuSkinPS2GlideSeed(0, gRowRect);
 				return true;
 			}
 			if ((left || right) && !audioOutput)
@@ -524,6 +528,7 @@ MenuSkinPS2Input(CMenuManager *m)
 	if (pageFocus) {
 		if (IsTabPage(m->m_nCurrScreen) && tri) {
 			pageFocus = false;
+			MenuSkinPS2GlideSeed(0, gRowRect);	// the box glides from the row back to the tab
 			return true;
 		}
 		return false;

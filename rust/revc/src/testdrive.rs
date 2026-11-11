@@ -1123,7 +1123,7 @@ impl Driver {
                     let (_, x, y, heading, hour, minute, weather) = SCENES[0];
                     match script.start.as_str() {
                         "menu_base" => unsafe { revc_test_scene(x, y, heading, hour, minute, weather); },
-                        "foot_open" => unsafe { revc_test_world_start(0, 520.0, -1100.0, 0.0) },	// beach sand, flat
+                        "foot_open" => unsafe { revc_test_world_start(0, 560.0, -700.0, 0.0) },	// beach sand, flat and clear
                         "car_straight" => unsafe { revc_test_world_start(1, MOONLITE.0, MOONLITE.1, 0.0) },	// Ocean Drive, north
                         "car_open" => unsafe { revc_test_world_start(1, -1450.0, -900.0, 0.0) },	// the airport
                         "bike_straight" => unsafe { revc_test_world_start(2, MOONLITE.0, MOONLITE.1, 0.0) },
