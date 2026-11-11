@@ -397,6 +397,21 @@ MenuSkinPS2Input(CMenuManager *m)
 		}
 		return true;
 	}
+	if (pageFocus && m->m_nCurrScreen == MENUPAGE_SOUND_SETTINGS && (up || down)) {
+		// Audio is a grid on the PS2 (v1.40): music | SFX on top (left/right change the volume),
+		// radio station below; down from either goes to radio station, up from it to music.
+		// (revc: the output/stereo cell beside radio station isn't a row yet.)
+		int music = -1, radio = -1;
+		for (int i = 0; i < NUM_MENUROWS; i++) {
+			int a = aScreens[MENUPAGE_SOUND_SETTINGS].m_aEntries[i].m_Action;
+			if (a == MENUACTION_MUSICVOLUME) music = i;
+			if (a == MENUACTION_RADIO) radio = i;
+		}
+		if (music >= 0 && radio >= 0) {
+			m->m_nCurrOption = m->m_nCurrOption == radio ? (up ? music : radio) : (down ? radio : m->m_nCurrOption);
+			return true;
+		}
+	}
 	if (pageFocus) {
 		if (IsTabPage(m->m_nCurrScreen) && tri) {
 			pageFocus = false;

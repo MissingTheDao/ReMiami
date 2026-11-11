@@ -363,9 +363,10 @@ const MOTION_ROUTES: &[MotionRoute] = &[
     ("ps2_highlight_wrap", "start down right right cross", "up", 60),
     ("ps2_highlight_wrap_down", "start down right right cross up", "down", 60),
     ("ps2_glide_load", "start right right cross cross", "down", 60),	// the slots
-    ("ps2_glide_audio_sideways", "start down right cross", "down", 60),
-    ("ps2_radio_right", "start down right cross down down", "right", 60),
-    ("ps2_radio_left", "start down right cross down down", "left", 60),
+    ("ps2_glide_audio", "start down right cross", "down", 60),	// music -> radio station
+    ("ps2_glide_audio_sideways", "start down right cross", "right", 60),
+    ("ps2_radio_right", "start down right cross down", "right", 60),
+    ("ps2_radio_left", "start down right cross down", "left", 60),
     ("ps2_slider_step", "start down right cross", "right", 60),
     ("ps2_legend_off", "start cross", "cross", 60),
     ("ps2_legend_on", "start cross cross", "cross", 60),
