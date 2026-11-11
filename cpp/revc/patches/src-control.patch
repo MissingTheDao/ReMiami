@@ -340,6 +340,30 @@
 +	static float (&PoliceRestartHeadings)[NUM_RESTART_POINTS];
 +	static uint16 &NumberOfPoliceRestarts;
  };
+--- a/src/control/RoadBlocks.cpp
++++ b/src/control/RoadBlocks.cpp
+@@ -236,6 +236,10 @@
+ 		CWorld::FindObjectsKindaColliding(tmp.GetPosition(), fModelRadius, 0, &colliding, 2, nil, false, true, true, false, false);
+ 		if (!colliding) {
+ 			CAutomobile* pVehicle = new CAutomobile(vehicleId, RANDOM_VEHICLE);
++#ifdef FIX_BUGS
++			if (pVehicle == nil)	// revc (SilentPatch VC): the vehicle pool is full
++				continue;
++#endif
+ 			pVehicle->SetStatus(STATUS_ABANDONED);
+ 			// pVehicle->GetHeightAboveRoad(); // called but return value is ignored?
+ 			tmp.GetPosition().z += fModelRadius - 0.6f;
+@@ -289,6 +293,10 @@
+ 		CWorld::FindObjectsKindaColliding(tmp.GetPosition(), pMI->GetColModel()->boundingSphere.radius, 0, &colliding, 2, nil, false, true, true, false, false);
+ 		if (colliding == 0) {
+ 			CObject* pObject = new CObject(MI_ROADWORKBARRIER1, true);
++#ifdef FIX_BUGS
++			if (pObject == nil)	// revc (SilentPatch VC): the object pool is full
++				return;
++#endif
+ 			pObject->GetMatrix() = tmp;
+ 			pObject->ObjectCreatedBy = TEMP_OBJECT;
+ 			pObject->m_nEndOfLifeTime = CTimer::GetTimeInMilliseconds() + 600000;
 --- a/src/control/Script.cpp
 +++ b/src/control/Script.cpp
 @@ -741,6 +741,8 @@

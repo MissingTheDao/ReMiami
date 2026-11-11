@@ -1,3 +1,51 @@
+--- a/src/peds/PedAttractor.cpp
++++ b/src/peds/PedAttractor.cpp
+@@ -104,7 +104,7 @@
+ const C2dEffect* CPedAttractorManager::GetEffectForIceCreamVan(CVehicle* pVehicle, const CVector& pos)
+ {
+ 	if (!vVehicleToEffect.empty()) {
+-		for (std::vector<CVehicleToEffect>::const_iterator assoc = vVehicleToEffect.begin(); assoc != vVehicleToEffect.end(); ++assoc) {
++		for (std::list<CVehicleToEffect>::const_iterator assoc = vVehicleToEffect.begin(); assoc != vVehicleToEffect.end(); ++assoc) {
+ 			if (assoc->GetVehicle() == pVehicle)
+ 				return assoc->ChooseEffect(pos);
+ 		}
+@@ -124,7 +124,7 @@
+ {
+ 	if (vVehicleToEffect.empty())
+ 		return nil;
+-	for (std::vector<CVehicleToEffect>::const_iterator assoc = vVehicleToEffect.begin(); assoc != vVehicleToEffect.end(); ++assoc) {
++	for (std::list<CVehicleToEffect>::const_iterator assoc = vVehicleToEffect.begin(); assoc != vVehicleToEffect.end(); ++assoc) {
+ 		if (assoc->HasThisEffect(pEffect))
+ 			return assoc->GetVehicle();
+ 	}
+@@ -149,7 +149,7 @@
+ 		return;
+ 	if (vVehicleToEffect.empty())
+ 		return;
+-	for (std::vector<CVehicleToEffect>::iterator assoc = vVehicleToEffect.begin(); assoc != vVehicleToEffect.end();) {
++	for (std::list<CVehicleToEffect>::iterator assoc = vVehicleToEffect.begin(); assoc != vVehicleToEffect.end();) {
+ 		if (assoc->GetVehicle() != pVehicle) {
+ 			++assoc;
+ 			continue;
+--- a/src/peds/PedAttractor.h
++++ b/src/peds/PedAttractor.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ #include "common.h"
+ #include <vector>
++#include <list>	// revc (SilentPatch VC): the ice cream van effects: pointers into them must stay valid
+ 
+ #include "2dEffect.h"
+ #include "Ped.h"
+@@ -33,7 +34,7 @@
+ 	std::vector<CPedAttractor*> vPizzaAttractors;
+ 	std::vector<CPedAttractor*> vShelterAttractors;
+ 	std::vector<CPedAttractor*> vIceCreamAttractors;
+-	std::vector<CVehicleToEffect> vVehicleToEffect;
++	std::list<CVehicleToEffect> vVehicleToEffect;
+ 
+ public:
+ 	CPedAttractor* RegisterPedWithAttractor(CPed* pPed, C2dEffect* pEffect, const CMatrix& matrix);
 --- a/src/peds/PedType.cpp
 +++ b/src/peds/PedType.cpp
 @@ -40,86 +40,19 @@

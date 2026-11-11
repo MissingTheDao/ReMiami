@@ -158,3 +158,28 @@
  }
  
  void
+--- a/src/objects/Stinger.cpp
++++ b/src/objects/Stinger.cpp
+@@ -37,6 +37,11 @@
+ CStinger::CStinger()
+ {
+ 	bIsDeployed = false;
++#ifdef FIX_BUGS
++	// revc (SilentPatch VC): no garbage pointers for Remove() to free
++	for (int32 i = 0; i < NUM_STINGER_SEGMENTS; i++)
++		pSpikes[i] = nil;
++#endif
+ }
+ 
+ void
+@@ -78,7 +83,10 @@
+ void
+ CStinger::Remove()
+ {
++#ifndef FIX_BUGS
+ 	if (!bIsDeployed) return;
++#endif
++	// (FIX_BUGS: also when not deployed yet: Init's pool-full abort frees the segments it made)
+ 
+ 	for (int32 i = 0; i < NUM_STINGER_SEGMENTS; i++) {
+ 		CStingerSegment *spikeSegment = pSpikes[i];
