@@ -366,6 +366,8 @@ struct Globals {
     mesh_xform: [f32; 48],
     im2d_override: u32,
     im2d_override_params: [f32; 8],
+    /// Added to every Im2D vertex position (console HUD layouts, plan task 13); 0 normally.
+    im2d_offset: [f32; 2],
     im3d_vertices: *const c_void,
     im3d_num_vertices: i32,
     im3d_xform: [f32; 48],
@@ -388,6 +390,7 @@ static mut G: Globals = Globals {
     mesh_xform: [0.0; 48],
     im2d_override: 0,
     im2d_override_params: [0.0; 8],
+    im2d_offset: [0.0; 2],
     im3d_vertices: null(),
     im3d_num_vertices: 0,
     im3d_xform: [0.0; 48],
@@ -726,14 +729,35 @@ fn im2d_state() -> DrawState {
     s
 }
 
+/// The vertices moved by the Im2D offset, or None when there is none.
+unsafe fn im2d_offset_vertices(vertices: *mut c_void, num_vertices: i32) -> Option<Vec<Vertex2D>> {
+    let [dx, dy] = g().im2d_offset;
+    if (dx == 0.0 && dy == 0.0) || vertices.is_null() || num_vertices <= 0 {
+        return None;
+    }
+    let src = unsafe { std::slice::from_raw_parts(vertices as *const Vertex2D, num_vertices as usize) };
+    Some(src.iter().map(|v| Vertex2D { x: v.x + dx, y: v.y + dy, ..*v }).collect())
+}
+
 unsafe extern "C" fn im2d_render_primitive(prim: u32, vertices: *mut c_void, num_vertices: i32) {
     let s = im2d_state();
-    unsafe { host::revc_rw_im2d(&s, prim, vertices as *const Vertex2D, num_vertices, null(), 0) };
+    let moved = unsafe { im2d_offset_vertices(vertices, num_vertices) };
+    let v = moved.as_ref().map_or(vertices as *const Vertex2D, |m| m.as_ptr());
+    unsafe { host::revc_rw_im2d(&s, prim, v, num_vertices, null(), 0) };
 }
 
 unsafe extern "C" fn im2d_render_indexed_primitive(prim: u32, vertices: *mut c_void, num_vertices: i32, indices: *mut c_void, num_indices: i32) {
     let s = im2d_state();
-    unsafe { host::revc_rw_im2d(&s, prim, vertices as *const Vertex2D, num_vertices, indices as *const u16, num_indices) };
+    let moved = unsafe { im2d_offset_vertices(vertices, num_vertices) };
+    let v = moved.as_ref().map_or(vertices as *const Vertex2D, |m| m.as_ptr());
+    unsafe { host::revc_rw_im2d(&s, prim, v, num_vertices, indices as *const u16, num_indices) };
+}
+
+/// Moves every following Im2D draw by (dx, dy) pixels until set back to (0, 0): the console HUD
+/// layouts (plan task 13) place the PC-coded HUD inside a 4:3 area or shift a group of elements.
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_device_set_im2d_offset(dx: f32, dy: f32) {
+    g().im2d_offset = [dx, dy];
 }
 
 pub(crate) const TEX_LINEAR: u32 = 2;

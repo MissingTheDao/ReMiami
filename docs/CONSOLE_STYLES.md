@@ -13,7 +13,7 @@ content and stay outside the repo; this file records what the code does and why.
 | 13b | World colours per style (lighting, colour filter, PS2 highlight clipping), checked against the captures with the same measurements | |
 | 13c | Trails: console persistence (30/128 per 30 Hz frame), frame-rate and resolution independent, on in both console styles | |
 | 13d | Style settings: fixed LOD 1.0, Classic camera and movement, 4:3 option, PS2 time cycle from an imported disc | LOD done |
-| 13e | HUD per style (Xbox safe-area shift and rounder radar), console UI scaled by screen height | |
+| 13e | HUD per style (Xbox safe-area shift and rounder radar), console UI scaled by screen height | done (measured elements) |
 | 13f | Button glyph variants per UI style | done |
 | 13g | PS2 menu look and animations | |
 | 13h | Xbox menu (Maestro) look and animations, controller page | |
@@ -62,3 +62,20 @@ style only picks the variant of that pad's set (`rust/revc/src/host/glyphs.rs`, 
 | PC | plain | plain | unchanged |
 
 A set without the variant (Steam Deck has no coloured buttons) uses the plain glyph.
+
+## 13e: HUD per UI style
+
+Measured on the console stills (research notes, `CONSOLE_LOOK_SPEC.md` 4b, local only):
+
+| | PC (revc default) | PS2 UI style | Xbox UI style |
+|---|---|---|---|
+| Vertical layout | the user's ProperScaling | PC constants in 448 lines (`CDraw::ScaleY`) | the same pixel constants in 480 lines |
+| Money, weapon, health, armour, wanted, clock | PC positions | PC positions | moved 22 px left and 22 px down (`HUD_FROM_RIGHT`/`HUD_Y` in Hud.cpp) |
+| Radar | 82x82 (FixRadar) or 94x76 | 94x76 at left 40, bottom 40 | 102x94 at left 55, bottom 42 |
+| Wide screens | stretched to the edges | 4:3 area scaled by the screen height, centred (pillarboxed) | same |
+
+The 4:3 area: `ConsoleHudBegin`/`ConsoleHudEnd` in `core/main.cpp` give the HUD code a 4:3 screen
+(width = height x 4/3, aspect 4:3) and the device moves every 2D draw to the centre
+(`revc_device_set_im2d_offset`). Text queued before (pickup texts placed in the 3D view) is drawn
+first. Not measured yet, so left at the PC positions: zone and vehicle names, subtitles, help and
+mission texts, timers and counters, the pager. Checking them needs console captures with those on screen.

@@ -272,7 +272,7 @@ revc_test_show_controls_menu(void)
 	if (getenv("REVC_TEST_PAD_CONTEXT") && atoi(getenv("REVC_TEST_PAD_CONTEXT")) == 1) {
 		PadPictureContextPress(FEOPTION_ACTION_SELECT);
 	}
-	FrontEndMenuManager.m_nCurrScreen = !page ? MENUPAGE_CONTROLLER_PC : strcmp(page, "pad") == 0 ? MENUPAGE_PAD_PICTURE : atoi(page);
+	FrontEndMenuManager.m_nCurrScreen = !page ? MENUPAGE_CONTROLLER_PC : strcmp(page, "pad") == 0 ? MENUPAGE_PAD_PICTURE : strcmp(page, "graphics") == 0 ? MENUPAGE_GRAPHICS_SETTINGS : atoi(page);
 	FrontEndMenuManager.m_nCurrOption = option ? atoi(option) : 0;
 }
 
