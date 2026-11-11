@@ -23,15 +23,15 @@ use std::ptr::{addr_of, addr_of_mut, null, null_mut};
 
 // rw::RenderState
 pub(crate) const TEXTURERASTER: i32 = 0;
-const TEXTUREADDRESS: i32 = 1;
+pub(crate) const TEXTUREADDRESS: i32 = 1;
 const TEXTUREADDRESSU: i32 = 2;
 const TEXTUREADDRESSV: i32 = 3;
 const TEXTUREFILTER: i32 = 4;
-const VERTEXALPHA: i32 = 5;
-const SRCBLEND: i32 = 6;
+pub(crate) const VERTEXALPHA: i32 = 5;
+pub(crate) const SRCBLEND: i32 = 6;
 const DESTBLEND: i32 = 7;
 const ZTESTENABLE: i32 = 8;
-const ZWRITEENABLE: i32 = 9;
+pub(crate) const ZWRITEENABLE: i32 = 9;
 const FOGENABLE: i32 = 10;
 const FOGCOLOR: i32 = 11;
 const CULLMODE: i32 = 12;
@@ -42,17 +42,19 @@ const STENCILPASS: i32 = 16;
 const STENCILFUNCTION: i32 = 17;
 const STENCILFUNCTIONMASK: i32 = 19;
 const STENCILFUNCTIONWRITEMASK: i32 = 20;
-const ALPHATESTFUNC: i32 = 21;
-const ALPHATESTREF: i32 = 22;
-const GSALPHATEST: i32 = 23;
-const GSALPHATESTREF: i32 = 24;
+pub(crate) const ALPHATESTFUNC: i32 = 21;
+pub(crate) const ALPHATESTREF: i32 = 22;
+pub(crate) const GSALPHATEST: i32 = 23;
+pub(crate) const GSALPHATESTREF: i32 = 24;
 // values
-const ALPHAALWAYS: u32 = 0;
-const ALPHAGREATEREQUAL: u32 = 1;
+pub(crate) const ALPHAALWAYS: u32 = 0;
+pub(crate) const ALPHAGREATEREQUAL: u32 = 1;
 const STENCILKEEP: u32 = 1;
 const STENCILALWAYS: u32 = 8;
 const CULLNONE: u32 = 1;
-const BLENDSRCALPHA: u32 = 5;
+pub(crate) const BLENDSRCALPHA: u32 = 5;
+pub(crate) const ALPHALESS: u32 = 2;
+pub(crate) const BLENDONE: u32 = 2;
 const BLENDINVSRCALPHA: u32 = 6;
 
 /// Render states as GL3 keeps them (gl3device.cpp rwStateCache): texture stage 0 keeps its own
@@ -125,10 +127,10 @@ fn reset_render_state() {
     s.stencil[st(STENCILPASS)] = STENCILKEEP;
 }
 
-const PLATFORM_WGPU: i32 = 13;
+pub(crate) const PLATFORM_WGPU: i32 = 13;
 
 /// The driver data of a wgpu raster; null for null or other platforms' rasters.
-fn raster_ext(r: *mut Raster) -> *mut WgpuRaster {
+pub(crate) fn raster_ext(r: *mut Raster) -> *mut WgpuRaster {
     if r.is_null() || unsafe { (*r).platform } != PLATFORM_WGPU {
         return null_mut();
     }
@@ -581,6 +583,26 @@ unsafe fn camera_target(cam: *mut Camera) -> u32 {
     }
 }
 
+/// engine->currentCamera
+pub(crate) fn current_camera() -> *mut Camera {
+    unsafe { *(hooks().current_camera)() }
+}
+
+/// The 2D texture an EnvMap draw parameter describes: the texture's raster, filter and
+/// addressing (as gl3 setTexture on stage 1), or white for null.
+///
+/// # Safety
+/// A live texture or null.
+pub(crate) unsafe fn tex_envmap(t: *mut Texture) -> EnvMap {
+    unsafe {
+        if !t.is_null() && !raster_ext((*t).raster as *mut Raster).is_null() {
+            let tx = &*t;
+            return EnvMap { texture: rwraster::upload_raster(tx.raster as *mut Raster), filter: tex_filter(tx), address_u: tex_address_u(tx), address_v: tex_address_v(tx) };
+        }
+        EnvMap { texture: 0, filter: TEX_LINEAR, address_u: TEX_WRAP, address_v: TEX_WRAP }
+    }
+}
+
 // ---------------------------------------------------------------- the Device functions
 
 /// Camera matrices as gl3 beginUpdate builds them (left-handed view, columns
@@ -714,8 +736,8 @@ unsafe extern "C" fn im2d_render_indexed_primitive(prim: u32, vertices: *mut c_v
     unsafe { host::revc_rw_im2d(&s, prim, vertices as *const Vertex2D, num_vertices, indices as *const u16, num_indices) };
 }
 
-const TEX_LINEAR: u32 = 2;
-const TEX_WRAP: u32 = 1;
+pub(crate) const TEX_LINEAR: u32 = 2;
+pub(crate) const TEX_WRAP: u32 = 1;
 
 /// Im2D vertices with a second coordinate set, drawn with the bound raster times `tex1`
 /// (null = white) at the second coordinates.
@@ -725,11 +747,7 @@ const TEX_WRAP: u32 = 1;
 pub unsafe fn im2d_render_indexed_primitive_uv2(prim: u32, vertices: *mut c_void, num_vertices: i32, indices: *mut c_void, num_indices: i32, tex1: *mut Texture) {
     unsafe {
         let s = current_draw_state();
-        let mut t = EnvMap { texture: 0, filter: TEX_LINEAR, address_u: TEX_WRAP, address_v: TEX_WRAP };
-        if !tex1.is_null() && !raster_ext((*tex1).raster as *mut Raster).is_null() {
-            let tx = &*tex1;
-            t = EnvMap { texture: rwraster::upload_raster(tx.raster as *mut Raster), filter: tex_filter(tx), address_u: tex_address_u(tx), address_v: tex_address_v(tx) };
-        }
+        let t = tex_envmap(tex1);
         host::revc_rw_im2d_uv2(&s, prim, vertices as *const Vertex2DUV2, num_vertices, indices as *const u16, num_indices, &t);
     }
 }
