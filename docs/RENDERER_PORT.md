@@ -546,6 +546,18 @@ layouts and is checked against a recording of the original, as in steps 3 and 4.
   defined). Image::read/readMasked and the format table stay C++ glue for now.
 - **5c. Rasters.** raster.cpp's bookkeeping (create/destroy, subrasters, createFromImage,
   format helpers) and the wgpu driver's imageFindRasterFormat/rasterFromImage/rasterToImage.
+  **Done 2026-11-11:** `rust/revc/src/rwraster.rs` makes and keeps the rasters (Rust allocates;
+  plugin data through hooks): create/destroy, subRaster, calculateNumLevels, formatHasAlpha, the
+  context stack, and the wgpu driver's raster code (rasterCreate, lock/unlock, imageFindRaster-
+  Format, rasterFromImage, rasterToImage, allocateDXT, uploadRaster, the native raster plugin).
+  The driver dispatch stays in raster.cpp. The pixel converters, the 4-bit palette packers and
+  convertTexToCurrentPlatform had no callers left and are deleted. Checked by
+  `tests/golden/rwraster.txt` (2,220 random operations; `tests/golden/recorders/rwraster`).
+  Three faults of the stage-1 driver turned up, none reached by the game; the port makes them
+  safe: setting an image into a level-less, unlocked texture raster wrote through a null
+  pointer; copies to or from a locked mip level of an odd width ran past the level (rasterLock
+  halves width and stride separately); and rasterFromImage leaked the unpalettized copy of
+  every 4/8-bit image.
 
 ## Appendix: every RW function the game calls
 

@@ -1,0 +1,2220 @@
+create 28 46 16 33792 = 0 => 0141b8e6e0e14d05 | c0
+toimage 0 = 09cd2f8b5402b887 => 0141b8e6e0e14d05 |
+dxt 60 12 1412 5 8 1 2281890705 = 1 => f20ada8c1cf9f443 | c1
+fromimage 1 3251822910 16 5 30 0 142 1 = 0 => f20ada8c1cf9f443 |
+sub 1 0 13 18 8 24 => 2ce8a1ade42e1d59 |
+destroy 1 => 0141b8e6e0e14d05 | d1 evict1
+push 0 = 0 => ef8c0de7ac8088b9 |
+lock 0 2 1 = 1 => eef7efecb26216e9 |
+pop = 0 => b2a94afb42da7435 |
+calc 332 2279 22796 = 12 0 => b2a94afb42da7435 |
+fromimage 0 2232883546 24 33 10 0 74 0 = 0 => b2a94afb42da7435 |
+unlock 0 => 984b00ca3e774f7c |
+calc 1684 576 24690 = 11 0 => 984b00ca3e774f7c |
+pop = -1 => 984b00ca3e774f7c |
+fromimage 0 3827912517 8 6 24 0 17 2 = 0 => 984b00ca3e774f7c |
+destroy 0 => 994f76653e2a3951 | d0 evict0
+dxt 40 64 34180 5 1 1 2903752759 = 2 => aecbc008fb3f3e8e | c2
+create 62 19 32 768 = 3 => eae0ad872625eb8e | c3
+lock 2 1 2 = 0 => eae0ad872625eb8e |
+unlock 3 => eae0ad872625eb8e |
+push 2 = 2 => e16e5182fd17d530 |
+create 21 31 32 1541 = 4 => 502e802fd889cbf0 | c4
+calc 64 1540 58049 = 11 0 => 502e802fd889cbf0 |
+upload 4 = 1 => af1f0b4143c8abb5 | up0:21x31,0,1,0
+fromimage 4 3200498776 4 19 11 0 10 2 = 0 => af1f0b4143c8abb5 |
+create 2 16 0 17666 = 5 => 9a01a029b03bfa07 | c5
+lock 5 3 1 = 0 => 9a01a029b03bfa07 |
+create 31 4 8 131 = -1 => 64674fa1c485cede | c6
+lock 2 1 3 = 0 => 64674fa1c485cede |
+destroy 3 => 8a53474db2ecc1de | d3 evict3
+numlevels 4 = 1 => 8a53474db2ecc1de |
+destroy 4 => c859a72d2b17a9b7 | d4 evict4 tdel1
+push 2 = 2 => 89a2212b5eb2d2d4 |
+create 43 51 16 5636 = 7 => 6678baacec3537e1 | c7
+numlevels 2 = 1 => 6678baacec3537e1 |
+create 1 16 8 38276 = 8 => bd46d777188ce44b | c8
+current = 2 => bd46d777188ce44b |
+toimage 5 = nil => bd46d777188ce44b |
+findfmt 6 1554946688 16 5 11 3 2 2 = 0 -1 -1 -1 -1 => bd46d777188ce44b |
+toimage 5 = nil => bd46d777188ce44b |
+current = 2 => bd46d777188ce44b |
+create 11 64 0 1665 = 9 => 3c38fa026bf7e506 | c9
+create 15 53 16 35460 = 10 => df97491bdbc84ca0 | c10
+dxt 28 32 34180 5 8 0 2849041016 = 11 => 58850a7be9b41422 | c11
+push 11 = 11 => 5f8832cb691ca25a |
+lock 2 2 5 = 0 => 5f8832cb691ca25a |
+lock 8 1 5 = 0 => 5f8832cb691ca25a |
+sub 9 6 7 16 10 3 => 25cf2d8faef844b0 |
+upload 6 = 0 => 25cf2d8faef844b0 |
+current = 11 => 25cf2d8faef844b0 |
+create 16 8 24 50691 = -1 => cbe1786339990a6c | c12
+unlock 12 => 77d6ddc564f49854 |
+findfmt 7 192852004 32 35 27 4 114 2 = 0 -1 -1 -1 -1 => 77d6ddc564f49854 |
+unlock 8 => 77d6ddc564f49854 |
+upload 6 = 0 => 77d6ddc564f49854 |
+sub 9 8 10 12 2 24 => b6d5a5483a66f7c0 |
+numlevels 7 = 6 => b6d5a5483a66f7c0 |
+lock 7 1 2 = 1 => 8e8a362bb065fea4 |
+fromimage 11 3777432190 16 19 12 0 174 0 = 0 => 8e8a362bb065fea4 |
+create 2 29 16 1025 = 13 => 96e236513472b98f | c13
+create 51 30 24 19076 = 14 => a41c3bf21cde0565 | c14
+lock 2 3 3 = 0 => a41c3bf21cde0565 |
+findfmt 2 41332187 8 33 19 0 6 0 = 0 -1 -1 -1 -1 => a41c3bf21cde0565 |
+lock 10 3 3 = 0 => a41c3bf21cde0565 |
+findfmt 7 746980347 16 37 23 0 15 1 = 0 -1 -1 -1 -1 => a41c3bf21cde0565 |
+push 10 = 10 => 650a3e67e2127c6e |
+destroy 11 => 4fbcc7538a0bacaa | d11 evict11
+dxt 28 16 34180 5 6 0 1816595723 = 15 => 7aadb805a0269c1c | c15
+pop = 10 => 78cae9e39b8bb937 |
+create 31 16 0 4612 = 16 => a3e766ebc281d62e | c16
+lock 8 2 1 = 0 => a3e766ebc281d62e |
+push 10 = 10 => 6ead0481dfe7d5d5 |
+lock 6 3 5 = 0 => 6ead0481dfe7d5d5 |
+numlevels 14 = 0 => 6ead0481dfe7d5d5 |
+numlevels 6 = 0 => 6ead0481dfe7d5d5 |
+lock 16 3 1 = 1 => 48c0bf9add063bbb |
+push 8 = 8 => a97a8f5544374124 |
+current = 8 => a97a8f5544374124 |
+toimage 2 = 8eddfaae66cf2c4a => 9bbd298f7f105fec |
+numlevels 13 = 0 => 9bbd298f7f105fec |
+findfmt 6 3173237470 32 35 31 0 180 2 = 0 -1 -1 -1 -1 => 9bbd298f7f105fec |
+dxt 56 40 4740 3 3 1 3256744967 = 17 => 557d14a241497dd5 | c17
+create 25 29 8 132 = 18 => 7c4b062d25195002 | c18
+calc 2973 2856 53693 = 12 1 => 7c4b062d25195002 |
+sub 17 17 3 19 30 24 => 3c71c56e2807bff4 |
+upload 5 = 0 => 3c71c56e2807bff4 |
+calc 195 413 646 = 9 0 => 3c71c56e2807bff4 |
+numlevels 16 = 5 => 3c71c56e2807bff4 |
+sub 8 2 19 7 18 23 => 32e9926f79363cce |
+create 1 64 32 128 = 19 => 48a11789a91c04d1 | c19
+findfmt 7 25715440 24 18 31 0 7 0 = 0 -1 -1 -1 -1 => 48a11789a91c04d1 |
+create 30 35 24 35329 = 20 => 013721bad8b14492 | c20
+create 12 51 24 645 = 21 => 9082a59e855309fd | c21
+lock 14 3 2 = 0 => 9082a59e855309fd |
+create 56 58 0 644 = 22 => 41d76eab2fa41a77 | c22
+create 2 16 8 54788 = 23 => 5f1e3257cb037285 | c23
+create 49 19 24 3 = -1 => 6567dbeee938673d | c24
+create 64 44 0 53764 = 25 => 39ea4306ec44cdd8 | c25
+lock 15 0 5 = 1 => 0ccfb9aedf289ddc |
+numlevels 7 = 6 => 0ccfb9aedf289ddc |
+create 4 2 32 32772 = 26 => 11a521aea5a5affc | c26
+dxt 12 8 644 5 5 1 3508078018 = 27 => 13e82db375c1922b | c27
+toimage 2 = 8eddfaae66cf2c4a => 13e82db375c1922b |
+create 28 55 32 4996 = 28 => 8d849658797a9c18 | c28
+calc 1073 2064 9978 = 12 0 => 8d849658797a9c18 |
+create 32 4 32 49796 = 29 => 80fa46490b9d2766 | c29
+create 31 45 24 46338 = 30 => a367bd5363f8c9a4 | c30
+dxt 16 4 37508 5 6 1 4057909726 = 31 => b627e4df6b2eab3e | c31
+upload 30 = 0 => b627e4df6b2eab3e |
+destroy 23 => cce2c211d1d7edd8 | d23 evict23
+findfmt 0 3986457775 4 23 15 0 14 2 = 0 -1 -1 -1 -1 => cce2c211d1d7edd8 |
+fromimage 2 964458990 16 1 16 0 6 1 = 0 => cce2c211d1d7edd8 |
+unlock 13 => 1d79ea153c0806a3 |
+push 14 = 14 => c7f8987e6c4ba06c |
+create 12 39 32 34304 = 32 => 6b24ccbd8d9bda36 | c32
+create 18 23 0 42244 = 33 => 3a3857c25526e6f9 | c33
+create 52 57 24 34309 = 34 => 112f0a0760e18591 | c34
+create 64 32 32 32773 = 35 => 9379e91f4c6c0411 | c35
+calc 2395 93 20315 = 12 0 => 9379e91f4c6c0411 |
+create 37 29 8 8834 = 36 => 26d28e9488c6ca64 | c36
+create 9 60 0 33024 = 37 => 42f41b969f9306ba | c37
+findfmt 4 1237394990 32 26 18 0 4 2 = 1 26 18 32 1284 => 42f41b969f9306ba |
+numlevels 16 = 5 => 42f41b969f9306ba |
+toimage 6 = nil => 42f41b969f9306ba |
+unlock 6 => 6ab98c8927aaaa0d |
+create 16 16 24 43524 = 38 => ce47462505e13879 | c38
+sub 19 36 10 2 17 1 => adc928459d732957 |
+create 20 39 8 5123 = -1 => 7d4e582a54eebdaa | c39
+push 13 = 13 => f914a128d3a5d394 |
+dxt 52 16 1412 1 2 1 1372922739 = 40 => 03fe11842a05c218 | c40
+lock 18 0 3 = 0 => 03fe11842a05c218 |
+lock 5 3 1 = 0 => 03fe11842a05c218 |
+toimage 30 = nil => 03fe11842a05c218 |
+dxt 8 12 644 5 1 0 3331710634 = 41 => fb3469096572c0b6 | c41
+unlock 40 => 59f7dc7765a91c24 |
+pop = 13 => dfd7bf5c6c1c053a |
+numlevels 40 = 1 => dfd7bf5c6c1c053a |
+lock 14 0 2 = 0 => dfd7bf5c6c1c053a |
+push 29 = 29 => 59a29cfcc904e534 |
+create 31 49 0 12801 = 42 => c8f3d36403d00b84 | c42
+upload 32 = 2 => 65d9685d948e0ec2 | up0:12x39,0,6,0
+upload 40 = 3 => 505e5bf0461593b0 | up0:52x16,1,1,0
+lock 17 1 2 = 0 => 505e5bf0461593b0 |
+calc 558 1637 23712 = 11 0 => 505e5bf0461593b0 |
+unlock 31 => a7e3fe257d967e00 |
+lock 27 3 3 = 0 => a7e3fe257d967e00 |
+numlevels 24 = 0 => a7e3fe257d967e00 |
+unlock 17 => 578f0df1dcf5652e |
+pop = 29 => d64d0c906a22f0e0 |
+lock 8 1 2 = 0 => d64d0c906a22f0e0 |
+create 20 27 0 33412 = 43 => cb9ff475642cf94a | c43
+upload 9 = 0 => cb9ff475642cf94a |
+calc 1327 1531 43731 = 11 0 => cb9ff475642cf94a |
+numlevels 20 = 0 => cb9ff475642cf94a |
+create 24 36 16 37121 = 44 => 64e71d468eb7917d | c44
+lock 14 3 3 = 0 => 64e71d468eb7917d |
+lock 28 1 5 = 0 => 64e71d468eb7917d |
+create 70 60 32 23044 = 45 => 420c8ca373350b7d | c45
+fromimage 33 1751969331 4 15 20 0 4 0 = 1 => 1c3a21e5ae5a0126 |
+findfmt 6 3469619901 32 2 31 0 17 0 = 0 -1 -1 -1 -1 => 1c3a21e5ae5a0126 |
+dxt 32 48 34180 5 6 1 557967344 = 46 => a005b77b475b07fe | c46
+create 61 62 8 1284 = 47 => 6504c8f0f9b54821 | c47
+unlock 21 => 6504c8f0f9b54821 |
+numlevels 5 = 0 => 6504c8f0f9b54821 |
+create 32 53 8 1027 = -1 => 043ac412e416b702 | c48
+current = 14 => 043ac412e416b702 |
+create 64 4 32 32771 = -1 => 8de2fcb03dcef86c | c49
+lock 33 2 3 = 1 => 979886a1d9115f8e |
+dxt 12 12 1412 3 2 0 279447080 = 50 => 3be4292b1af237e2 | c50
+push 20 = 20 => c2297b504b7f0555 |
+destroy 24 => 37aa677a755cabdd | d24 evict24
+push 50 = 50 => 6b43559e22df9ace |
+lock 14 1 2 = 0 => 6b43559e22df9ace |
+create 55 56 0 17921 = 51 => 4db4be0d1aaacae7 | c51
+create 28 70 16 37253 = 52 => a0c704854754afa0 | c52
+fromimage 41 759402494 8 11 2 0 87 0 = 0 => a0c704854754afa0 |
+findfmt 7 2368815776 24 29 26 0 5 2 = 0 -1 -1 -1 -1 => a0c704854754afa0 |
+numlevels 38 = 5 => a0c704854754afa0 |
+findfmt 5 398808106 24 3 24 0 171 2 = 0 -1 -1 -1 -1 => a0c704854754afa0 |
+lock 5 0 1 = 0 => a0c704854754afa0 |
+push 14 = 14 => 3b0b2ff8ea74b6a1 |
+findfmt 1 2495669434 4 32 10 0 12 2 = 0 -1 -1 -1 -1 => 3b0b2ff8ea74b6a1 |
+dxt 52 36 34180 5 7 1 3777386590 = 53 => 77dbd6b6f64e584d | c53
+upload 8 = 0 => 77dbd6b6f64e584d |
+pop = 14 => a99db2a273b57e0c |
+numlevels 40 = 1 => a99db2a273b57e0c |
+push 25 = 25 => 984112189051598a |
+findfmt 0 1662871968 16 28 29 2 234 2 = 0 -1 -1 -1 -1 => 984112189051598a |
+numlevels 49 = 0 => 984112189051598a |
+create 29 27 8 4100 = 54 => 18eb49553086bfb2 | c54
+toimage 35 = 5fc2b9b5eaca1bba => 18eb49553086bfb2 |
+dxt 4 40 34180 5 1 0 547454489 = 55 => 31f1a1ed87695636 | c55
+upload 55 = 4 => 4e1a78ec6e95da4b | up0:4x40,5,1,0
+calc 2017 2738 38354 = 12 1 => 4e1a78ec6e95da4b |
+toimage 13 = nil => 4e1a78ec6e95da4b |
+upload 13 = 0 => 4e1a78ec6e95da4b |
+numlevels 34 = 6 => 4e1a78ec6e95da4b |
+create 53 65 32 1028 = 56 => 02f27a00508ca26b | c56
+create 12 34 8 4097 = 57 => bea3dd7ad8afd00d | c57
+toimage 51 = nil => bea3dd7ad8afd00d |
+findfmt 1 776041479 8 7 17 5 11 1 = 0 -1 -1 -1 -1 => bea3dd7ad8afd00d |
+upload 25 = 5 => cc6dd5d41a6ea0c8 | up0:64x44,0,1,1
+create 64 20 0 6660 = 58 => aebe486781f6aeb2 | c58
+numlevels 13 = 0 => aebe486781f6aeb2 |
+create 39 68 16 16385 = 59 => 48dbb69fc61f0c51 | c59
+create 65 18 0 34306 = 60 => 8e6cbe8a835ac783 | c60
+current = 25 => 8e6cbe8a835ac783 |
+sub 15 31 14 10 20 1 => ed0fe3a562f57d8a |
+lock 45 2 5 = 1 => 425ae70ccc4d3af9 |
+create 39 64 0 38275 = -1 => 1e5590749ea42a87 | c61
+findfmt 3 3196019743 32 18 7 0 199 2 = 0 -1 -1 -1 -1 => 1e5590749ea42a87 |
+dxt 32 36 33412 1 5 1 1147083717 = 62 => 3105e68bd5c5506a | c62
+fromimage 27 2041694944 24 28 3 4 20 0 = 0 => 3105e68bd5c5506a |
+lock 59 1 1 = 0 => 3105e68bd5c5506a |
+create 18 19 24 1281 = 63 => 9c4807348f8ae288 | c63
+dxt 56 8 37508 3 6 0 2205541315 = 64 => 0614a100af4f274c | c64
+lock 46 1 3 = 1 => f838bf2ce351b1ab |
+create 61 9 16 9857 = 65 => 63af365c50dcd915 | c65
+lock 8 1 1 = 0 => 63af365c50dcd915 |
+create 24 67 16 35458 = 66 => 7e89b3c3f3a7bceb | c66
+lock 38 0 2 = 1 => d476b1b0fbe12d84 |
+lock 5 1 3 = 0 => d476b1b0fbe12d84 |
+sub 55 46 5 9 3 6 => a9f101a3e32565b0 |
+push 35 = 35 => e6ce35d044cbbf92 |
+upload 49 = 0 => e6ce35d044cbbf92 |
+pop = 35 => a9f101a3e32565b0 |
+current = 25 => a9f101a3e32565b0 |
+upload 12 = 0 => a9f101a3e32565b0 |
+create 36 28 32 34308 = 67 => 122d62800c6d29e4 | c67
+unlock 13 => 122d62800c6d29e4 |
+calc 2693 363 44260 = 12 0 => 122d62800c6d29e4 |
+dxt 16 60 1412 5 7 0 986180451 = 68 => 20e1e87e5da36af4 | c68
+toimage 37 = 0db04366a8d9c214 => 20e1e87e5da36af4 |
+calc 9 2290 4040 = 12 0 => 20e1e87e5da36af4 |
+create 26 46 24 261 = 69 => f3769441b57189c9 | c69
+calc 710 931 60820 = 10 0 => f3769441b57189c9 |
+numlevels 45 = 7 => f3769441b57189c9 |
+push 35 = 35 => af37dc9e125a19bb |
+destroy 55 => 1a78385b35c788fa | d55 evict55 tdel4
+calc 571 2615 20350 = 12 0 => 1a78385b35c788fa |
+sub 40 10 19 3 13 2 => 280ab1d57391aee7 |
+push 39 = 39 => 57df4bef820031a3 |
+fromimage 50 3166766399 16 22 23 0 206 2 = 0 => 57df4bef820031a3 |
+dxt 32 12 33412 5 1 1 3403397500 = 70 => 0344ccfad57ea159 | c70
+create 19 17 0 16516 = 71 => 624a64dd5775e14a | c71
+unlock 15 => b919b0521bcfd5e7 |
+destroy 25 => fbf5c01abe6ecb23 | d25 evict25 tdel5
+fromimage 58 2259502133 24 25 29 0 18 0 = 1 => 02821efd5fa499f2 |
+calc 1558 2632 7303 = 12 0 => 02821efd5fa499f2 |
+create 3 8 0 1536 = 72 => 76fa8533ced9fec0 | c72
+lock 40 1 3 = 0 => 76fa8533ced9fec0 |
+fromimage 37 3814623992 32 15 9 0 15 0 = 0 => 76fa8533ced9fec0 |
+pop = 39 => e4a60e76a997d894 |
+dxt 40 4 644 3 3 0 3653690335 = 73 => faa83bf51ebcbaa7 | c73
+fromimage 31 3802026121 24 32 24 0 9 0 = 0 => faa83bf51ebcbaa7 |
+calc 467 133 46970 = 9 0 => faa83bf51ebcbaa7 |
+upload 69 = 6 => 195775b0f314246d | up0:26x46,0,1,0
+upload 30 = 0 => 195775b0f314246d |
+unlock 37 => 195775b0f314246d |
+sub 9 32 8 4 6 19 => 06d140e7485dbdc8 |
+upload 32 = 2 => 06d140e7485dbdc8 |
+toimage 44 = nil => 06d140e7485dbdc8 |
+lock 8 2 1 = 0 => 06d140e7485dbdc8 |
+numlevels 35 = 7 => 06d140e7485dbdc8 |
+unlock 10 => 06d140e7485dbdc8 |
+fromimage 34 3843672841 8 25 23 0 11 0 = 0 => 06d140e7485dbdc8 |
+lock 8 1 2 = 0 => 06d140e7485dbdc8 |
+toimage 67 = 8644a373b8eec12d => 06d140e7485dbdc8 |
+dxt 32 8 33412 1 3 1 478243342 = 74 => 57f55c356aea254f | c74
+current = 35 => 57f55c356aea254f |
+sub 68 39 10 8 27 9 => d103abee2dcc5c2c |
+dxt 4 60 34180 5 8 1 2710285322 = 75 => ddf500777b889a5a | c75
+numlevels 2 = 1 => ddf500777b889a5a |
+dxt 64 20 1412 5 6 1 1927588891 = 76 => 2a38b4e73b3eb375 | c76
+dxt 44 32 37508 3 1 0 961846925 = 77 => e076465362ed2417 | c77
+calc 2836 2778 4408 = 12 1 => e076465362ed2417 |
+numlevels 32 = 6 => e076465362ed2417 |
+create 18 40 8 517 = 78 => 6158f76f7b0f590c | c78
+create 38 40 24 5248 = 79 => f208ee55e89c59fe | c79
+lock 12 2 2 = 0 => f208ee55e89c59fe |
+dxt 20 44 34180 5 3 1 3737367039 = 80 => 033b9873b76a87f1 | c80
+destroy 5 => 2672a5920f842853 | d5 evict5
+create 40 66 32 32769 = 81 => 9de651baed0f6989 | c81
+current = 35 => 9de651baed0f6989 |
+dxt 20 56 34180 1 2 1 4092087970 = 82 => 16aa9a7c6616ff37 | c82
+upload 58 = 7 => 21c6dd34281d0cf5 | up0:64x20,0,7,0
+findfmt 2 1470111156 4 3 5 0 11 1 = 0 -1 -1 -1 -1 => 21c6dd34281d0cf5 |
+destroy 19 => c095753c9cdd9598 | d19 evict19
+dxt 20 24 1412 3 5 1 4156783285 = 83 => 3326c4a24654f25e | c83
+lock 69 2 5 = 0 => 3326c4a24654f25e |
+create 8 8 8 1541 = 84 => ec89f1324e88b8f3 | c84
+lock 68 1 2 = 0 => ec89f1324e88b8f3 |
+fromimage 54 85690125 4 20 27 0 7 1 = 1 => 4bc5e28e443e0c64 |
+push 12 = 12 => ee635e0d8776402b |
+lock 6 3 1 = 0 => ee635e0d8776402b |
+create 7 70 0 2691 = -1 => f4fa24a0b00287ae | c85
+fromimage 50 4126689784 4 13 10 0 7 1 = 0 => f4fa24a0b00287ae |
+sub 62 28 4 17 8 10 => ce9df4746c552cf3 |
+dxt 60 44 33412 1 5 1 1079727767 = 86 => a1add21f52d119af | c86
+findfmt 2 2192397555 32 36 25 0 129 0 = 0 -1 -1 -1 -1 => a1add21f52d119af |
+destroy 26 => 53f07f4477740dfb | d26 evict26
+upload 9 = 0 => 53f07f4477740dfb |
+push 10 = 10 => dae2b614cfb3fc70 |
+calc 2772 1279 31381 = 12 0 => dae2b614cfb3fc70 |
+destroy 47 => 5b759c7fd9815afb | d47 evict47
+create 39 69 32 2 = 87 => 77bb96bf1dea86da | c87
+upload 84 = 8 => 9102b41ca1003f92 | up0:8x8,0,1,0
+lock 17 3 1 = 0 => 9102b41ca1003f92 |
+upload 29 = 0 => 9102b41ca1003f92 |
+numlevels 30 = 0 => 9102b41ca1003f92 |
+lock 74 2 5 = 1 => 16636b019bff1afa |
+pop = 10 => 428ac4a1dfe2c151 |
+upload 7 = 9 => fedf6f91ec2fbce0 | up0:43x51,0,6,0
+lock 59 1 1 = 0 => fedf6f91ec2fbce0 |
+push 7 = 7 => 0a71173225cfa706 |
+push 2 = 2 => 9ef08d77e87063a3 |
+dxt 56 8 644 3 1 1 1247157719 = 88 => 146037d31a9243bb | c88
+create 28 12 0 34309 = 89 => 35962114f033a1e1 | c89
+create 7 4 0 1412 = 90 => 15b428b7c53dd592 | c90
+lock 76 0 2 = 1 => 3a2eee9144cd011d |
+create 11 48 0 1413 = 91 => 61d52768479d260f | c91
+findfmt 1 3051032617 8 5 40 0 9 0 = 0 -1 -1 -1 -1 => 61d52768479d260f |
+create 65 67 0 33796 = 92 => 58a389a08d98f1e6 | c92
+unlock 28 => 58a389a08d98f1e6 |
+create 35 39 0 2562 = 93 => dafb33c085265693 | c93
+findfmt 1 2733790300 8 9 17 3 9 1 = 0 -1 -1 -1 -1 => dafb33c085265693 |
+lock 71 3 1 = 0 => dafb33c085265693 |
+calc 891 547 22674 = 10 0 => dafb33c085265693 |
+create 60 59 0 257 = 94 => 3e95f2dc4d21aeeb | c94
+destroy 51 => 8fdb2ed8d9007b0a | d51 evict51
+unlock 42 => 1675ecc0b45ae7ac |
+lock 34 0 2 = 1 => b1dbf86d40abadbb |
+lock 88 2 1 = 0 => b1dbf86d40abadbb |
+numlevels 10 = 0 => b1dbf86d40abadbb |
+numlevels 34 = 6 => b1dbf86d40abadbb |
+lock 67 2 1 = 1 => e2bdaf5f0f95fd83 |
+destroy 8 => 8780d8252b1f487e | d8 evict8
+pop = 2 => 4f11c49d18e8eba3 |
+toimage 67 = 3c52a5f81278754f => 4f11c49d18e8eba3 |
+fromimage 73 1214542332 4 35 13 0 12 1 = 0 => 4f11c49d18e8eba3 |
+pop = 7 => 3f9be89443055fd5 |
+push 79 = 79 => 503c22ca3d27abeb |
+destroy 42 => 7daf75c4d7f04afd | d42 evict42
+sub 85 83 2 15 21 27 => 241a09c50193d999 |
+unlock 30 => 2a04413efc216037 |
+push 66 = 66 => 01fea045778d7a4a |
+sub 65 64 9 19 23 26 => 0aaf09222001d04c |
+unlock 15 => 0aaf09222001d04c |
+destroy 30 => 8b0948a0090d189c | d30 evict30
+push 72 = 72 => e8b6c73f92e17de5 |
+calc 17 2385 61655 = 12 0 => e8b6c73f92e17de5 |
+push 16 = 16 => 60f00168b66cc786 |
+create 69 23 0 32773 = 95 => d83e9af0f7bd6060 | c95
+create 44 12 0 4865 = 96 => ec0625568777b261 | c96
+create 64 53 0 32770 = 97 => 84adcb62b3f41d7b | c97
+unlock 80 => 229d6e212a126d6f |
+dxt 12 36 1412 1 4 0 2660338511 = 98 => 2afe47ae83a8a162 | c98
+sub 90 14 10 10 4 6 => df96cbae2dddc9db |
+create 37 50 24 4 = 99 => 301b1bce778fe225 | c99
+dxt 64 16 34180 5 6 0 3186337060 = 100 => b98467185afc1076 | c100
+calc 2619 113 52153 = 12 0 => b98467185afc1076 |
+destroy 84 => 3db643ea6b1a67c3 | d84 evict84 tdel8
+create 7 8 16 259 = -1 => d17a50aa4e84b61d | c101
+create 69 13 16 1282 = 102 => e3588afc5f1bfc11 | c102
+fromimage 54 4139294833 16 17 8 0 217 2 = 1 => 426865e4de8c8575 |
+push 78 = 78 => 239be6843ac345da |
+calc 878 1404 64156 = 11 0 => 239be6843ac345da |
+dxt 52 8 38276 3 7 0 3141733236 = 103 => 40c6056ce58466c9 | c103
+toimage 61 = nil => 40c6056ce58466c9 |
+findfmt 3 303055074 32 21 28 0 63 2 = 0 -1 -1 -1 -1 => 40c6056ce58466c9 |
+dxt 20 40 644 3 6 1 3168885837 = 104 => 37929eecb37e6095 | c104
+create 34 19 32 5509 = 105 => e92f58ebcd6e0257 | c105
+numlevels 105 = 0 => e92f58ebcd6e0257 |
+numlevels 45 = 7 => e92f58ebcd6e0257 |
+create 61 46 32 17794 = 106 => 08b04c204ccd5434 | c106
+upload 16 = 10 => e65048e851ab1256 | up0:31x16,0,5,0
+findfmt 4 1816392062 8 26 3 3 14 2 = 1 26 3 32 1284 => e65048e851ab1256 |
+fromimage 86 1387234315 16 34 33 0 232 1 = 0 => e65048e851ab1256 |
+numlevels 43 = 0 => e65048e851ab1256 |
+toimage 88 = a6480b0466e936fd => 11f861072290358e |
+calc 910 81 35134 = 10 0 => 11f861072290358e |
+destroy 71 => 6df35796079f14a5 | d71 evict71
+lock 9 2 2 = 0 => 6df35796079f14a5 |
+unlock 52 => 6df35796079f14a5 |
+create 2 64 0 772 = 107 => 35a137fc721da5f1 | c107
+lock 15 0 1 = 1 => 24c570e522182c19 |
+push 86 = 86 => def695f0cdf43260 |
+destroy 92 => 4fa787f64c5e0ea1 | d92 evict92
+lock 107 0 2 = 1 => 255c2cc8a121b5a6 |
+push 43 = 43 => f497fa94fd940c8c |
+fromimage 83 1739605646 16 19 32 0 13 2 = 0 => f497fa94fd940c8c |
+create 35 51 24 1284 = 108 => 81537f725de88d0f | c108
+current = 43 => 81537f725de88d0f |
+create 38 16 32 49797 = 109 => c9343a762f681188 | c109
+create 24 17 16 2689 = 110 => fff80fae13b2236f | c110
+create 16 67 8 17669 = 111 => a589cfb6e6f6555c | c111
+numlevels 9 = 0 => a589cfb6e6f6555c |
+toimage 53 = 4edb8c17fe95c721 => 5c27a89cf3549ff8 |
+lock 31 0 1 = 1 => 992fb4e4d0263120 |
+unlock 83 => a22bb59f0806b1ec |
+upload 10 = 0 => a22bb59f0806b1ec |
+destroy 108 => ce6e8f03111d25c3 | d108 evict108
+destroy 59 => dde67c7f80f94b80 | d59 evict59
+lock 2 1 2 = 0 => dde67c7f80f94b80 |
+lock 94 1 5 = 0 => dde67c7f80f94b80 |
+destroy 27 => c8316536b497b4b3 | d27 evict27
+create 62 51 32 34304 = 112 => 70543abfa2de65f2 | c112
+toimage 106 = nil => 70543abfa2de65f2 |
+dxt 56 56 1412 3 3 0 1970353597 = 113 => 01979e340bce5980 | c113
+toimage 106 = nil => 01979e340bce5980 |
+sub 98 16 13 9 5 26 => 7b588664080f3959 |
+lock 80 2 2 = 1 => 68cdfd994249d6ea |
+dxt 60 12 34180 1 7 1 1654668430 = 114 => cd6a90cfb94c81b2 | c114
+lock 113 2 3 = 0 => cd6a90cfb94c81b2 |
+destroy 65 => a6439e6bab192a9a | d65 evict65
+findfmt 7 3758145854 32 10 10 6 9 2 = 0 -1 -1 -1 -1 => a6439e6bab192a9a |
+fromimage 104 3905596971 24 33 18 2 202 0 = 0 => a6439e6bab192a9a |
+calc 446 1308 17371 = 11 1 => a6439e6bab192a9a |
+unlock 109 => a6439e6bab192a9a |
+create 64 8 0 256 = 115 => 03c9b0b0cb9a77f7 | c115
+push 46 = 46 => 8053a376c03249ca |
+lock 110 1 5 = 0 => 8053a376c03249ca |
+current = 46 => 8053a376c03249ca |
+numlevels 107 = 1 => 8053a376c03249ca |
+lock 9 0 1 = 0 => 8053a376c03249ca |
+numlevels 102 = 0 => 8053a376c03249ca |
+lock 6 3 1 = 0 => 8053a376c03249ca |
+create 27 66 32 34305 = 116 => 38e43a1ee465533d | c116
+lock 17 3 3 = 0 => 38e43a1ee465533d |
+numlevels 41 = 1 => 38e43a1ee465533d |
+push 40 = 40 => 43a79ac74def5774 |
+lock 91 3 2 = 0 => 43a79ac74def5774 |
+dxt 32 32 4740 1 7 1 1457835852 = 117 => eb1dded4a340e0b4 | c117
+push 13 = 13 => 71ef1cce9252daae |
+create 39 56 0 17538 = 118 => c7ed37c569602966 | c118
+upload 83 = 11 => c1b13e0825cf3e34 | up0:20x24,3,1,0
+lock 98 3 2 = 0 => c1b13e0825cf3e34 |
+create 1 45 24 13701 = 119 => 7c6116b38c44ef76 | c119
+destroy 115 => 87996ad524f5bfcf | d115 evict115
+toimage 43 = nil => 87996ad524f5bfcf |
+upload 40 = 3 => 87996ad524f5bfcf |
+unlock 73 => 69caa0e2317fb477 |
+dxt 20 12 644 1 2 1 3009017183 = 120 => bb17729f24bf6adf | c120
+current = 13 => bb17729f24bf6adf |
+unlock 74 => a44e3c6f6414d587 |
+dxt 44 36 4740 5 8 0 1940813268 = 121 => 8486c18400829e6f | c121
+create 31 22 24 13058 = 122 => 8723185afa6870a4 | c122
+unlock 106 => 0f02343ddf79f23b |
+numlevels 94 = 0 => 0f02343ddf79f23b |
+lock 72 1 5 = 0 => 0f02343ddf79f23b |
+numlevels 39 = 0 => 0f02343ddf79f23b |
+numlevels 110 = 0 => 0f02343ddf79f23b |
+current = 13 => 0f02343ddf79f23b |
+numlevels 29 = 0 => 0f02343ddf79f23b |
+numlevels 54 = 5 => 0f02343ddf79f23b |
+current = 13 => 0f02343ddf79f23b |
+create 18 63 8 5120 = 123 => b9e8bd77bdabd13c | c123
+push 46 = 46 => 27b20881c46d7fe3 |
+create 43 70 16 33280 = 124 => 3feefb797c122ba0 | c124
+destroy 6 => 4cc96106c735605a | d6 evict6
+dxt 52 4 34180 3 2 1 2920363233 = 125 => d69d839055b53460 | c125
+lock 48 1 5 = 0 => d69d839055b53460 |
+create 1 4 0 20993 = 126 => dae6c85bba9cf81f | c126
+upload 56 = 12 => 49c5c716df07d8d3 | up0:53x65,0,1,0
+create 26 7 0 33797 = 127 => 089783817a00837b | c127
+dxt 4 16 1412 5 3 1 1155476791 = 128 => 2307fd3980600bc0 | c128
+lock 113 1 3 = 0 => 2307fd3980600bc0 |
+unlock 31 => 6c8aec17ec14c3e0 |
+dxt 20 8 34180 5 8 1 2011768092 = 129 => c4d9aa1631974508 | c129
+numlevels 78 = 1 => c4d9aa1631974508 |
+create 32 8 32 37123 = -1 => 90be7cc78bc620bd | c130
+create 18 8 24 21123 = -1 => 2e0e0a946e9b6fdf | c131
+destroy 29 => 67e57b80ffc9a9ed | d29 evict29
+unlock 35 => 67e57b80ffc9a9ed |
+toimage 56 = 538807a399781565 => 67e57b80ffc9a9ed |
+fromimage 114 322076067 8 39 38 0 18 0 = 0 => 67e57b80ffc9a9ed |
+fromimage 86 2637222340 8 26 17 0 218 2 = 0 => 67e57b80ffc9a9ed |
+current = 46 => 67e57b80ffc9a9ed |
+current = 46 => 67e57b80ffc9a9ed |
+findfmt 2 3524333192 24 2 4 0 17 2 = 0 -1 -1 -1 -1 => 67e57b80ffc9a9ed |
+fromimage 82 950133438 8 19 34 0 153 1 = 0 => 67e57b80ffc9a9ed |
+push 33 = 33 => bde648e95e33ccef |
+dxt 12 36 34180 3 6 1 3072417761 = 132 => 3ed803f9abeeeed0 | c132
+pop = 33 => 5affeeef59e7a022 |
+numlevels 52 = 0 => 5affeeef59e7a022 |
+create 24 49 8 5506 = 133 => b14c504e0b46f93b | c133
+numlevels 15 = 6 => b14c504e0b46f93b |
+create 63 7 16 12293 = 134 => c5d3479ab75b5922 | c134
+pop = 46 => 894e87560401e94d |
+create 64 64 0 37636 = 135 => 7ea6d50bdae168ed | c135
+lock 133 0 5 = 0 => 7ea6d50bdae168ed |
+create 31 15 16 516 = 136 => 83c684f10f961d27 | c136
+lock 75 3 2 = 1 => 30d04e885a98dbd8 |
+fromimage 78 547026843 32 22 19 0 28 2 = 0 => 30d04e885a98dbd8 |
+create 47 59 32 4609 = 137 => 91ececd26dc3ead6 | c137
+create 32 63 8 4356 = 138 => 32757896180917a8 | c138
+lock 111 0 5 = 1 => ac5b7c571043e074 |
+dxt 12 28 5508 1 5 1 252246206 = 139 => cb0d0810b2bcc596 | c139
+fromimage 64 2473227974 32 29 14 0 186 2 = 0 => cb0d0810b2bcc596 |
+lock 32 3 5 = 1 => da7d538b0ba60ff5 |
+unlock 81 => faf2698271944563 |
+create 54 12 16 14851 = -1 => b61043999bd1f589 | c140
+lock 89 0 5 = 1 => c5e5ebc58961229d |
+create 59 65 24 4737 = 141 => db7f8fb3e42427b1 | c141
+lock 120 3 2 = 0 => db7f8fb3e42427b1 |
+upload 14 = 0 => db7f8fb3e42427b1 |
+fromimage 107 545101947 8 33 22 0 6 2 = 1 => ef9b7edbbdd24617 |
+toimage 2 = 8eddfaae66cf2c4a => ef9b7edbbdd24617 |
+toimage 12 = nil => ef9b7edbbdd24617 |
+create 15 63 32 513 = 142 => a53226a9c0925435 | c142
+create 44 63 16 33025 = 143 => c94275f7a3a03265 | c143
+push 138 = 138 => 7cf260c3eee6fbae |
+findfmt 5 712211386 16 25 35 3 9 1 = 0 -1 -1 -1 -1 => 7cf260c3eee6fbae |
+create 58 17 8 35329 = 144 => 0f14d762e9e40e67 | c144
+dxt 4 20 644 1 7 1 2180847044 = 145 => b327301eefe2ac09 | c145
+lock 54 1 3 = 1 => b28ed3ee3b4e3b95 |
+fromimage 64 657847626 24 38 30 0 11 1 = 0 => b28ed3ee3b4e3b95 |
+toimage 12 = nil => b28ed3ee3b4e3b95 |
+calc 1043 2859 28880 = 12 0 => b28ed3ee3b4e3b95 |
+sub 2 89 15 13 27 23 => ea4016a013d575ac |
+unlock 141 => 1431a70a238f8efe |
+fromimage 107 2817325964 8 19 14 3 20 0 = 1 => 07110d5701a67582 |
+fromimage 129 2761251760 24 12 26 0 14 0 = 0 => 07110d5701a67582 |
+lock 35 2 3 = 1 => 13b77131436d3871 |
+dxt 16 40 5508 1 2 1 2209696200 = 146 => ae16b766f5d2f30d | c146
+lock 58 3 2 = 1 => 6080b8eae234fc60 |
+unlock 83 => 6080b8eae234fc60 |
+create 3 25 16 1538 = 147 => 0f33c7bb06f340bf | c147
+unlock 58 => 694c445ec71dc6d6 |
+dxt 28 8 4740 5 6 1 1123542103 = 148 => 33ecf792d9064674 | c148
+toimage 10 = nil => 33ecf792d9064674 |
+dxt 56 16 5508 3 1 0 4110564693 = 149 => 0f682ff57eebe2dd | c149
+create 68 27 32 5250 = 150 => a5a209d4f15267a5 | c150
+upload 46 = 13 => 111e9215962f43a9 | up0:32x48,5,6,0
+dxt 20 48 4740 3 1 1 1825582575 = 151 => 6847193f4878c378 | c151
+findfmt 3 2268018529 32 36 37 0 15 2 = 0 -1 -1 -1 -1 => 6847193f4878c378 |
+unlock 90 => 8f4cdba2567cc0e9 |
+create 12 19 0 644 = 152 => a242ba8a2517b967 | c152
+current = 138 => a242ba8a2517b967 |
+fromimage 74 3926575082 16 37 8 0 114 1 = 0 => a242ba8a2517b967 |
+fromimage 113 3764776698 32 31 40 0 90 2 = 0 => a242ba8a2517b967 |
+unlock 12 => a242ba8a2517b967 |
+numlevels 48 = 0 => a242ba8a2517b967 |
+push 97 = 97 => 13401ad999a1ca85 |
+upload 20 = 0 => 13401ad999a1ca85 |
+destroy 64 => 1f3f04b8ade8d0dd | d64 evict64
+calc 2081 440 21023 = 12 0 => 1f3f04b8ade8d0dd |
+calc 2887 1258 13643 = 12 1 => 1f3f04b8ade8d0dd |
+lock 74 2 2 = 1 => 79976887284d3bee |
+create 58 5 8 133 = 153 => ff4c1f7cef913a2c | c153
+push 107 = 107 => 99a1af9c9af70406 |
+create 64 2 16 34180 = 154 => 8a0737f10265518a | c154
+push 121 = 121 => aefea6f77570f8ec |
+lock 36 0 1 = 0 => aefea6f77570f8ec |
+toimage 123 = 31192bc1fb1b6c70 => aefea6f77570f8ec |
+current = 121 => aefea6f77570f8ec |
+pop = 121 => 8a0737f10265518a |
+create 19 23 16 33537 = 155 => a9b97581437e2e0f | c155
+current = 107 => a9b97581437e2e0f |
+sub 128 127 17 0 2 6 => 11a7a9661a6ef835 |
+create 19 21 16 1283 = -1 => 4dc3725d85b259ea | c156
+pop = 107 => 711986aa2accca80 |
+create 25 52 32 901 = 157 => 51423ba4670386e2 | c157
+calc 2119 194 52367 = 12 0 => 51423ba4670386e2 |
+create 10 19 8 8448 = 158 => ec72770711600a5a | c158
+pop = 97 => ee3b5bfcbaafc688 |
+push 69 = 69 => 6d07a61da37f6a7e |
+create 28 10 8 4101 = 159 => 29fc177f37eca70e | c159
+pop = 69 => 16623e7e249683d8 |
+fromimage 82 1084166442 4 20 27 0 13 1 = 0 => 16623e7e249683d8 |
+dxt 56 40 33412 3 3 1 2411965519 = 160 => 71bba6a4f9f09a73 | c160
+create 7 1 32 21505 = 161 => 88115d38ba2a2a61 | c161
+lock 63 1 2 = 0 => 88115d38ba2a2a61 |
+upload 142 = 0 => 88115d38ba2a2a61 |
+upload 18 = 0 => 88115d38ba2a2a61 |
+calc 2319 2458 10956 = 12 0 => 88115d38ba2a2a61 |
+dxt 20 52 1412 5 2 1 1895827424 = 162 => 8c7e1cc336b70fbd | c162
+numlevels 161 = 0 => 8c7e1cc336b70fbd |
+numlevels 91 = 0 => 8c7e1cc336b70fbd |
+dxt 12 60 34180 1 6 1 606888888 = 163 => 57cbcff58e8d64f8 | c163
+dxt 56 28 1412 5 5 1 2102794741 = 164 => 74058f7dd3c027d1 | c164
+create 64 2 0 37636 = 165 => 0484ef9a5fc225d3 | c165
+lock 120 1 5 = 0 => 0484ef9a5fc225d3 |
+calc 295 2417 13908 = 12 0 => 0484ef9a5fc225d3 |
+findfmt 7 831521809 8 28 38 0 3 0 = 0 -1 -1 -1 -1 => 0484ef9a5fc225d3 |
+fromimage 41 2795310810 16 28 33 0 1 2 = 0 => 0484ef9a5fc225d3 |
+destroy 57 => 79bf50fd428a5295 | d57 evict57
+upload 102 = 0 => 79bf50fd428a5295 |
+numlevels 9 = 0 => 79bf50fd428a5295 |
+findfmt 5 2919963676 16 23 27 5 228 0 = 0 -1 -1 -1 -1 => 79bf50fd428a5295 |
+create 22 18 32 33540 = 166 => 557df69dadffe8da | c166
+lock 68 3 3 = 0 => 557df69dadffe8da |
+create 64 4 24 10754 = 167 => b611147d2e131f57 | c167
+unlock 83 => b611147d2e131f57 |
+pop = 138 => 13bfd6be4d654ecc |
+lock 17 3 3 = 0 => 13bfd6be4d654ecc |
+lock 39 3 1 = 0 => 13bfd6be4d654ecc |
+push 150 = 150 => 35a68523ea45daab |
+calc 409 1853 10674 = 11 0 => 35a68523ea45daab |
+calc 463 551 20492 = 10 0 => 35a68523ea45daab |
+destroy 110 => 74b06db28d04eea4 | d110 evict110
+create 4 16 0 1156 = 168 => ea056382b299f286 | c168
+unlock 145 => 516b73898224a2a4 |
+calc 1580 1517 59577 = 11 0 => 516b73898224a2a4 |
+fromimage 68 796895943 24 9 25 0 4 0 = 0 => 516b73898224a2a4 |
+sub 41 125 4 0 20 1 => 91362f8d42da70a1 |
+destroy 85 => 4924871c03ec9da8 | d85 evict85
+calc 2873 1909 28681 = 12 0 => 4924871c03ec9da8 |
+create 8 32 24 50177 = 169 => 9f5ff4a7c3e11ca4 | c169
+create 1 2 0 43648 = 170 => ab12fdf171cdcf5a | c170
+upload 158 = 14 => f9bfd3fed7807f98 | up0:10x19,0,1,0
+current = 150 => f9bfd3fed7807f98 |
+dxt 48 8 34180 5 8 1 3845848131 = 171 => 66c07280f2eef1b4 | c171
+fromimage 151 203727039 32 10 36 0 4 0 = 0 => 66c07280f2eef1b4 |
+toimage 147 = nil => 66c07280f2eef1b4 |
+create 36 24 8 42627 = -1 => 7a788d9236798224 | c172
+lock 40 0 5 = 1 => d436a05c576d2378 |
+create 31 39 32 38019 = -1 => 1ee341b8996a76d6 | c173
+findfmt 3 795399450 32 12 11 0 20 1 = 0 -1 -1 -1 -1 => 1ee341b8996a76d6 |
+upload 168 = 0 => 1ee341b8996a76d6 |
+create 12 17 32 1538 = 174 => 3fb5bfc8724c9da2 | c174
+sub 141 97 14 12 7 10 => 432751fca2511a25 |
+push 50 = 50 => 82067b45cb8431e4 |
+dxt 28 4 1412 1 6 0 1860444630 = 175 => 7a7e2172acf83a71 | c175
+findfmt 7 1846732513 4 33 14 0 10 2 = 0 -1 -1 -1 -1 => 7a7e2172acf83a71 |
+destroy 162 => 2b9be74c2fb81d45 | d162 evict162
+unlock 15 => c0ff5595c0b9d68d |
+destroy 68 => a90f39915904d48e | d68 evict68
+create 63 38 16 1025 = 176 => be16d2b6799bc6d3 | c176
+toimage 165 = a2301c2a16a2833c => be16d2b6799bc6d3 |
+upload 112 = 15 => f15be02b6cf98d14 | up0:62x51,0,6,0
+findfmt 6 3617286841 32 36 38 0 19 2 = 0 -1 -1 -1 -1 => f15be02b6cf98d14 |
+fromimage 117 2324475173 32 13 6 0 17 0 = 0 => f15be02b6cf98d14 |
+numlevels 155 = 0 => f15be02b6cf98d14 |
+findfmt 4 2864151382 16 13 14 0 17 0 = 1 13 14 32 1284 => f15be02b6cf98d14 |
+findfmt 6 2648695753 32 12 22 0 8 1 = 0 -1 -1 -1 -1 => f15be02b6cf98d14 |
+create 32 64 24 4484 = 177 => 285da46973b0d76f | c177
+create 53 29 16 771 = -1 => a8dfc31477420d70 | c178
+create 33 35 24 17797 = 179 => 24434d00b9a51ece | c179
+lock 148 2 2 = 0 => 24434d00b9a51ece |
+upload 56 = 12 => 24434d00b9a51ece |
+current = 50 => 24434d00b9a51ece |
+dxt 24 28 38276 3 5 1 248558709 = 180 => 6580bd98b34b78dc | c180
+dxt 24 24 644 1 8 1 1333858526 = 181 => 95f00d67c6cc80b0 | c181
+push 119 = 119 => 5ba50fe53852ca86 |
+toimage 9 = nil => 5ba50fe53852ca86 |
+push 160 = 160 => bf097e8f755028c9 |
+findfmt 4 1695789654 24 3 36 0 43 0 = 1 3 36 32 1284 => bf097e8f755028c9 |
+toimage 106 = nil => bf097e8f755028c9 |
+dxt 12 52 34180 3 5 0 1789371378 = 182 => ca08663159e65162 | c182
+lock 161 2 1 = 0 => ca08663159e65162 |
+fromimage 112 1033294204 8 37 27 0 13 2 = 0 => ca08663159e65162 |
+fromimage 112 261708086 4 35 19 0 15 0 = 0 => ca08663159e65162 |
+calc 1720 2050 15803 = 12 0 => ca08663159e65162 |
+create 8 8 16 2561 = 183 => af1cafe78402ba84 | c183
+findfmt 1 1729140612 4 18 15 0 4 0 = 0 -1 -1 -1 -1 => af1cafe78402ba84 |
+pop = 160 => e27bffbc7114f53b |
+toimage 151 = 2b8a14bdfa259ac3 => 957b3fc7639a02b7 |
+unlock 118 => 2252586fac5621f8 |
+toimage 137 = nil => 2252586fac5621f8 |
+upload 127 = 16 => ae5154a56dc96568 | up0:26x7,0,5,0
+destroy 82 => 5b817598528230a2 | d82 evict82
+calc 683 422 47955 = 10 0 => 5b817598528230a2 |
+unlock 159 => 5b817598528230a2 |
+sub 70 136 7 10 3 9 => 3e830669ba5bfc2f |
+destroy 58 => 7e70d6251ef458a6 | d58 evict58 tdel7
+lock 131 2 1 = 0 => 7e70d6251ef458a6 |
+numlevels 44 = 0 => 7e70d6251ef458a6 |
+toimage 139 = 24cae79460b5bc0f => 64cfb39956f79b5c |
+lock 164 1 2 = 0 => 64cfb39956f79b5c |
+toimage 31 = 849e517d306611a7 => 64cfb39956f79b5c |
+toimage 94 = nil => 64cfb39956f79b5c |
+numlevels 104 = 1 => 64cfb39956f79b5c |
+push 145 = 145 => d2d7a25238b9ef92 |
+create 1 60 0 47616 = 184 => 23c0c09fee6285b8 | c184
+calc 2381 2540 1766 = 12 0 => 23c0c09fee6285b8 |
+toimage 146 = a4cdf47505e13db5 => 30bdfafed776c660 |
+findfmt 0 851848242 8 7 13 0 37 1 = 0 -1 -1 -1 -1 => 30bdfafed776c660 |
+fromimage 15 959473864 16 27 29 3 16 1 = 0 => 30bdfafed776c660 |
+toimage 142 = nil => 30bdfafed776c660 |
+calc 1674 2872 32775 = 12 0 => 30bdfafed776c660 |
+create 64 16 8 1282 = 185 => 5420ce13d9e34a10 | c185
+create 2 4 8 6658 = 186 => 8ee6e288a48477af | c186
+findfmt 7 2115818506 32 1 40 0 155 2 = 0 -1 -1 -1 -1 => 8ee6e288a48477af |
+create 64 64 16 33796 = 187 => 33a4899805f458c6 | c187
+create 4 1 0 50308 = 188 => b0969818349e36fc | c188
+create 17 5 0 21508 = 189 => e2fdbb56a809b85c | c189
+upload 188 = 0 => e2fdbb56a809b85c |
+current = 145 => e2fdbb56a809b85c |
+upload 81 = 0 => e2fdbb56a809b85c |
+numlevels 79 = 0 => e2fdbb56a809b85c |
+create 28 41 16 13314 = 190 => 15736443017fbd46 | c190
+unlock 18 => 15736443017fbd46 |
+lock 167 1 1 = 0 => 15736443017fbd46 |
+pop = 145 => 9393f129dad3b9a8 |
+fromimage 159 1960064120 8 28 2 5 4 1 = 0 => 9393f129dad3b9a8 |
+destroy 41 => f123d6497096e0f7 | d41 evict41
+create 53 65 16 33796 = 191 => 6ae3c47f47c2734f | c191
+unlock 180 => b8a42067def95ad7 |
+current = 119 => b8a42067def95ad7 |
+dxt 4 24 644 1 6 1 1556876517 = 192 => 015fbc2df2bfcb19 | c192
+unlock 40 => f565f65f241ee5fb |
+toimage 90 = nil => f565f65f241ee5fb |
+unlock 32 => c0906847e760b0a5 |
+fromimage 100 743578901 16 26 26 0 36 1 = 0 => c0906847e760b0a5 |
+current = 119 => c0906847e760b0a5 |
+create 58 32 16 50177 = 193 => 2d8eaf82e26a99d3 | c193
+create 55 20 8 4613 = 194 => 16ef5915bdcd2a52 | c194
+create 54 11 0 33539 = -1 => 775cfaacd0703a0c | c195
+fromimage 38 1043786261 8 11 12 5 193 2 = 1 => f771a5245a7de40c |
+calc 2707 2171 33880 = 12 0 => f771a5245a7de40c |
+pop = 119 => 061fd848384bfd1a |
+create 29 32 24 5508 = 196 => b4f9661a49d09655 | c196
+lock 18 1 3 = 0 => b4f9661a49d09655 |
+lock 191 3 5 = 1 => 4c095d0a5abd64c2 |
+sub 149 133 16 9 10 7 => 344ab6e9c38547de |
+lock 152 1 5 = 0 => 344ab6e9c38547de |
+numlevels 137 = 0 => 344ab6e9c38547de |
+sub 175 10 19 11 18 14 => 3df534605904f7df |
+push 106 = 106 => 4ada439c63660b94 |
+create 22 36 16 2562 = 197 => f7cbe1399c950887 | c197
+calc 1751 1123 1009 = 11 1 => f7cbe1399c950887 |
+create 16 4 8 2561 = 198 => ea72b7179112ec25 | c198
+calc 2252 245 22524 = 12 0 => ea72b7179112ec25 |
+create 43 63 8 4226 = 199 => b32df91c6f06537a | c199
+numlevels 102 = 0 => b32df91c6f06537a |
+create 32 16 16 42243 = -1 => 138fda0f3d07fee7 | c200
+destroy 140 => 49a6b7172e619a95 | d140 evict140
+push 28 = 28 => d71d38977a6c6b76 |
+fromimage 194 2303374193 24 39 33 3 235 0 = 0 => d71d38977a6c6b76 |
+sub 199 172 11 6 26 25 => 13f2f75af7f8fb4b |
+lock 81 2 3 = 0 => 13f2f75af7f8fb4b |
+findfmt 0 2988641309 32 32 21 0 5 2 = 0 -1 -1 -1 -1 => 13f2f75af7f8fb4b |
+lock 99 0 1 = 1 => 64b001b440f7bd53 |
+destroy 190 => 511d6cd81069cdb9 | d190 evict190
+unlock 114 => ef73e2c005075237 |
+unlock 46 => 3a3e18a4ff4ac131 |
+numlevels 9 = 0 => 3a3e18a4ff4ac131 |
+unlock 181 => 751ec556300846ed |
+pop = 28 => d02a67b130277b3e |
+create 9 39 16 35332 = 201 => 1aa0144b2b2a736e | c201
+push 195 = 195 => 52a3dcdb23d82f52 |
+pop = 195 => 1aa0144b2b2a736e |
+calc 1754 2532 39854 = 12 0 => 1aa0144b2b2a736e |
+upload 15 = 17 => 564ba95f90b301ee | up0:28x16,5,6,0
+lock 119 2 1 = 0 => 564ba95f90b301ee |
+dxt 64 60 34180 1 7 0 3756854675 = 202 => dc2294245417d3d1 | c202
+lock 148 2 2 = 0 => dc2294245417d3d1 |
+findfmt 0 455952180 4 27 20 0 16 2 = 0 -1 -1 -1 -1 => dc2294245417d3d1 |
+upload 73 = 18 => 3c6ff8e8b9746dda | up0:40x4,3,1,0
+create 1 4 32 34436 = 203 => af5f23083018da5c | c203
+fromimage 182 748673984 4 15 26 0 13 1 = 0 => af5f23083018da5c |
+toimage 181 = 8f050da677d5be2d => af5f23083018da5c |
+dxt 28 56 1412 3 5 0 3948057967 = 204 => 06b1cf7eeb660785 | c204
+unlock 56 => 06b1cf7eeb660785 |
+push 137 = 137 => f086a42a9c45ace3 |
+create 58 25 32 33280 = 205 => 2efd834dbf491ead | c205
+create 31 39 24 33792 = 206 => cb738278adf3ee63 | c206
+calc 70 1643 2319 = 11 0 => cb738278adf3ee63 |
+upload 181 = 19 => 9a794873a0bba071 | up0:24x24,1,1,0
+push 204 = 204 => 546dc6dfeb93e31c |
+current = 204 => 546dc6dfeb93e31c |
+sub 199 195 9 0 1 29 => 586bbb9939a14950 |
+toimage 195 = nil => 586bbb9939a14950 |
+create 4 2 32 1284 = 207 => b1af04d8a61762be | c207
+create 4 2 24 41602 = 208 => 512ae3d4f349d871 | c208
+numlevels 199 = 0 => 512ae3d4f349d871 |
+lock 13 1 3 = 0 => 512ae3d4f349d871 |
+push 45 = 45 => aba380e55ef251bf |
+lock 204 1 5 = 0 => aba380e55ef251bf |
+sub 114 38 3 19 9 19 => f651ef2a4c2a3a21 |
+current = 45 => f651ef2a4c2a3a21 |
+findfmt 6 3194894921 4 27 15 7 8 0 = 0 -1 -1 -1 -1 => f651ef2a4c2a3a21 |
+toimage 168 = nil => f651ef2a4c2a3a21 |
+fromimage 165 1591818962 24 33 32 0 14 0 = 1 => 18ab954a0456b669 |
+lock 189 2 2 = 1 => cb627fd04f2ca5a4 |
+create 38 4 8 54276 = 209 => fbf37c4a2212987c | c209
+unlock 38 => fbc1eb8f9d610eeb |
+create 57 39 0 1153 = 210 => ba4832a04a656ad1 | c210
+upload 36 = 0 => ba4832a04a656ad1 |
+lock 202 1 2 = 1 => c9111304753761c9 |
+dxt 4 44 37508 1 4 0 1140029878 = 211 => e340915db0cf5ebc | c211
+upload 87 = 0 => e340915db0cf5ebc |
+unlock 90 => e340915db0cf5ebc |
+dxt 36 8 33412 5 3 1 672211426 = 212 => b1e4f905078a1474 | c212
+calc 543 2974 51794 = 12 0 => b1e4f905078a1474 |
+push 191 = 191 => 5c64a01e312ed3ca |
+create 2 16 0 17156 = 213 => 34464a2e80485a94 | c213
+destroy 94 => 8d4e12270ce32974 | d94 evict94
+destroy 13 => 0af641315a5aa1f8 | d13 evict13
+numlevels 211 = 1 => 0af641315a5aa1f8 |
+create 50 63 0 35328 = 214 => c552f6f8f45c1822 | c214
+push 157 = 157 => 03d059869b08e7e8 |
+lock 2 2 5 = 0 => 03d059869b08e7e8 |
+findfmt 1 2836625236 24 32 18 4 193 2 = 0 -1 -1 -1 -1 => 03d059869b08e7e8 |
+upload 2 = 20 => 07dcb952a13d140d | up0:40x64,5,1,0
+current = 157 => 07dcb952a13d140d |
+lock 60 2 2 = 0 => 07dcb952a13d140d |
+findfmt 4 2268523063 24 12 37 0 3 1 = 1 12 37 32 1284 => 07dcb952a13d140d |
+numlevels 191 = 7 => 07dcb952a13d140d |
+fromimage 213 2638406251 8 28 28 0 177 2 = 1 => 2f43b082cec77ae1 |
+push 196 = 196 => dd8115475bf32ca4 |
+findfmt 6 1874684694 24 32 39 3 3 1 = 0 -1 -1 -1 -1 => dd8115475bf32ca4 |
+create 35 49 16 33795 = -1 => 7218b31080ccc848 | c215
+create 32 32 32 2565 = 216 => 6f76f0849104bc12 | c216
+sub 177 137 0 1 14 21 => d7a1bca64e911698 |
+numlevels 171 = 8 => d7a1bca64e911698 |
+calc 2714 1659 54350 = 12 0 => d7a1bca64e911698 |
+dxt 64 32 37508 5 6 0 1797248953 = 217 => 04fb090c9861510e | c217
+current = 196 => 04fb090c9861510e |
+fromimage 17 2428856791 16 13 7 0 177 1 = 0 => 04fb090c9861510e |
+destroy 130 => 51a6fabb7f73fe63 | d130 evict130
+create 16 32 32 33792 = 218 => 99d448c911acad9d | c218
+lock 208 3 5 = 0 => 99d448c911acad9d |
+create 34 51 32 32769 = 219 => 4113e205d35bf66c | c219
+create 7 8 24 13314 = 220 => 732cdf0088510dd4 | c220
+unlock 52 => 732cdf0088510dd4 |
+current = 196 => 732cdf0088510dd4 |
+create 16 8 16 1029 = 221 => ad0f9f542f68934c | c221
+create 34 68 8 4737 = 222 => 502ae71df7a0c4a4 | c222
+upload 107 = 21 => 895215e9e97c56f1 | up0:2x64,0,1,0
+create 4 8 32 1024 = 223 => 6ccb9df2debdb1a6 | c223
+create 32 4 16 771 = -1 => 614b02fce1987b79 | c224
+sub 88 129 6 8 30 19 => 7deb1f7a525c420f |
+numlevels 66 = 0 => 7deb1f7a525c420f |
+sub 152 193 12 4 17 5 => 286215ae0318a1b5 |
+calc 2834 1318 39888 = 12 0 => 286215ae0318a1b5 |
+fromimage 194 3268316399 24 18 37 0 9 2 = 0 => 286215ae0318a1b5 |
+create 40 59 8 37893 = 225 => 3b45426fe255d302 | c225
+unlock 141 => 42425bf3cf49000f |
+lock 95 3 1 = 1 => c64063a0c40052d5 |
+calc 545 2516 35949 = 12 0 => c64063a0c40052d5 |
+toimage 73 = f19b4df8fa72996d => c64063a0c40052d5 |
+push 206 = 206 => c31fcc9d0a9e31e8 |
+create 63 4 0 35333 = 226 => 856bacec8f0a33e8 | c226
+create 58 29 32 42496 = 227 => 3fa596dbaa0f47c7 | c227
+create 30 60 8 514 = 228 => 1346070f5be2c35c | c228
+unlock 210 => 79d6199248a15022 |
+destroy 22 => 6560d633ca916e38 | d22 evict22
+toimage 113 = ca2ef83eeb246e32 => 1e2fc6d2ecc06030 |
+create 60 5 0 4740 = 229 => dc42a6519df76776 | c229
+upload 70 = 22 => 2063344ee681da91 | up0:32x12,5,1,0
+fromimage 72 2725831336 24 29 35 0 12 0 = 0 => 2063344ee681da91 |
+create 40 26 32 0 = 230 => 575e273581729b77 | c230
+create 10 53 0 33539 = -1 => a0d565f7b2bef487 | c231
+destroy 81 => 707782062284546f | d81 evict81
+sub 212 139 6 9 30 6 => 8ca08cd14ea2cc2b |
+unlock 48 => f2732fb87cf9c6d6 |
+push 192 = 192 => 47a845a62493f6e7 |
+current = 192 => 47a845a62493f6e7 |
+upload 183 = 0 => 47a845a62493f6e7 |
+calc 2440 2600 20274 = 12 0 => 47a845a62493f6e7 |
+toimage 182 = d0803a5b38fb1391 => 49d140fe88d77683 |
+pop = 192 => a6862f073f403b32 |
+calc 426 718 57119 = 10 0 => a6862f073f403b32 |
+sub 171 54 0 9 4 27 => acba7a6e70feb831 |
+current = 206 => acba7a6e70feb831 |
+dxt 16 28 33412 3 7 0 1099982687 = 232 => 4aec19d735d23d36 | c232
+lock 69 3 5 = 0 => 4aec19d735d23d36 |
+fromimage 34 1380304491 16 3 8 4 3 2 = 0 => 4aec19d735d23d36 |
+current = 206 => 4aec19d735d23d36 |
+create 8 4 16 47620 = 233 => 53a897a499cba0c4 | c233
+pop = 206 => 9b8a4ca1d7369879 |
+calc 454 2958 14704 = 12 0 => 9b8a4ca1d7369879 |
+numlevels 213 = 1 => 9b8a4ca1d7369879 |
+fromimage 17 3994170231 24 2 18 2 16 2 = 0 => 9b8a4ca1d7369879 |
+fromimage 80 496210446 8 25 12 0 100 0 = 0 => 9b8a4ca1d7369879 |
+calc 1220 1447 27002 = 11 0 => 9b8a4ca1d7369879 |
+findfmt 6 1914793168 8 15 26 0 18 0 = 0 -1 -1 -1 -1 => 9b8a4ca1d7369879 |
+findfmt 2 2179485462 32 30 39 0 1 1 = 0 -1 -1 -1 -1 => 9b8a4ca1d7369879 |
+fromimage 230 2221633934 24 7 8 0 113 0 = 0 => 9b8a4ca1d7369879 |
+fromimage 103 3991772629 24 40 11 0 9 2 = 0 => 9b8a4ca1d7369879 |
+unlock 14 => 9b8a4ca1d7369879 |
+upload 128 = 23 => 8b5a4417a6adf4d7 | up0:4x16,5,1,0
+push 169 = 169 => 8529620a075eb11d |
+numlevels 193 = 0 => 8529620a075eb11d |
+lock 186 0 3 = 0 => 8529620a075eb11d |
+lock 98 0 5 = 1 => f6405593300fa0e9 |
+create 25 28 0 13829 = 234 => 707f9ebcf79b6d9f | c234
+calc 2362 982 29233 = 12 0 => 707f9ebcf79b6d9f |
+numlevels 93 = 0 => 707f9ebcf79b6d9f |
+numlevels 14 = 0 => 707f9ebcf79b6d9f |
+lock 2 1 2 = 0 => 707f9ebcf79b6d9f |
+push 66 = 66 => 04fbf3132344a3dc |
+destroy 226 => baa668a83975b4a8 | d226 evict226
+push 207 = -1 => baa668a83975b4a8 |
+destroy 124 => 9991f480555fadbf | d124 evict124
+numlevels 223 = 1 => 9991f480555fadbf |
+pop = 66 => 83c895648bb9420c |
+create 64 2 32 1026 = 235 => 231611eb8ebe0d41 | c235
+lock 151 0 1 = 1 => 89e7b214aafcb669 |
+fromimage 175 2285528809 16 31 27 0 18 1 = 0 => 89e7b214aafcb669 |
+toimage 157 = nil => 89e7b214aafcb669 |
+create 2 16 0 41476 = 236 => 214216778720289e | c236
+create 23 5 32 34308 = 237 => 52bafe324b4c2412 | c237
+toimage 131 = nil => 52bafe324b4c2412 |
+push 20 = 20 => 16b7abe096686237 |
+destroy 218 => 90c0d28e47c0bce1 | d218 evict218
+create 28 68 24 897 = 238 => d956f3949a8c0af0 | c238
+create 8 2 0 43651 = -1 => 83f44d1eb41b85e6 | c239
+unlock 48 => 83f44d1eb41b85e6 |
+destroy 56 => af0ada2ba8205022 | d56 evict56 tdel12
+push 239 = -1 => af0ada2ba8205022 |
+toimage 117 = 4246f3718c746990 => ec3b9703157d3872 |
+create 10 65 8 1281 = 240 => f82f422415f077fa | c240
+unlock 238 => 3e15bbcbb34532f2 |
+create 48 45 32 32897 = 241 => 22a6a59fb9a8e9a7 | c241
+numlevels 122 = 0 => 22a6a59fb9a8e9a7 |
+numlevels 187 = 7 => 22a6a59fb9a8e9a7 |
+calc 2234 2710 26605 = 12 0 => 22a6a59fb9a8e9a7 |
+dxt 52 12 37508 3 6 1 3030563056 = 242 => 19aa4fc2222b534e | c242
+lock 36 2 1 = 0 => 19aa4fc2222b534e |
+dxt 52 16 38276 1 3 1 3197816096 = 243 => 919b95310431fb57 | c243
+destroy 20 => 2ebcbbc3539b6100 | d20 evict20
+create 32 32 24 389 = 244 => 9df2fc228dc8c0f2 | c244
+numlevels 2 = 1 => 9df2fc228dc8c0f2 |
+findfmt 0 2817566360 24 6 13 0 12 1 = 0 -1 -1 -1 -1 => 9df2fc228dc8c0f2 |
+fromimage 135 446603443 32 1 21 6 23 0 = 1 => 664100ee44cabeb0 |
+push 97 = -1 => 664100ee44cabeb0 |
+dxt 12 44 37508 1 4 1 3138509064 = 245 => 61fa673c9459928c | c245
+fromimage 2 50495431 8 20 8 0 11 1 = 0 => 61fa673c9459928c |
+toimage 209 = 496ad914c0a934df => 61fa673c9459928c |
+fromimage 35 3889142075 16 31 2 0 20 0 = 0 => 61fa673c9459928c |
+lock 224 3 5 = 0 => 61fa673c9459928c |
+create 62 1 8 5252 = 246 => fe0e1519fd2bccce | c246
+lock 214 3 2 = 1 => 29827eb32161d2bb |
+destroy 78 => 0faab132e47dea7f | d78 evict78
+toimage 220 = nil => 0faab132e47dea7f |
+dxt 24 56 37508 1 2 0 69347612 = 247 => 5635b050a39e0d69 | c247
+sub 21 72 18 19 5 11 => 5cf42f880ada6d30 |
+upload 76 = 24 => cbb63f2e13db4791 | up0:64x20,5,1,0
+create 10 68 0 33284 = 248 => 701160c13e8bb464 | c248
+create 54 50 8 39428 = 249 => 2b1c6d2bc59ab5e4 | c249
+toimage 232 = 70b12e64f491b1d6 => 510262e29da33a34 |
+destroy 106 => d04a42b3d0b5850f | d106 evict106
+destroy 179 => 34b08c8c729c1231 | d179 evict179
+sub 203 202 11 16 3 25 => 9c69eba9219a198c |
+push 36 = -1 => 9c69eba9219a198c |
+destroy 17 => bc13cd510fc96d95 | d17 evict17
+dxt 40 60 1412 1 8 0 954487380 = 250 => 389b9db026ce74aa | c250
+pop = 244 => ec555e1a386460ff |
+lock 180 1 5 = 0 => ec555e1a386460ff |
+create 57 34 16 33153 = 251 => 852afe207394e397 | c251
+findfmt 1 3706387203 16 7 5 2 204 1 = 0 -1 -1 -1 -1 => 852afe207394e397 |
+destroy 222 => d0fe0f0c5a94530b | d222 evict222
+sub 121 88 16 4 5 22 => 20a65ff75d3c5336 |
+current = 169 => 20a65ff75d3c5336 |
+numlevels 211 = 1 => 20a65ff75d3c5336 |
+create 4 32 16 385 = 252 => 883310af88ee6d8d | c252
+dxt 28 56 644 5 3 1 3133331376 = 253 => 88ba73f91f30a997 | c253
+toimage 237 = 1fdb43ce017621cb => 88ba73f91f30a997 |
+destroy 104 => a3af0f7b1b1c40e3 | d104 evict104
+unlock 220 => 803c39f3dd96d304 |
+push 74 = 74 => 8f144ef2e5663bbf |
+dxt 28 4 4740 5 7 0 3121194282 = 254 => c13a3052709f4e66 | c254
+unlock 234 => c13a3052709f4e66 |
+unlock 16 => 08b69ba5b6a3c7dd |
+upload 31 = 25 => b1a0dfca09b172d5 | up0:16x4,5,1,0
+dxt 16 8 33412 3 2 0 3383259923 = 255 => d085e0a6b99d3fd0 | c255
+create 34 68 16 5 = 256 => b0dd52d6729dc9bf | c256
+toimage 144 = nil => b0dd52d6729dc9bf |
+calc 2569 2199 2455 = 12 0 => b0dd52d6729dc9bf |
+dxt 44 16 644 1 5 1 824335592 = 257 => 5517eb87fcc267e5 | c257
+fromimage 83 834524468 24 5 1 0 5 0 = 0 => 5517eb87fcc267e5 |
+lock 39 2 2 = 0 => 5517eb87fcc267e5 |
+findfmt 1 3757929625 8 18 38 0 15 1 = 0 -1 -1 -1 -1 => 5517eb87fcc267e5 |
+fromimage 113 1788430709 16 24 32 0 216 1 = 0 => 5517eb87fcc267e5 |
+dxt 52 56 34180 3 2 0 179620128 = 258 => 226d8fc8400b28e9 | c258
+fromimage 213 3514723318 16 32 38 0 7 0 = 1 => 44fdd870662e86fd |
+unlock 209 => 44fdd870662e86fd |
+fromimage 230 2671471876 24 4 21 4 34 1 = 0 => 44fdd870662e86fd |
+calc 698 293 19492 = 10 0 => 44fdd870662e86fd |
+fromimage 35 2480511308 4 28 36 0 14 0 = 0 => 44fdd870662e86fd |
+push 233 = -1 => 44fdd870662e86fd |
+create 29 15 8 389 = 259 => d1f29968454b358f | c259
+lock 114 2 3 = 1 => c5c2969b6e6531f3 |
+fromimage 225 2070881251 4 34 14 0 5 0 = 0 => c5c2969b6e6531f3 |
+fromimage 34 4240060459 24 13 2 0 7 1 = 0 => c5c2969b6e6531f3 |
+dxt 60 44 38276 3 1 1 1544081418 = 260 => 969e2db4ca852ebe | c260
+upload 31 = 25 => 969e2db4ca852ebe |
+dxt 60 8 644 3 3 0 3368915149 = 261 => f620d8ad10719b7f | c261
+pop = 74 => bce672ca91968a44 |
+lock 178 3 1 = 0 => bce672ca91968a44 |
+create 54 28 0 33923 = -1 => c385d3ee507056b8 | c262
+calc 2151 1264 27727 = 12 0 => c385d3ee507056b8 |
+current = 169 => c385d3ee507056b8 |
+lock 171 2 3 = 1 => 25c48a51e105bec0 |
+upload 195 = 0 => 25c48a51e105bec0 |
+dxt 64 44 1412 5 8 1 3052569235 = 263 => c7dc350f27234161 | c263
+fromimage 245 3163124594 4 32 33 0 9 0 = 0 => c7dc350f27234161 |
+findfmt 2 3998431389 4 26 39 3 6 0 = 0 -1 -1 -1 -1 => c7dc350f27234161 |
+fromimage 120 2434541255 8 12 40 0 3 0 = 0 => c7dc350f27234161 |
+lock 63 2 3 = 0 => c7dc350f27234161 |
+pop = 169 => 3d93cf3d07882fab |
+numlevels 230 = 1 => 3d93cf3d07882fab |
+lock 219 0 1 = 0 => 3d93cf3d07882fab |
+dxt 12 60 1412 1 8 1 3147457436 = 264 => f1a08854c88ca868 | c264
+calc 1098 563 53985 = 11 0 => f1a08854c88ca868 |
+unlock 9 => f0a78a39f8d0fa5d |
+create 56 66 32 641 = 265 => 2ad38f05ea440dfd | c265
+destroy 161 => 4454eedf5c5555d7 | d161 evict161
+create 19 24 8 1668 = 266 => 68efa33845fa0a31 | c266
+create 8 1 24 32772 = 267 => 15ef9006a0be4a2a | c267
+destroy 198 => aa694916355fea3c | d198 evict198
+push 188 = 188 => 545f87e777774383 |
+unlock 235 => e71ab4a58ed2cb5d |
+upload 262 = 0 => e71ab4a58ed2cb5d |
+findfmt 4 2664498756 8 6 34 7 14 1 = 1 6 34 32 1284 => e71ab4a58ed2cb5d |
+pop = 188 => 079701705eec5d02 |
+create 40 50 8 33920 = 268 => ef2db1695873f06c | c268
+push 116 = 116 => ec6a07b6c22c56db |
+findfmt 4 2812318306 16 28 31 0 1 2 = 1 28 31 32 1284 => ec6a07b6c22c56db |
+dxt 12 8 5508 3 2 0 2119651995 = 269 => bcf93fb1f7ccebbc | c269
+unlock 234 => bcf93fb1f7ccebbc |
+lock 225 1 5 = 0 => bcf93fb1f7ccebbc |
+lock 237 1 5 = 1 => 7aff968540fdd9c8 |
+toimage 166 = 6e56a7cb07338039 => 7aff968540fdd9c8 |
+current = 116 => 7aff968540fdd9c8 |
+numlevels 132 = 6 => 7aff968540fdd9c8 |
+create 6 67 0 35330 = 270 => ac62d0d08fc188e4 | c270
+upload 191 = 26 => 22cabd6007c7489a | up0:53x65,0,7,0
+create 25 9 32 39553 = 271 => 03a8375fa7d34d18 | c271
+create 32 64 32 54276 = 272 => 3aca27b5201352e2 | c272
+unlock 52 => 3aca27b5201352e2 |
+calc 2549 762 19952 = 12 0 => 3aca27b5201352e2 |
+unlock 101 => 81977407c0b438ad |
+dxt 48 40 4740 1 4 1 2017038015 = 273 => b1b43b8ab6ebad01 | c273
+calc 1192 1678 41181 = 11 0 => b1b43b8ab6ebad01 |
+lock 197 1 3 = 0 => b1b43b8ab6ebad01 |
+findfmt 7 161543820 16 17 27 0 16 1 = 0 -1 -1 -1 -1 => b1b43b8ab6ebad01 |
+dxt 52 20 644 1 8 0 3343123805 = 274 => 1fea8a00eca71b02 | c274
+fromimage 89 654934320 16 29 2 0 249 0 = 0 => 1fea8a00eca71b02 |
+unlock 100 => b15a2af35a2cdfc9 |
+push 21 = 21 => fc9f88eb11cf376d |
+pop = 21 => b15a2af35a2cdfc9 |
+destroy 60 => fa42748d2bcd7c37 | d60 evict60
+unlock 271 => 4b9cca7ffda05c97 |
+push 237 = 237 => 68067a40f39f88ab |
+lock 239 3 1 = 0 => 68067a40f39f88ab |
+create 46 7 8 1284 = 275 => bdb56bb14d033cb2 | c275
+current = 237 => bdb56bb14d033cb2 |
+fromimage 232 3485745240 4 12 33 0 15 1 = 0 => bdb56bb14d033cb2 |
+findfmt 6 953101980 32 14 37 0 18 2 = 0 -1 -1 -1 -1 => bdb56bb14d033cb2 |
+calc 1659 2671 47574 = 12 0 => bdb56bb14d033cb2 |
+dxt 44 12 34180 5 3 1 379210253 = 276 => d746b4ab2b31472c | c276
+findfmt 1 2784799365 32 32 3 6 78 1 = 0 -1 -1 -1 -1 => d746b4ab2b31472c |
+lock 184 2 3 = 0 => d746b4ab2b31472c |
+toimage 166 = 6e56a7cb07338039 => d746b4ab2b31472c |
+lock 96 2 1 = 0 => d746b4ab2b31472c |
+calc 673 523 53015 = 10 0 => d746b4ab2b31472c |
+create 31 18 8 4099 = -1 => d631d0c417cc4ac3 | c277
+current = 237 => d631d0c417cc4ac3 |
+findfmt 2 1632962681 4 1 35 0 5 0 = 0 -1 -1 -1 -1 => d631d0c417cc4ac3 |
+findfmt 3 4010421834 4 6 31 0 1 0 = 0 -1 -1 -1 -1 => d631d0c417cc4ac3 |
+push 95 = -1 => d631d0c417cc4ac3 |
+create 4 16 24 33796 = 278 => 8bd22cd2fb378e9f | c278
+create 32 64 16 2562 = 279 => 41f408a559247096 | c279
+current = 237 => 41f408a559247096 |
+create 4 8 24 17413 = 280 => bc1cc11c4b60c568 | c280
+push 268 = -1 => bc1cc11c4b60c568 |
+dxt 36 28 644 5 4 0 2378093096 = 281 => aa4381f00f7894ad | c281
+dxt 32 4 4740 1 6 1 4053338002 = 282 => 30aad2f89292d703 | c282
+unlock 232 => 30aad2f89292d703 |
+findfmt 5 320184519 4 1 34 0 10 0 = 0 -1 -1 -1 -1 => 30aad2f89292d703 |
+upload 69 = 6 => 30aad2f89292d703 |
+findfmt 4 2268291806 24 10 35 0 2 1 = 1 10 35 32 1284 => 30aad2f89292d703 |
+push 142 = -1 => 30aad2f89292d703 |
+sub 18 264 9 3 3 12 => efa8647a7fdc76b7 |
+numlevels 121 = 1 => efa8647a7fdc76b7 |
+create 3 16 24 37124 = 283 => 0ecfc575856c0c60 | c283
+toimage 258 = cae086c74299bf76 => a9322d40cc0818f4 |
+create 33 43 8 1028 = 284 => 3055b156697f66c1 | c284
+unlock 144 => 2ca85069cada78fa |
+fromimage 134 3635116937 4 32 13 0 5 1 = 0 => 2ca85069cada78fa |
+destroy 212 => af9726957db5689e | d212 evict212
+destroy 37 => 0de6e7655286feb8 | d37 evict37
+destroy 204 => a58362c6f6df5190 | d204 evict204
+toimage 221 = 35cc9c28e0e5b5dd => a58362c6f6df5190 |
+push 120 = -1 => a58362c6f6df5190 |
+create 56 2 32 5120 = 285 => 59839e38a47d1ca8 | c285
+unlock 136 => 59839e38a47d1ca8 |
+lock 273 1 1 = 0 => 59839e38a47d1ca8 |
+fromimage 77 3531517549 4 15 33 4 3 0 = 0 => 59839e38a47d1ca8 |
+current = 237 => 59839e38a47d1ca8 |
+fromimage 46 3383529875 8 4 4 0 7 2 = 0 => 59839e38a47d1ca8 |
+create 2 8 32 36997 = 286 => 84cf2e22d638401b | c286
+fromimage 194 1808147193 24 14 5 0 14 1 = 0 => 84cf2e22d638401b |
+upload 97 = 0 => 84cf2e22d638401b |
+findfmt 4 3939558262 16 12 35 6 12 0 = 1 12 35 32 1284 => 84cf2e22d638401b |
+upload 240 = 0 => 84cf2e22d638401b |
+dxt 48 64 644 1 3 1 896842894 = 287 => fb1b90b5314f614f | c287
+findfmt 0 2942785776 4 12 38 0 4 0 = 0 -1 -1 -1 -1 => fb1b90b5314f614f |
+lock 228 2 2 = 0 => fb1b90b5314f614f |
+destroy 145 => 11f78a84aff41103 | d145 evict145
+calc 1561 807 48649 = 11 0 => 11f78a84aff41103 |
+upload 119 = 0 => 11f78a84aff41103 |
+pop = 237 => 4e89686f3fcfa973 |
+numlevels 243 = 1 => 4e89686f3fcfa973 |
+findfmt 5 2826227837 8 16 11 0 220 2 = 0 -1 -1 -1 -1 => 4e89686f3fcfa973 |
+create 64 2 8 768 = 288 => 810f4ff2f6611e2c | c288
+push 156 = 156 => 779b0c432d463e0d |
+current = 156 => 779b0c432d463e0d |
+push 35 = -1 => 779b0c432d463e0d |
+upload 149 = 27 => e91d9f83acd933af | up0:56x16,3,1,0
+lock 211 0 3 = 1 => 53699380b9193e99 |
+upload 240 = 0 => 53699380b9193e99 |
+create 51 59 16 33924 = 289 => 3ccc764329f3e29f | c289
+push 97 = -1 => 3ccc764329f3e29f |
+sub 281 247 14 6 23 20 => e0f1081ed31c9fc9 |
+dxt 24 8 34180 1 6 1 4054470313 = 290 => 17381c81c143733f | c290
+create 1 2 8 5760 = 291 => c770acbb1371b5c1 | c291
+lock 247 1 3 = 0 => c770acbb1371b5c1 |
+destroy 264 => 6cdae7213c2e2600 | d264 evict264
+lock 31 3 2 = 0 => 6cdae7213c2e2600 |
+push 164 = -1 => 6cdae7213c2e2600 |
+create 38 25 0 38149 = 292 => 4ad0cf0de52279a2 | c292
+findfmt 7 3729453807 16 37 27 0 15 0 = 0 -1 -1 -1 -1 => 4ad0cf0de52279a2 |
+dxt 48 32 1412 5 6 0 578060303 = 293 => fae5c94e778c3d1b | c293
+lock 283 2 3 = 0 => fae5c94e778c3d1b |
+sub 21 160 3 8 24 9 => 0e3677662c994f4e |
+lock 252 0 5 = 0 => 0e3677662c994f4e |
+calc 2108 1626 3757 = 12 0 => 0e3677662c994f4e |
+upload 61 = 0 => 0e3677662c994f4e |
+toimage 100 = e89455d5b995eaf6 => 0e3677662c994f4e |
+current = 156 => 0e3677662c994f4e |
+calc 2539 1039 20024 = 12 0 => 0e3677662c994f4e |
+push 221 = -1 => 0e3677662c994f4e |
+fromimage 206 316346011 4 2 26 0 5 2 = 0 => 0e3677662c994f4e |
+current = 156 => 0e3677662c994f4e |
+lock 174 1 3 = 0 => 0e3677662c994f4e |
+create 2 2 16 1155 = -1 => f1b7f8f487c67b88 | c294
+create 29 49 32 17153 = 295 => 83e5a4dba715c26d | c295
+findfmt 4 3588957775 8 8 19 0 13 2 = 1 8 19 32 1284 => 83e5a4dba715c26d |
+upload 216 = 28 => c0af5b6e35b00031 | up0:32x32,0,1,0
+current = 156 => c0af5b6e35b00031 |
+numlevels 180 = 1 => c0af5b6e35b00031 |
+dxt 52 40 33412 5 4 0 1182154365 = 296 => 8bea0c4a2aa9d240 | c296
+create 60 59 32 33157 = 297 => 2ac824f17520805e | c297
+fromimage 232 382518602 24 10 10 0 235 2 = 0 => 2ac824f17520805e |
+pop = 156 => c7f4dbd3a22a3157 |
+push 200 = 200 => ac87b2352b7ea0ca |
+toimage 164 = 07a20acef08cdf55 => 6db94fa4ec3dcea2 |
+lock 261 2 5 = 0 => 6db94fa4ec3dcea2 |
+fromimage 223 3437978596 16 36 31 0 10 0 = 0 => 6db94fa4ec3dcea2 |
+current = 200 => 6db94fa4ec3dcea2 |
+fromimage 292 2460630069 32 7 10 5 101 0 = 0 => 6db94fa4ec3dcea2 |
+upload 121 = 29 => ad4c751e8c144e86 | up0:44x36,5,1,0
+findfmt 4 4109168112 32 27 31 5 226 2 = 1 27 31 32 1284 => ad4c751e8c144e86 |
+upload 236 = 30 => 46dd3d9f7f19186c | up0:2x16,0,5,0
+dxt 32 64 1412 3 7 0 1704987453 = 298 => 68ca8b60b78494a3 | c298
+create 33 24 8 42500 = 299 => c16e878fdd1e49f2 | c299
+toimage 79 = nil => c16e878fdd1e49f2 |
+upload 287 = 31 => 6a102aee5acd5b28 | up0:48x64,1,1,0
+calc 1209 1243 18011 = 11 0 => 6a102aee5acd5b28 |
+create 2 44 16 42242 = 300 => 40b9937e6311da22 | c300
+lock 134 1 5 = 1 => 4e9f3cb32e6d0421 |
+upload 209 = 32 => 28fe3a227cb3a7c1 | up0:38x4,0,1,1
+create 21 52 8 34052 = 301 => 799578ac0b2e864c | c301
+sub 273 66 1 11 30 4 => 86cb484c446cffa8 |
+lock 53 0 5 = 1 => 0c1ad0b1d2436e0c |
+upload 74 = 33 => db2d07fb163c859c | up0:32x8,1,3,0
+toimage 38 = 69dc78ae2ac82db0 => db2d07fb163c859c |
+fromimage 254 2091643883 32 11 13 0 15 1 = 0 => db2d07fb163c859c |
+sub 254 166 10 13 19 19 => 61036b46be0fb1ab |
+sub 196 286 13 1 15 3 => f0a6aacecda1862f |
+toimage 173 = nil => f0a6aacecda1862f |
+dxt 12 60 34180 3 3 0 3652651083 = 302 => b37debb736f2ed7f | c302
+fromimage 225 1828796653 4 31 8 0 13 0 = 0 => b37debb736f2ed7f |
+current = 200 => b37debb736f2ed7f |
+create 16 64 16 33792 = 303 => 6735f5110f72fa61 | c303
+toimage 43 = nil => 6735f5110f72fa61 |
+push 159 = -1 => 6735f5110f72fa61 |
+destroy 238 => 254b5d9ff49fd3b4 | d238 evict238
+push 290 = -1 => 254b5d9ff49fd3b4 |
+toimage 113 = ca2ef83eeb246e32 => 254b5d9ff49fd3b4 |
+calc 998 835 9470 = 10 0 => 254b5d9ff49fd3b4 |
+destroy 2 => 1b4c855d8920ec37 | d2 evict2 tdel20
+numlevels 278 = 5 => 1b4c855d8920ec37 |
+dxt 64 20 644 3 3 1 4226260844 = 304 => 981161de213f41a9 | c304
+create 57 44 8 5377 = 305 => 7393e903450f3867 | c305
+unlock 258 => 7393e903450f3867 |
+push 235 = -1 => 7393e903450f3867 |
+upload 172 = 0 => 7393e903450f3867 |
+lock 154 0 3 = 0 => 7393e903450f3867 |
+toimage 72 = 303ce991173a0a42 => 7393e903450f3867 |
+unlock 228 => c1586b4e38a3e27d |
+fromimage 278 206831671 4 9 27 0 1 2 = 1 => cb9fff1576c92e8d |
+pop = 200 => 08a1b131c6c5f0e0 |
+lock 289 0 1 = 0 => 08a1b131c6c5f0e0 |
+destroy 213 => 480723d592f9221e | d213 evict213
+calc 364 2324 6285 = 12 0 => 480723d592f9221e |
+lock 293 3 2 = 0 => 480723d592f9221e |
+toimage 36 = nil => 480723d592f9221e |
+calc 2267 1760 30022 = 12 1 => 480723d592f9221e |
+unlock 121 => 505d1ee927b83f49 |
+create 45 56 32 5253 = 306 => 439f6e01219c04ba | c306
+numlevels 63 = 0 => 439f6e01219c04ba |
+create 23 63 24 17920 = 307 => 647fc7f67f4c6f3b | c307
+sub 10 86 15 14 2 27 => 4e4405980a26562d |
+upload 196 = 0 => 4e4405980a26562d |
+sub 217 251 14 0 8 9 => 34c0aab51f4ec4a8 |
+numlevels 74 = 3 => 34c0aab51f4ec4a8 |
+toimage 142 = nil => 34c0aab51f4ec4a8 |
+upload 187 = 34 => 6268bc71c695ab96 | up0:64x64,0,7,0
+fromimage 304 1301987969 32 26 29 0 3 1 = 0 => 6268bc71c695ab96 |
+fromimage 206 1812138331 16 32 4 0 12 2 = 0 => 6268bc71c695ab96 |
+toimage 105 = nil => 6268bc71c695ab96 |
+findfmt 6 911361414 32 37 32 1 241 2 = 0 -1 -1 -1 -1 => 6268bc71c695ab96 |
+calc 1413 2575 17797 = 12 1 => 6268bc71c695ab96 |
+create 35 4 16 1280 = 308 => 7fdc1fe5445b7866 | c308
+sub 77 231 12 2 1 17 => f1cddc485a282ad6 |
+create 4 16 32 2564 = 309 => 262212f1e399fca2 | c309
+lock 138 2 2 = 1 => b0248ce1176dbe9f |
+create 37 4 0 4613 = 310 => 155d97640960f3e4 | c310
+lock 163 3 3 = 1 => e501784a6def1f45 |
+unlock 9 => e501784a6def1f45 |
+numlevels 152 = 0 => e501784a6def1f45 |
+fromimage 107 1096225015 16 39 18 0 161 0 = 1 => 4db6d4b8752d03a2 |
+create 17 9 16 33282 = 311 => a432661506ec2403 | c311
+unlock 244 => a432661506ec2403 |
+lock 275 3 5 = 0 => a432661506ec2403 |
+create 52 6 24 33412 = 312 => be8f69beff57f06d | c312
+sub 109 309 6 1 29 7 => afa9dab94710d1f1 |
+fromimage 120 967720291 8 4 32 0 216 2 = 0 => afa9dab94710d1f1 |
+toimage 127 = 0f49de0d2d23afe0 => afa9dab94710d1f1 |
+findfmt 5 3827131840 4 26 27 0 10 0 = 0 -1 -1 -1 -1 => afa9dab94710d1f1 |
+dxt 16 48 34180 3 1 1 1636528441 = 313 => 67935d4ad98ec331 | c313
+push 270 = 270 => 03c738cb38ee4e1d |
+numlevels 155 = 0 => 03c738cb38ee4e1d |
+unlock 254 => 148b5c709cb565e1 |
+create 8 16 8 36997 = 314 => 1031a725edacc672 | c314
+calc 531 1148 20300 = 11 0 => 1031a725edacc672 |
+findfmt 1 4098285245 24 39 27 0 8 1 = 0 -1 -1 -1 -1 => 1031a725edacc672 |
+unlock 214 => 7bfb66de735105d3 |
+lock 295 2 1 = 0 => 7bfb66de735105d3 |
+destroy 116 => 90775defe745ed89 | d116 evict116
+current = 270 => 90775defe745ed89 |
+calc 2845 2346 15597 = 12 0 => 90775defe745ed89 |
+lock 311 1 1 = 0 => 90775defe745ed89 |
+dxt 48 40 33412 5 5 0 2383955331 = 315 => 1661e32c2b9ce20c | c315
+dxt 8 44 5508 1 8 0 4172522755 = 316 => 935341cd91d6b4a3 | c316
+numlevels 220 = 0 => 935341cd91d6b4a3 |
+fromimage 139 3001653289 24 6 17 0 4 1 = 0 => 935341cd91d6b4a3 |
+pop = 270 => e8cef3356ab60c17 |
+lock 284 2 2 = 0 => e8cef3356ab60c17 |
+findfmt 7 1490431018 8 39 22 6 170 2 = 0 -1 -1 -1 -1 => e8cef3356ab60c17 |
+toimage 188 = nil => e8cef3356ab60c17 |
+findfmt 6 3273593768 32 20 16 0 171 1 = 0 -1 -1 -1 -1 => e8cef3356ab60c17 |
+create 45 41 0 644 = 317 => 8b65da01954ebf2d | c317
+numlevels 111 = 1 => 8b65da01954ebf2d |
+fromimage 315 2753409195 16 35 35 0 15 2 = 0 => 8b65da01954ebf2d |
+upload 271 = 0 => 8b65da01954ebf2d |
+create 24 12 32 1538 = 318 => c0a0da8edb91f644 | c318
+unlock 291 => c0a0da8edb91f644 |
+fromimage 180 872683350 32 39 27 3 191 1 = 0 => c0a0da8edb91f644 |
+create 19 56 24 1028 = 319 => fef2ef8f9b877017 | c319
+upload 314 = 0 => fef2ef8f9b877017 |
+upload 172 = 0 => fef2ef8f9b877017 |
+lock 241 0 2 = 0 => fef2ef8f9b877017 |
+calc 2952 907 2340 = 12 0 => fef2ef8f9b877017 |
+sub 171 310 2 13 19 24 => bd6d6a913029bcf2 |
+toimage 112 = 81807ea12c3711a0 => bd6d6a913029bcf2 |
+destroy 313 => 9763a3c42f7db012 | d313 evict313
+fromimage 46 2161110571 16 7 16 0 15 2 = 0 => 9763a3c42f7db012 |
+create 3 61 0 35329 = 320 => 8e71addb92855bae | c320
+create 2 8 8 8197 = 321 => 3fa03a745c6e92f9 | c321
+create 47 45 8 1026 = 322 => 371231a26e0c3a40 | c322
+destroy 297 => 383b098321935bfe | d297 evict297
+push 90 = 90 => 9475aeabfb4571d5 |
+findfmt 7 3465459803 4 38 15 0 10 1 = 0 -1 -1 -1 -1 => 9475aeabfb4571d5 |
+dxt 8 48 33412 5 7 0 3157664022 = 323 => dbe60ba95d1b56c5 | c323
+sub 217 169 17 7 15 15 => 77f8f15fb6fe6de2 |
+destroy 266 => dba985af60478c84 | d266 evict266
+fromimage 304 1169689621 32 38 24 0 85 2 = 0 => dba985af60478c84 |
+create 63 18 0 5633 = 324 => 3efafd0394d97be3 | c324
+findfmt 7 393936848 8 29 16 0 5 1 = 0 -1 -1 -1 -1 => 3efafd0394d97be3 |
+dxt 28 20 5508 5 1 1 3592733951 = 325 => bb76b36774e6c919 | c325
+findfmt 0 3645130906 24 18 10 0 112 0 = 0 -1 -1 -1 -1 => bb76b36774e6c919 |
+create 52 33 8 21509 = 326 => 0705228c7f214ed3 | c326
+destroy 296 => f6ab2441d7ea4fce | d296 evict296
+create 24 51 32 34304 = 327 => aca4e40a710e8f24 | c327
+destroy 243 => 1b28af3311c23725 | d243 evict243
+sub 239 118 13 13 25 1 => 2f23eedb73b38862 |
+findfmt 6 242488251 24 32 20 0 167 1 = 0 -1 -1 -1 -1 => 2f23eedb73b38862 |
+create 4 45 24 12804 = 328 => 0e32bc3d41ee0070 | c328
+toimage 31 = 849e517d306611a7 => 0e32bc3d41ee0070 |
+dxt 56 48 34180 1 7 0 1982465167 = 329 => c7ece1f366ccfcec | c329
+create 64 32 16 35328 = 330 => 53fecfcb88083f78 | c330
+fromimage 16 2024210254 16 5 21 0 4 2 = 1 => 8a5feadce893fdb1 |
+sub 196 73 17 13 24 17 => de2bb11d51641b64 |
+fromimage 180 3672472470 4 10 33 0 14 0 = 0 => de2bb11d51641b64 |
+push 89 = -1 => de2bb11d51641b64 |
+destroy 320 => 63ae835265dad280 | d320 evict320
+create 59 56 24 17922 = 331 => 769569ed1da8026e | c331
+sub 100 67 9 10 23 17 => e504f37ef08c27bc |
+create 15 58 0 1285 = 332 => bde92f9ee487e2c4 | c332
+upload 315 = 35 => ea9b05c5bf3c78ee | up0:48x40,5,5,0
+pop = 90 => 1c39146e21c74a15 |
+dxt 36 44 37508 5 5 0 2822253236 = 333 => 0edfd2feeedac43b | c333
+sub 293 112 7 3 27 24 => 2ea571679f11275a |
+fromimage 107 392887189 24 26 4 0 56 2 = 1 => 717b70ac88df0fa6 |
+numlevels 100 = 6 => 717b70ac88df0fa6 |
+findfmt 0 3039835817 8 7 29 0 190 0 = 0 -1 -1 -1 -1 => 717b70ac88df0fa6 |
+dxt 36 44 4740 5 4 0 3044189135 = 334 => b96a179194effd0a | c334
+create 2 2 0 36866 = 335 => 4cea709ac886a0ad | c335
+findfmt 1 3218945772 24 10 15 0 3 0 = 0 -1 -1 -1 -1 => 4cea709ac886a0ad |
+create 62 9 24 4867 = -1 => aeea2a9fe8697909 | c336
+unlock 302 => 90ddfae49b2704d5 |
+destroy 77 => 4cb9bc23454ab723 | d77 evict77
+unlock 14 => 4cb9bc23454ab723 |
+findfmt 7 528566054 16 7 10 0 174 0 = 0 -1 -1 -1 -1 => 4cb9bc23454ab723 |
+push 234 = 234 => 3f972cfad817c9c8 |
+create 29 14 16 33536 = 337 => 17d33786fafb936f | c337
+upload 12 = 0 => 17d33786fafb936f |
+current = 234 => 17d33786fafb936f |
+create 35 17 32 769 = 338 => 3b2e7143bcebb2a8 | c338
+numlevels 337 = 5 => 3b2e7143bcebb2a8 |
+pop = 234 => f4bee79bf04d24c3 |
+findfmt 2 2370459406 8 35 2 0 157 0 = 0 -1 -1 -1 -1 => f4bee79bf04d24c3 |
+lock 228 2 5 = 0 => f4bee79bf04d24c3 |
+sub 9 330 11 3 2 28 => 064bacebfa082dc4 |
+fromimage 302 4011478264 24 23 16 0 5 2 = 0 => 064bacebfa082dc4 |
+upload 10 = 0 => 064bacebfa082dc4 |
+findfmt 6 1164573164 32 33 9 0 194 2 = 0 -1 -1 -1 -1 => 064bacebfa082dc4 |
+toimage 153 = nil => 064bacebfa082dc4 |
+lock 258 1 5 = 1 => 807436d6f8cbdc97 |
+create 9 3 16 38532 = 339 => 29757fb922cf3eb8 | c339
+toimage 139 = 24cae79460b5bc0f => 29757fb922cf3eb8 |
+lock 153 0 1 = 0 => 29757fb922cf3eb8 |
+fromimage 233 1643173527 4 4 30 0 13 1 = 1 => 1ad9f1c16af615d8 |
+unlock 189 => a8982b3171c8b45d |
+pop = 315 => ca9ec9f9593f0402 |
+create 27 59 32 35333 = 340 => 65f811ec8d9da32f | c340
+destroy 326 => 38e89660f623a245 | d326 evict326
+create 1 1 32 1157 = 341 => ee52820cb5941342 | c341
+findfmt 2 2557707222 8 13 8 5 61 1 = 0 -1 -1 -1 -1 => ee52820cb5941342 |
+pop = 196 => 86c21b7b3bf931bb |
+upload 336 = 0 => 86c21b7b3bf931bb |
+dxt 60 52 1412 1 3 0 3353590306 = 342 => 36639cd7e3710ae9 | c342
+create 16 60 32 33796 = 343 => 824272be6a744bdd | c343
+lock 216 1 5 = 0 => 824272be6a744bdd |
+calc 384 2225 768 = 12 1 => 824272be6a744bdd |
+calc 2966 2340 20302 = 12 0 => 824272be6a744bdd |
+lock 230 2 5 = 0 => 824272be6a744bdd |
+upload 172 = 0 => 824272be6a744bdd |
+fromimage 263 4149927340 16 8 25 0 2 0 = 0 => 824272be6a744bdd |
+create 4 16 32 36993 = 344 => 99b6688e798e7145 | c344
+dxt 52 60 4740 5 4 0 1229451213 = 345 => ff1f2a04e6dde53d | c345
+push 227 = 227 => c6043f16e067625b |
+toimage 185 = nil => c6043f16e067625b |
+create 26 34 0 33028 = 346 => 27c8f63efa42ab4c | c346
+unlock 183 => a33de297b8c8d6cc |
+calc 2257 2476 55254 = 12 0 => a33de297b8c8d6cc |
+calc 1257 1711 61425 = 11 0 => a33de297b8c8d6cc |
+destroy 240 => 08451509daef6c88 | d240 evict240
+pop = 227 => c8daa650082f8256 |
+unlock 225 => c8daa650082f8256 |
+findfmt 2 2290622188 8 2 7 1 212 2 = 0 -1 -1 -1 -1 => c8daa650082f8256 |
+pop = 157 => 983b512e27f8a67c |
+current = 191 => 983b512e27f8a67c |
+dxt 32 52 1412 3 1 0 11765073 = 347 => c3768636c516904b | c347
+destroy 178 => d3d172962bc65950 | d178 evict178
+lock 121 0 3 = 1 => 1a2a2b0c2f85d0e2 |
+numlevels 252 = 0 => 1a2a2b0c2f85d0e2 |
+fromimage 53 4245058208 8 29 31 4 155 2 = 0 => 1a2a2b0c2f85d0e2 |
+unlock 199 => 3b17a2f99af5d2ee |
+sub 269 177 11 10 12 4 => 554ea29ae5bb4f99 |
+create 38 31 32 12932 = 348 => 5d98eb719ddd117b | c348
+toimage 210 = nil => 5d98eb719ddd117b |
+unlock 43 => 5d98eb719ddd117b |
+upload 335 = 0 => 5d98eb719ddd117b |
+lock 252 3 2 = 0 => 5d98eb719ddd117b |
+dxt 32 40 38276 1 8 0 1718621679 = 349 => 574b710fba6e99b1 | c349
+toimage 165 = 123b9871f43abaf4 => 574b710fba6e99b1 |
+dxt 28 20 34180 1 8 0 1206397646 = 350 => ee96e68f90a81d78 | c350
+unlock 109 => 8219ce5a413ea2ec |
+lock 182 0 3 = 1 => 75c2d014b203b962 |
+current = 191 => 75c2d014b203b962 |
+fromimage 299 1529256481 32 40 9 4 60 0 = 1 => 2669a3bb6dfd850a |
+fromimage 194 1659806005 4 40 22 0 7 2 = 0 => 2669a3bb6dfd850a |
+create 19 58 16 2 = 351 => 932111571c3a4c3c | c351
+sub 261 350 18 9 7 18 => 40864ef45bfdc8f5 |
+push 36 = 36 => 023684a97c2aeff6 |
+create 8 1 32 1153 = 352 => 9bc73ccee3adffb7 | c352
+upload 156 = 0 => 9bc73ccee3adffb7 |
+fromimage 302 1636696407 4 15 24 4 12 0 = 0 => 9bc73ccee3adffb7 |
+push 254 = 254 => 4271a2b37fb97d64 |
+push 74 = 74 => ae7b50b8f447447d |
+sub 239 131 19 12 8 10 => db1d8c418da4765d |
+current = 74 => db1d8c418da4765d |
+create 65 42 0 33026 = 353 => 04af490eebf7d6f2 | c353
+lock 341 3 1 = 0 => 04af490eebf7d6f2 |
+create 27 55 0 37381 = 354 => 50195f1faf9b0828 | c354
+create 1 1 16 643 = -1 => c84141b055a05d78 | c355
+create 44 43 8 33796 = 356 => 0db6979d7b5eaa4d | c356
+lock 280 1 5 = 0 => 0db6979d7b5eaa4d |
+sub 120 232 0 2 8 9 => 6fc3081f92fd60e6 |
+numlevels 39 = 0 => 6fc3081f92fd60e6 |
+create 19 47 32 772 = 357 => 6f71aa528d087857 | c357
+current = 74 => 6f71aa528d087857 |
+numlevels 220 = 0 => 6f71aa528d087857 |
+upload 67 = 36 => 670f8c1c4e90765b | up0:36x28,0,6,0
+create 23 68 0 37890 = 358 => 1e105a502bc7d467 | c358
+upload 292 = 37 => 20c7f74eee97b392 | up0:38x25,0,1,1
+toimage 127 = 0f49de0d2d23afe0 => 20c7f74eee97b392 |
+unlock 182 => c60bf60f53cd6334 |
+numlevels 93 = 0 => c60bf60f53cd6334 |
+toimage 282 = bdd7d2a97106f03b => 2cb3b23464f2ebc4 |
+lock 235 0 2 = 0 => 2cb3b23464f2ebc4 |
+numlevels 181 = 1 => 2cb3b23464f2ebc4 |
+dxt 16 64 1412 1 8 1 2295150432 = 359 => b85f8920bdff2460 | c359
+destroy 186 => ff4b8868d9f8d3d7 | d186 evict186
+fromimage 329 765446933 24 14 29 0 255 1 = 0 => ff4b8868d9f8d3d7 |
+sub 125 323 11 15 1 4 => 4d713fb36768e32f |
+lock 133 2 1 = 0 => 4d713fb36768e32f |
+dxt 44 48 38276 3 6 1 3297133639 = 360 => e7c27280a8a5c166 | c360
+create 43 63 24 2692 = 361 => 04e39e0d7373f4b0 | c361
+create 32 64 16 10884 = 362 => 28d44c6095abdcee | c362
+current = 74 => 28d44c6095abdcee |
+sub 339 146 6 10 13 5 => 92a1f146a02b1312 |
+create 19 10 8 4866 = 363 => 5989fbfd130f2f31 | c363
+unlock 324 => 6caf2289d4775650 |
+lock 286 0 5 = 0 => 6caf2289d4775650 |
+upload 50 = 38 => cc5bb7e814fd6b97 | up0:12x12,3,1,0
+fromimage 189 1440817035 24 26 6 6 10 2 = 1 => 459075b328a4cc47 |
+push 113 = 113 => 3979914b7c821253 |
+create 32 32 24 4611 = -1 => 825abb719ac2e95b | c364
+create 16 8 32 32770 = 365 => 89c92e7adb112628 | c365
+fromimage 298 1745195430 4 11 35 0 14 2 = 0 => 89c92e7adb112628 |
+create 42 28 16 9857 = 366 => 0ca3ebfcb5aeab00 | c366
+lock 332 1 1 = 0 => 0ca3ebfcb5aeab00 |
+dxt 48 24 4740 1 3 1 3196838941 = 367 => 31e8fcce56ff2218 | c367
+fromimage 334 567075706 32 34 30 3 211 2 = 0 => 31e8fcce56ff2218 |
+create 29 11 24 36995 = -1 => 5e3e537ac6bf4608 | c368
+destroy 334 => ca927462fef30d1c | d334 evict334
+lock 165 0 5 = 1 => 4e0453604b886e44 |
+dxt 36 52 37508 1 4 0 2470229160 = 369 => 50c8d9944b09331c | c369
+unlock 112 => 50c8d9944b09331c |
+numlevels 7 = 6 => 50c8d9944b09331c |
+numlevels 16 = 5 => 50c8d9944b09331c |
+create 1 64 16 32773 = 370 => 591039be4878d4ba | c370
+findfmt 0 2871434769 4 34 2 0 7 0 = 0 -1 -1 -1 -1 => 591039be4878d4ba |
+unlock 101 => 591039be4878d4ba |
+numlevels 298 = 1 => 591039be4878d4ba |
+current = 113 => 591039be4878d4ba |
+sub 139 28 1 18 4 15 => 128ea7d87a36c231 |
+toimage 366 = nil => 128ea7d87a36c231 |
+lock 229 0 5 = 0 => 128ea7d87a36c231 |
+sub 119 32 7 10 14 11 => 5aa3a87440f0b0ca |
+fromimage 307 3017189940 24 11 25 0 154 1 = 0 => 5aa3a87440f0b0ca |
+numlevels 239 = 0 => 5aa3a87440f0b0ca |
+fromimage 135 2063867218 32 11 7 0 12 2 = 1 => 4d787dc4ed1934cf |
+lock 159 1 1 = 1 => ad7eae42cfaa4a5b |
+findfmt 1 814584262 8 7 12 0 11 1 = 0 -1 -1 -1 -1 => ad7eae42cfaa4a5b |
+create 23 60 16 5509 = 371 => fab4466175223c91 | c371
+create 2 1 8 5634 = 372 => d566d3184c53b35b | c372
+current = 113 => d566d3184c53b35b |
+create 8 32 8 1153 = 373 => 8b239ea2246d364f | c373
+findfmt 3 137361414 24 18 2 0 2 1 = 0 -1 -1 -1 -1 => 8b239ea2246d364f |
+toimage 21 = nil => 8b239ea2246d364f |
+lock 120 1 3 = 0 => 8b239ea2246d364f |
+pop = 113 => 00b6ea7097720163 |
+dxt 12 20 1412 5 4 1 3628469280 = 374 => 1c40d36c614870d2 | c374
+upload 157 = 0 => 1c40d36c614870d2 |
+create 68 20 8 770 = 375 => 170856d88d6dec10 | c375
+unlock 152 => 82748f794bbbffa3 |
+fromimage 319 3765440239 8 40 25 0 187 2 = 1 => 0f4c225676daafb1 |
+calc 371 1474 47079 = 11 0 => 0f4c225676daafb1 |
+push 287 = 287 => 5c5bde63acd052a8 |
+toimage 270 = nil => 5c5bde63acd052a8 |
+toimage 182 = d0803a5b38fb1391 => 5c5bde63acd052a8 |
+findfmt 1 2090715311 24 12 19 0 15 1 = 0 -1 -1 -1 -1 => 5c5bde63acd052a8 |
+fromimage 127 2221436929 24 26 36 0 126 0 = 0 => 5c5bde63acd052a8 |
+create 45 66 16 33925 = 376 => 890e63ae1b808ca3 | c376
+create 18 43 24 32768 = 377 => e7b2daf1997fbbbc | c377
+push 158 = -1 => e7b2daf1997fbbbc |
+findfmt 5 1759140538 24 38 13 0 118 0 = 0 -1 -1 -1 -1 => e7b2daf1997fbbbc |
+toimage 228 = nil => e7b2daf1997fbbbc |
+numlevels 236 = 5 => e7b2daf1997fbbbc |
+calc 742 2802 26196 = 12 0 => e7b2daf1997fbbbc |
+calc 2467 1209 1380 = 12 1 => e7b2daf1997fbbbc |
+numlevels 158 = 1 => e7b2daf1997fbbbc |
+findfmt 4 4068127733 8 25 18 0 179 2 = 1 25 18 32 1284 => e7b2daf1997fbbbc |
+findfmt 1 427494889 32 37 32 2 212 0 = 0 -1 -1 -1 -1 => e7b2daf1997fbbbc |
+lock 234 3 2 = 1 => 49cd5ac623b2093d |
+dxt 12 60 5508 3 8 1 3266611927 = 378 => 08874cf57f27bb52 | c378
+findfmt 4 1838594121 4 34 5 5 11 1 = 1 34 5 32 1284 => 08874cf57f27bb52 |
+calc 1381 1509 32112 = 11 0 => 08874cf57f27bb52 |
+calc 437 339 48743 = 9 0 => 08874cf57f27bb52 |
+pop = 287 => 624d2ada634b7527 |
+pop = 74 => 0036dda20caaf766 |
+lock 281 2 3 = 0 => 0036dda20caaf766 |
+lock 227 0 5 = 1 => 338331d9dbc8c24a |
+lock 251 2 1 = 0 => 338331d9dbc8c24a |
+push 118 = 118 => 00a007d2816af6a7 |
+create 57 43 16 5378 = 379 => bd2fc90e8e1524a9 | c379
+fromimage 233 3629146189 24 20 13 0 150 0 = 1 => 97bdbcef77e722a3 |
+current = 118 => 97bdbcef77e722a3 |
+numlevels 265 = 0 => 97bdbcef77e722a3 |
+calc 599 2291 55156 = 12 0 => 97bdbcef77e722a3 |
+unlock 38 => 97bdbcef77e722a3 |
+destroy 14 => 54c4ef3171d0b871 | d14 evict14
+create 32 49 0 34048 = 380 => b90fb023ca9f78e9 | c380
+push 260 = 260 => de7f48980d94689f |
+current = 260 => de7f48980d94689f |
+create 38 59 8 33409 = 381 => 9b982f2a79d0b1c4 | c381
+toimage 99 = c5dad2f31a588826 => 9b982f2a79d0b1c4 |
+unlock 290 => 2cace3dbc111d3a0 |
+create 67 26 16 39427 = -1 => def46f0f33443c1d | c382
+findfmt 4 2695232562 4 38 17 0 8 1 = 1 38 17 32 1284 => def46f0f33443c1d |
+toimage 156 = nil => def46f0f33443c1d |
+fromimage 88 2721632882 32 17 30 0 10 0 = 0 => def46f0f33443c1d |
+numlevels 365 = 0 => def46f0f33443c1d |
+calc 1120 1920 59194 = 11 0 => def46f0f33443c1d |
+destroy 166 => aeefa739632467bd | d166 evict166
+create 2 64 32 37508 = 383 => a366157bdd5552ff | c383
+current = 260 => a366157bdd5552ff |
+calc 1055 590 56548 = 11 0 => a366157bdd5552ff |
+calc 202 416 1419 = 9 1 => a366157bdd5552ff |
+dxt 60 44 1412 3 7 0 2514588354 = 384 => ed27c74ca58c0f4f | c384
+numlevels 184 = 1 => ed27c74ca58c0f4f |
+findfmt 5 2057198091 8 4 32 0 18 1 = 0 -1 -1 -1 -1 => ed27c74ca58c0f4f |
+calc 1567 1343 35031 = 11 0 => ed27c74ca58c0f4f |
+lock 267 0 2 = 1 => ee61409ca5cee774 |
+current = 260 => ee61409ca5cee774 |
+fromimage 247 2376530893 16 29 13 0 18 1 = 0 => ee61409ca5cee774 |
+numlevels 142 = 0 => ee61409ca5cee774 |
+findfmt 5 3966785780 16 21 23 0 227 1 = 0 -1 -1 -1 -1 => ee61409ca5cee774 |
+pop = 260 => 2e90b11c859e37d2 |
+push 113 = 113 => d625a10325bd927a |
+toimage 105 = nil => d625a10325bd927a |
+pop = 113 => 2e90b11c859e37d2 |
+lock 273 0 5 = 1 => a270a35d9cad3a96 |
+dxt 28 16 34180 5 4 1 3997736321 = 385 => 72d2c2f8ad8ad3a0 | c385
+pop = 118 => 44c473defe8abb95 |
+fromimage 159 2491161321 32 8 40 0 27 1 = 0 => 44c473defe8abb95 |
+push 196 = 196 => b5c75658dbbc3b32 |
+toimage 211 = e2cc0000930af504 => b5c75658dbbc3b32 |
+create 10 6 32 34050 = 386 => 59b072822c368046 | c386
+create 1 44 24 33026 = 387 => 4c097b40a0b84853 | c387
+dxt 28 28 1412 3 3 0 2895478955 = 388 => 425c7ee164969bb7 | c388
+lock 247 2 3 = 0 => 425c7ee164969bb7 |
+destroy 40 => 477692fbb9478e7d | d40 evict40 tdel3
+lock 308 0 3 = 1 => 6003f7b6f3d100ef |
+lock 201 2 3 = 1 => a8ad9c4bfb6f0ce3 |
+unlock 303 => a8ad9c4bfb6f0ce3 |
+sub 287 31 1 15 8 21 => 377c5eafd0975cb3 |
+create 42 70 24 516 = 389 => 9a54eede0f8ccfb8 | c389
+numlevels 368 = 0 => 9a54eede0f8ccfb8 |
+push 177 = 177 => 91b49cfbc682ee94 |
+pop = 177 => 9a54eede0f8ccfb8 |
+findfmt 5 4278912072 8 23 11 0 14 0 = 0 -1 -1 -1 -1 => 9a54eede0f8ccfb8 |
+toimage 322 = nil => 9a54eede0f8ccfb8 |
+create 27 16 24 17923 = -1 => 18d4ef192e2300cb | c390
+sub 315 49 18 8 13 30 => b4ae5025c65acbbf |
+numlevels 353 = 0 => b4ae5025c65acbbf |
+destroy 381 => 7e4e9c7699eeffdc | d381 evict381
+unlock 380 => 7e4e9c7699eeffdc |
+create 67 9 32 259 = -1 => beec114299c89e17 | c391
+lock 332 2 5 = 0 => beec114299c89e17 |
+dxt 36 20 33412 1 6 1 1191243696 = 392 => 832262f4f1ed4601 | c392
+create 53 55 32 10755 = -1 => 2d4721a6ba3d5e27 | c393
+create 12 40 8 18945 = 394 => a46dfed45ffa7861 | c394
+create 4 32 8 4097 = 395 => 3cc51ac072cc3861 | c395
+dxt 16 40 34180 5 6 0 3470709926 = 396 => cebc39485cb1fd24 | c396
+numlevels 63 = 0 => cebc39485cb1fd24 |
+current = 196 => cebc39485cb1fd24 |
+calc 551 333 17804 = 10 1 => cebc39485cb1fd24 |
+sub 50 237 0 11 17 19 => 602e9a01e76c6266 |
+create 16 53 16 39556 = 397 => 74cdbee17a19c0c9 | c397
+push 163 = 163 => 290911ca72467bdf |
+sub 291 70 16 8 16 17 => be7892873ed1e678 |
+create 32 32 8 33027 = -1 => ed41e01ac818828d | c398
+findfmt 5 1985124775 4 9 7 4 4 1 = 0 -1 -1 -1 -1 => ed41e01ac818828d |
+lock 43 2 2 = 0 => ed41e01ac818828d |
+lock 239 1 2 = 0 => ed41e01ac818828d |
+create 32 42 0 9216 = 399 => c9ab266517a6e91d | c399
+dxt 12 12 37508 3 8 1 344603729 = 400 => cedc229bbb632b48 | c400
+create 47 15 24 38404 = 401 => 368efbfb0a69f797 | c401
+calc 29 861 32520 = 10 0 => 368efbfb0a69f797 |
+create 3 33 0 4224 = 402 => eb08a3de87d3c9d0 | c402
+toimage 254 = 6df6de8515fc5f48 => eb08a3de87d3c9d0 |
+lock 360 1 2 = 0 => eb08a3de87d3c9d0 |
+findfmt 7 1767530229 8 39 11 0 95 1 = 0 -1 -1 -1 -1 => eb08a3de87d3c9d0 |
+dxt 12 40 37508 5 2 0 1509755413 = 403 => ceb66a5c104e2f16 | c403
+calc 1926 39 59917 = 11 0 => ceb66a5c104e2f16 |
+current = 163 => ceb66a5c104e2f16 |
+toimage 103 = 0ac55543285e15a2 => ed1c9e0efe5dc0d2 |
+create 8 8 24 33541 = 404 => 73873a5ea7133b9f | c404
+create 53 23 16 38532 = 405 => 4ea1d42134e785dc | c405
+create 59 4 16 259 = -1 => df532ec9eb4af986 | c406
+calc 129 709 37792 = 10 1 => df532ec9eb4af986 |
+pop = 163 => 4ac41205a10e7f58 |
+sub 261 146 11 18 12 21 => 88ebe263afa2d379 |
+create 55 38 8 1284 = 407 => 0bae68167771e627 | c407
+numlevels 66 = 0 => 0bae68167771e627 |
+push 317 = 317 => f2e66a42d43cc90c |
+lock 158 3 3 = 0 => f2e66a42d43cc90c |
+create 12 14 32 1412 = 408 => c9596d6d4a09ec0f | c408
+dxt 20 52 37508 3 4 1 1776664212 = 409 => 87a0efb0cb922456 | c409
+push 159 = -1 => 87a0efb0cb922456 |
+create 33 16 32 261 = 410 => 5cf5450d50aa2165 | c410
+unlock 155 => a666b9bc5cda22d9 |
+sub 329 237 14 17 23 16 => e125bc33f865f322 |
+push 403 = -1 => e125bc33f865f322 |
+destroy 365 => 2f136ec8b4176411 | d365 evict365
+destroy 235 => 16be4ed56960561a | d235 evict235
+push 132 = -1 => 16be4ed56960561a |
+calc 2773 1436 15045 = 12 0 => 16be4ed56960561a |
+push 351 = -1 => 16be4ed56960561a |
+numlevels 231 = 0 => 16be4ed56960561a |
+unlock 9 => 7ca50d65f262e494 |
+pop = 317 => dd36527e3b35c5ff |
+numlevels 274 = 1 => dd36527e3b35c5ff |
+pop = 196 => e55ffeafecd049a0 |
+upload 15 = 17 => e55ffeafecd049a0 |
+current = 254 => e55ffeafecd049a0 |
+numlevels 378 = 1 => e55ffeafecd049a0 |
+push 356 = 356 => d68c545de22710f4 |
+fromimage 325 3907078672 16 21 24 0 248 0 = 0 => d68c545de22710f4 |
+sub 317 159 3 2 13 9 => 8ce1c4e897c9a820 |
+numlevels 368 = 0 => 8ce1c4e897c9a820 |
+lock 362 0 1 = 0 => 8ce1c4e897c9a820 |
+lock 170 3 3 = 0 => 8ce1c4e897c9a820 |
+fromimage 343 2247549821 32 35 21 0 14 1 = 1 => f8fcbff2bd9fa5d7 |
+calc 2229 1179 57114 = 12 0 => f8fcbff2bd9fa5d7 |
+numlevels 316 = 1 => f8fcbff2bd9fa5d7 |
+calc 681 2617 21101 = 12 0 => f8fcbff2bd9fa5d7 |
+create 64 4 0 38272 = 411 => 941a58e5ab3fec1a | c411
+upload 366 = 0 => 941a58e5ab3fec1a |
+create 6 42 8 5380 = 412 => 8c94eb963087e55e | c412
+unlock 144 => 8c94eb963087e55e |
+create 11 62 0 1028 = 413 => 98d7415c5ee0f647 | c413
+create 6 49 0 1285 = 414 => 4d040cd4e96c088c | c414
+dxt 24 24 34180 3 5 0 2269159243 = 415 => f112a66aef873926 | c415
+create 9 6 8 50436 = 416 => 46cb068b031b8d49 | c416
+unlock 28 => 46cb068b031b8d49 |
+unlock 76 => 1062c0364ed6165d |
+unlock 196 => 4eecc1b5a35307f1 |
+lock 88 0 3 = 1 => f092b7632c51c1c7 |
+unlock 311 => 32e566697a3d5a7f |
+calc 1711 2459 11006 = 12 0 => 32e566697a3d5a7f |
+create 4 38 16 4097 = 417 => e6824c509e858011 | c417
+lock 128 0 5 = 1 => 94fee79f87793aed |
+fromimage 403 2598596493 24 23 34 0 10 2 = 0 => 94fee79f87793aed |
+numlevels 285 = 6 => 94fee79f87793aed |
+calc 2539 655 15466 = 12 0 => 94fee79f87793aed |
+upload 211 = 39 => 52d8f299ed30383f | up0:4x44,1,1,0
+create 27 11 16 16388 = 418 => 4984e20c5b46073d | c418
+create 2 8 8 50432 = 419 => d8406ebe130e59ae | c419
+findfmt 7 1887630929 24 33 7 7 81 0 = 0 -1 -1 -1 -1 => d8406ebe130e59ae |
+lock 113 0 3 = 1 => 83860537d6ed5550 |
+numlevels 369 = 1 => 83860537d6ed5550 |
+create 20 56 24 1541 = 420 => 0930e6332bd50551 | c420
+fromimage 412 241041962 24 21 33 1 6 2 = 1 => 17c908db2bff3884 |
+toimage 177 = nil => 17c908db2bff3884 |
+push 131 = 131 => ebd8335c4907116e |
+destroy 310 => b5e8ee36095c5615 | d310 evict310
+destroy 284 => 3b84ede5357ba3b8 | d284 evict284
+toimage 369 = 0acb2317c4a93895 => 3347c6f78ee1aa46 |
+upload 410 = 40 => 300ffb868078355e | up0:33x16,0,1,0
+findfmt 6 450899144 32 14 17 3 20 0 = 0 -1 -1 -1 -1 => 300ffb868078355e |
+lock 217 3 5 = 0 => 300ffb868078355e |
+dxt 16 40 33412 5 5 0 1329316878 = 421 => 1573011f6adf1b30 | c421
+findfmt 5 3314617752 8 22 1 0 111 0 = 0 -1 -1 -1 -1 => 1573011f6adf1b30 |
+unlock 382 => a9380877eedb3ad5 |
+lock 251 3 3 = 0 => a9380877eedb3ad5 |
+create 64 64 8 33666 = 422 => cec210bea32f11ef | c422
+create 47 28 16 1284 = 423 => d66afdae81fcfdfd | c423
+fromimage 396 1441961238 16 13 4 0 5 1 = 0 => d66afdae81fcfdfd |
+create 8 2 32 517 = 424 => 95eab48dad17612f | c424
+dxt 36 12 34180 3 6 1 247030506 = 425 => 644cec7be7284f6b | c425
+lock 156 2 1 = 0 => 644cec7be7284f6b |
+dxt 4 4 644 3 3 1 1753025643 = 426 => 588c9156a598f5a1 | c426
+lock 400 2 1 = 0 => 588c9156a598f5a1 |
+create 4 16 32 33796 = 427 => 1281c63cdbddc405 | c427
+dxt 16 28 34180 3 2 1 1922093077 = 428 => 9f724dff7d904eae | c428
+findfmt 5 548075876 24 13 15 0 12 0 = 0 -1 -1 -1 -1 => 9f724dff7d904eae |
+push 354 = -1 => 9f724dff7d904eae |
+lock 28 0 2 = 0 => 9f724dff7d904eae |
+pop = 131 => 12bbbe36cdefa2c4 |
+pop = 356 => 7bcafe2e339ef1b0 |
+fromimage 205 1106505715 4 24 31 2 3 0 = 0 => 7bcafe2e339ef1b0 |
+calc 1289 1460 46397 = 11 1 => 7bcafe2e339ef1b0 |
+create 56 65 16 32770 = 429 => 8c52417e0622bd12 | c429
+create 32 2 32 4 = 430 => 47a727865da2a533 | c430
+push 10 = 10 => 4c525038ce15ce42 |
+sub 374 288 9 13 26 9 => 04fbaeaeaad54537 |
+lock 340 2 2 = 1 => 8c47a503bcc01ac5 |
+unlock 406 => 9fbf14ad74f88022 |
+calc 525 1217 55421 = 11 0 => 9fbf14ad74f88022 |
+dxt 20 20 37508 3 2 1 1960900608 = 431 => d085951ebb76d6f0 | c431
+fromimage 217 4202599502 32 12 13 0 185 2 = 0 => d085951ebb76d6f0 |
+create 57 37 24 38147 = -1 => af2bc235a4077575 | c432
+unlock 331 => 7daabc689971a4a2 |
+lock 359 2 3 = 0 => 7daabc689971a4a2 |
+sub 28 143 8 6 15 19 => b3479693f6057674 |
+create 62 34 32 1284 = 433 => b39f2d05c6ffba72 | c433
+create 21 66 16 4352 = 434 => 5c9f633596dcf215 | c434
+destroy 280 => ea02afa9e49a98e7 | d280 evict280
+findfmt 1 814470988 16 39 38 0 14 1 = 0 -1 -1 -1 -1 => ea02afa9e49a98e7 |
+create 8 60 24 1540 = 435 => f33c2400eab58555 | c435
+dxt 36 20 34180 5 4 0 3728257711 = 436 => 0404b393e05292f3 | c436
+push 354 = 354 => 687126aef0fea807 |
+create 29 53 32 33793 = 437 => 0b75b87ebb1b5083 | c437
+unlock 53 => d104039653b8e547 |
+dxt 20 60 644 1 1 0 1795573630 = 438 => 00846254ca1a6fb9 | c438
+create 55 16 0 17412 = 439 => 905b56c96f218e95 | c439
+unlock 403 => 6c69462521daca91 |
+create 37 44 24 33796 = 440 => 60d6a8613a383f63 | c440
+create 57 41 0 16773 = 441 => fd99bca2d59ef5cd | c441
+lock 257 0 2 = 1 => 96d02cf2273a4266 |
+push 402 = -1 => 96d02cf2273a4266 |
+dxt 28 16 33412 3 4 0 3194310545 = 442 => d615c7cf65941c16 | c442
+unlock 278 => d615c7cf65941c16 |
+create 17 14 16 1025 = 443 => e5127057d51785b9 | c443
+unlock 291 => 29f93d86dc9ccfc7 |
+create 54 35 8 14849 = 444 => 689a25ca6422ac24 | c444
+create 52 36 0 1538 = 445 => 53176b54272b7489 | c445
+findfmt 1 2718953223 4 27 1 2 8 0 = 0 -1 -1 -1 -1 => 53176b54272b7489 |
+create 4 2 32 32768 = 446 => 44e9254765c8a0f1 | c446
+current = 354 => 44e9254765c8a0f1 |
+numlevels 73 = 1 => 44e9254765c8a0f1 |
+upload 433 = 41 => 6f49fe59cad57b88 | up0:62x34,0,1,0
+unlock 300 => 616332ddc59fc41e |
+create 6 67 24 4992 = 447 => b043f962d99ae131 | c447
+lock 361 2 1 = 0 => b043f962d99ae131 |
+lock 147 3 3 = 0 => b043f962d99ae131 |
+unlock 102 => 5f82105d535e0259 |
+unlock 36 => 002f5b11c35064f1 |
+dxt 28 32 34180 3 8 1 2968922049 = 448 => 2f45eeae37a62532 | c448
+findfmt 6 118077271 4 30 9 0 8 0 = 0 -1 -1 -1 -1 => 2f45eeae37a62532 |
+upload 344 = 0 => 2f45eeae37a62532 |
+unlock 363 => f72b87ba8ba42a33 |
+dxt 8 4 4740 5 4 0 661989744 = 449 => 2c6aff8a1e64f05f | c449
+create 70 66 8 2564 = 450 => 6bf089e4367820cb | c450
+create 12 7 0 1537 = 451 => cfa34a8d7a79623a | c451
+push 141 = -1 => cfa34a8d7a79623a |
+lock 197 1 1 = 0 => cfa34a8d7a79623a |
+create 15 58 16 1667 = -1 => e5d4276c92fcd01f | c452
+numlevels 449 = 1 => e5d4276c92fcd01f |
+calc 786 882 2320 = 10 0 => e5d4276c92fcd01f |
+lock 135 0 1 = 1 => 2055ae9624dcbeeb |
+create 1 2 16 901 = 453 => ef984b5044c77cad | c453
+lock 314 2 1 = 0 => ef984b5044c77cad |
+upload 436 = 42 => 409e701403de8dc6 | up0:36x20,5,4,0
+unlock 209 => 409e701403de8dc6 |
+upload 146 = 43 => 353602c53ba515d0 | up0:16x40,1,1,0
+sub 148 449 11 9 11 30 => f0987da6b0e8ef79 |
+toimage 303 = 36489bc640ccbd15 => f0987da6b0e8ef79 |
+push 390 = -1 => f0987da6b0e8ef79 |
+sub 367 15 9 4 30 13 => b5a674565d8f2024 |
+unlock 329 => 4510e2b0095f5177 |
+findfmt 5 3580572939 16 26 28 0 10 2 = 0 -1 -1 -1 -1 => 4510e2b0095f5177 |
+create 63 15 32 33794 = 454 => 5dcfe0a6bde83b00 | c454
+current = 354 => 5dcfe0a6bde83b00 |
+sub 151 338 15 14 23 7 => 6a6424fbc88c987f |
+unlock 447 => 6a6424fbc88c987f |
+create 2 25 8 1284 = 455 => d3dc6d864d0a4cdd | c455
+lock 372 0 3 = 0 => d3dc6d864d0a4cdd |
+create 39 11 32 33156 = 456 => b8aef3073f5682fe | c456
+calc 227 2895 3023 = 12 0 => b8aef3073f5682fe |
+lock 289 1 3 = 0 => b8aef3073f5682fe |
+findfmt 1 2715437980 8 20 30 0 216 1 = 0 -1 -1 -1 -1 => b8aef3073f5682fe |
+create 7 62 16 1537 = 457 => 817d7e2b331ad589 | c457
+create 55 20 8 33541 = 458 => d9351f5d4061da75 | c458
+toimage 211 = e2cc0000930af504 => d9351f5d4061da75 |
+numlevels 455 = 1 => d9351f5d4061da75 |
+lock 293 3 5 = 0 => d9351f5d4061da75 |
+dxt 28 64 34180 3 4 1 1378658070 = 459 => d68c83cba0e9523d | c459
+calc 2754 690 65072 = 12 0 => d68c83cba0e9523d |
+fromimage 53 4217125055 8 13 29 0 18 2 = 0 => d68c83cba0e9523d |
+findfmt 0 655744195 24 23 4 7 177 0 = 0 -1 -1 -1 -1 => d68c83cba0e9523d |
+fromimage 181 2742232993 24 14 34 0 19 0 = 0 => d68c83cba0e9523d |
+fromimage 421 1188292722 4 17 2 0 10 0 = 0 => d68c83cba0e9523d |
+create 64 2 8 643 = -1 => 24872b9690038367 | c460
+create 11 59 16 644 = 461 => 68be02877b889561 | c461
+dxt 64 32 5508 5 5 1 3838752523 = 462 => c54056a46b57ba97 | c462
+create 16 43 32 35459 = -1 => 2b4d7df63d5084c4 | c463
+toimage 199 = nil => 2b4d7df63d5084c4 |
+create 67 13 0 1540 = 464 => 8c1f74dc02fc397f | c464
+sub 449 464 14 14 1 20 => ae294a5d523dc597 |
+dxt 48 32 33412 5 1 1 4020194444 = 465 => 9ff462dda824fd22 | c465
+lock 462 0 5 = 1 => 1e2c71a5908be186 |
+numlevels 270 = 0 => 1e2c71a5908be186 |
+toimage 236 = 328c45dc5124a83f => 1e2c71a5908be186 |
+create 23 50 0 37377 = 466 => 78819e4e2039d735 | c466
+create 35 56 8 37125 = 467 => a3340526601ac71d | c467
+create 25 38 0 33796 = 468 => 86348688ff0b68ca | c468
+push 76 = -1 => 86348688ff0b68ca |
+create 12 2 8 33793 = 469 => 2ebc8860cfac4a6c | c469
+lock 380 0 2 = 1 => 361a307eb34ca087 |
+create 8 8 24 33285 = 470 => 9c552be0a0f1aa73 | c470
+fromimage 111 3120548131 24 36 12 0 44 2 = 0 => 9c552be0a0f1aa73 |
+push 405 = -1 => 9c552be0a0f1aa73 |
+create 1 32 0 768 = 471 => 4a82e4a0d2c0bd4d | c471
+upload 261 = 44 => 410bbab3be14d5a0 | up0:60x8,3,1,0
+current = 354 => 410bbab3be14d5a0 |
+numlevels 151 = 1 => 410bbab3be14d5a0 |
+create 2 4 24 1028 = 472 => 42d8498b70bea37f | c472
+numlevels 269 = 1 => 42d8498b70bea37f |
+toimage 194 = 917aaf56b64d8efa => 42d8498b70bea37f |
+dxt 52 32 1412 3 3 0 2989747563 = 473 => 7f6de99317e6a977 | c473
+upload 298 = 45 => 15c168cfdcac8e93 | up0:32x64,3,1,0
+numlevels 423 = 1 => 15c168cfdcac8e93 |
+create 2 16 0 33794 = 474 => d65194ba8b4072fa | c474
+findfmt 0 1768825170 4 7 3 4 7 1 = 0 -1 -1 -1 -1 => d65194ba8b4072fa |
+lock 286 1 1 = 0 => d65194ba8b4072fa |
+toimage 32 = 0ffcd9442dc7ccee => d65194ba8b4072fa |
+sub 100 120 4 9 19 19 => cb3807f71de54f6b |
+create 8 2 16 8197 = 475 => 90ee9122eceb354c | c475
+create 4 1 8 37253 = 476 => 0cbdde774269cdf3 | c476
+dxt 12 64 1412 3 8 0 1420975978 = 477 => d5ffe7f1788de12d | c477
+lock 197 0 3 = 0 => d5ffe7f1788de12d |
+push 255 = -1 => d5ffe7f1788de12d |
+lock 177 2 5 = 0 => d5ffe7f1788de12d |
+lock 223 0 5 = 1 => 0843787044da8509 |
+current = 354 => 0843787044da8509 |
+pop = 354 => e9ebbcbc40fa9b11 |
+create 65 12 24 257 = 478 => 5e60730f731c4a03 | c478
+create 2 8 32 1156 = 479 => 4634552eda962e99 | c479
+create 15 11 16 54148 = 480 => 7f0d93843c4d107f | c480
+dxt 8 20 34180 3 3 1 1155860429 = 481 => 96b5f504231a93f5 | c481
+pop = 10 => 21af943d4bcbc044 |
+create 1 32 24 33667 = -1 => 29c034d84b940d92 | c482
+push 373 = 373 => dff734cbe109d90f |
+pop = 373 => 29c034d84b940d92 |
+findfmt 7 3666719344 24 12 10 0 8 1 = 0 -1 -1 -1 -1 => 29c034d84b940d92 |
+create 46 35 0 6659 = -1 => de1617803673db1f | c483
+unlock 416 => de1617803673db1f |
+destroy 347 => 360fa3e973e13bc8 | d347 evict347
+create 40 33 8 42500 = 484 => a166b23dd06a2e60 | c484
+create 50 27 32 37634 = 485 => 9f46f17eaecc9853 | c485
+fromimage 135 4243967118 32 32 16 0 9 1 = 1 => 37a1c19ab7b5f2c8 |
+lock 401 3 2 = 0 => 37a1c19ab7b5f2c8 |
+calc 1285 2643 42148 = 12 0 => 37a1c19ab7b5f2c8 |
+calc 1866 764 63004 = 11 0 => 37a1c19ab7b5f2c8 |
+create 55 54 0 8705 = 486 => af047350df5510c3 | c486
+numlevels 403 = 1 => af047350df5510c3 |
+toimage 249 = aa9aaeacb92ac6b9 => af047350df5510c3 |
+create 8 32 32 54149 = 487 => f9e044ee8f1ed9f4 | c487
+upload 292 = 37 => f9e044ee8f1ed9f4 |
+dxt 20 32 37508 5 3 1 510684151 = 488 => d9aa7556e0f2e201 | c488
+create 59 14 8 517 = 489 => 6d12fc5a724994db | c489
+create 13 49 0 50436 = 490 => c3d60010f7c4318f | c490
+lock 283 1 5 = 0 => c3d60010f7c4318f |
+lock 311 1 2 = 0 => c3d60010f7c4318f |
+create 1 8 32 9476 = 491 => 4f94ec327e1b5785 | c491
+lock 331 0 3 = 0 => 4f94ec327e1b5785 |
+upload 303 = 46 => a9f6f9d9bcb7874b | up0:16x64,0,7,0
+push 470 = 470 => b43ea47881284881 |
+calc 1771 997 27196 = 11 0 => b43ea47881284881 |
+calc 1900 2268 34784 = 12 0 => b43ea47881284881 |
+toimage 192 = f821d65d7fe6c869 => 239a5296de49f207 |
+lock 387 1 2 = 0 => 239a5296de49f207 |
+calc 1497 2476 61089 = 12 0 => 239a5296de49f207 |
+toimage 421 = 1690bb206460a1ed => 0451fb9e840d5677 |
+pop = 470 => e23a934e1c682a59 |
+create 20 46 0 2565 = 492 => ef9e2fc24bc51df1 | c492
+create 46 35 32 33536 = 493 => a975bcb3954ecbfe | c493
+lock 283 2 3 = 0 => a975bcb3954ecbfe |
+lock 102 0 1 = 0 => a975bcb3954ecbfe |
+sub 119 156 9 2 4 30 => 1297dcad979aeba3 |
+numlevels 101 = 0 => 1297dcad979aeba3 |
+upload 90 = 0 => 1297dcad979aeba3 |
+calc 2245 465 17375 = 12 1 => 1297dcad979aeba3 |
+unlock 209 => 1297dcad979aeba3 |
+create 56 59 24 643 = -1 => 7c725f3d5b7e2514 | c494
+create 1 4 32 516 = 495 => 7cf4e231a1ca2a43 | c495
+lock 112 1 1 = 1 => 00a66e817e128cad |
+pop = 254 => 1ef24fe380b1ab06 |
+lock 336 1 5 = 0 => 1ef24fe380b1ab06 |
+push 303 = 303 => 68557f0956d829f7 |
+create 8 21 8 6786 = 496 => ed3a8549c2772ddf | c496
+push 403 = 403 => ceda1556856686e4 |
+create 56 17 32 49156 = 497 => 8b4f54d35823bb4e | c497
+create 2 42 32 41987 = -1 => 6eb23c5069542f18 | c498
+create 5 29 8 4996 = 499 => 40ba39e9db7857ff | c499
+unlock 395 => db42225a5d2be8f3 |
+lock 457 1 3 = 0 => db42225a5d2be8f3 |
+findfmt 0 1691774657 16 9 35 0 13 2 = 0 -1 -1 -1 -1 => db42225a5d2be8f3 |
+toimage 221 = 35cc9c28e0e5b5dd => db42225a5d2be8f3 |
+toimage 482 = nil => db42225a5d2be8f3 |
+unlock 87 => 550d661c5d7f3151 |
+dxt 40 24 1412 5 4 0 2614926591 = 500 => d977cf2b6f8e0198 | c500
+toimage 275 = 1e2da7e220b202e4 => d977cf2b6f8e0198 |
+unlock 89 => bdf4df52cddd35f5 |
+pop = 403 => c857d00db924c43a |
+unlock 237 => 19a25b3d9b2ffffb |
+create 45 56 0 2690 = 501 => 970caee3821f25f3 | c501
+numlevels 214 = 6 => 970caee3821f25f3 |
+create 12 7 8 3 = -1 => 641033d8ec5bbcce | c502
+create 2 2 24 640 = 503 => c7e333efb1f8c53c | c503
+numlevels 360 = 1 => c7e333efb1f8c53c |
+fromimage 448 45052775 32 38 29 0 16 1 = 0 => c7e333efb1f8c53c |
+findfmt 6 3844758830 24 39 35 0 5 1 = 0 -1 -1 -1 -1 => c7e333efb1f8c53c |
+push 312 = 312 => 4f45b21caae5afbc |
+create 47 10 24 1028 = 504 => 90529a82ded0a626 | c504
+lock 481 3 1 = 0 => 90529a82ded0a626 |
+push 423 = 423 => 595b0a52ee8aaa5f |
+findfmt 7 831950804 16 10 23 0 11 1 = 0 -1 -1 -1 -1 => 595b0a52ee8aaa5f |
+fromimage 113 1928003092 8 19 4 0 99 2 = 0 => 595b0a52ee8aaa5f |
+dxt 60 4 4740 3 1 1 736828467 = 505 => 73fb3e6bb909e0df | c505
+sub 242 223 13 14 27 20 => 1eafc888ce90142e |
+pop = 423 => 54ceda4d8930481b |
+upload 54 = 47 => 765dc8e66cb658e5 | up0:29x27,0,5,0
+create 36 5 24 1285 = 506 => 022647b1564a0284 | c506
+numlevels 114 = 7 => 022647b1564a0284 |
+destroy 195 => d2850eaa07512580 | d195 evict195
+unlock 375 => 25d61bd42c333fb0 |
+toimage 61 = nil => 25d61bd42c333fb0 |
+calc 2423 1301 17278 = 12 1 => 25d61bd42c333fb0 |
+lock 339 3 3 = 0 => 25d61bd42c333fb0 |
+unlock 234 => 2ed3850758abf095 |
+toimage 352 = nil => 2ed3850758abf095 |
+create 56 44 8 19077 = 507 => 18ce8a0bad01a867 | c507
+calc 2553 2100 12690 = 12 1 => 18ce8a0bad01a867 |
+findfmt 4 2566692595 8 23 36 6 109 2 = 1 23 36 32 1284 => 18ce8a0bad01a867 |
+unlock 220 => 18ce8a0bad01a867 |
+numlevels 431 = 1 => 18ce8a0bad01a867 |
+numlevels 253 = 1 => 18ce8a0bad01a867 |
+upload 412 = 48 => 2ae387df32617276 | up0:6x42,0,6,0
+push 207 = 207 => 4e612996961df86c |
+numlevels 363 = 0 => 4e612996961df86c |
+dxt 16 16 33412 3 2 1 3291935149 = 508 => e4e0d3a4aab95a5d | c508
+create 23 31 16 53764 = 509 => a15a81f4f2d4fd72 | c509
+lock 230 1 2 = 0 => a15a81f4f2d4fd72 |
+sub 367 70 16 2 11 20 => a05de29d1a3ac3b7 |
+upload 205 = 49 => 5572fc7f9431b69a | up0:58x25,0,6,0
+sub 431 377 9 13 30 5 => d8607c0702dc54ff |
+lock 459 0 5 = 1 => 460c28bab2d66dcb |
+push 46 = -1 => 460c28bab2d66dcb |
+pop = 207 => d2f2a95b013ccc81 |
+toimage 425 = cff83fa6bc235a58 => 769a12cbc2f4cd8d |
+upload 494 = 0 => 769a12cbc2f4cd8d |
+unlock 223 => 8e4f6d9d7963a7bc |
+lock 507 1 3 = 0 => 8e4f6d9d7963a7bc |
+create 64 4 16 16770 = 510 => dc8de923e2f21e50 | c510
+current = 312 => dc8de923e2f21e50 |
+lock 15 2 5 = 1 => e090dfa26ec8db39 |
+fromimage 73 1520939849 32 36 4 0 248 2 = 0 => e090dfa26ec8db39 |
+create 40 6 24 4864 = 511 => 41602da83f2918ad | c511
+lock 509 1 1 = 0 => 41602da83f2918ad |
+lock 246 3 2 = 0 => 41602da83f2918ad |
+lock 224 2 5 = 0 => 41602da83f2918ad |
+numlevels 448 = 8 => 41602da83f2918ad |
+calc 2723 564 15245 = 12 0 => 41602da83f2918ad |
+findfmt 3 1488647333 8 16 10 6 60 2 = 0 -1 -1 -1 -1 => 41602da83f2918ad |
+create 8 1 16 514 = 512 => 12b1c2971ff8e975 | c512
+destroy 188 => f498fa3df5ccd08f | d188 evict188
+toimage 348 = nil => f498fa3df5ccd08f |
+calc 2097 925 8224 = 12 0 => f498fa3df5ccd08f |
+toimage 405 = nil => f498fa3df5ccd08f |
+create 51 15 16 259 = -1 => 149205756ada5412 | c513
+push 155 = 155 => 353070d790bdca64 |
+push 406 = -1 => 353070d790bdca64 |
+create 43 62 8 33156 = 514 => efba6fbdcf614ec7 | c514
+upload 500 = 50 => 036ee5c15892ac40 | up0:40x24,5,1,0
+dxt 20 60 5508 1 7 0 3478206607 = 515 => 974401733a95670d | c515
+numlevels 216 = 1 => 974401733a95670d |
+sub 411 262 4 19 25 13 => e2248ef5ee116d63 |
+destroy 333 => 29cf91ada7bf5909 | d333 evict333
+calc 11 1881 46189 = 11 0 => 29cf91ada7bf5909 |
+destroy 327 => 9d4712c73f03fa67 | d327 evict327
+push 216 = -1 => 9d4712c73f03fa67 |
+destroy 43 => 986f9e2f3fa75ec3 | d43 evict43
+lock 148 3 5 = 0 => 986f9e2f3fa75ec3 |
+destroy 451 => f358303756ae3036 | d451 evict451
+findfmt 1 3127490460 32 29 26 0 19 2 = 0 -1 -1 -1 -1 => f358303756ae3036 |
+upload 263 = 51 => a57c5d8a2f2759f8 | up0:64x44,5,1,0
+current = 155 => a57c5d8a2f2759f8 |
+toimage 109 = nil => a57c5d8a2f2759f8 |
+numlevels 194 = 6 => a57c5d8a2f2759f8 |
+findfmt 3 3290895341 16 4 9 0 203 2 = 0 -1 -1 -1 -1 => a57c5d8a2f2759f8 |
+numlevels 407 = 1 => a57c5d8a2f2759f8 |
+create 43 67 16 512 = 516 => 293d4ca5f94fdb94 | c516
+calc 2813 1888 54169 = 12 1 => 293d4ca5f94fdb94 |
+fromimage 418 458341780 8 11 35 0 80 0 = 1 => 168ebedbb8e7a041 |
+toimage 193 = nil => 168ebedbb8e7a041 |
+calc 2008 2036 37165 = 11 1 => 168ebedbb8e7a041 |
+numlevels 233 = 1 => 168ebedbb8e7a041 |
+dxt 36 16 34180 3 3 1 1031851884 = 517 => 79d29fcdb60fd95d | c517
+pop = 155 => 28df8fcb3180db77 |
+create 64 4 0 1669 = 518 => b6e3585dd89b2d1b | c518
+fromimage 123 3820107205 16 38 20 2 97 1 = 0 => b6e3585dd89b2d1b |
+create 63 34 0 1156 = 519 => c12e9462fa164b71 | c519
+create 55 11 8 38146 = 520 => 89ed014a0f8285c9 | c520
+calc 1721 164 904 = 11 1 => 89ed014a0f8285c9 |
+calc 2854 1338 56768 = 12 0 => 89ed014a0f8285c9 |
+findfmt 1 239029998 4 23 26 0 9 0 = 0 -1 -1 -1 -1 => 89ed014a0f8285c9 |
+sub 274 357 15 1 18 23 => 5db8193ce61e8099 |
+findfmt 6 2576750348 32 11 8 0 4 1 = 0 -1 -1 -1 -1 => 5db8193ce61e8099 |
+fromimage 283 3356385160 32 5 31 0 1 1 = 1 => 9320ec4f5022c358 |
+findfmt 1 698591446 8 39 12 2 214 2 = 0 -1 -1 -1 -1 => 9320ec4f5022c358 |
+lock 337 2 2 = 1 => e68c72cdee7643b7 |
+push 356 = 356 => 00a5ab129e08e77d |
+push 87 = -1 => 00a5ab129e08e77d |
+upload 504 = 52 => 54efd3327fdc70b1 | up0:47x10,0,1,0
+calc 865 2044 52489 = 11 0 => 54efd3327fdc70b1 |
+push 98 = -1 => 54efd3327fdc70b1 |
+lock 473 1 5 = 0 => 54efd3327fdc70b1 |
+upload 295 = 0 => 54efd3327fdc70b1 |
+create 64 48 8 4867 = -1 => 6f86d0ddfc465ec2 | c521
+destroy 119 => b16e72d80726e2ba | d119 evict119
+upload 517 = 53 => 57ad1b07cc9b684e | up0:36x16,3,3,0
+unlock 494 => 4c18e100e20ccef9 |
+unlock 191 => b7cd7171cb3a3ad7 |
+findfmt 1 4028837648 8 2 33 0 7 1 = 0 -1 -1 -1 -1 => b7cd7171cb3a3ad7 |
+create 1 2 32 5633 = 522 => c4e916a548ab88ce | c522
+lock 292 2 5 = 0 => c4e916a548ab88ce |
+create 2 7 16 33539 = -1 => 8f6bccef2e7e9110 | c523
+current = 356 => 8f6bccef2e7e9110 |
+calc 1340 992 47657 = 11 0 => 8f6bccef2e7e9110 |
+fromimage 38 379924273 8 22 18 0 118 1 = 1 => 72234b7a671f938e |
+toimage 142 = nil => 72234b7a671f938e |
+destroy 442 => 00405b8bc1334a2e | d442 evict442
+fromimage 438 1143488706 8 2 29 0 11 2 = 0 => 00405b8bc1334a2e |
+pop = 356 => 82e2764eade7bf04 |
+destroy 438 => 95fa748ddb78963e | d438 evict438
+dxt 16 28 5508 3 4 0 3106085141 = 524 => 4f816dfc0c232aa3 | c524
+lock 466 3 2 = 0 => 4f816dfc0c232aa3 |
+dxt 44 32 644 1 8 0 264985168 = 525 => b492b38aef5c86ee | c525
+current = 312 => b492b38aef5c86ee |
+upload 341 = 0 => b492b38aef5c86ee |
+toimage 102 = nil => b492b38aef5c86ee |
+pop = 312 => b8dccd232b657ef6 |
+sub 510 402 12 13 3 12 => 5219bb3e5a7aacb0 |
+unlock 80 => 73637f43fd18e15b |
+destroy 399 => 4aba593d85159473 | d399 evict399
+unlock 34 => 25a5f3dec1290ff4 |
+lock 447 0 5 = 0 => 25a5f3dec1290ff4 |
+numlevels 346 = 6 => 25a5f3dec1290ff4 |
+create 6 49 24 1668 = 526 => ee8e27f2b6cfc0f6 | c526
+lock 430 0 2 = 1 => 56a07eba94361719 |
+create 28 4 16 8323 = -1 => 55d05fa5b135536b | c527
+destroy 72 => 0a0306b35e8f9a28 | d72 evict72
+lock 199 0 5 = 0 => 0a0306b35e8f9a28 |
+toimage 237 = 1fdb43ce017621cb => 0a0306b35e8f9a28 |
+create 41 45 8 21892 = 528 => 10a72bbfeff66723 | c528
+fromimage 180 2734140242 4 8 5 0 10 0 = 0 => 10a72bbfeff66723 |
+lock 316 2 2 = 0 => 10a72bbfeff66723 |
+current = 303 => 10a72bbfeff66723 |
+upload 419 = 54 => f118a39c8ed298e1 | up0:2x8,0,4,0
+sub 74 476 11 13 20 3 => 161577ae883ee12f |
+create 67 58 8 4609 = 529 => 043609f07a030790 | c529
+pop = 303 => 652ec7bc48807abd |
+dxt 40 16 34180 1 6 1 3320034437 = 530 => 3c5449a111717b2b | c530
+upload 112 = 15 => 3c5449a111717b2b |
+create 64 16 8 33284 = 531 => b1541a9273d0fb36 | c531
+lock 221 1 2 = 0 => b1541a9273d0fb36 |
+numlevels 383 = 0 => b1541a9273d0fb36 |
+create 4 5 8 513 = 532 => b99bc157e2f4fe89 | c532
+unlock 170 => b99bc157e2f4fe89 |
+calc 2785 984 49613 = 12 1 => b99bc157e2f4fe89 |
+unlock 455 => b99bc157e2f4fe89 |
+fromimage 129 679140684 4 35 31 7 9 2 = 0 => b99bc157e2f4fe89 |
+upload 338 = 0 => b99bc157e2f4fe89 |
+push 39 = 39 => d729efc1eac4e817 |
+create 63 29 24 16386 = 533 => 481c74d80eda50ca | c533
+create 32 45 16 1409 = 534 => 0853fa316cfe56e0 | c534
+upload 372 = 0 => 0853fa316cfe56e0 |
+fromimage 148 2958469449 32 2 17 0 9 1 = 0 => 0853fa316cfe56e0 |
+upload 258 = 55 => 06022d877782ce76 | up0:52x56,3,2,0
+upload 299 = 56 => 26048fdc656e1863 | up0:33x24,0,6,0
+findfmt 3 3295290585 16 38 32 0 16 0 = 0 -1 -1 -1 -1 => 26048fdc656e1863 |
+lock 369 1 5 = 0 => 26048fdc656e1863 |
+findfmt 6 2387441765 24 16 2 0 166 1 = 0 -1 -1 -1 -1 => 26048fdc656e1863 |
+calc 480 436 63270 = 9 0 => 26048fdc656e1863 |
+numlevels 289 = 0 => 26048fdc656e1863 |
+create 1 7 24 34052 = 535 => 2ee020a6a03a158f | c535
+toimage 18 = nil => 2ee020a6a03a158f |
+create 47 68 8 772 = 536 => fc4feec522f76dbe | c536
+pop = 39 => b2188384f8d729f0 |
+unlock 107 => d75a8e4bb6e5e3d7 |
+push 368 = 368 => 1f66ac4cdb181041 |
+lock 174 2 3 = 0 => 1f66ac4cdb181041 |
+create 42 10 32 49540 = 537 => 9ed2e7ab475edec2 | c537
+destroy 410 => bb3e0f9bad4f2789 | d410 evict410 tdel40
+create 2 4 32 1669 = 538 => 506a3d75ffb6d8de | c538
+unlock 424 => 506a3d75ffb6d8de |
+create 43 68 16 33284 = 539 => 3c7e7521a79a885f | c539
+push 271 = 271 => f90bcebac2610184 |
+upload 98 = 57 => 75063273ff3192cc | up0:12x36,1,1,0
+create 4 2 8 4 = 540 => c483c797b9df247a | c540
+unlock 314 => c483c797b9df247a |
+dxt 52 28 38276 5 3 1 1033562231 = 541 => 638004bf4f558f56 | c541
+sub 177 298 12 5 5 10 => b63ae0289456bdb2 |
+calc 1596 1405 58168 = 11 1 => b63ae0289456bdb2 |
+toimage 385 = 720e27805d815f51 => fbad501c5b7ca34e |
+current = 271 => fbad501c5b7ca34e |
+toimage 192 = f821d65d7fe6c869 => fbad501c5b7ca34e |
+dxt 36 20 1412 3 3 0 782175146 = 542 => 110fb7f7e010e926 | c542
+push 475 = 475 => dc07455263ba641f |
+unlock 319 => dc07455263ba641f |
+create 40 28 8 1664 = 543 => 5e59fef54aecfbe9 | c543
+upload 114 = 58 => 00f45e3ff81349b2 | up0:60x12,1,7,0
+current = 475 => 00f45e3ff81349b2 |
+create 16 60 24 8704 = 544 => 87406ebc03681bdc | c544
+create 39 47 32 256 = 545 => a14c58ce8bf7d902 | c545
+calc 302 1369 9407 = 11 0 => a14c58ce8bf7d902 |
+create 2 64 32 5 = 546 => 64abab46e732f17f | c546
+findfmt 4 338013685 16 12 36 0 204 1 = 1 12 36 32 1284 => 64abab46e732f17f |
+unlock 346 => 64abab46e732f17f |
+calc 2413 1177 31965 = 12 0 => 64abab46e732f17f |
+create 59 49 16 5 = 547 => e5858a74479d3a8b | c547
+upload 205 = 49 => e5858a74479d3a8b |
+dxt 20 8 644 5 8 1 1572237472 = 548 => 70ed277f569c68ed | c548
+create 7 34 24 37635 = -1 => b2a737e71862c45f | c549
+findfmt 3 627702799 32 16 1 0 5 2 = 0 -1 -1 -1 -1 => b2a737e71862c45f |
+create 32 18 24 42500 = 550 => 16de0b1317680c42 | c550
+fromimage 283 3213627162 16 16 32 7 193 2 = 1 => ab34e6c76cc62bb4 |
+lock 276 3 2 = 0 => ab34e6c76cc62bb4 |
+sub 118 380 4 9 17 4 => 9edbb3c5ec56ec79 |
+lock 76 3 5 = 0 => 9edbb3c5ec56ec79 |
+create 29 43 0 132 = 551 => 5e7c674856babd8e | c551
+create 6 18 0 17540 = 552 => 958e4603df9ff49c | c552
+unlock 122 => 88a12a8499c55fc5 |
+create 2 1 32 772 = 553 => 0370063ddba0044b | c553
+create 64 16 0 5634 = 554 => 9cc2814b020c50a2 | c554
+upload 340 = 59 => 903e65ce19a0ece1 | up0:27x59,0,6,0
+create 47 4 0 6661 = 555 => b11640d30ba86b8a | c555
+create 29 67 24 2691 = -1 => 5197f924e1a23d28 | c556
+lock 452 1 1 = 0 => 5197f924e1a23d28 |
+pop = 475 => 4e6c880f80c2bae9 |
+dxt 32 56 644 3 8 1 4080071302 = 557 => a450a97fc7691843 | c557
+push 289 = 289 => 1a506146b0950a30 |
+unlock 416 => 1a506146b0950a30 |
+create 23 43 24 2564 = 558 => 038fd8b881e12686 | c558
+upload 426 = 60 => 842252ed0fdc4147 | up0:4x4,3,1,0
+numlevels 244 = 0 => 842252ed0fdc4147 |
+dxt 16 40 1412 1 1 0 3237493006 = 559 => 677895e0ed22ba19 | c559
+sub 534 493 7 12 22 6 => 3da0bbf0110dcc31 |
+calc 1649 1051 64652 = 11 0 => 3da0bbf0110dcc31 |
+push 445 = -1 => 3da0bbf0110dcc31 |
+pop = 289 => 8686a20b278751fe |
+push 206 = 206 => 1192ca3ef05cddd9 |
+create 32 8 8 640 = 560 => ce3877d1fcf584cf | c560
+upload 393 = 0 => ce3877d1fcf584cf |
+lock 467 1 5 = 0 => ce3877d1fcf584cf |
+dxt 56 20 34180 5 4 1 3171955512 = 561 => 7c63e6bf91abca5d | c561
+calc 2766 1471 33878 = 12 0 => 7c63e6bf91abca5d |
+dxt 64 56 37508 1 6 0 3729502339 = 562 => 0d2b239482e9826b | c562
+lock 483 0 1 = 0 => 0d2b239482e9826b |
+fromimage 455 3104578014 32 13 3 0 91 0 = 1 => 6330481b76778f95 |
+toimage 127 = 0f49de0d2d23afe0 => 6330481b76778f95 |
+fromimage 506 1719816027 32 17 29 5 168 1 = 0 => 6330481b76778f95 |
+create 40 2 24 1410 = 563 => fb96dc4b0cb41f73 | c563
+fromimage 356 1455706284 4 20 14 0 10 2 = 1 => d8d5fe60b915ab2d |
+destroy 479 => ba9a2ccdc3e4850f | d479 evict479
+upload 12 = 0 => ba9a2ccdc3e4850f |
+current = 206 => ba9a2ccdc3e4850f |
+dxt 44 36 34180 3 3 0 624695776 = 564 => afa2553d64acd42c | c564
+upload 417 = 0 => afa2553d64acd42c |
+upload 506 = 61 => b68337443e2af231 | up0:36x5,0,1,0
+fromimage 302 1525596317 4 32 11 7 13 2 = 0 => b68337443e2af231 |
+fromimage 175 3494506448 24 4 33 0 2 1 = 0 => b68337443e2af231 |
+findfmt 5 1224777975 8 23 35 0 54 1 = 0 -1 -1 -1 -1 => b68337443e2af231 |
+calc 1737 1196 58369 = 11 0 => b68337443e2af231 |
+push 239 = -1 => b68337443e2af231 |
+push 111 = -1 => b68337443e2af231 |
+findfmt 6 1484732864 8 15 30 3 214 1 = 0 -1 -1 -1 -1 => b68337443e2af231 |
+create 65 39 32 10752 = 565 => a7802ec984bc7ee0 | c565
+create 63 16 16 34052 = 566 => 9ec52b343cf93305 | c566
+dxt 20 44 34180 3 1 1 1704577167 = 567 => d9b1b0902000fd38 | c567
+upload 490 = 62 => 53621ab66491e8ae | up0:13x49,0,6,0
+create 28 7 0 901 = 568 => 8f80bbf0f4257228 | c568
+destroy 193 => 05c0f1fcf601b356 | d193 evict193
+findfmt 0 137761132 24 40 13 7 86 2 = 0 -1 -1 -1 -1 => 05c0f1fcf601b356 |
+calc 2845 913 23066 = 12 0 => 05c0f1fcf601b356 |
+create 11 21 16 41733 = 569 => e75f0a8267f6912a | c569
+create 22 37 8 49665 = 570 => 300cb2467f7391bb | c570
+create 57 65 8 37251 = -1 => ea044f2eae16f762 | c571
+create 1 32 32 10756 = 572 => 0c078176ff7556e9 | c572
+create 29 64 8 50180 = 573 => c6eae579bb0a65fd | c573
+findfmt 6 3398501188 4 1 38 0 8 2 = 0 -1 -1 -1 -1 => c6eae579bb0a65fd |
+create 51 10 24 1668 = 574 => 6c94a493b486b9fb | c574
+dxt 28 56 34180 1 8 0 1561241683 = 575 => bb96a84f173619f6 | c575
+create 7 24 32 9093 = 576 => ecf1f7617b9f2af4 | c576
+fromimage 491 305572322 16 27 32 0 216 0 = 1 => f67a65ebd9a6bf28 |
+numlevels 455 = 1 => f67a65ebd9a6bf28 |
+lock 34 2 1 = 1 => 6beadedf9433c778 |
+current = 206 => 6beadedf9433c778 |
+create 16 2 24 1411 = -1 => eb87cafdd43d298f | c577
+create 8 1 8 256 = 578 => 25a406027be0332d | c578
+create 64 32 0 261 = 579 => da1294afa3a11b9d | c579
+destroy 341 => 4ab219119e07bf4e | d341 evict341
+calc 664 2084 13252 = 12 1 => 4ab219119e07bf4e |
+sub 528 257 19 2 13 10 => 47d709ffdcb16320 |
+destroy 573 => a2dbad9f1b938d88 | d573 evict573
+create 22 59 32 5508 = 580 => 1c812cbc117f5a33 | c580
+fromimage 298 2396680696 4 30 26 0 10 1 = 0 => 1c812cbc117f5a33 |
+create 70 68 24 34304 = 581 => efc694598cbbce36 | c581
+create 3 9 16 1541 = 582 => deb44787afca6488 | c582
+toimage 486 = nil => deb44787afca6488 |
+toimage 422 = nil => deb44787afca6488 |
+toimage 475 = 804dd450b824908f => deb44787afca6488 |
+unlock 582 => deb44787afca6488 |
+numlevels 452 = 0 => deb44787afca6488 |
+lock 562 3 1 = 0 => deb44787afca6488 |
+fromimage 205 1285112102 32 27 31 0 218 2 = 0 => deb44787afca6488 |
+numlevels 248 = 7 => deb44787afca6488 |
+sub 339 97 16 11 6 10 => 88a0e965a6f457e0 |
+calc 1733 2077 24993 = 12 1 => 88a0e965a6f457e0 |
+findfmt 5 1982478433 32 3 40 0 216 0 = 0 -1 -1 -1 -1 => 88a0e965a6f457e0 |
+toimage 376 = nil => 88a0e965a6f457e0 |
+calc 1761 2811 46252 = 12 0 => 88a0e965a6f457e0 |
+unlock 477 => d288b172b562ac4c |
+create 67 34 16 33024 = 583 => a414b1dc3a4f11f0 | c583
+sub 447 254 7 19 4 30 => be52b5f4fffbe7ca |
+current = 206 => be52b5f4fffbe7ca |
+current = 206 => be52b5f4fffbe7ca |
+create 32 4 0 1156 = 584 => 941c5ed2df6d9c98 | c584
+unlock 379 => b38f097f02f8f542 |
+toimage 283 = efe7aa10d85c86cc => b38f097f02f8f542 |
+push 171 = -1 => b38f097f02f8f542 |
+create 1 16 32 9600 = 585 => 2a4961cd83cf8845 | c585
+unlock 93 => c69b04828e85bec9 |
+upload 208 = 0 => c69b04828e85bec9 |
+pop = 206 => 35c04b0be75034ee |
+sub 83 167 0 0 11 9 => 89e6a8d9a6c27128 |
