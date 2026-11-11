@@ -625,6 +625,18 @@ there is logic, deletion where nothing calls it.
   driver and device tables, engine plugins), error.cpp, prim.cpp's box helpers, and base.cpp's
   streams (StreamFile, StreamMemory, chunk headers, findChunk) that the TXD writer and the
   game's RwStream calls use.
+  **Done 2026-11-11 (plugin lists and streams; the engine, errors and prim helpers moved to
+  7b):** `rust/revc/src/rwplugin.rs` owns PluginList (register, stream/rights/always callbacks,
+  construct/destruct/copy, extension read/write/size/skip, rights) and the global plugin list,
+  plus StreamMemory, the 32/16-bit transfers, chunk header read/write and findChunk. plg.cpp and
+  the stream part of base.cpp are forwarding shells; Rust calls the virtual stream methods
+  (so StreamFile and the game's streams still work) through trampolines installed by a static
+  initialiser. The typed reads (readU32 etc.) now start from 0, so a read past the end gives 0
+  instead of stack garbage (librw left them uninitialised; the recorder avoids those reads).
+  Checked by `tests/golden/rwplugin.txt` (5,065 random operations over four plugin lists with
+  eight callback sets, extension chunks read, skipped and written, and the memory stream;
+  `tests/golden/recorders/rwplugin`). librw quirk kept out of the recording: streamWrite calls
+  a null writer when a plugin has a size callback but no writer.
 - **7b. Pipelines and render state.** pipeline.cpp (ObjPipeline and the vertex instancing
   helpers), render.cpp (render state get/set), and the wgpu driver's remaining C++
   (wgpudevice.cpp: device begin/end update, Im2D/Im3D, render states, raster binding;
