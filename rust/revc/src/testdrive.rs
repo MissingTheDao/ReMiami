@@ -1127,8 +1127,10 @@ impl Driver {
                         "car_straight" => unsafe { revc_test_world_start(1, MOONLITE.0, MOONLITE.1, 0.0) },	// Ocean Drive, north
                         "car_open" => unsafe { revc_test_world_start(1, -1450.0, -900.0, 0.0) },	// the airport
                         "bike_straight" => unsafe { revc_test_world_start(2, MOONLITE.0, MOONLITE.1, 0.0) },
+                        "bloodrb_straight" => unsafe { revc_test_world_start(3, MOONLITE.0, MOONLITE.1, 0.0) },	// the PS2 tests' cheat car
+                        "bloodrb_open" => unsafe { revc_test_world_start(3, -1450.0, -900.0, 0.0) },
                         other => {
-                            self.fail(format!("pad script start state {other:?} not known (menu_base, foot_open, car_straight, car_open, bike_straight)"));
+                            self.fail(format!("pad script start state {other:?} not known (menu_base, foot_open, car_straight, car_open, bike_straight, bloodrb_straight, bloodrb_open)"));
                             return self.finish();
                         }
                     }

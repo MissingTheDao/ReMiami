@@ -287,7 +287,7 @@ revc_test_menu_input(int down, int change)
 }
 
 // World start states for pad scripts (research autopad README): kind 0 on foot, 1 an Infernus,
-// 2 a PCJ-600, engine on, the player driving; at (x, y) on the ground facing `heading` degrees
+// 2 a PCJ-600, 3 a Bloodring Banger, engine on, the player driving; at (x, y) on the ground facing `heading` degrees
 // (0 = north), noon, clear, no traffic or peds (revc_test_scene).
 void
 revc_test_world_start(int kind, float x, float y, float heading)
@@ -295,7 +295,7 @@ revc_test_world_start(int kind, float x, float y, float heading)
 	revc_test_scene(x, y, heading, 12, 0, 0);
 	if (kind == 0)
 		return;
-	int mi = kind == 2 ? MI_PCJ600 : MI_INFERNUS;
+	int mi = kind == 2 ? MI_PCJ600 : kind == 3 ? MI_BLOODRB : MI_INFERNUS;	// (3: the Bloodring Banger, the car the PS2 tests can spawn)
 	CStreaming::RequestModel(mi, STREAMFLAGS_DEPENDENCY);
 	CStreaming::LoadAllRequestedModels(false);
 	CPlayerPed *ped = FindPlayerPed();
