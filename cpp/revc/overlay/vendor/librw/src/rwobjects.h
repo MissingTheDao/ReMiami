@@ -88,15 +88,6 @@ struct Frame
 	static void syncDirty(void);
 };
 
-struct FrameList_
-{
-	int32 numFrames;
-	Frame **frames;
-
-	void streamWrite(Stream *stream);
-	static uint32 streamGetSize(Frame *f);
-};
-Frame **makeFrameList(Frame *frame, Frame **flist);
 
 struct ObjectWithFrame
 {
@@ -325,8 +316,6 @@ struct Texture
 	Addressing getAddressV(void) { return (Addressing)((filterAddressing >> 12) & 0xF); }
 	void setAddressU(Addressing u) { filterAddressing = (filterAddressing & ~0xF00) | u<<8; }
 	void setAddressV(Addressing v) { filterAddressing = (filterAddressing & ~0xF000) | v<<12; }
-	bool streamWrite(Stream *stream);
-	uint32 streamGetSize(void);
 	static Texture *read(const char *name, const char *mask);
 	static Texture *streamReadNative(Stream *stream);
 	void streamWriteNative(Stream *stream);
@@ -377,8 +366,6 @@ struct Material
 	Material *clone(void);
 	void destroy(void);
 	void setTexture(Texture *tex);
-	bool streamWrite(Stream *stream);
-	uint32 streamGetSize(void);
 };
 
 void registerMaterialRightsPlugin(void);
@@ -440,8 +427,6 @@ struct MaterialList
 	void deinit(void);
 	int32 appendMaterial(Material *mat);
 	int32 findIndex(Material *mat);
-	bool streamWrite(Stream *stream);
-	uint32 streamGetSize(void);
 };
 
 struct Geometry
@@ -480,13 +465,8 @@ struct Geometry
 	bool32 hasColoredMaterial(void);
 	void allocateData(void);
 	MeshHeader *allocateMeshes(int32 numMeshes, uint32 numIndices, bool32 noIndices);
-	void generateTriangles(int8 *adc = nil);
 	void buildMeshes(void);
 	void buildTristrips(void);	// private, used by buildMeshes
-	void correctTristripWinding(void);
-	void removeUnusedMaterials(void);
-	bool streamWrite(Stream *stream);
-	uint32 streamGetSize(void);
 
 	enum Flags
 	{
@@ -590,8 +570,6 @@ struct Atomic
 	};
 	void setFlags(uint32 flags) { this->object.object.flags = flags; }
 	uint32 getFlags(void) const { return this->object.object.flags; }
-	bool streamWriteClump(Stream *stream, FrameList_ *frmlst);
-	uint32 streamGetSize(void);
 
 	static void defaultRenderCB(Atomic *atomic);
 };
@@ -632,8 +610,6 @@ struct Light
 	int32 getType(void){ return this->object.object.subType; }
 	void setFlags(uint32 flags) { this->object.object.flags = flags; }
 	uint32 getFlags(void) { return this->object.object.flags; }
-	bool streamWrite(Stream *stream);
-	uint32 streamGetSize(void);
 
 	enum Type {
 		DIRECTIONAL = 1,
@@ -722,9 +698,6 @@ struct Camera
 	void setViewOffset(const V2d *offset);
 	void setProjection(int32 proj);
 	int32 frustumTestSphere(const Sphere *s) const;
-	static Camera *streamRead(Stream *stream);
-	bool streamWrite(Stream *stream);
-	uint32 streamGetSize(void);
 
 	// fov in degrees
 	void setFOV(float32 fov, float32 ratio);
@@ -762,8 +735,6 @@ struct Clump
 		this->object.parent = f; }
 	Frame *getFrame(void) const {
 		return (Frame*)this->object.parent; }
-	bool streamWrite(Stream *stream);
-	uint32 streamGetSize(void);
 	void render(void);
 };
 
