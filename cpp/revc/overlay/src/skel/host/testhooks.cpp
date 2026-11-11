@@ -235,6 +235,7 @@ revc_test_menu_page_id(const char *name)
 			return e.p;
 	return -1;
 }
+extern "C++" bool MenuSkinPS2Active(int page, bool gameNotLoaded);	// (C++ linkage inside this file's extern "C" block)
 int
 revc_test_menu_state(int page, int option, int context, int layout, int legend)
 {
@@ -252,6 +253,9 @@ revc_test_menu_state(int page, int option, int context, int layout, int legend)
 	if (layout >= 0 && page == MENUPAGE_MAP) {
 		float base = SCREEN_SCALE_Y(162.0f);
 		FrontEndMenuManager.m_fMapSize = layout == 0 ? base : layout == 1 ? base * 2.0f : SCREEN_SCALE_Y(1000.0f);
+	} else if (layout >= 0 && page == MENUPAGE_CONSOLE_CONTROLS && FrontEndMenuManager.m_nCurrScreen >= 0 && MenuSkinPS2Active(page, false)) {
+		extern int8 gPs2Setup;	// the PS2 style's controller setup 1-4
+		gPs2Setup = layout;
 	} else if (layout >= 0)
 		PadLayoutApply(layout);
 	// context: the controller picture's context, or on Stats/Brief the Xbox sub-tab

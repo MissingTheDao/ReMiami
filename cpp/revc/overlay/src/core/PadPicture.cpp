@@ -119,6 +119,7 @@ static const PadAction padActions[] = {
 };
 
 struct Callout { const PadSpot *spot; wchar text[96]; };
+bool Ps2SetupActive(void);	// (ControllerConfig.cpp)
 
 static void
 AppendText(wchar *dst, const char *key, int max)
@@ -272,6 +273,59 @@ static const PadSpot ds2Spots[] = {
 	{ 20, 370, 560, "" }, { 21, 640, 560, "" },
 };
 
+// The PS2's own labels for its setups 1-4 (the PS2 UI style with a setup chosen), on foot and in
+// car, read off the v3.00 captures. Button numbers as the spots: 1 circle, 2 cross, 3 square,
+// 4 triangle, 5 L2, 6 R2, 7 L1, 8 R1, 9 select, 10 L3, 11 R3, 12 start, 13 D-pad, 20/21 the sticks.
+struct Ps2Label { int joy; const char *text; };
+static const Ps2Label ps2FootCommon[] = {
+	{ 5, "Cycle Weapon left" }, { 6, "Cycle Weapon right" }, { 3, "Jump" }, { 20, "Movement" },
+	{ 10, "Crouch [L3 button]" }, { 21, "First person camera" }, { 11, "Look behind [R3 button]" }, { 12, "Pause" },
+};
+static const Ps2Label ps2Foot[4][8] = {
+	{ { 7, "Look forward" }, { 8, "Target" }, { 4, "Enter vehicle" }, { 1, "Attack or Fire weapon" }, { 2, "Run" }, { 13, "Movement" }, { 9, "Camera modes" } },
+	{ { 7, "Look forward" }, { 8, "Target" }, { 4, "Enter vehicle" }, { 1, "Attack or Fire weapon" }, { 2, "Run" }, { 13, "Camera modes" }, { 9, "NA" } },
+	{ { 7, "Enter vehicle" }, { 8, "Target" }, { 4, "Look forward" }, { 1, "Run" }, { 2, "Attack or Fire weapon" }, { 13, "Movement" }, { 9, "Camera modes" } },
+	{ { 7, "Target" }, { 8, "Attack or Fire weapon" }, { 4, "Enter vehicle" }, { 1, "Look forward" }, { 2, "Run" }, { 13, "NA" }, { 9, "Camera modes" } },
+};
+static const Ps2Label ps2CarCommon[] = {
+	{ 5, "Look left" }, { 6, "Look right" }, { 12, "Pause" },
+};
+static const Ps2Label ps2Car[4][12] = {
+	{ { 7, "Radio stations" }, { 8, "Hand brake" }, { 4, "Enter and exit vehicle" }, { 1, "Fire" }, { 2, "Accelerate" }, { 3, "Brake or Reverse" },
+	  { 13, "Vehicle control" }, { 20, "Vehicle control" }, { 10, "Horn [L3 button]" }, { 21, "Turret control" }, { 11, "Sub-mission [R3 button]" }, { 9, "Camera modes" } },
+	{ { 7, "Horn" }, { 8, "Hand brake" }, { 4, "Enter and exit vehicle" }, { 1, "Fire" }, { 2, "Accelerate" }, { 3, "Brake or Reverse" },
+	  { 13, "Camera modes" }, { 20, "Vehicle control" }, { 10, "Radio stations" }, { 21, "Turret control" }, { 11, "Sub-mission [R3 button]" }, { 9, "NA" } },
+	{ { 7, "Enter and exit vehicle" }, { 8, "Horn" }, { 4, "Hand brake" }, { 1, "Fire" }, { 2, "Accelerate" }, { 3, "Brake or Reverse" },
+	  { 13, "Vehicle control" }, { 20, "Vehicle control" }, { 10, "Radio station cycle [L3 button]" }, { 21, "Turret control" }, { 11, "Sub-mission [R3 button]" }, { 9, "Camera modes" } },
+	{ { 7, "Hand brake" }, { 8, "Fire" }, { 4, "Enter and exit vehicle" }, { 1, "Radio stations" }, { 2, "NA" }, { 3, "Sub-mission" },
+	  { 13, "Turret control" }, { 20, "Vehicle control" }, { 10, "Horn [L3 button]" }, { 21, "Accelerate, Brake or Reverse" }, { 9, "Camera modes" } },
+};
+
+// The label of one PS2 spot for the current PS2 setup (false: none, or not in a setup).
+static bool
+Ps2SetupLabel(int joy, int context, wchar *out)
+{
+	extern int8 gPs2Setup;
+	if (!Ps2SetupActive() || context > 1)
+		return false;
+	const Ps2Label *common = context == 0 ? ps2FootCommon : ps2CarCommon;
+	int nc = context == 0 ? ARRAY_SIZE(ps2FootCommon) : ARRAY_SIZE(ps2CarCommon);
+	const Ps2Label *own = context == 0 ? ps2Foot[gPs2Setup] : ps2Car[gPs2Setup];
+	int no = context == 0 ? 8 : 12;
+	const char *t = nil;
+	for (int i = 0; i < nc && !t; i++)
+		if (common[i].joy == joy) t = common[i].text;
+	for (int i = 0; i < no && !t; i++)
+		if (own[i].text && own[i].joy == joy) t = own[i].text;
+	if (t == nil)
+		return false;
+	char buf[96];
+	strncpy(buf, t, sizeof(buf) - 1);
+	buf[sizeof(buf) - 1] = 0;
+	AsciiToUnicode(buf, out);
+	return true;
+}
+
 void
 DrawPadPicturePS2(void)
 {
@@ -308,7 +362,11 @@ DrawPadPicturePS2(void)
 		Callout &c = callouts[n];
 		c.spot = &ds2Spots[s];
 		c.text[0] = 0;
-		if (c.spot->joy == 20)
+		if (Ps2SetupLabel(c.spot->joy, padContext, c.text))
+			;	// the PS2's own label for its setup
+		else if (Ps2SetupActive())
+			;	// the setup gives this button no label
+		else if (c.spot->joy == 20)
 			AppendText(c.text, padContext == 0 ? "RVC_MOV" : "RVC_STR", ARRAY_SIZE(c.text));
 		else if (c.spot->joy == 21)
 			AppendText(c.text, "RVC_CAM", ARRAY_SIZE(c.text));

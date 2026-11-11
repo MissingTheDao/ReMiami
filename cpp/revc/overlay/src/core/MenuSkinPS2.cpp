@@ -71,7 +71,7 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 		s.to = target;
 		s.start = now;
 	}
-	float t = Min(1.0f, (now - s.start) / 167.0f);
+	float t = Min(1.0f, (now - s.start) / (s.from.top - s.to.top > SY(100.0f) ? 100.0f : 167.0f));	// (the page-open sweep: 3 frames)
 	s.cur = CRect(s.from.left + (s.to.left - s.from.left) * t, s.from.top + (s.to.top - s.from.top) * t,
 		s.from.right + (s.to.right - s.from.right) * t, s.from.bottom + (s.to.bottom - s.from.bottom) * t);
 	return s.cur;
