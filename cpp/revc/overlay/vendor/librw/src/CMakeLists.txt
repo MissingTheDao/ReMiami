@@ -5,15 +5,12 @@ add_library(librw
     anim.cpp
     base.cpp
     bmp.cpp
-    camera.cpp
     charset.cpp
-    clump.cpp
     engine.cpp
     geometry.cpp
     geoplg.cpp
     hanim.cpp
     image.cpp
-    light.cpp
     matfx.cpp
     pipeline.cpp
     plg.cpp
@@ -33,7 +30,6 @@ add_library(librw
     skin.cpp
     texture.cpp
     tga.cpp
-    world.cpp
 
     wgpu/rwwgpu.h
     wgpu/wgpudevice.cpp

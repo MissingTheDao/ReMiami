@@ -64,7 +64,94 @@ pub const PERSPECTIVE: i32 = 1;
     pub dirty_list: unsafe extern "C" fn() -> *mut LinkList, // &engine->frameDirtyList
 }
 static mut HOOKS: Option<Hooks> = None;
-fn hooks() -> &'static Hooks { unsafe { (*std::ptr::addr_of!(HOOKS)).as_ref().expect("hooks") } }
+fn hooks() -> &'static Hooks { unsafe { (*std::ptr::addr_of!(HOOKS)).as_ref().unwrap_or(&DEFAULT_HOOKS) } }
+
+// The game's hooks (stage 2 step 7d2, from camera.cpp): librw's allocator, the classes' plugin
+// lists and counters (rwplugin.rs), the camera's sync and update callbacks.
+mod defaults {
+    use super::*;
+    use crate::rwplugin::{self as pl, class_list};
+    fn class(kind: i32) -> usize {
+        [pl::CLASS_ATOMIC, pl::CLASS_CLUMP, pl::CLASS_LIGHT, pl::CLASS_CAMERA, pl::CLASS_WORLD][kind as usize]
+    }
+    fn engine() -> *mut crate::rwengine::Engine {
+        unsafe { *std::ptr::addr_of!(crate::rwengine::revc_engine) }
+    }
+    pub(super) unsafe extern "C" fn alloc(size: usize) -> *mut u8 {
+        unsafe { crate::rwengine::rw_malloc(size, 0x30000) as *mut u8 }
+    }
+    pub(super) unsafe extern "C" fn free(p: *mut u8) {
+        unsafe { crate::rwengine::rw_free(p as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn size(kind: i32) -> usize {
+        unsafe { (*class_list(class(kind))).size as usize }
+    }
+    pub(super) unsafe extern "C" fn construct(kind: i32, o: *mut c_void) {
+        unsafe { pl::pl_construct(class_list(class(kind)), o) }
+    }
+    pub(super) unsafe extern "C" fn destruct(kind: i32, o: *mut c_void) {
+        unsafe { pl::pl_destruct(class_list(class(kind)), o) }
+    }
+    pub(super) unsafe extern "C" fn copy(kind: i32, d: *mut c_void, s: *mut c_void) {
+        unsafe { pl::pl_copy(class_list(class(kind)), d, s) }
+    }
+    pub(super) unsafe extern "C" fn allocated(kind: i32, delta: i32) {
+        unsafe { *pl::alloc_count(class(kind)) += delta }
+    }
+    /// camera.cpp's cameraSync: the view matrix and the frustum from the frame's LTM.
+    pub(super) unsafe extern "C" fn camera_sync(o: *mut ObjectWithFrame) {
+        unsafe {
+            let cam = o as *mut Camera;
+            let ltm = crate::rwframe::get_ltm((*cam).object.object.parent as *mut Frame);
+            crate::rwcamera::revc_camera_sync(
+                ltm,
+                std::ptr::addr_of!((*cam).view_window) as *const crate::rwcamera::CamParams,
+                &mut (*cam).view_matrix,
+                (*cam).frustum_planes.as_mut_ptr(),
+                (*cam).frustum_corners.as_mut_ptr(),
+                &mut (*cam).frustum_bound_box,
+            );
+        }
+    }
+    pub(super) unsafe extern "C" fn default_begin_update(cam: *mut Camera) {
+        unsafe {
+            let e = engine();
+            (*e).current_camera = cam as *mut c_void;
+            crate::rwframe::sync_dirty(&mut (*e).frame_dirty_list);
+            ((*e).device.begin_update)(cam);
+        }
+    }
+    pub(super) unsafe extern "C" fn default_end_update(cam: *mut Camera) {
+        unsafe { ((*engine()).device.end_update)(cam) }
+    }
+    pub(super) unsafe extern "C" fn world_begin_update(cam: *mut Camera) {
+        unsafe {
+            (*engine()).current_world = (*cam).world as *mut c_void;
+            ((*cam).original_begin_update.expect("originalBeginUpdate"))(cam);
+        }
+    }
+    pub(super) unsafe extern "C" fn world_end_update(cam: *mut Camera) {
+        unsafe { ((*cam).original_end_update.expect("originalEndUpdate"))(cam) }
+    }
+    pub(super) unsafe extern "C" fn dirty_list() -> *mut LinkList {
+        unsafe { &mut (*engine()).frame_dirty_list }
+    }
+}
+static DEFAULT_HOOKS: Hooks = Hooks {
+    alloc: defaults::alloc,
+    free: defaults::free,
+    size: defaults::size,
+    construct: defaults::construct,
+    destruct: defaults::destruct,
+    copy: defaults::copy,
+    allocated: defaults::allocated,
+    camera_sync: defaults::camera_sync,
+    default_begin_update: defaults::default_begin_update,
+    default_end_update: defaults::default_end_update,
+    world_begin_update: defaults::world_begin_update,
+    world_end_update: defaults::world_end_update,
+    dirty_list: defaults::dirty_list,
+};
 
 const NORMALS: u32 = crate::rwgeomobj::NORMALS;
 
