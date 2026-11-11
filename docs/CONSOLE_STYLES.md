@@ -12,7 +12,7 @@ content and stay outside the repo; this file records what the code does and why.
 | 13a | Reference scenes: the `scenes` test scenario stands the player at the console capture spots (time, weather, follow camera, HUD on) and writes 640x480 frames; `scripts/scene_colours.py` measures them | done |
 | 13b | World colours per style (lighting, colour filter, PS2 highlight clipping), checked against the captures with the same measurements | |
 | 13c | Trails: console persistence (30/128 per 30 Hz frame), frame-rate and resolution independent, on in both console styles | |
-| 13d | Style settings: fixed LOD 1.0, Classic camera and movement, 4:3 option, PS2 time cycle from an imported disc | |
+| 13d | Style settings: fixed LOD 1.0, Classic camera and movement, 4:3 option, PS2 time cycle from an imported disc | LOD done |
 | 13e | HUD per style (Xbox safe-area shift and rounder radar), console UI scaled by screen height | |
 | 13f | Button glyph variants per UI style | |
 | 13g | PS2 menu look and animations | |
@@ -42,3 +42,9 @@ First measurement (S1, noon, region means; `scene_colours.py`):
 
 revc's roads are far darker than on either console, and the PS2 filter tints everything yellow
 where the PS2 stays neutral. That is 13b.
+
+## 13d: style settings
+
+- Draw distance: the PS2 and Xbox presets set the LOD scale to 1.0, as both consoles use with no
+  slider (PS2 `m_PrefsLOD`, Xbox XBE `ms_lodDistScale` at 0x2c34b8); the PC preset sets the PC
+  release's default 1.2. Moving the slider afterwards shows the style as Custom, like the other options.
