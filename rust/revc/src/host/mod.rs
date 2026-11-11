@@ -12,7 +12,7 @@ mod joystick;
 mod keymap;
 mod glyphs;
 mod pads;
-mod wgpu;
+pub(crate) mod wgpu;
 
 pub use pads::PadKind;
 
