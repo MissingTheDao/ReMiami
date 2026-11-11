@@ -8,7 +8,21 @@
  #include <semaphore.h>
  #include <sys/types.h>
  #include <unistd.h>
-@@ -82,14 +83,18 @@
+@@ -30,6 +31,13 @@
+ bool flushStream[MAX_CDCHANNELS];
+ #endif
+ 
++// revc: unnamed semaphores where the system has them (not macOS). Named ones ("/semaphore_cd_stream"
++// ...) are shared by every running copy of the game, so two at once stall each other's loading
++// (seen 2026-11-11; SilentPatch VC has the same fix).
++#if !defined(__APPLE__) && !defined(USE_UNNAMED_SEM)
++#define USE_UNNAMED_SEM
++#endif
++
+ #ifdef USE_UNNAMED_SEM
+ 
+ #define RE3_SEM_OPEN(name, ...) re3_sem_open()
+@@ -82,14 +90,18 @@
  
  #endif
  
