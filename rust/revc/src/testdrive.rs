@@ -76,6 +76,7 @@ unsafe extern "C" {
     fn revc_test_pedhit_sample() -> i32;
     fn revc_test_pedhit_result(max_rise: *mut f32, car_dist: *mut f32);
     fn revc_test_pedhit_drawn(body_rise: *mut f32, head_rise: *mut f32, hit: *mut i32);
+    fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
     fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
 }
 
@@ -98,6 +99,7 @@ enum Scenario {
     Motion,
     PedHit,
     Scanner,
+    Scenes,
 }
 
 #[derive(Debug)]
@@ -116,6 +118,8 @@ enum Phase {
     /// and captured SPOT_WAIT_MS later, so wind, waves and the clock are at the same phase in every
     /// run whatever the frame rate (the simulation advances in exact 30 Hz steps).
     Spot { idx: usize, base: u32, stage: SpotStage },
+    /// Console reference scenes (SCENES), same timing scheme as Spot.
+    Scene { idx: usize, base: u32, stage: SpotStage },
     /// Motion capture: scripted walk since game time `t0`, `step` into MOTION_SCRIPT.
     Motion { t0: u32, step: usize },
     PedHit,
@@ -137,6 +141,45 @@ const SPOTS: &[(&str, f32, f32, f32, f32, f32)] = &[
     ("starfish_island", -380.0, -560.0, 26.0, 26.0, 20.0),
     ("airport", -1450.0, -900.0, 0.0, -40.0, 26.0),
 ];
+/// Console reference scenes (plan task 13; the PS2/Xbox stills are in Claude outputs/world-captures,
+/// local only): (name, x, y, heading in degrees with 0 = north, hour, minute, weather 0 sunny
+/// 1 cloudy 2 rain 3 fog). The player stands with the follow camera behind him and the HUD on, as in
+/// the console captures. REVC_TEST_SCENES=S1,S4 picks some; REVC_TEST_SCENE=x,y,heading,hour,minute,
+/// weather[;...] adds scenes named custom0, custom1, ... (for finding a spot).
+const SCENES: &[(&str, f32, f32, f32, i32, i32, i32)] = &[
+    ("S1_noon", MOONLITE.0, MOONLITE.1, 0.0, 12, 9, 0),
+    ("S2_night", MOONLITE.0, MOONLITE.1, 0.0, 22, 0, 0),
+    ("S3_rain", MOONLITE.0, MOONLITE.1, 0.0, 12, 0, 2),
+    ("S4_fog", MOONLITE.0, MOONLITE.1, 0.0, 12, 0, 3),
+    ("S5_east", MOONLITE.0, MOONLITE.1, 270.0, 7, 0, 0),
+    ("S6_lighthouse", LIGHTHOUSE.0, LIGHTHOUSE.1, 35.0, 19, 0, 0),
+    ("S6_lighthouse_noon", LIGHTHOUSE.0, LIGHTHOUSE.1, 35.0, 11, 38, 0),
+    ("S10_dawn", MOONLITE.0, MOONLITE.1, 0.0, 5, 33, 0),
+];
+/// Middle of Ocean Drive in front of the Moonlite Hotel, and next to the lighthouse.
+const MOONLITE: (f32, f32) = (257.0, -1250.0);
+const LIGHTHOUSE: (f32, f32) = (470.0, -1695.0);
+const SCENE_WAIT_MS: u32 = 2500;
+const SCENE_PERIOD_MS: u32 = 5000;
+
+fn scene_list() -> Vec<(String, f32, f32, f32, i32, i32, i32)> {
+    let pick = std::env::var("REVC_TEST_SCENES").ok();
+    let mut v: Vec<_> = SCENES
+        .iter()
+        .filter(|s| pick.as_deref().is_none_or(|p| p.split(',').any(|n| s.0 == n || s.0.split('_').next() == Some(n))))
+        .map(|s| (s.0.to_string(), s.1, s.2, s.3, s.4, s.5, s.6))
+        .collect();
+    if let Ok(c) = std::env::var("REVC_TEST_SCENE") {
+        for (i, one) in c.split(';').enumerate() {
+            let f: Vec<f32> = one.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+            if f.len() == 6 {
+                v.push((format!("custom{i}"), f[0], f[1], f[2], f[3] as i32, f[4] as i32, f[5] as i32));
+            }
+        }
+    }
+    v
+}
+
 const SPOT_WAIT_MS: u32 = 4000;
 const SPOT_PERIOD_MS: u32 = 6000;
 /// Game time before each spot's capture over which frame times are measured.
@@ -228,7 +271,8 @@ pub fn init() -> Result<bool, String> {
         "motion" => Scenario::Motion,
         "pedhit" => Scenario::PedHit,
         "scanner" => Scenario::Scanner,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, scanner)")),
+        "scenes" => Scenario::Scenes,
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, scanner, scenes)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -342,7 +386,7 @@ impl Driver {
                         self.phase = Phase::MenuShot { frames: 0 };
                         return false;
                     }
-                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::Scanner => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::Scanner | Scenario::Scenes => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -415,6 +459,11 @@ impl Driver {
                 }
                 if self.scenario == Scenario::Gamepad {
                     self.phase = Phase::Pads;
+                    return false;
+                }
+                if self.scenario == Scenario::Scenes {
+                    let base = (unsafe { revc_test_game_ms() } / 1000 + 1) * 1000;
+                    self.phase = Phase::Scene { idx: 0, base, stage: SpotStage::Travel };
                     return false;
                 }
                 if self.scenario == Scenario::Spots {
@@ -553,6 +602,44 @@ impl Driver {
                             self.check_image_at(w, h, &rgba, dir("REVC_TEST_SHOT_DIR"), reference, &format!("{name}: "), None);
                             if idx + 1 < SPOTS.len() {
                                 self.phase = Phase::Spot { idx: idx + 1, base, stage: SpotStage::Travel };
+                            } else {
+                                return self.finish();
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Phase::Scene { idx, base, stage } => {
+                let scenes = scene_list();
+                if scenes.is_empty() {
+                    self.fail("scenes: none selected".into());
+                    return self.finish();
+                }
+                let (name, x, y, heading, hour, minute, weather) = scenes[idx].clone();
+                let now = unsafe { revc_test_game_ms() };
+                let visit = base + idx as u32 * SCENE_PERIOD_MS;
+                match stage {
+                    SpotStage::Travel if now >= visit => {
+                        let z = unsafe { revc_test_scene(x, y, heading, hour, minute, weather) };
+                        log(format!("scene {name}: ({x}, {y}, {z:.2}) heading {heading} at {hour:02}:{minute:02} weather {weather}"));
+                        self.phase = Phase::Scene { idx, base, stage: SpotStage::Settle };
+                    }
+                    SpotStage::Settle if now >= visit + SCENE_WAIT_MS && unsafe { revc_test_fading() } == 0 => {
+                        crate::host::request_capture();
+                        self.phase = Phase::Scene { idx, base, stage: SpotStage::Capturing };
+                    }
+                    SpotStage::Capturing => {
+                        if let Some((w, h, rgba)) = crate::host::take_capture() {
+                            let path = std::env::var_os("REVC_TEST_SHOT_DIR").map(|d| PathBuf::from(d).join(format!("{name}.png")));
+                            if let Some(p) = path {
+                                if let Err(e) = write_png(&p, w, h, &rgba) {
+                                    self.fail(format!("writing {}: {e}", p.display()));
+                                }
+                            }
+                            log(format!("{name}: captured {w}x{h} at game time {now}"));
+                            if idx + 1 < scenes.len() {
+                                self.phase = Phase::Scene { idx: idx + 1, base, stage: SpotStage::Travel };
                             } else {
                                 return self.finish();
                             }

@@ -6,7 +6,7 @@
 #   --wgpu   (accepted, no effect: the wgpu renderer is the only one; REVC_RENDERER_BACKEND=vulkan|gl
 #            picks its backend, Vulkan by default)
 # Needs a display (the game opens a window). Game data: REVC_GAME_DIR or ./game.
-# Scenarios: boot, saveload, savegame (save slot 1's game to slot 2, then load slot 2: own reference), formats, texmods, gamepad, spots (default), motion, pedhit (car hits peds at 320 fps: drawn where the physics has them), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
+# Scenarios: scenes (console reference scenes at 640x480, REVC_TEST_SCENES/REVC_TEST_SCENE pick them), boot, saveload, savegame (save slot 1's game to slot 2, then load slot 2: own reference), formats, texmods, gamepad, spots (default), motion, pedhit (car hits peds at 320 fps: drawn where the physics has them), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
 # formats: compares what the C++ loaders read with the Rust parsers in rust/revc-formats.
 # oldsave: saveload of tests/saves/other/GTAVCsf1-64bit-gcc.b (slot 1's game as a 64-bit GCC build
 #   saves it) in slot 3: the game converts it (FixSave, keeps a .bak) and loads it; saveload's reference.
@@ -84,6 +84,15 @@ for s in "${SCENARIOS[@]}"; do
     cp "$ROOT/tests/saves/other/GTAVCsf1-64bit-gcc.b" "$T/userfiles/GTAVCsf3.b"
     envs=(REVC_GAME_DIR="$T" REVC_TEST=saveload REVC_TEST_SLOT=3 REVC_TEST_SHOT="$OUT/$s.png")
     (( BLESS == 0 )) && [[ -f "$REF/saveload.png" ]] && envs+=(REVC_TEST_REF="$REF/saveload.png")
+  fi
+  # scenes (not in the default set): the console reference scenes at 640x480 (plan task 13), written
+  # to $OUT/scenes/ for comparison with the PS2/Xbox captures (local only); no references.
+  if [[ "$s" == scenes ]]; then
+    mkdir -p "$OUT/scenes"
+    envs+=(REVC_TEST_SHOT_DIR="$OUT/scenes")
+    printf 'width=%s\nheight=%s\nmaximized=0\n' "${REVC_SCENE_W:-640}" "${REVC_SCENE_H:-480}" > "$T/userfiles/revc_window.ini"
+  else
+    printf 'width=1280\nheight=720\nmaximized=0\n' > "$T/userfiles/revc_window.ini"
   fi
   if [[ "$s" == spots || "$s" == gamepad ]]; then
     # Screenshots are overwritten on every run.

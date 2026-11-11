@@ -159,6 +159,45 @@ revc_test_shake(int durationMs, int freq)
 	CPad::GetPad(0)->StartShake(durationMs, freq);
 }
 
+// Console reference scenes (plan task 13, Claude outputs/world-captures/SCENES.md): the player stands
+// at (x, y) on the ground facing `heading` degrees (0 = north, counter-clockwise like the game), the
+// normal follow camera directly behind him, HUD and radar on, the clock at hour:minute and the
+// weather forced (0 sunny, 1 cloudy, 2 rainy, 3 foggy). No peds or traffic, so runs repeat.
+float
+revc_test_scene(float x, float y, float heading, int hour, int minute, int weather)
+{
+	CPopulation::PedDensityMultiplier = 0.0f;
+	CCarCtrl::CarDensityMultiplier = 0.0f;
+	CGame::currArea = AREA_MAIN_MAP;
+	CStreaming::RemoveBuildingsNotInArea(AREA_MAIN_MAP);
+	CClock::SetGameClock(hour, minute);
+	CWeather::ForceWeatherNow(weather);
+
+	CVector pos(x, y, 20.0f);
+	CTimer::Suspend();
+	CStreaming::LoadScene(pos);
+	CTimer::Resume();
+	CColStore::EnsureCollisionIsInMemory(CVector2D(x, y));
+	pos.z = CWorld::FindGroundZForCoord(x, y);
+
+	CHud::m_Wants_To_Draw_Hud = true;
+	CHud::m_HideRadar = false;
+	CHud::SetHelpMessage(nil, true);
+
+	CPlayerPed *ped = FindPlayerPed();
+	CVector pedPos = pos;
+	pedPos.z += ped->GetDistanceFromCentreOfMassToBaseOfModel();
+	ped->Teleport(pedPos);
+	float h = DEGTORAD(heading);
+	ped->m_fRotationCur = ped->m_fRotationDest = h;
+	ped->SetHeading(h);
+	CWorld::ClearExcitingStuffFromArea(pedPos, 120.0f, true);
+
+	TheCamera.RestoreWithJumpCut();
+	TheCamera.SetCameraDirectlyBehindForFollowPed_CamOnAString();
+	return pos.z;
+}
+
 // Fixed-spot screenshots (plan task 3): puts the player at (x, y) on the main map (on the ground
 // when z <= -100) with nothing random around (no peds or traffic, fixed time and weather) and
 // points a fixed camera from player + (dx, dy, dz) at the player, with the HUD hidden, like the mission scripts do
