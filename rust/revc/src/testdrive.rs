@@ -1138,6 +1138,9 @@ impl Driver {
                         }
                     }
                     MENU_VIDEO_FRAME.store(0, Ordering::Relaxed);
+                    // the pad is in use from the start (as a player holding one), not from the
+                    // first press: the console styles pick the pad's controls by it
+                    unsafe { revc_test_pad(1, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) };
                 }
                 let rec_start = script.mark("input").map_or(0, |f| f.saturating_sub(MOTION_INPUT_FRAME));
                 let rec_end = script.mark("end").unwrap_or(script.last_frame() + 60);
