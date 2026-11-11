@@ -415,7 +415,7 @@ const MOTION_ROUTES: &[MotionRoute] = &[
     ("ps2_map_zoom_in", "start cross", "+r1:90", 150),
     ("ps2_map_zoom_out", "start cross +r1:120", "+r2:90", 150),
     ("ps2_stats_scroll", "start right right right", "none", 600),
-    ("ps2_setup_switch", "start down cross", "right", 60),
+    ("ps2_setup_switch", "start down cross cross", "right", 60),	// configuration: cross enters its edit mode
     ("ps2_display_screen_pos", "start down right right cross down down down down down down cross", "right", 60),
     // Xbox (pages: load map brief stats controls audio display; START opens Load the first time
     // with the icon bar focused; A goes in, B out; LT/RT switch pages inside)
@@ -449,6 +449,14 @@ const MOTION_ROUTES: &[MotionRoute] = &[
     ("xbox_logo_shimmer", "start", "none", 1200),
     ("xbox_list_scroll", "start right right a right", "none", 600),	// Brief: tutorial briefings
     ("xbox_stats_scroll", "start right right right", "none", 600),
+    // Controls (three left of Load): select controls, display controls, invert, vibration, credits
+    ("xbox_dropdown_open", "start left left left a", "a", 60),	// select controls: the drop-down
+    ("xbox_dropdown_close", "start left left left a a", "b", 60),
+    ("xbox_subpage_open", "start left left left a down", "a", 60),	// display controls
+    ("xbox_subpage_close", "start left left left a down a", "b", 60),
+    ("xbox_subtab_walking_driving", "start left left left a down a", "right", 60),
+    ("xbox_row_controls_slow", "start left left left a down down", "down", 60),	// invert -> vibration
+    ("xbox_option_toggle", "start left a down down", "right", 60),	// Display: subtitles on -> off
 ];
 
 /// The pad script for a routed motion (MOTION_ROUTES).
@@ -494,7 +502,8 @@ fn route_script(r: &MotionRoute) -> Result<crate::padscript::PadScript, String> 
 fn motion_route() -> Option<&'static MotionRoute> {
     let id = std::env::var("REVC_TEST_MOTION").ok()?;
     // (the research catalogue's newer references carry a version suffix: same motion, same route)
-    let base = id.strip_suffix("_v140").or_else(|| id.strip_suffix("_v2")).unwrap_or(&id);
+    // ("_2": a second sample of the same motion)
+    let base = id.strip_suffix("_v140").or_else(|| id.strip_suffix("_v2")).or_else(|| id.strip_suffix("_2")).unwrap_or(&id);
     MOTION_ROUTES.iter().find(|m| m.0 == base)
 }
 

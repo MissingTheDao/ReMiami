@@ -30,7 +30,7 @@ KNOWN=$(/usr/bin/grep -oE '^ *\("(ps2|xbox)_[a-z0-9_]+"' "$ROOT/rust/revc/src/te
 FAILED=0
 RAN=()
 for id in "${IDS[@]}"; do
-  base=${id%_v140}; base=${base%_v2}
+  base=${id%_v140}; base=${base%_v2}; base=${base%_2}
   /usr/bin/grep -qx -- "$base" <<< "$KNOWN" || { echo "motion $id: no revc motion, using the json's revc source"; continue; }
   st=1; [[ $id == xbox_* ]] && st=2
   cfg="$OUT/$id.ini"

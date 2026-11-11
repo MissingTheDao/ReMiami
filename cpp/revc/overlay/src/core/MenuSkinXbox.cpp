@@ -772,18 +772,10 @@ DrawSubTabs(int page, uint8 alpha)
 	CFont::SetWrapx(SCREEN_WIDTH);
 	float w = CFont::GetStringWidth(TheText.Get(names[cur]), true);
 	float bx0 = X(lx[cur] - 8.0f), bx1 = Max(X(lx[cur]) + w + W(60.0f), X(lx[cur] + 172.0f)), tilt = W(5.0f);
-	// the dark block at the bar's outer end; after a switch it slides behind the bar from the
-	// other end to the outer end over ~330 ms (Xbox autopad, xbox_subtab_change_v2)
-	static int lastTab = -1, lastPage = -1;
-	static uint32 switchedAt;
-	uint32 now = CTimer::GetTimeInMillisecondsPauseMode();
-	if (page == lastPage && cur != lastTab)
-		switchedAt = now;
-	lastTab = cur;
-	lastPage = page;
-	// (gone from the old side at the jump; grows in at the outer end from ~frame 6 to frame 20)
-	float t = Clamp(((int)(now - switchedAt) - 100) / 233.0f, 0.0f, 1.0f);
-	float sw = W(15.0f) * t;
+	// the dark block at the bar's outer end, there at once after a switch (the change is a hard cut;
+	// what looked like it sliding in was the selection pulse, research on autopad set 2)
+	(void)page;
+	float sw = W(15.0f);
 	CSprite2d::Draw2DPolygon(bx0 + tilt, y0, bx1 + tilt, y0, bx0, y1, bx1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
 	if (sw > 0.0f) {
 		if (cur == 0)
@@ -984,12 +976,9 @@ MenuSkinXboxInput(CMenuManager *m)
 	}
 	if (HasSubTabs(m->m_nCurrScreen) && !SettingsSubTabs(m->m_nCurrScreen)) {
 		if (left || right) {
+			// a hard cut: the content and the sub-tab highlight switch in one frame (research,
+			// autopad set 2 at 3888: no fade, slide or glide)
 			MenuSkinXboxSetSubTab(m->m_nCurrScreen, 1 - MenuSkinXboxSubTab(m->m_nCurrScreen));
-			extern bool gPs2FadeIsPageChange;
-			m->m_nMenuFadeAlpha = 0;	// the sub-tab's content fades in (~214 ms 10-90 %, Xbox autopad)
-			gPs2FadeIsPageChange = false;
-			extern bool gXboxSubTabFade;
-			gXboxSubTabFade = true;
 		}
 		return left || right || a;
 	}
