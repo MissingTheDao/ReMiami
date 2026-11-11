@@ -22,6 +22,8 @@ revc-formats = { path = "../revc-formats" }
 revc-import = { path = "../revc-import" }
 # The renderer: revc-rw on wgpu (Vulkan, OpenGL; DX12 on Windows), plan task 12.
 revc-rw = { path = "../revc-rw" }
+# Deflate for texture packs in zip files (texmods.rs); already in the tree via png.
+miniz_oxide = "0.8"
 
 [features]
 # Kept so `--features wgpu` in old commands still builds; the wgpu renderer is the only one.

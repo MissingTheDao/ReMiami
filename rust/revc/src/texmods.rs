@@ -6,6 +6,9 @@
 //! `<txd>` is the dictionary's name: the model's TXD in gta3.img (e.g. `infernus`), or the file
 //! name of a loose TXD (`hud`, `fonts`, `generic`, `wheels` ...). Deeper folders are allowed for
 //! grouping; the folder directly containing the file names the dictionary.
+//! Packs: `mods/packs/*.zip` hold the same layout inside (`textures/<txd>/<texture>.png`, or the
+//! files directly under `<txd>/`); loose files win over packs, and packs are read in name order
+//! (the first pack with a texture wins).
 //! Any size is accepted (non-square and larger than the original included). A file that can't
 //! be read or decoded is reported once and the original texture is kept.
 //!
@@ -19,19 +22,93 @@ use std::sync::{Mutex, OnceLock};
 
 const MAX_SIZE: u32 = 8192;
 
-static INDEX: OnceLock<HashMap<(String, String), PathBuf>> = OnceLock::new();
+/// Where an override comes from: a loose file or a file inside a pack.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Source {
+    File(PathBuf),
+    Zip(crate::ziparchive::Entry),
+}
+
+impl Source {
+    fn read(&self) -> Result<Vec<u8>, String> {
+        match self {
+            Source::File(p) => std::fs::read(p).map_err(|e| e.to_string()),
+            Source::Zip(e) => e.read(),
+        }
+    }
+}
+
+impl std::fmt::Display for Source {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Source::File(p) => write!(f, "{}", p.display()),
+            Source::Zip(e) => write!(f, "{}:{}", e.archive.display(), e.name),
+        }
+    }
+}
+
+type Index = HashMap<(String, String), Source>;
+
+static INDEX: OnceLock<Index> = OnceLock::new();
 static APPLIED: AtomicUsize = AtomicUsize::new(0);
 static FAILED: AtomicUsize = AtomicUsize::new(0);
 static COMPRESSED: AtomicUsize = AtomicUsize::new(0);
 /// Files already reported as bad (each is reported once, though it may be asked for again when
 /// its dictionary is streamed in again).
-static REPORTED: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+static REPORTED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 fn mods_dir() -> PathBuf {
     Path::new("mods").join("textures")
 }
 
-fn build_index(root: &Path) -> HashMap<(String, String), PathBuf> {
+fn packs_dir() -> PathBuf {
+    Path::new("mods").join("packs")
+}
+
+/// Adds the image files of every pack in `dir` (zips, in name order) that the index lacks.
+fn add_packs(index: &mut Index, dir: &Path) {
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let mut zips: Vec<PathBuf> = rd
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")))
+        .collect();
+    zips.sort();
+    for zip in zips {
+        let entries = match crate::ziparchive::list(&zip) {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("texmods: {}: {e}; pack skipped", zip.display());
+                continue;
+            }
+        };
+        let mut added = 0;
+        for e in entries {
+            let parts: Vec<&str> = e.name.split('/').filter(|p| !p.is_empty()).collect();
+            let Some((file, dirs)) = parts.split_last() else { continue };
+            let Some((stem, ext)) = file.rsplit_once('.') else { continue };
+            let ext = ext.to_ascii_lowercase();
+            if ext != "png" && ext != "dds" {
+                continue;
+            }
+            // The folder directly containing the file names the dictionary; a file at the top or
+            // directly in `textures/` replaces the texture in any dictionary.
+            let txd = match dirs.last() {
+                Some(d) if !(dirs.len() == 1 && d.eq_ignore_ascii_case("textures")) => d.to_ascii_lowercase(),
+                _ => String::new(),
+            };
+            let key = (txd, stem.to_ascii_lowercase());
+            let png_over_dds = ext == "png" && matches!(index.get(&key), Some(Source::Zip(z)) if z.archive == e.archive && z.name.to_ascii_lowercase().ends_with(".dds"));
+            if !index.contains_key(&key) || png_over_dds {
+                index.insert(key, Source::Zip(e));
+                added += 1;
+            }
+        }
+        eprintln!("texmods: pack {}: {added} texture overrides", zip.display());
+    }
+}
+
+fn build_index(root: &Path) -> Index {
     let mut index = HashMap::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
@@ -55,19 +132,20 @@ fn build_index(root: &Path) -> HashMap<(String, String), PathBuf> {
             // Prefer PNG if both exist; otherwise first found.
             let key = (txd, tex);
             if ext == "png" || !index.contains_key(&key) {
-                index.insert(key, p);
+                index.insert(key, Source::File(p));
             }
         }
     }
     index
 }
 
-fn index() -> &'static HashMap<(String, String), PathBuf> {
+fn index() -> &'static Index {
     INDEX.get_or_init(|| {
-        let idx = build_index(&mods_dir());
+        let mut idx = build_index(&mods_dir());
         if !idx.is_empty() {
             eprintln!("texmods: {} texture overrides in {}", idx.len(), mods_dir().display());
         }
+        add_packs(&mut idx, &packs_dir());
         idx
     })
 }
@@ -85,8 +163,8 @@ pub fn compressed() -> usize {
 /// A DXT1/3/5 DDS that can be uploaded as it is: size a multiple of 4 (BC textures are whole
 /// blocks), and mip levels in the file when the texture is sampled with mips (otherwise the
 /// RGBA8 path keeps it mipmapped by generating them).
-fn dds_blocks(path: &Path, want_mips: bool) -> Option<(u32, u32, u8, bool, Vec<Vec<u8>>)> {
-    let data = std::fs::read(path).ok()?;
+fn dds_blocks(src: &Source, want_mips: bool) -> Option<(u32, u32, u8, bool, Vec<Vec<u8>>)> {
+    let data = src.read().ok()?;
     if !data.starts_with(b"DDS ") {
         return None;
     }
@@ -103,12 +181,15 @@ fn dds_blocks(path: &Path, want_mips: bool) -> Option<(u32, u32, u8, bool, Vec<V
 
 /// RGBA8, top row first.
 pub(crate) fn decode(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
-    let data = std::fs::read(path).map_err(|e| e.to_string())?;
+    decode_bytes(&std::fs::read(path).map_err(|e| e.to_string())?)
+}
+
+fn decode_bytes(data: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
     let (w, h, rgba) = if data.starts_with(b"DDS ") {
-        let img = revc_formats::dds::decode(&data).map_err(|e| e.to_string())?;
+        let img = revc_formats::dds::decode(data).map_err(|e| e.to_string())?;
         (img.width, img.height, img.rgba)
     } else {
-        decode_png(&data)?
+        decode_png(data)?
     };
     if w == 0 || h == 0 || w > MAX_SIZE || h > MAX_SIZE {
         return Err(format!("size {w}x{h} outside 1..={MAX_SIZE}"));
@@ -137,7 +218,7 @@ fn decode_png(data: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
     Ok((w, h, rgba))
 }
 
-fn lookup(txd: &str, tex: &str) -> Option<&'static PathBuf> {
+fn lookup(txd: &str, tex: &str) -> Option<&'static Source> {
     let idx = index();
     idx.get(&(txd.to_ascii_lowercase(), tex.to_ascii_lowercase()))
         .or_else(|| idx.get(&(String::new(), tex.to_ascii_lowercase())))
@@ -163,8 +244,8 @@ pub unsafe extern "C" fn revc_texmod_find_dxt(
     size: *mut usize,
 ) -> c_int {
     let (txd, tex) = unsafe { (CStr::from_ptr(txd).to_string_lossy(), CStr::from_ptr(texture).to_string_lossy()) };
-    let Some(path) = lookup(&txd, &tex) else { return 0 };
-    let Some((w, h, k, alpha, lv)) = dds_blocks(path, want_mips != 0) else { return 0 };
+    let Some(src) = lookup(&txd, &tex) else { return 0 };
+    let Some((w, h, k, alpha, lv)) = dds_blocks(src, want_mips != 0) else { return 0 };
     let n = lv.len();
     let data = lv.concat().into_boxed_slice();
     unsafe {
@@ -206,8 +287,8 @@ pub unsafe extern "C" fn revc_texmod_find(
     rgba: *mut *mut c_uchar,
 ) -> c_int {
     let (txd, tex) = unsafe { (CStr::from_ptr(txd).to_string_lossy(), CStr::from_ptr(texture).to_string_lossy()) };
-    let Some(path) = lookup(&txd, &tex) else { return 0 };
-    match decode(path) {
+    let Some(src) = lookup(&txd, &tex) else { return 0 };
+    match src.read().and_then(|d| decode_bytes(&d)) {
         Ok((w, h, px)) => {
             let boxed = px.into_boxed_slice();
             unsafe {
@@ -220,9 +301,10 @@ pub unsafe extern "C" fn revc_texmod_find(
         }
         Err(e) => {
             let mut reported = REPORTED.lock().unwrap();
-            if !reported.contains(path) {
-                eprintln!("texmods: {}: {e}; keeping the original {txd}/{tex}", path.display());
-                reported.push(path.clone());
+            let name = src.to_string();
+            if !reported.contains(&name) {
+                eprintln!("texmods: {name}: {e}; keeping the original {txd}/{tex}");
+                reported.push(name);
                 FAILED.fetch_add(1, Ordering::Relaxed);
             }
             0
@@ -258,6 +340,31 @@ mod tests {
         assert!(idx.contains_key(&("".into(), "radar".into())));
         assert!(idx.contains_key(&("infernus".into(), "body".into())));
         assert_eq!(idx.len(), 3);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn packs_add_what_loose_files_lack() {
+        let root = std::env::temp_dir().join(format!("revc-texpacks-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("loose/hud")).unwrap();
+        std::fs::create_dir_all(root.join("packs")).unwrap();
+        std::fs::write(root.join("loose/hud/fist.png"), b"loose").unwrap();
+        let zip = crate::ziparchive::tests::build(&[
+            ("textures/hud/fist.png", b"packed", false),
+            ("textures/hud/radardisc.png", b"disc", true),
+            ("textures/radar.dds", b"any", false),
+            ("fonts/font1.png", b"font", false),
+            ("readme.txt", b"no", false),
+        ]);
+        std::fs::write(root.join("packs/b.zip"), &zip).unwrap();
+        std::fs::write(root.join("packs/a.zip"), crate::ziparchive::tests::build(&[("hud/radardisc.png", b"first", false)])).unwrap();
+        let mut idx = build_index(&root.join("loose"));
+        add_packs(&mut idx, &root.join("packs"));
+        assert_eq!(idx.len(), 4);
+        assert!(matches!(&idx[&("hud".into(), "fist".into())], Source::File(_)));
+        assert_eq!(idx[&("hud".into(), "radardisc".into())].read().unwrap(), b"first");
+        assert_eq!(idx[&("".into(), "radar".into())].read().unwrap(), b"any");
+        assert_eq!(idx[&("fonts".into(), "font1".into())].read().unwrap(), b"font");
         std::fs::remove_dir_all(root).unwrap();
     }
 

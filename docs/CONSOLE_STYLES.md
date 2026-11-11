@@ -17,7 +17,7 @@ content and stay outside the repo; this file records what the code does and why.
 | 13f | Button glyph variants per UI style | done |
 | 13g | PS2 menu look and animations | |
 | 13h | Xbox menu (Maestro) look and animations, controller page | |
-| 13i | Console data from an imported disc (Xbox maps and flames, PS2 animations), texture packs from zips | |
+| 13i | Console data from an imported disc (Xbox maps and flames, PS2 animations), texture packs from zips | zip packs done |
 
 ## 13a: reference scenes
 
