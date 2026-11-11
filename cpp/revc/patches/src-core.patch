@@ -2073,7 +2073,7 @@
 +				// (the Xbox page change: each page's entrance has its own length, whatever the
 +				// distance: ~12 frames into Brief/Stats, ~23 into Map, Display, Audio, Controls;
 +				// Xbox autopad sets 2-3; frames scaled by ~1.13 as revc's steps land early)
-+				int xboxFrames = m_nCurrScreen == MENUPAGE_BRIEFS || m_nCurrScreen == MENUPAGE_STATS ? 14 : 24;
++				int xboxFrames = m_nCurrScreen == MENUPAGE_BRIEFS || m_nCurrScreen == MENUPAGE_STATS ? 14 : 31;
 +				int xboxStep = 255 * 2 / xboxFrames;
 +				(void)gPanelMove;
 +				m_nMenuFadeAlpha += !ps2 ? (gXboxSubTabFade ? 30 : gPs2FadeIsPageChange && MenuSkinXboxActive(m_nCurrScreen, m_bGameNotLoaded) ? xboxStep : 20) :
@@ -2084,7 +2084,17 @@
  			}
  			LastFade = CTimer::GetTimeInMillisecondsPauseMode();
  #ifdef FIX_BUGS
-@@ -2518,9 +3546,9 @@
+@@ -2474,7 +3502,8 @@
+ 
+ 	if (!transitionCall && m_firstStartCounter == 255) {
+ 		int actualAlpha = m_nMenuFadeAlpha;
+-		if (actualAlpha < 255) {
++		// (revc: the Xbox swaps a page's content at once: no fading-out copy of the old page)
++		if (actualAlpha < 255 && !(XBOX_SKIN_ON && gPs2FadeIsPageChange)) {
+ 			int actualScreen = m_nCurrScreen;
+ 			SetFrontEndRenderStates();
+ 			m_nCurrScreen = m_nPrevScreen;
+@@ -2518,9 +3547,9 @@
  
  	if (m_nCurrScreen != MENUPAGE_OUTRO)
  		if (m_firstStartCounter == 255) {
@@ -2096,7 +2106,7 @@
  		}
  
  	if (m_ShowEmptyBindingError) {
-@@ -2538,7 +3566,11 @@
+@@ -2538,7 +3567,11 @@
  		}
  	}
  
@@ -2109,7 +2119,7 @@
  		CRect mouse(0.0f, 0.0f, MENU_X(35.0f), MENU_Y(35.0f));
  		CRect shad(MENU_X(10.0f), MENU_Y(3.0f), MENU_X(45.0f), MENU_Y(38.0f));
  
-@@ -2924,7 +3956,7 @@
+@@ -2924,7 +3957,7 @@
  	CFont::SetDropColor(CRGBA(0, 0, 0, FadeIn(255)));
  
  	// Back button
@@ -2118,7 +2128,7 @@
  	CFont::SetRightJustifyOff();
  
  	if (!strcmp(m_aSkinName, m_PrefsSkinFile)) {
-@@ -2941,6 +3973,10 @@
+@@ -2941,6 +3974,10 @@
  int
  CMenuManager::FadeIn(int alpha)
  {
@@ -2129,7 +2139,7 @@
  	return Min(m_nMenuFadeAlpha, alpha);
  }
  
-@@ -3352,6 +4388,15 @@
+@@ -3352,6 +4389,15 @@
  void
  CMenuManager::PrintBriefs()
  {
@@ -2145,7 +2155,7 @@
  	CFont::SetColor(CRGBA(0, 0, 0, FadeIn(255)));
  	CFont::SetRightJustifyOff();
  	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
-@@ -3389,6 +4434,14 @@
+@@ -3389,6 +4435,14 @@
  	static float scrollY = 0;
  
  	int rowNum = CStats::ConstructStatLine(99999);
@@ -2160,7 +2170,7 @@
  	CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(90.0f), MENU_Y(142.0f),
  		MENU_X_LEFT_ALIGNED(543.0f), MENU_Y(142.f),
  		MENU_X_LEFT_ALIGNED(107.0f), MENU_Y(316.f),
-@@ -3413,13 +4466,21 @@
+@@ -3413,13 +4467,21 @@
  
  	static uint32 lastCheck = 0;
  
@@ -2185,7 +2195,7 @@
  		}
  		lastCheck = CTimer::GetTimeInMillisecondsPauseMode();
  	}
-@@ -3444,6 +4505,11 @@
+@@ -3444,6 +4506,11 @@
  		}
  		alpha = 0.f;
  
@@ -2197,7 +2207,7 @@
  		// If it's still on screen
  		if (y > MENU_Y(STATS_VISIBLE_START_Y) && y < MENU_Y(STATS_VISIBLE_END_Y)) {
  			CStats::ConstructStatLine(row);
-@@ -3464,27 +4530,48 @@
+@@ -3464,27 +4531,48 @@
  			if (y >= MENU_Y(STATS_TOP_Y + STATS_FADING_AREA_LENGTH) && y <= MENU_Y(STATS_BOTTOM_Y - STATS_FADING_AREA_LENGTH))
  				alpha = 255.0f;
  
@@ -2248,7 +2258,7 @@
  	AsciiToUnicode(gString, gUString);
  
  	UnicodeStrcpy(gUString2, CStats::FindCriminalRatingString());
-@@ -3499,6 +4586,13 @@
+@@ -3499,6 +4587,13 @@
  	CFont::SetColor(CRGBA(0, 0, 0, FadeIn(255)));
  	CFont::SetDropShadowPosition(0);
  
@@ -2262,7 +2272,7 @@
  	CFont::PrintString(MENU_X_LEFT_ALIGNED(STATS_RATING_X) - CFont::GetStringWidth(gUString2, true) / 2.f, MENU_Y(STATS_RATING_Y_2), gUString2);
  }
  
-@@ -3602,6 +4696,30 @@
+@@ -3602,6 +4697,30 @@
  				}
  			}
  
@@ -2293,7 +2303,7 @@
  			if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
  				if (CPad::GetPad(0)->GetMouseWheelDown() && m_fMapSize > MENU_X(MAP_SIZE_TO_ALLOW_X_MOVE))
  					ZOOM(mapCrosshair.x, mapCrosshair.y, false);
-@@ -3715,11 +4833,11 @@
+@@ -3715,11 +4834,11 @@
  			break;
  		}
  		case MENUPAGE_SOUND_SETTINGS:
@@ -2307,7 +2317,7 @@
  					m_nHoverOption = HOVEROPTION_NEXT_RADIO;
  			}
  			break;
-@@ -4297,6 +5415,8 @@
+@@ -4297,6 +5416,8 @@
  
  	if (!m_AllowNavigation && m_firstStartCounter == 255)
  		m_AllowNavigation = true;
@@ -2316,7 +2326,7 @@
  	if (!m_bShowMouse && m_nCurrScreen != MENUPAGE_MAP && (m_nMouseOldPosX != m_nMousePosX || m_nMouseOldPosY != m_nMousePosY)) {
  		m_bShowMouse = true;
  	}
-@@ -4547,7 +5667,8 @@
+@@ -4547,7 +5668,8 @@
  		}
  	}
  	if (changeValueBy != 0) {
@@ -2326,7 +2336,7 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_NOTHING
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_LABEL
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_YES
-@@ -4957,7 +6078,7 @@
+@@ -4957,7 +6079,7 @@
  					ControlsManager.MakeControllerActionsBlank();
  					ControlsManager.InitDefaultControlConfiguration();
  					ControlsManager.InitDefaultControlConfigMouse(MousePointerStateHelper.GetMouseSetUp());
@@ -2335,7 +2345,7 @@
  					if (AllValidWinJoys.m_aJoys[JOYSTICK1].m_bInitialised) {
  						DIDEVCAPS devCaps;
  						devCaps.dwSize = sizeof(DIDEVCAPS);
-@@ -5590,7 +6711,8 @@
+@@ -5590,7 +6712,8 @@
  
  		// Reminder: You need REGISTER_START_BUTTON defined to make it work.
  		if ((CPad::GetPad(0)->GetStartJustDown() || CPad::GetPad(0)->GetEscapeJustDown())
@@ -2345,7 +2355,7 @@
  			|| m_bShutDownFrontEndRequested || m_bStartUpFrontEndRequested
  #ifdef REGISTER_START_BUTTON
  			|| CPad::GetPad(0)->GetStartJustDown() && !m_bGameNotLoaded
-@@ -5608,6 +6730,8 @@
+@@ -5608,6 +6731,8 @@
  				DoRWStuffEndOfFrame();
  			}
  
@@ -2354,7 +2364,7 @@
  			if (m_bShutDownFrontEndRequested)
  				m_bMenuActive = false;
  			else if (m_bStartUpFrontEndRequested)
-@@ -5626,6 +6750,10 @@
+@@ -5626,6 +6751,10 @@
  				CPad::StopPadsShaking();
  #endif
  			} else {
@@ -2365,7 +2375,7 @@
  #ifdef EXTENDED_COLOURFILTER
  				// we always expect CPostFX to be open
  				CMBlur::BlurOn = true;
-@@ -5720,6 +6848,7 @@
+@@ -5720,6 +6849,7 @@
  void
  CMenuManager::UnloadTextures()
  {
@@ -2373,7 +2383,7 @@
  	if (m_nCurrScreen == MENUPAGE_SOUND_SETTINGS)
  		DMAudio.StopFrontEndTrack();
  
-@@ -5827,52 +6956,54 @@
+@@ -5827,52 +6957,54 @@
  
  	// Because m_fMapSize is half of the map length(hence * 2), and map consists of 3x3 tiles(hence / 3).
  	float halfTile = m_fMapSize * 2.f / 3.f / 2.f;
@@ -2455,7 +2465,7 @@
  	}
  
  	CRadar::DrawBlips();
-@@ -5933,12 +7064,15 @@
+@@ -5933,12 +7065,15 @@
  		mapCrosshair.y = m_nMousePosY;
  	}
  
