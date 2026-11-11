@@ -93,9 +93,8 @@ for s in "${SCENARIOS[@]}"; do
     printf 'width=%s\nheight=%s\nmaximized=0\n' "${REVC_SCENE_W:-640}" "${REVC_SCENE_H:-480}" > "$T/userfiles/revc_window.ini"
   else
     # REVC_TEST_WINDOW=WxH: another window size (with matching Width/Height in the config)
-    w=${REVC_TEST_WINDOW%x*}; h=${REVC_TEST_WINDOW#*x}
-    printf 'width=%s\nheight=%s\nmaximized=0\n' "${REVC_TEST_WINDOW:+$w}${REVC_TEST_WINDOW:-1280}" "${REVC_TEST_WINDOW:+$h}" > "$T/userfiles/revc_window.ini"
-    [[ -z "${REVC_TEST_WINDOW:-}" ]] && printf 'width=1280\nheight=720\nmaximized=0\n' > "$T/userfiles/revc_window.ini"
+    win=${REVC_TEST_WINDOW:-1280x720}
+    printf 'width=%s\nheight=%s\nmaximized=0\n' "${win%x*}" "${win#*x}" > "$T/userfiles/revc_window.ini"
   fi
   if [[ "$s" == spots || "$s" == gamepad ]]; then
     # Screenshots are overwritten on every run.
