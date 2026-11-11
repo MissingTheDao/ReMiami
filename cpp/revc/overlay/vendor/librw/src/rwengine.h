@@ -220,44 +220,5 @@ char *strdup_LOC(const char *s, uint32 hint, const char *here);
 #define rwStrdup(s, h) rw::strdup_LOC(s,h,RWHERE)
 
 extern MemoryFunctions defaultMemfuncs;
-extern MemoryFunctions managedMemfuncs;
-void printleaks(void);	// when using managed mem funcs
-
-namespace null {
-	void beginUpdate(Camera*);
-	void endUpdate(Camera*);
-	void clearCamera(Camera*, RGBA *col, uint32 mode);
-	void showRaster(Raster*, uint32 flags);
-
-	void   setRenderState(int32 state, void *value);
-	void  *getRenderState(int32 state);
-
-	bool32 rasterRenderFast(Raster *raster, int32 x, int32 y);
-
-	Raster *rasterCreate(Raster*);
-	uint8 *rasterLock(Raster*, int32 level, int32 lockMode);
-	void   rasterUnlock(Raster*, int32 level);
-	uint8 *rasterLockPalette(Raster*, int32 lockMode);
-	void   rasterUnlockPalette(Raster*);
-	int32  rasterNumLevels(Raster*);
-	bool32 imageFindRasterFormat(Image *img, int32 type,
-		int32 *width, int32 *height, int32 *depth, int32 *format);
-	bool32 rasterFromImage(Raster*, Image*);
-	Image *rasterToImage(Raster*);
-
-	void im2DRenderLine(void*, int32, int32, int32);
-	void im2DRenderTriangle(void*, int32, int32, int32, int32);
-	void im2DRenderPrimitive(PrimitiveType, void*, int32);
-	void im2DRenderIndexedPrimitive(PrimitiveType, void*, int32, void*, int32);
-
-	void im3DTransform(void *vertices, int32 numVertices, Matrix *world, uint32 flags);
-	void im3DRenderPrimitive(PrimitiveType primType);
-	void im3DRenderIndexedPrimitive(PrimitiveType primType, void *indices, int32 numIndices);
-	void im3DEnd(void);
-
-	int deviceSystem(DeviceReq req, void *arg0, int32 n);
-
-	extern Device renderdevice;
-}
 
 }

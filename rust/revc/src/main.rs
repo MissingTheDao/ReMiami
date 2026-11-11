@@ -25,6 +25,7 @@ mod rwplugins;
 mod rwplugin;
 mod rwdevice;
 mod rwpipe;
+mod rwengine;
 
 /// Tests that install process-wide hooks (librw object plugins) take this lock.
 #[cfg(test)]

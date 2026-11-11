@@ -9,7 +9,6 @@ add_library(librw
     charset.cpp
     clump.cpp
     engine.cpp
-    error.cpp
     frame.cpp
     geometry.cpp
     geoplg.cpp
@@ -20,7 +19,6 @@ add_library(librw
     pipeline.cpp
     plg.cpp
     png.cpp
-    prim.cpp
     raster.cpp
     render.cpp
     rwanim.h

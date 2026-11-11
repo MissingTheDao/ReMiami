@@ -95,7 +95,6 @@ struct Im2DVertex
 
 void registerPlatformPlugins(void);
 
-extern Device renderdevice;
 
 // Raster data kept in memory as RGBA8 (top row first) for every mip level and uploaded to a GPU
 // texture in the Rust host before it is drawn with (after every write lock).

@@ -643,6 +643,20 @@ there is logic, deletion where nothing calls it.
   wgpupipe.cpp: the default, skin and MatFX pipelines' instancing and render callbacks). The
   Rust renderer under them (revc-rw) already exists, so this is mostly moving the glue, plus
   the pipeline choice left out of 6c.
+  **Done 2026-11-11:** in three parts. (1) `rust/revc/src/rwdevice.rs`: the device
+  (host window and video modes, GL3-style render states and texture stage 0, camera matrices,
+  clears, Im2D/Im3D, the system requests); the render-state block was drafted by the local
+  model and corrected (it truncated the raster pointer). (2) `rust/revc/src/rwpipe.rs`: the
+  model pipeline (instancing, gl3 lighting, the GS alpha test emulation, MatFX env maps, skin
+  matrices); C++ keeps the ObjPipeline objects, the skin/MatFX driver plugins that pick them,
+  and the names custompipes_wgpu.cpp calls. (3) `rust/revc/src/rwengine.rs`: the Engine state
+  machine, the default memory functions, the driver tables, the subsystem/video queries and
+  the error record; RWERROR now prints through the Rust message table (parsed from base.err,
+  so the C++ enum and the strings keep one source). error.cpp and prim.cpp are deleted, as are
+  pipeline.cpp's instancing helpers, librw's managed memory functions and the null device,
+  none of which had callers. This is revc's own driver code or librw orchestration without
+  logic of its own, so the scenario suites check it on both backends. render.cpp (thin
+  wrappers over the device table) goes with fakerw in 7d.
 - **7c. The debug font.** charset.cpp (RtCharset, used by the debug menu and debug text):
   ported, or redrawn with the Rust text code if that gives the same pixels.
 - **7d. librw and fakerw go.** The RW API becomes a Rust C ABI: fakerw's headers declare the

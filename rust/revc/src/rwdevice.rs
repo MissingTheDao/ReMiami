@@ -944,13 +944,6 @@ pub const RENDER_DEVICE: Device = Device {
 // ---------------------------------------------------------------- C ABI (wgpudevice.cpp forwards)
 
 /// # Safety
-/// `d` points at an rw::Device.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn revc_device_get(d: *mut Device) {
-    unsafe { d.write(RENDER_DEVICE) };
-}
-
-/// # Safety
 /// As the Rust functions they forward to.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn revc_device_evict_raster(r: *mut Raster) {
