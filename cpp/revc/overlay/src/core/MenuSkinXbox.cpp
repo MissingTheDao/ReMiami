@@ -18,6 +18,7 @@
 extern int8 gUiStyle;
 extern "C" int revc_import_rgba(int kind, const char *rel, int *width, int *height, unsigned char **rgba);
 extern "C" void revc_texmod_free(unsigned char *rgba, int width, int height);
+extern "C" ssize_t revc_import_read(int kind, const char *rel, uint8 *buf, size_t cap);
 
 static float X(float x) { return SCALE_AND_CENTER_X(x); }
 static float Y(float y) { return SCREEN_SCALE_Y(y); }
@@ -71,6 +72,89 @@ ImportTexture(const char *rel)
 	return tex;
 }
 
+// The Xbox menu's bitmap fonts (neo/UserInterface/fonts: RWFont, RWSFArborcrestHeavy): a 256 px
+// texture and a METRICS1 file with each character's box (code, left, top, right, bottom) in those
+// 256 px, so a higher-resolution remake works as fractions of the texture.
+struct XboxFont {
+	CSprite2d *sprite;
+	struct Box { int16 l, t, r, b; } box[256];
+	bool ok;
+};
+static XboxFont fontRW;
+
+static bool
+LoadFont(XboxFont &f, const char *tex, const char *met)
+{
+	f.ok = false;
+	if (f.sprite == nil)
+		f.sprite = new CSprite2d;
+	f.sprite->m_pTexture = ImportTexture(tex);
+	static uint8 buf[16384];
+	ssize_t len = revc_import_read(0, met, buf, sizeof(buf) - 1);
+	if (f.sprite->m_pTexture == nil || len <= 0)
+		return false;
+	buf[len] = 0;
+	memset(f.box, 0, sizeof(f.box));
+	char *p = (char *)buf;
+	for (int line = 0; *p; line++) {
+		char *end = strchr(p, '\n');
+		if (end)
+			*end = 0;
+		int c, l, t, r, b;
+		if (line >= 3 && sscanf(p, "%d %d %d %d %d", &c, &l, &t, &r, &b) == 5 && c >= 0 && c < 256)
+			f.box[c] = { (int16)l, (int16)t, (int16)r, (int16)b };
+		if (!end)
+			break;
+		p = end + 1;
+	}
+	f.ok = true;
+	return true;
+}
+
+// Width of `text` at `height` px (the font's 28 px cells scaled).
+static float
+XboxFontWidth(const XboxFont &f, const wchar *text, float height)
+{
+	float w = 0.0f, s = height / 28.0f;
+	for (; *text; text++) {
+		const XboxFont::Box &b = f.box[*text < 256 ? *text : '?'];
+		w += (b.r - b.l + 1) * s;
+	}
+	return w;
+}
+
+static void
+XboxFontPrint(const XboxFont &f, float x, float y, float height, const wchar *text, const CRGBA &col)
+{
+	if (!f.ok)
+		return;
+	float s = height / 28.0f;
+	for (; *text; text++) {
+		const XboxFont::Box &b = f.box[*text < 256 ? *text : '?'];
+		float w = (b.r - b.l + 1) * s;
+		if (b.r > b.l && *text != ' ') {
+			float u0 = b.l / 256.0f, u1 = (b.r + 1) / 256.0f, v0 = b.t / 256.0f, v1 = (b.b + 1) / 256.0f;
+			f.sprite->Draw(CRect(x, y, x + w, y + (b.b - b.t + 1) * s), col, u0, v0, u1, v0, u0, v1, u1, v1);
+		}
+		x += w;
+	}
+}
+
+// Text in the Xbox menu font for other menu code (the controller page's callouts): align 0 left,
+// 1 right of x; a dark drop shadow. False when the font isn't loaded (then draw as before).
+bool
+MenuSkinXboxText(float x, float y, float height, const wchar *text, const CRGBA &col, int align)
+{
+	if (!fontRW.ok)
+		return false;
+	if (align == 1)
+		x -= XboxFontWidth(fontRW, text, height);
+	float d = height / 10.0f;
+	XboxFontPrint(fontRW, x + d, y + d, height, text, CRGBA(0, 0, 0, col.a));
+	XboxFontPrint(fontRW, x, y, height, text, col);
+	return true;
+}
+
 static bool
 LoadSprites(void)
 {
@@ -87,6 +171,7 @@ LoadSprites(void)
 		logo.m_pTexture = ImportTexture("ui/r3_menu_228.dds");
 		glint[0].m_pTexture = ImportTexture("ui/r3_menu_230.dds");
 		glint[1].m_pTexture = ImportTexture("ui/r3_menu_232.dds");
+		LoadFont(fontRW, "ui/fonts/rwsfarborcrestheavy.dds", "ui/fonts/rwsfarborcrestheavy.met");	// the help line's font
 		if (ok && logo.m_pTexture)
 			spritesState = 1;
 	}
@@ -104,6 +189,9 @@ MenuSkinXboxUnload(void)
 	logo.Delete();
 	glint[0].Delete();
 	glint[1].Delete();
+	if (fontRW.sprite)
+		fontRW.sprite->Delete();
+	fontRW.ok = false;
 	spritesState = 0;
 }
 
@@ -195,30 +283,38 @@ DrawIconBar(CMenuManager *m, uint8 alpha)
 	}
 }
 
-// "START: resume game   <-/->: select   A: select   B: back" in pink under the icons, with the
-// pad's glyphs (the Xbox UI style's coloured variant).
+// "START: resume game   <-/->: select   A: select   B: back" in pink under the icons: the pad's
+// glyphs (Xbox UI style: coloured) and the text in the Xbox's RWSFArborcrestHeavy (measured at y 427, 15 px).
 static void
 DrawHelpLine(uint8 alpha)
 {
-	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
-	CFont::SetScale(W(0.44f), H(0.74f));
-	CFont::SetPropOn();
-	CFont::SetBackgroundOff();
-	CFont::SetRightJustifyOff();
-	CFont::SetCentreOff();
-	CFont::SetDropShadowPosition(0);
-	CFont::SetWrapx(SCREEN_WIDTH);
-	CFont::SetColor(CRGBA(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha));
-	static const char *parts[4][2] = { { "~P~", "RVC_XHR" }, { "~I~~F~", "RVC_XHS" }, { "~X~", "RVC_XHS" }, { "~O~", "RVC_XHB" } };
+	static const int glyphs[4][2] = { { BUTTON_START, -1 }, { BUTTON_DPAD_LEFT, BUTTON_DPAD_RIGHT }, { BUTTON_CROSS, -1 }, { BUTTON_CIRCLE, -1 } };
+	static const char *texts[4] = { "RVC_XHR", "RVC_XHS", "RVC_XHS", "RVC_XHB" };
 	static const float px[4] = { 52.0f, 200.0f, 340.0f, 450.0f };
+	const float gh = H(14.0f), th = H(15.0f), y = Y(427.0f);
+	CRGBA pink(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha);
 	wchar buf[64];
 	for (int i = 0; i < 4; i++) {
-		AsciiToUnicode(parts[i][0], buf);
-		int n = UnicodeStrlen(buf);
-		buf[n++] = ':';
-		buf[n++] = ' ';
-		UnicodeStrcpy(buf + n, TheText.Get(parts[i][1]));
-		CFont::PrintString(X(px[i]), Y(429.0f), buf);
+		float x = X(px[i]);
+		for (int k = 0; k < 2; k++) {
+			if (glyphs[i][k] < 0)
+				continue;
+			CSprite2d &g = CFont::ButtonSprite[glyphs[i][k]];
+			if (g.m_pTexture) {
+				g.Draw(CRect(x, y - H(1.0f), x + gh, y - H(1.0f) + gh), CRGBA(255, 255, 255, alpha));
+				x += gh + W(1.0f);
+			}
+		}
+		buf[0] = ':';
+		UnicodeStrcpy(buf + 1, TheText.Get(texts[i]));
+		if (fontRW.ok)
+			XboxFontPrint(fontRW, x, y, th, buf, pink);
+		else {
+			CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
+			CFont::SetScale(W(0.44f), H(0.74f));
+			CFont::SetColor(pink);
+			CFont::PrintString(x, y, buf);
+		}
 	}
 }
 

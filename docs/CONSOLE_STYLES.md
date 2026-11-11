@@ -244,6 +244,11 @@ native 640x480 xemu captures:
   fire, sub-missions, radio, camera, enter/exit. The Xbox's separate "Fire missiles" has no
   action of its own in the controls found so far: not shown.
 
+- Xbox menu font: the help line and the controller page's callout labels use the Xbox's
+  RWSFArborcrestHeavy (imported texture + METRICS1 boxes, drawn by `XboxFontPrint`); callouts in
+  the Xbox's green with teal lines (measured). Titles and items stay in the game's heading font,
+  which is what the Xbox shows there too.
+
 Still to do: the Xbox per-page panel shapes,
 the Xbox fonts (RWFont/RWSFArborcrestHeavy), dialogs (blue layered panels), the Load list and Stats in the Xbox style, checking every page
 against the captures.

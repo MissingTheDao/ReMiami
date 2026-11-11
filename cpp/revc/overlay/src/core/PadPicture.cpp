@@ -205,6 +205,10 @@ DrawPadPicture(void)
 	CFont::SetCentreOff();
 	CFont::SetPropOn();
 	CRGBA lineCol(255, 150, 225, FrontEndMenuManager.FadeIn(200));
+	// Xbox skin: the Xbox page's look, teal lines and green labels in its menu font (measured)
+	extern bool MenuSkinXboxText(float x, float y, float height, const wchar *text, const CRGBA &col, int align);
+	if (xbox)
+		lineCol = CRGBA(26, 165, 120, FrontEndMenuManager.FadeIn(230));
 	for (int side = 0; side < 2; side++) {
 		const Callout *list[ARRAY_SIZE(padSpots)];
 		int m = 0;
@@ -233,7 +237,9 @@ DrawPadPicture(void)
 				CFont::SetRightJustifyOff();
 				CFont::SetWrapx(SCREEN_WIDTH);
 			}
-			CFont::PrintString(MENU_X_LEFT_ALIGNED(lx), MENU_Y(ly - 6.0f), line);
+			if (!(xbox && MenuSkinXboxText(MENU_X_LEFT_ALIGNED(lx), MENU_Y(ly - 9.0f), MENU_Y(18.0f), list[i]->text,
+				CRGBA(40, 205, 120, FrontEndMenuManager.FadeIn(255)), side == 0 ? 1 : 0)))
+				CFont::PrintString(MENU_X_LEFT_ALIGNED(lx), MENU_Y(ly - 6.0f), line);
 			DrawLine(MENU_X_LEFT_ALIGNED(lx + (side == 0 ? 4.0f : -4.0f)), MENU_Y(ly),
 				MENU_X_LEFT_ALIGNED(ax), MENU_Y(ay), lineCol);
 			float d = SCREEN_SCALE_Y(2.5f);
