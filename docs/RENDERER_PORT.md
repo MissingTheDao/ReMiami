@@ -674,6 +674,24 @@ there is logic, deletion where nothing calls it.
   accessors) for the game code that is still C++, until the game's own port (stages 4 and 5)
   removes them too. Done when the librw CMake target is gone and both suites still pass.
 
+  **7d in parts (survey 2026-11-11, after 7c).** What C++ is left in librw: plugin stream code
+  (HAnim, skin with its legacy reader, MatFX, the BinMesh writer, the atomic and material
+  rights plugins, texture anisotropy), Animation's stream read/write and the interpolator
+  registry, the TXD dictionary stream, Image::read/readMasked and the file format registry, the
+  class statics (each class's plugin list and numAllocated) with the module open/close and
+  driver plugin registration, and one-line forwarders. The game's own C++ (rw/DffRead.cpp,
+  rw/TexRead.cpp, RwHelper, custompipes_wgpu.cpp) calls rw:: methods directly, so the methods
+  must stay declared and defined after the .cpp files go.
+  - **7d1. Stream and plugin code to Rust**, with recordings where there is logic: the plugin
+    streams above, Animation streams, the TXD dictionary stream, image file lookup.
+  - **7d2. Statics and registration to Rust**: the class plugin lists and counters become Rust
+    statics the headers reach through extern "C"; module open/close and the wgpu driver
+    plugins register from Rust; the hooks of steps 3 to 7 collapse into direct Rust calls.
+  - **7d3. librw's .cpp files go**: every remaining method becomes an inline forwarder in its
+    header (calling `revc_*`); the librw CMake target is removed.
+  - **7d4. fakerw goes**: fake.cpp's RW API (358 functions) is exported by Rust under the C
+    names fakerw's headers declare (extern "C"); fake.cpp is deleted.
+
 ## Appendix: every RW function the game calls
 
 | Function | Call sites | Area |
