@@ -432,6 +432,7 @@ MenuSkinXboxDialogBack(uint8 alpha)
 {
 	CSprite2d::DrawRect(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(0, 0, 0, alpha / 2));
 	CSprite2d::Draw2DPolygon(X(118.0f), Y(152.0f), X(560.0f), Y(136.0f), X(118.0f), Y(352.0f), X(538.0f), Y(347.0f), CRGBA(70, 118, 145, alpha));
+	CSprite2d::Draw2DPolygon(X(522.0f), Y(128.0f), X(543.0f), Y(126.0f), X(510.0f), Y(350.0f), X(531.0f), Y(350.0f), CRGBA(90, 160, 205, alpha));	// stacked lighter edges on the right
 	CSprite2d::Draw2DPolygon(X(498.0f), Y(126.0f), X(520.0f), Y(124.0f), X(484.0f), Y(352.0f), X(506.0f), Y(352.0f), CRGBA(20, 40, 60, alpha));
 	CSprite2d::Draw2DPolygon(X(85.0f), Y(138.0f), X(520.0f), Y(118.0f), X(100.0f), Y(337.0f), X(505.0f), Y(333.0f), CRGBA(105, 198, 247, alpha));
 }
