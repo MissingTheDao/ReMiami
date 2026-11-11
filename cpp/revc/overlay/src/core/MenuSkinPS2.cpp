@@ -301,6 +301,10 @@ MenuSkinPS2PageFocus(void)
 // Audio: the "output" cell (beside radio station) has focus; m_nCurrOption is the radio row.
 static bool audioOutput;
 bool MenuSkinPS2AudioOutputFocus(void) { return audioOutput; }
+// Audio edit mode: cross on a cell; the box grows over label and value, left/right change the
+// value, triangle goes straight to the tab bar.
+static bool audioEdit;
+bool MenuSkinPS2AudioEdit(void) { return audioEdit; }
 
 static bool loadColumn;
 static int loadRow;
@@ -363,6 +367,7 @@ MenuSkinPS2Input(CMenuManager *m)
 		pageFocus = !IsTabPage(m->m_nCurrScreen);
 		loadColumn = false;
 		audioOutput = false;
+		audioEdit = false;
 	}
 	if (!MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return false;
@@ -414,6 +419,20 @@ MenuSkinPS2Input(CMenuManager *m)
 			if (a == MENUACTION_SFXVOLUME) sfx = i;
 			if (a == MENUACTION_RADIO) radio = i;
 		}
+		if (audioEdit) {
+			if (tri) {
+				audioEdit = false;
+				pageFocus = false;
+				return true;
+			}
+			if ((left || right) && !audioOutput)
+				return false;	// the PC menu changes the volume / station
+			return true;
+		}
+		if (cross) {
+			audioEdit = true;
+			return true;
+		}
 		if (music >= 0 && sfx >= 0 && radio >= 0 && (up || down || left || right)) {
 			int cell = m->m_nCurrOption == sfx ? 1 : m->m_nCurrOption == radio ? (audioOutput ? 3 : 2) : 0;
 			if (left || right)
@@ -444,6 +463,7 @@ MenuSkinPS2Input(CMenuManager *m)
 		loadColumn = m->m_nCurrScreen == MENUPAGE_CHOOSE_LOAD_SLOT;
 		loadRow = 0;
 		audioOutput = false;
+		audioEdit = false;
 		m->m_nCurrOption = aScreens[m->m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL ? 1 : 0;
 		m->m_nFirstVisibleRowOnList = 0;
 		return true;

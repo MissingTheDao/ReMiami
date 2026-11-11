@@ -646,6 +646,29 @@ DrawSubTabs(int page, uint8 alpha)
 	CFont::SetDropShadowPosition(0);
 }
 
+// Controls, "select controls": A opens an in-place drop-down over the row (Xbox: "standard" /
+// "classic", light-blue box, the current one mint; revc adds its own "original PC").
+#define NUM_DROP 3
+static bool dropOpen;
+static int dropSel;
+extern "C" int PadLayoutCurrent(void);
+extern "C" void PadLayoutApply(int layout);
+void SaveINIControllerSettings(void);
+
+static void
+DrawDropDown(uint8 alpha)
+{
+	static const char *names[NUM_DROP] = { "standard", "classic", "original pc" };
+	const float x0 = 128.0f, x1 = 330.0f, y0 = 150.0f * 448.0f / 480.0f, pitch = 30.0f * 448.0f / 480.0f;
+	CSprite2d::DrawRect(CRect(X(x0), Y(y0), X(x1), Y(y0 + pitch * NUM_DROP + 6.0f)), CRGBA(120, 190, 235, alpha));
+	MenuSkinXboxSelection(X(x0 + 4.0f), Y(y0 + 3.0f + pitch * dropSel), X(x1 - 4.0f), Y(y0 + 3.0f + pitch * (dropSel + 1)), alpha, false, 0.0f);
+	for (int i = 0; i < NUM_DROP; i++) {
+		wchar buf[32];
+		AsciiToUnicode(names[i], buf);
+		MenuSkinXboxText(X(x0 + 14.0f), Y(y0 + 8.0f + pitch * i), H(15.0f), buf, i == dropSel ? CRGBA(0, 0, 0, alpha) : CRGBA(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha), 0);
+	}
+}
+
 // The page START opens (Frontend.cpp), with the icon bar focused.
 int
 MenuSkinXboxOpenPage(void)
@@ -727,6 +750,25 @@ MenuSkinXboxInput(CMenuManager *m)
 		return true;
 	}
 	// inside a page
+	if (dropOpen) {	// the Controls drop-down: up/down choose, A applies, B closes without applying
+		const bool up = pad->GetDPadUpJustDown() || pad->GetUpJustDown(), down = pad->GetDPadDownJustDown() || pad->GetDownJustDown();
+		if (up || down)
+			dropSel = (dropSel + (down ? 1 : NUM_DROP - 1)) % NUM_DROP;
+		if (a) {
+			extern int8 gPs2Setup;
+			PadLayoutApply(dropSel);
+			gPs2Setup = -1;
+			SaveINIControllerSettings();
+		}
+		if (a || b || m->m_nCurrScreen != MENUPAGE_CONSOLE_CONTROLS)
+			dropOpen = false;
+		return true;
+	}
+	if (a && m->m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS && m->m_nCurrOption == 0) {
+		dropOpen = true;
+		dropSel = Max(PadLayoutCurrent(), 0);
+		return true;
+	}
 	int step = pad->GetRightShoulder2JustDown() ? 1 : pad->GetLeftShoulder2JustDown() ? -1 : 0;
 	if (step != 0 && cur >= 0) {
 		m->SwitchToNewScreen(SWITCH_TO_PAGE(tabs[(cur + step + n) % n].page));
@@ -735,6 +777,19 @@ MenuSkinXboxInput(CMenuManager *m)
 	}
 	if (b && IsTabPage(m->m_nCurrScreen)) {
 		barFocus = true;
+		return true;
+	}
+	if (b && pad->GetCircleJustDown()) {	// B on a sub-page or dialog: back, the row it came from selected (the PC menu goes back on triangle)
+		for (int i = 0; i < n; i++)
+			if (tabs[i].alt == m->m_nCurrScreen && tabs[i].alt != tabs[0].alt) {	// a tab's second page (the controller picture): to the tab's page
+				int from = m->m_nCurrScreen;
+				m->SwitchToNewScreen(SWITCH_TO_PAGE(tabs[i].page));
+				for (int r = 0; r < NUM_MENUROWS; r++)
+					if (aScreens[m->m_nCurrScreen].m_aEntries[r].m_TargetMenu == from)
+						m->m_nCurrOption = r;
+				return true;
+			}
+		m->SwitchToNewScreen(-2);
 		return true;
 	}
 	// Y on Display, Audio and Controls opens their "advanced" list; B there goes back to the page
@@ -765,5 +820,7 @@ MenuSkinXboxDraw(CMenuManager *m, uint8 alpha)
 		DrawSubTabs(m->m_nCurrScreen, alpha);
 	DrawIconBar(m, DialogDim(alpha));
 	DrawHelpLine(m, DialogDim(alpha));
+	if (dropOpen && m->m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS)
+		DrawDropDown(alpha);
 	CFont::DrawFonts();
 }
