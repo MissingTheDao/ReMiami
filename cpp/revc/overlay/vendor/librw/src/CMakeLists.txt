@@ -2,7 +2,6 @@ add_library(librw
     "${PROJECT_SOURCE_DIR}/args.h"
     "${PROJECT_SOURCE_DIR}/rw.h"
 
-    base.cpp
     charset.cpp
     engine.cpp
     rwanim.h

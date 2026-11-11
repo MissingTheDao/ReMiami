@@ -2271,3 +2271,413 @@ registerMatFXPlugin(void)
 }
 
 }
+
+// ---------------------------------------------------------------- vectors, matrices, streams (math.rs, rwmatrix.rs, rwplugin.rs, rwimagefile.rs)
+#define PSEP_C '/'
+#define PSEP_S "/"
+#ifdef __unix__
+#endif
+
+
+namespace rw {
+
+
+
+inline Matrix identMat = {
+	{ 1.0f, 0.0f, 0.0f }, Matrix::IDENTITY|Matrix::TYPEORTHONORMAL,
+	{ 0.0f, 1.0f, 0.0f }, 0,
+	{ 0.0f, 0.0f, 1.0f }, 0,
+	{ 0.0f, 0.0f, 0.0f }, 0
+};
+
+// lazy implementation
+
+
+// revc (stage 2 step 4b): the Quat functions are in Rust (rust/revc/src/rwhanim.rs)
+extern "C" {
+void revc_rwquat_mult(const Quat *q, const Quat *p, Quat *out);
+void revc_rwquat_lerp(const Quat *q, const Quat *p, float32 r, Quat *out);
+void revc_rwquat_slerp(const Quat *q, const Quat *p, float32 a, Quat *out);
+}
+
+inline Quat
+mult(const Quat &q, const Quat &p)
+{
+	Quat r;
+	revc_rwquat_mult(&q, &p, &r);
+	return r;
+}
+
+
+// revc (stage 2 step 7d1): in Rust (rust/revc/src/rwhanim.rs), checked against tests/golden/rwquat.txt
+extern "C" void revc_rwquat_rotate(Quat *q, const V3d *axis, float32 angle, int32 op);
+inline Quat*
+Quat::rotate(const V3d *axis, float32 angle, CombineOp op)
+{
+	revc_rwquat_rotate(this, axis, angle, op);
+	return this;
+}
+
+inline Quat
+lerp(const Quat &q, const Quat &p, float32 r)
+{
+	Quat res;
+	revc_rwquat_lerp(&q, &p, r, &res);
+	return res;
+};
+
+inline Quat
+slerp(const Quat &q, const Quat &p, float32 a)
+{
+	Quat res;
+	revc_rwquat_slerp(&q, &p, a, &res);
+	return res;
+}
+
+//
+// V3d
+//
+
+inline V3d
+cross(const V3d &a, const V3d &b)
+{
+	return makeV3d(a.y*b.z - a.z*b.y,
+	               a.z*b.x - a.x*b.z,
+	               a.x*b.y - a.y*b.x);
+}
+
+// revc (stage 2 step 4c): in Rust (rust/revc/src/rwgeometry.rs)
+extern "C" {
+void revc_v3d_transform_points(V3d *out, const V3d *in, int32 n, const Matrix *m);
+void revc_v3d_transform_vectors(V3d *out, const V3d *in, int32 n, const Matrix *m);
+}
+
+inline void
+V3d::transformPoints(V3d *out, const V3d *in, int32 n, const Matrix *m)
+{
+	revc_v3d_transform_points(out, in, n, m);
+}
+
+inline void
+V3d::transformVectors(V3d *out, const V3d *in, int32 n, const Matrix *m)
+{
+	revc_v3d_transform_vectors(out, in, n, m);
+}
+
+
+//
+// Matrix
+//
+
+inline Matrix::Tolerance matrixDefaultTolerance = { 0.01f, 0.01f, 0.01f };
+
+// revc (docs/RENDERER_PORT.md, stage 2 step 3a): the Matrix functions are in Rust
+// (rust/revc/src/rwmatrix.rs), bit-identical to the code that was here (tests/golden/rwmatrix.txt).
+extern "C" {
+void revc_rwm_optimize(Matrix *m, Matrix::Tolerance *tol);
+void revc_rwm_mult(Matrix *d, const Matrix *a, const Matrix *b);
+void revc_rwm_mult_(Matrix *d, const Matrix *a, const Matrix *b);
+void revc_rwm_invert(Matrix *d, const Matrix *s);
+void revc_rwm_invert_orthonormal(Matrix *d, const Matrix *s);
+void revc_rwm_invert_general(Matrix *d, const Matrix *s);
+void revc_rwm_transpose(Matrix *d, const Matrix *s);
+void revc_rwm_rotate_axis(Matrix *m, const V3d *axis, float32 angle, int32 op);
+void revc_rwm_rotate_quat(Matrix *m, const Quat *q, int32 op);
+void revc_rwm_translate(Matrix *m, const V3d *t, int32 op);
+void revc_rwm_scale(Matrix *m, const V3d *s, int32 op);
+void revc_rwm_transform(Matrix *m, const Matrix *with, int32 op);
+void revc_rwm_get_rotation(const Matrix *m, Quat *out);
+void revc_rwm_look_at(Matrix *m, const V3d *dir, const V3d *up);
+void revc_rwm_make_rotation_axis(Matrix *d, const V3d *axis, float32 angle);
+void revc_rwm_make_rotation_quat(Matrix *d, const Quat *q);
+float32 revc_rwm_normal_error(const Matrix *m);
+float32 revc_rwm_orthogonal_error(const Matrix *m);
+float32 revc_rwm_identity_error(const Matrix *m);
+}
+
+inline Matrix*
+Matrix::create(void)
+{
+	Matrix *m = (Matrix*)rwMalloc(sizeof(Matrix), MEMDUR_EVENT | ID_MATRIX);
+	m->setIdentity();
+	return m;
+}
+
+inline void
+Matrix::destroy(void)
+{
+	rwFree(this);
+}
+
+inline void
+Matrix::setIdentity(void)
+{
+	*this = identMat;
+}
+
+inline void
+Matrix::optimize(Tolerance *tolerance)
+{
+	revc_rwm_optimize(this, tolerance);
+}
+
+inline Matrix*
+Matrix::mult(Matrix *dst, const Matrix *src1, const Matrix *src2)
+{
+	revc_rwm_mult(dst, src1, src2);
+	return dst;
+}
+
+inline Matrix*
+Matrix::invert(Matrix *dst, const Matrix *src)
+{
+	revc_rwm_invert(dst, src);
+	return dst;
+}
+
+// transpose the 3x3 submatrix, pos is set to 0
+inline Matrix*
+Matrix::transpose(Matrix *dst, const Matrix *src)
+{
+	revc_rwm_transpose(dst, src);
+	return dst;
+}
+
+inline Matrix*
+Matrix::rotate(const V3d *axis, float32 angle, CombineOp op)
+{
+	revc_rwm_rotate_axis(this, axis, angle, op);
+	return this;
+}
+
+inline Matrix*
+Matrix::rotate(const Quat &q, CombineOp op)
+{
+	revc_rwm_rotate_quat(this, &q, op);
+	return this;
+}
+inline Matrix*
+Matrix::translate(const V3d *translation, CombineOp op)
+{
+	revc_rwm_translate(this, translation, op);
+	return this;
+}
+
+inline Matrix*
+Matrix::scale(const V3d *scale, CombineOp op)
+{
+	revc_rwm_scale(this, scale, op);
+	return this;
+}
+
+inline Matrix*
+Matrix::transform(const Matrix *mat, CombineOp op)
+{
+	revc_rwm_transform(this, mat, op);
+	return this;
+}
+
+inline Quat
+Matrix::getRotation(void)
+{
+	Quat q;
+	revc_rwm_get_rotation(this, &q);
+	return q;
+}
+
+inline void
+Matrix::lookAt(const V3d &dir, const V3d &up)
+{
+	revc_rwm_look_at(this, &dir, &up);
+}
+
+/* For a row-major representation, this calculates src1 * src2.
+ * For column-major src2 * src1.
+ * i.e. a vector is first xformed by src1, then by src2
+ */
+inline void
+Matrix::mult_(Matrix *dst, const Matrix *src1, const Matrix *src2)
+{
+	revc_rwm_mult_(dst, src1, src2);
+}
+
+inline void
+Matrix::invertOrthonormal(Matrix *dst, const Matrix *src)
+{
+	revc_rwm_invert_orthonormal(dst, src);
+}
+
+inline Matrix*
+Matrix::invertGeneral(Matrix *dst, const Matrix *src)
+{
+	revc_rwm_invert_general(dst, src);
+	return dst;
+}
+
+inline void
+Matrix::makeRotation(Matrix *dst, const V3d *axis, float32 angle)
+{
+	revc_rwm_make_rotation_axis(dst, axis, angle);
+}
+
+/* q must be normalized */
+inline void
+Matrix::makeRotation(Matrix *dst, const Quat &q)
+{
+	revc_rwm_make_rotation_quat(dst, &q);
+}
+
+inline float32
+Matrix::normalError(void)
+{
+	return revc_rwm_normal_error(this);
+}
+
+inline float32
+Matrix::orthogonalError(void)
+{
+	return revc_rwm_orthogonal_error(this);
+}
+
+inline float32
+Matrix::identityError(void)
+{
+	return revc_rwm_identity_error(this);
+}
+
+// revc (stage 2 step 5b): makePath (with the case correction) is in Rust
+// (rust/revc/src/rwimagefile.rs), checked against tests/golden/rwimagefile.txt
+extern "C" void revc_make_path(char *filename);
+
+inline void
+makePath(char *filename)
+{
+	revc_make_path(filename);
+}
+
+// Streams: the memory stream, the 32/16-bit transfers and the chunk headers
+// live in Rust (rust/revc/src/rwplugin.rs), checked against tests/golden/rwplugin.txt.
+// Rust reaches the virtual stream methods through these trampolines.
+struct StreamHooks {
+	uint32 (*read8)(Stream *s, void *data, uint32 n);
+	uint32 (*write8)(Stream *s, const void *data, uint32 n);
+	void (*seek)(Stream *s, int32 off, int32 whence);
+	uint32 (*tell)(Stream *s);
+	int32 (*eof)(Stream *s);
+	int32 (*version)(void);
+	int32 (*build)(void);
+};
+static_assert(offsetof(StreamMemory, data) == 8 && sizeof(StreamMemory) == 32, "StreamMemory layout");
+static_assert(sizeof(ChunkHeaderInfo) == 16, "ChunkHeaderInfo layout");
+
+extern "C" {
+void revc_stream_set_hooks(StreamHooks h);
+uint32 revc_sm_write8(StreamMemory *s, const void *d, uint32 n);
+uint32 revc_sm_read8(StreamMemory *s, void *d, uint32 n);
+void revc_sm_seek(StreamMemory *s, int32 off, int32 whence);
+void revc_sm_open(StreamMemory *s, uint8 *d, uint32 len, uint32 cap);
+uint32 revc_stream_read32(Stream *s, void *d, uint32 n);
+uint32 revc_stream_write32(Stream *s, const void *d, uint32 n);
+int32 revc_write_chunk_header(Stream *s, int32 type, int32 size);
+int32 revc_read_chunk_header_info(Stream *s, ChunkHeaderInfo *h);
+int32 revc_find_chunk(Stream *s, uint32 type, uint32 *len, uint32 *ver);
+}
+
+inline uint32 hRead8(Stream *s, void *d, uint32 n) { return s->read8(d, n); }
+inline uint32 hWrite8(Stream *s, const void *d, uint32 n) { return s->write8(d, n); }
+inline void hSeek(Stream *s, int32 off, int32 whence) { s->seek(off, whence); }
+inline uint32 hTell(Stream *s) { return s->tell(); }
+inline int32 hEof(Stream *s) { return s->eof(); }
+inline int32 hVersion(void) { return version; }
+inline int32 hBuild(void) { return build; }
+inline struct StreamHooksInit {
+	StreamHooksInit(void) { revc_stream_set_hooks({ hRead8, hWrite8, hSeek, hTell, hEof, hVersion, hBuild }); }
+} streamHooksInit;
+
+inline uint32 Stream::write32(const void *data, uint32 length) { return revc_stream_write32(this, data, length); }
+inline uint32 Stream::write16(const void *data, uint32 length) { return revc_stream_write32(this, data, length); }
+inline uint32 Stream::read32(void *data, uint32 length) { return revc_stream_read32(this, data, length); }
+inline uint32 Stream::read16(void *data, uint32 length) { return revc_stream_read32(this, data, length); }
+
+inline int32 Stream::writeI8(int8 val) { return write8(&val, 1); }
+inline int32 Stream::writeU8(uint8 val) { return write8(&val, 1); }
+inline int32 Stream::writeI16(int16 val) { return write16(&val, 2); }
+inline int32 Stream::writeU16(uint16 val) { return write16(&val, 2); }
+inline int32 Stream::writeI32(int32 val) { return write32(&val, 4); }
+inline int32 Stream::writeU32(uint32 val) { return write32(&val, 4); }
+inline int32 Stream::writeF32(float32 val) { return write32(&val, 4); }
+// zero-initialised so a read past the end gives 0 instead of stack garbage
+inline int8 Stream::readI8(void) { int8 t = 0; read8(&t, 1); return t; }
+inline uint8 Stream::readU8(void) { uint8 t = 0; read8(&t, 1); return t; }
+inline int16 Stream::readI16(void) { int16 t = 0; read16(&t, 2); return t; }
+inline uint16 Stream::readU16(void) { uint16 t = 0; read16(&t, 2); return t; }
+inline int32 Stream::readI32(void) { int32 t = 0; read32(&t, 4); return t; }
+inline uint32 Stream::readU32(void) { uint32 t = 0; read32(&t, 4); return t; }
+inline float32 Stream::readF32(void) { float32 t = 0; read32(&t, 4); return t; }
+
+inline void StreamMemory::close(void) {}
+inline uint32 StreamMemory::write8(const void *data, uint32 len) { return revc_sm_write8(this, data, len); }
+inline uint32 StreamMemory::read8(void *data, uint32 len) { return revc_sm_read8(this, data, len); }
+inline void StreamMemory::seek(int32 offset, int32 whence) { revc_sm_seek(this, offset, whence); }
+inline uint32 StreamMemory::tell(void) { return this->position; }
+inline bool StreamMemory::eof(void) { return this->position == S_EOF; }
+inline StreamMemory *StreamMemory::open(uint8 *data, uint32 length, uint32 capacity) { revc_sm_open(this, data, length, capacity); return this; }
+inline uint32 StreamMemory::getLength(void) { return this->length; }
+
+
+inline StreamFile*
+StreamFile::open(const char *path, const char *mode)
+{
+	assert(this->file == nil);
+	this->file = fopen(path, mode);
+	if(this->file == nil){
+		RWERROR_HDR((ERR_FILE, path));
+		return nil;
+	}
+	return this;
+}
+
+inline void
+StreamFile::close(void)
+{
+	assert(this->file);
+	fclose(this->file);
+	this->file = nil;
+}
+
+inline uint32
+StreamFile::write8(const void *data, uint32 length)
+{
+	return (uint32)fwrite(data, 1, length, this->file);
+}
+
+inline uint32
+StreamFile::read8(void *data, uint32 length)
+{
+	return (uint32)fread(data, 1, length, this->file);
+}
+
+inline void
+StreamFile::seek(int32 offset, int32 whence)
+{
+	fseek(this->file, offset, whence);
+}
+
+inline uint32
+StreamFile::tell(void)
+{
+	return ftell(this->file);
+}
+
+inline bool
+StreamFile::eof(void)
+{
+	return ( feof(this->file) != 0 );
+}
+
+inline bool writeChunkHeader(Stream *s, int32 type, int32 size) { return revc_write_chunk_header(s, type, size) != 0; }
+inline bool readChunkHeaderInfo(Stream *s, ChunkHeaderInfo *header) { return revc_read_chunk_header_info(s, header) != 0; }
+inline bool findChunk(Stream *s, uint32 type, uint32 *length, uint32 *version) { return revc_find_chunk(s, type, length, version) != 0; }
+
+
+}
