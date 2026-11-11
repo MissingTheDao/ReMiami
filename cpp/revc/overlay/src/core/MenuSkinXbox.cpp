@@ -267,6 +267,17 @@ MenuSkinXboxTab(int page)
 	return CurrentTab(page);
 }
 
+// Whether `page` is one of the seven icon-bar pages, or the Load tab's slot list (the controller
+// picture, the Controls tab's other page, is a sub-page: it opens in one frame).
+bool
+MenuSkinXboxIsTabPage(int page)
+{
+	for (int i = 0; i < (int)ARRAY_SIZE(tabs); i++)
+		if (tabs[i].page == page || (tabs[i].alt == page && page == MENUPAGE_CHOOSE_LOAD_SLOT))
+			return true;
+	return false;
+}
+
 // Whether the skin draws on this page: Xbox UI style, a game running, a page the Xbox pause menu
 // has, and the Xbox menu sprites imported.
 bool
