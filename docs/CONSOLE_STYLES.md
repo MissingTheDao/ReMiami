@@ -315,7 +315,21 @@ Round 2:
   highlight (no double highlights, no "back" on brief/stats/map); the criminal rating reads
   "Citizen [0]"; the load page is titled "load".
 
-Next: the page contents per console (and the PS2 map position/legend item and 5-line help box). Plan for the extras (research, from the user's "add options without
+Page contents, part 1:
+- New pages `MENUPAGE_CONSOLE_DISPLAY` (brightness, trails = the motion blur setting, subtitles,
+  wide screen (PS2 only), radar mode, hud mode) and `MENUPAGE_CONSOLE_CONTROLS` (controller layout,
+  display controls = the controller picture, invert, vibration); the PS2 tabs and Xbox icons point
+  to them.
+- The Audio page shows music, sfx and radio station in the console styles (the PC's MP3 boost,
+  dynamic acoustics, restore defaults and back are taken out while a console style is shown:
+  `ConsoleAudioRows`/`FilterRows` in `MenuScreensCustom.cpp`).
+- revc's other settings (the PC Display, Graphics, Audio and Controls pages) stay reachable through
+  the pause menu's Options entry until the console-style option lists (PS2 options tab, Xbox
+  advanced sub-tab) exist.
+
+Next: the console-style option lists; Xbox confirm dialog (dimmed page, OK/Cancel); stats/brief
+sub-tabs; load page layouts; map legend item; save page; the round-3 details (help-line items per
+page, the highlight's lighter tail and length). Plan for the extras (research, from the user's "add options without
 breaking cohesion", `menu-compare/OPTIONS_PLACEMENT.md`): console pages stay as on the console;
 revc's extra options go into patterns the consoles used: PS2 an "options" eighth tab (language
 becomes a row) with a Stats-style list; Xbox an "advanced" sub-tab on Display, Audio and

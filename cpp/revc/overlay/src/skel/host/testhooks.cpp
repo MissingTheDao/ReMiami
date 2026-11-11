@@ -225,6 +225,7 @@ revc_test_menu_page_id(const char *name)
 		{ "new_game_confirm", MENUPAGE_NEW_GAME_RELOAD }, { "load", MENUPAGE_CHOOSE_LOAD_SLOT },
 		{ "load_confirm", MENUPAGE_LOAD_SLOT_CONFIRM }, { "save", MENUPAGE_CHOOSE_SAVE_SLOT },
 		{ "controls", MENUPAGE_CONTROLLER_PC }, { "pad", MENUPAGE_PAD_PICTURE }, { "pause", MENUPAGE_PAUSE_MENU },
+		{ "console_display", MENUPAGE_CONSOLE_DISPLAY }, { "console_controls", MENUPAGE_CONSOLE_CONTROLS },
 	};
 	for (auto &e : pages)
 		if (strcmp(e.n, name) == 0)

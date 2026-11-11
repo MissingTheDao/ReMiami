@@ -35,9 +35,9 @@ static const XboxTab tabs[] = {
 	{ MENUPAGE_MAP, -1, "ui/r3_menu_241.dds" },			// compass
 	{ MENUPAGE_BRIEFS, -1, "ui/r3_menu_243.dds" },		// tape
 	{ MENUPAGE_STATS, -1, "ui/r3_menu_246.dds" },			// computer
-	{ MENUPAGE_CONTROLLER_PC, MENUPAGE_PAD_PICTURE, "ui/r3_menu_249.dds" },	// pad (and the controller picture)
+	{ MENUPAGE_CONSOLE_CONTROLS, MENUPAGE_PAD_PICTURE, "ui/r3_menu_249.dds" },	// pad: the console's controls page (and the controller picture)
 	{ MENUPAGE_SOUND_SETTINGS, -1, "ui/r3_menu_252.dds" },	// boombox
-	{ MENUPAGE_DISPLAY_SETTINGS, MENUPAGE_GRAPHICS_SETTINGS, "ui/r3_menu_255.dds" },	// TV
+	{ MENUPAGE_CONSOLE_DISPLAY, -1, "ui/r3_menu_255.dds" },	// TV: the console's display page
 };
 // icon centres on the bar (measured)
 static const float iconX[7] = { 112.0f, 180.0f, 253.0f, 325.0f, 395.0f, 463.0f, 530.0f };
