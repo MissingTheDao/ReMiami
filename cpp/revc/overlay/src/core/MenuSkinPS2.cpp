@@ -12,6 +12,7 @@
 #include "Sprite2d.h"
 #include "Text.h"
 #include "Timer.h"
+#include "Pad.h"
 
 extern int8 gUiStyle;
 
@@ -103,9 +104,15 @@ DrawHelpBox(uint8 alpha)
 			buf[n++] = ' ';
 			UnicodeStrcpy(buf + n, TheText.Get("RVC_HBT"));
 		}
-		CFont::SetRightJustifyOn();
-		CFont::PrintString(PX(1205.0f), y, buf);
-		CFont::SetRightJustifyOff();
+		if (i < 3) {
+			CFont::SetRightJustifyOn();
+			CFont::PrintString(PX(1205.0f), y, buf);
+			CFont::SetRightJustifyOff();
+		} else {
+			// glyphs only: the font's string width doesn't count button sprites, so they are
+			// placed from the left where the PS2 draws its arrows
+			CFont::PrintString(PX(1040.0f), y, buf);
+		}
 		CFont::PrintString(PX(1215.0f), y, TheText.Get("RVC_HDA"));
 		CFont::PrintString(PX(1245.0f), y, TheText.Get(actions[i]));
 	}
@@ -119,6 +126,23 @@ MenuSkinPS2Active(int page, bool gameNotLoaded)
 	// REVC_TEST_MENU_SKIN: also before a game is loaded (screenshots from the boot test).
 	static bool test = getenv("REVC_TEST_MENU_SKIN") != nil;
 	return gUiStyle == 1 && (!gameNotLoaded || test) && CurrentTab(page) >= 0;
+}
+
+// L1/R1 step through the tabs, as on the PS2 pause menu (the PC menu's own navigation stays).
+// Returns true when it switched pages (the rest of this frame's menu input is skipped).
+bool
+MenuSkinPS2Input(CMenuManager *m)
+{
+	if (!MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded))
+		return false;
+	CPad *pad = CPad::GetPad(0);
+	int step = pad->GetRightShoulder1JustDown() ? 1 : pad->GetLeftShoulder1JustDown() ? -1 : 0;
+	if (step == 0)
+		return false;
+	int n = ARRAY_SIZE(tabs);
+	int next = (CurrentTab(m->m_nCurrScreen) + step + n) % n;
+	m->SwitchToNewScreen(tabs[next].page);
+	return true;
 }
 
 // Called by CMenuManager::DrawBackground after the page; draws nothing unless UI STYLE is PS2.

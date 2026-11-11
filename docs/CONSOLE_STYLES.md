@@ -167,7 +167,12 @@ the green help box (Select / Back / Resume / Navigate with the pad's glyphs), an
 to 7 rows so it stays above them. Measured on the PS2 Display capture (positions in capture pixels
 in the file). `REVC_TEST_MENU_SKIN=1` shows it before a game is loaded (boot screenshots).
 
-Still to do: the D-pad glyphs of the Navigate line don't draw; PS2 item layout ("label : value"
-centred on the colon, larger row spacing); L1/R1 or left/right switching between tabs; the
-animations (open fade, page cross-fade, highlight slide); the other pages checked against their
-captures; the tab names are English built-in texts.
+Also done: options with a value are drawn as "LABEL : VALUE" lined up on the colon (label ends at
+269, colon at 282, value from 302 in 640 wide, as measured); L1/R1 step through the tabs; the page
+cross-fade takes 167 ms (measured on the PS2) instead of the PC's ~390 ms; the D-pad and Select/Start
+glyphs now load from the game's button TXDs too (they were never set, so they were missing without
+a glyph pack).
+
+Still to do: the menu-open fade (234 ms) and the highlight slide (133-200 ms); sliders next to their
+label as on the PS2; labels without a value centred; the row spacing (PS2 ~30 px at 448 lines);
+checking the other pages against their captures; the tab names are English built-in texts.
