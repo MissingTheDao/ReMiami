@@ -724,6 +724,210 @@ pub unsafe extern "C" fn revc_write_png(img: *mut Image, filename: *const c_char
     }
 }
 
+// ---------------------------------------------------------------- file formats, read, readMasked
+
+/// Image::fileRead / fileWrite
+pub type FileRead = unsafe extern "C" fn(*const c_char) -> *mut Image;
+pub type FileWrite = unsafe extern "C" fn(*mut Image, *const c_char);
+
+#[derive(Clone)]
+struct FileFormat {
+    ext: String,
+    read: Option<FileRead>,
+    write: Option<FileWrite>,
+}
+static FORMATS: Mutex<Vec<FileFormat>> = Mutex::new(Vec::new());
+
+/// Image::registerFileFormat: up to 10 formats, tried in registration order.
+pub fn register_file_format(ext: &str, read: Option<FileRead>, write: Option<FileWrite>) -> bool {
+    let mut f = FORMATS.lock().unwrap();
+    if f.len() >= 10 {
+        return false;
+    }
+    f.push(FileFormat { ext: ext.to_string(), read, write });
+    true
+}
+
+/// The image module's close: the formats and the search path go.
+pub fn clear_file_formats() {
+    FORMATS.lock().unwrap().clear();
+    set_search_path(None);
+}
+
+/// The writer registered for an extension (case as registered), if any.
+pub fn file_writer(ext: &str) -> Option<FileWrite> {
+    FORMATS.lock().unwrap().iter().find(|f| f.ext == ext).and_then(|f| f.write)
+}
+
+/// Image::read: `name` + "." + each registered extension with a reader, in order, through the
+/// search path; the first file a reader accepts.
+///
+/// # Safety
+/// The image hooks are set.
+pub unsafe fn read_image(root: &str, name: &str) -> *mut Image {
+    let formats = FORMATS.lock().unwrap().clone();
+    for f in formats {
+        let Some(read) = f.read else { continue };
+        // librw copies at most 19 characters of the extension
+        let ext: String = f.ext.chars().take(19).collect();
+        let Some(found) = get_filename(root, &format!("{name}.{ext}")) else { continue };
+        let Ok(c) = CString::new(found) else { continue };
+        let img = unsafe { read(c.as_ptr()) };
+        if !img.is_null() {
+            return img;
+        }
+    }
+    std::ptr::null_mut()
+}
+
+/// Image::readMasked: the image, with the mask image's biggest channel as alpha if a mask name
+/// is given and found; an image of up to 8 bits is palettized back to its depth.
+///
+/// # Safety
+/// The image hooks are set.
+pub unsafe fn read_masked(root: &str, name: &str, mask: Option<&str>) -> *mut Image {
+    unsafe {
+        let img = read_image(root, name);
+        if img.is_null() {
+            return img;
+        }
+        if let Some(m) = mask.filter(|m| !m.is_empty()) {
+            let mi = read_image(root, m);
+            if mi.is_null() {
+                return img;
+            }
+            crate::rwimage::make_mask(mi);
+            let orig = (*img).depth;
+            crate::rwimage::apply_mask(img, mi);
+            (crate::rwimage::hooks().destroy)(mi);
+            if orig <= 8 && (*img).depth != orig {
+                crate::rwimage::palettize(img, orig);
+            }
+        }
+        img
+    }
+}
+
+/// # Safety
+/// `ext` a C string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_image_register_file_format(ext: *const c_char, read: Option<FileRead>, write: Option<FileWrite>) -> i32 {
+    register_file_format(unsafe { cstr(ext) }, read, write) as i32
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_image_clear_file_formats() {
+    clear_file_formats()
+}
+/// # Safety
+/// `name` a C string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_image_read(name: *const c_char) -> *mut Image {
+    unsafe { read_image(".", cstr(name)) }
+}
+/// # Safety
+/// `name` a C string, `mask` one or null.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_image_read_masked(name: *const c_char, mask: *const c_char) -> *mut Image {
+    unsafe { read_masked(".", cstr(name), if mask.is_null() { None } else { Some(cstr(mask)) }) }
+}
+
+#[cfg(test)]
+mod golden_read {
+    //! Replays tests/golden/rwimageread.txt (recorded from librw's image.cpp).
+    use super::*;
+    use crate::rwimage::revc_image_set_hooks;
+    use crate::rwimage::testkit::test_hooks;
+
+    static ROOT: Mutex<String> = Mutex::new(String::new());
+    fn joined(p: *const c_char) -> CString {
+        let p = unsafe { cstr(p) };
+        CString::new(format!("{}/{p}", ROOT.lock().unwrap())).unwrap()
+    }
+    // the readers open what getFilename found, relative to the test's directory
+    unsafe extern "C" fn rpng(p: *const c_char) -> *mut Image {
+        unsafe { revc_read_png(joined(p).as_ptr()) }
+    }
+    unsafe extern "C" fn rbmp(p: *const c_char) -> *mut Image {
+        unsafe { revc_read_bmp(joined(p).as_ptr()) }
+    }
+    unsafe extern "C" fn rtga(p: *const c_char) -> *mut Image {
+        unsafe { revc_read_tga(joined(p).as_ptr()) }
+    }
+
+    fn hash(img: *mut Image) -> String {
+        if img.is_null() {
+            return "nil".into();
+        }
+        let i = unsafe { &*img };
+        let mut h = 0xcbf29ce484222325u64;
+        let mut b = |x: u8| h = (h ^ x as u64).wrapping_mul(0x100000001b3);
+        for v in [i.width, i.height, i.depth, i.bpp, i.stride, i.flags] {
+            for k in 0..4 {
+                b((v >> (8 * k)) as u8);
+            }
+        }
+        let mut maxi = -1i32;
+        for y in 0..i.height {
+            for x in 0..i.width * i.bpp {
+                let p = unsafe { *i.pixels.add((y * i.stride + x) as usize) };
+                b(p);
+                maxi = maxi.max(p as i32);
+            }
+        }
+        if i.depth <= 8 {
+            for k in 0..((maxi + 1) * 4) as usize {
+                b(unsafe { *i.palette.add(k) });
+            }
+        }
+        format!("{h:016x}")
+    }
+
+    #[test]
+    fn matches_librw_golden() {
+        let _guard = crate::testlock();
+        let golden = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/golden");
+        let text = std::fs::read_to_string(format!("{golden}/rwimageread.txt")).expect("tests/golden/rwimageread.txt");
+        unsafe { revc_image_set_hooks(test_hooks()) };
+        let tmp = std::env::temp_dir().join(format!("revc-rwimageread-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("sub")).unwrap();
+        let root = tmp.to_str().unwrap().to_string();
+        *ROOT.lock().unwrap() = root.clone();
+        clear_file_formats();
+        let readers: [Option<FileRead>; 4] = [None, Some(rpng), Some(rbmp), Some(rtga)];
+        let (mut n, mut bad) = (0, Vec::new());
+        for line in text.lines() {
+            let w: Vec<&str> = line.split_whitespace().collect();
+            let (got, want): (String, String) = match w[0] {
+                "file" => {
+                    std::fs::copy(format!("{golden}/imagefiles/{}", w[2]), tmp.join(w[1])).unwrap();
+                    continue;
+                }
+                "reg" => (register_file_format(w[1], readers[w[2].parse::<usize>().unwrap()], None).then_some("1").unwrap_or("0").into(), w[4].into()),
+                "clear" => {
+                    clear_file_formats();
+                    continue;
+                }
+                "search" => {
+                    set_search_path(if w[1] == "-" { None } else { Some(w[1]) });
+                    continue;
+                }
+                "read" => (hash(unsafe { read_image(&root, w[1]) }), w[3].into()),
+                "readm" => (hash(unsafe { read_masked(&root, w[1], Some(if w[2] == "~" { "" } else { w[2] })) }), w[4].into()),
+                other => panic!("unknown op {other}"),
+            };
+            n += 1;
+            if got != want && bad.len() < 6 {
+                bad.push(format!("{line}: got {got}"));
+            }
+        }
+        clear_file_formats();
+        let _ = std::fs::remove_dir_all(&tmp);
+        assert!(n > 3500, "only {n} cases");
+        assert!(bad.is_empty(), "differences (first {}):\n{}", bad.len(), bad.join("\n"));
+    }
+}
+
 #[cfg(test)]
 mod golden {
     //! Replays tests/golden/rwimagefile.txt over the corpus tests/golden/imagefiles/ (both
@@ -744,6 +948,7 @@ mod golden {
 
     #[test]
     fn matches_librw_golden() {
+        let _guard = crate::testlock();
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/golden");
         let text = std::fs::read_to_string(format!("{root}/rwimagefile.txt")).expect("tests/golden/rwimagefile.txt");
         unsafe { revc_image_set_hooks(test_hooks()) };
