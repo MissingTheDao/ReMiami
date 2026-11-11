@@ -612,6 +612,34 @@ Step 7 (outlook): the engine core (Engine open/start/stop, plugin lists, streams
 render state, errors), the debug charset, and the wgpu driver's remaining C++ glue; after that
 librw and the fakerw shim are gone.
 
+### Stage 2, step 7: the engine core, then librw goes (plan, 2026-11-11)
+
+After step 6 every librw object lives in Rust; the C++ left is the engine core, the wgpu
+driver's glue, thin forwarding shells, and fakerw (the RW API the game calls, 358 C++
+functions in src/fakerw/fake.cpp). Same method as before: recordings of the original where
+there is logic, deletion where nothing calls it.
+
+- **7a. Plugin lists, engine and streams.** plg.cpp (PluginList: register, construct,
+  destruct, copy, the stream callbacks) in Rust; the hooks of steps 3 to 6 then collapse into
+  calls inside Rust. engine.cpp (Engine init/open/start/stop/term, the memory functions, the
+  driver and device tables, engine plugins), error.cpp, prim.cpp's box helpers, and base.cpp's
+  streams (StreamFile, StreamMemory, chunk headers, findChunk) that the TXD writer and the
+  game's RwStream calls use.
+- **7b. Pipelines and render state.** pipeline.cpp (ObjPipeline and the vertex instancing
+  helpers), render.cpp (render state get/set), and the wgpu driver's remaining C++
+  (wgpudevice.cpp: device begin/end update, Im2D/Im3D, render states, raster binding;
+  wgpupipe.cpp: the default, skin and MatFX pipelines' instancing and render callbacks). The
+  Rust renderer under them (revc-rw) already exists, so this is mostly moving the glue, plus
+  the pipeline choice left out of 6c.
+- **7c. The debug font.** charset.cpp (RtCharset, used by the debug menu and debug text):
+  ported, or redrawn with the Rust text code if that gives the same pixels.
+- **7d. librw and fakerw go.** The RW API becomes a Rust C ABI: fakerw's headers declare the
+  Rw*/Rp*/Rt* functions extern "C" and Rust exports them (generated from the headers, a good
+  job for the local model, then reviewed); fake.cpp and every librw .cpp are deleted. librw's
+  headers stay only as the C++ declarations of the Rust-owned layouts (structs, inline field
+  accessors) for the game code that is still C++, until the game's own port (stages 4 and 5)
+  removes them too. Done when the librw CMake target is gone and both suites still pass.
+
 ## Appendix: every RW function the game calls
 
 | Function | Call sites | Area |
