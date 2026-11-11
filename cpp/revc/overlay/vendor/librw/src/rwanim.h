@@ -67,11 +67,6 @@ struct Animation
 		return (KeyFrameHeader*)((uint8*)this->keyframes +
 		                         n*this->interpInfo->animKeyFrameSize);
 	}
-	static Animation *streamRead(Stream *stream);
-	static Animation *streamReadLegacy(Stream *stream);
-	bool streamWrite(Stream *stream);
-	bool streamWriteLegacy(Stream *stream);
-	uint32 streamGetSize(void);
 };
 
 struct AnimInterpolator

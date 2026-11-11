@@ -684,6 +684,15 @@ there is logic, deletion where nothing calls it.
   must stay declared and defined after the .cpp files go.
   - **7d1. Stream and plugin code to Rust**, with recordings where there is logic: the plugin
     streams above, Animation streams, the TXD dictionary stream, image file lookup.
+    **Part 1 done 2026-11-11 (dead code):** nothing writes models, TXDs or animations (the
+    model writers went in step 6; the TXD writer already failed in streamWriteNative and is
+    only reached when the video card can't do DXT, which the wgpu device always can; the game
+    reads its own .ifp files), and nothing reads TXDs or animations through librw (the game's
+    rw/TexRead.cpp reads natives in Rust under LIBRW_HOST). So the BinMesh, native data, HAnim,
+    rights and anisotropy writers, the Animation streams, the TXD dictionary and native
+    streams, and fakerw's native texture hack reader are deleted; RwTexDictionaryStreamWrite
+    returns nil (its caller handles that). The plugin registrations stay, since they set the
+    object layouts and the IDs the extension reader matches.
   - **7d2. Statics and registration to Rust**: the class plugin lists and counters become Rust
     statics the headers reach through extern "C"; module open/close and the wgpu driver
     plugins register from Rust; the hooks of steps 3 to 7 collapse into direct Rust calls.

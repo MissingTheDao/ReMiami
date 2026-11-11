@@ -317,9 +317,6 @@ struct Texture
 	void setAddressU(Addressing u) { filterAddressing = (filterAddressing & ~0xF00) | u<<8; }
 	void setAddressV(Addressing v) { filterAddressing = (filterAddressing & ~0xF000) | v<<12; }
 	static Texture *read(const char *name, const char *mask);
-	static Texture *streamReadNative(Stream *stream);
-	void streamWriteNative(Stream *stream);
-	uint32 streamGetSizeNative(void);
 
 	static Texture *(*findCB)(const char *name);
 	static Texture *(*readCB)(const char *name, const char *mask);
@@ -794,9 +791,6 @@ struct TexDictionary
 	void addFront(Texture *t);
 	void remove(Texture *t);
 	Texture *find(const char *name);
-	static TexDictionary *streamRead(Stream *stream);
-	void streamWrite(Stream *stream);
-	uint32 streamGetSize(void);
 
 	static void setCurrent(TexDictionary *txd);
 	static TexDictionary *getCurrent(void);
