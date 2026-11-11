@@ -49,6 +49,34 @@ static const Ps2Tab tabs[] = {
 	{ MENUPAGE_CONSOLE_OPTIONS, MENUPAGE_LANGUAGE_SETTINGS, 1043.0f, 995.0f, "RVC_PT8" },	// revc: "options" in the EU discs' "language" place
 };
 
+// The PS2's highlight boxes glide: to a new item in 167 ms (the label's size morphing on the way),
+// and in from 190 px below when a page opens (measured on the v3.00 video). id: one box kind
+// (0 the tab bar, 1 the slot lists); returns the box to draw this frame.
+CRect
+MenuSkinPS2Glide(int id, int page, const CRect &target)
+{
+	static struct { CRect from, to, cur; uint32 start; int page; bool init; } g[4];
+	auto &s = g[id];
+	uint32 now = CTimer::GetTimeInMillisecondsPauseMode();
+	if (!s.init || s.page != page) {
+		s.init = true;
+		s.page = page;
+		s.from = target;
+		s.from.top += SY(190.0f);
+		s.from.bottom += SY(190.0f);
+		s.to = target;
+		s.start = now;
+	} else if (target.left != s.to.left || target.top != s.to.top || target.right != s.to.right || target.bottom != s.to.bottom) {
+		s.from = s.cur;
+		s.to = target;
+		s.start = now;
+	}
+	float t = Min(1.0f, (now - s.start) / 167.0f);
+	s.cur = CRect(s.from.left + (s.to.left - s.from.left) * t, s.from.top + (s.to.top - s.from.top) * t,
+		s.from.right + (s.to.right - s.from.right) * t, s.from.bottom + (s.to.bottom - s.from.bottom) * t);
+	return s.cur;
+}
+
 // "screen position" (PS2 Display page): the picture's offset for TVs that crop it, as on the PS2.
 // Packed in one ini value ([Display] ScreenPosition): x and y, -8..7 steps of 2 menu pixels each.
 // X on the row starts adjusting with the arrows; X or triangle ends it.
@@ -100,6 +128,11 @@ DrawTabs(CMenuManager *m, uint8 alpha)
 		float w = CFont::GetStringWidth(TheText.Get(tabs[cur].name), true);
 		float cx = SCALE_AND_CENTER_X(tabCX[cur]), cy = SCREEN_SCALE_Y(tabRowY[cur / 4]);
 		float hw = w / 2.0f + SX(8.0f), h0 = SY(13.0f), t = SY(2.0f);
+		// gliding from tab to tab (one box for the bar: no sweep on page changes)
+		CRect r = MenuSkinPS2Glide(0, 0, CRect(cx - hw, cy - h0, cx + hw, cy + h0));
+		cx = (r.left + r.right) / 2.0f;
+		hw = (r.right - r.left) / 2.0f;
+		cy = (r.top + r.bottom) / 2.0f;
 		CSprite2d::Draw2DPolygon(cx - hw, cy - h0 + t, cx + hw, cy - h0 - t, cx - hw, cy + h0 + t, cx + hw, cy + h0 - t,
 			CRGBA(PS2_GREEN.r, PS2_GREEN.g, PS2_GREEN.b, alpha));
 	}
@@ -117,8 +150,8 @@ DrawTabs(CMenuManager *m, uint8 alpha)
 static void
 DrawHelpBox(uint8 alpha, int page)
 {
-	const bool mapPage = page == MENUPAGE_MAP, savePage = page == MENUPAGE_CHOOSE_SAVE_SLOT;
-	const int rows = mapPage ? 5 : 4, nd = savePage ? 2 : 4;
+	const bool mapPage = page == MENUPAGE_MAP, savePage = page == MENUPAGE_CHOOSE_SAVE_SLOT, optionsPage = page == MENUPAGE_CONSOLE_OPTIONS;
+	const int rows = mapPage ? 5 : 4, nd = savePage || optionsPage ? 2 : 4;	// (the options list: up/down scroll)
 	// thick black outline, about 8 capture pixels all round (measured)
 	const float o = 8.0f;
 	CSprite2d::Draw2DPolygon(HX(975.0f - o), HY(742.0f - o), HX(1390.0f + o), HY(728.0f - o), HX(990.0f - o), HY(882.0f + o), HX(1418.0f + o), HY(910.0f + o),
@@ -130,7 +163,7 @@ DrawHelpBox(uint8 alpha, int page)
 	// pack the game's own coloured button textures are drawn as they are.
 	static const int glyphs[3] = { BUTTON_CROSS, BUTTON_TRIANGLE, BUTTON_START };
 	static const int dpad[4] = { BUTTON_DPAD_UP, BUTTON_DPAD_DOWN, BUTTON_DPAD_RIGHT, BUTTON_DPAD_LEFT };
-	const char *actions[5] = { "RVC_HSE", "RVC_HBA", "RVC_HRE", mapPage ? "RVC_HSC" : "RVC_HNA", "RVC_HZO" };
+	const char *actions[5] = { optionsPage ? "RVC_HCH" : "RVC_HSE", "RVC_HBA", "RVC_HRE", mapPage || optionsPage ? "RVC_HSC" : "RVC_HNA", "RVC_HZO" };
 	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
 	CFont::SetScale(SX(mapPage ? 0.36f : 0.41f), SY(mapPage ? 0.62f : 0.68f));	// five rows: a little smaller to fit the box
 	CFont::SetPropOn();

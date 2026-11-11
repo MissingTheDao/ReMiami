@@ -1010,7 +1010,7 @@
  #include "Timer.h"
  
  wchar WideErrorString[25];
-@@ -16,173 +15,239 @@
+@@ -16,173 +15,241 @@
  CText::CText(void)
  {
  	encoding = 'e';
@@ -1280,6 +1280,7 @@
 +	{ "RVC_HRE", "Resume" },
 +	{ "RVC_HNA", "Navigate" },
 +	{ "RVC_HSC", "Scroll" },
++	{ "RVC_HCH", "Change" },
 +	{ "RVC_HZO", "Zoom" },
 +	{ "RVC_HZB", "R1 \\ R2 button" },
 +	// Xbox menu skin help line (core/MenuSkinXbox.cpp)
@@ -1287,6 +1288,7 @@
 +	{ "RVC_XHS", "select" },
 +	{ "RVC_XHB", "back" },
 +	{ "RVC_XHC", "change" },
++	{ "RVC_XHA", "advanced" },
 +	{ "RVC_XHM", "move/zoom" },
 +	{ "RVC_XTL", "LOAD" },
 +	{ "RVC_XTC", "CONTROLS" },
@@ -1381,7 +1383,7 @@
  }
  
  void
-@@ -201,297 +266,24 @@
+@@ -201,297 +268,24 @@
  }
  
  void
@@ -1684,7 +1686,7 @@
  	return aStr;
  }
  
-@@ -499,13 +291,7 @@
+@@ -499,13 +293,7 @@
  UnicodeToAsciiForSaveLoad(wchar *src)
  {
  	static char aStr[256];
@@ -1699,7 +1701,7 @@
  	return aStr;
  }
  
-@@ -513,13 +299,7 @@
+@@ -513,13 +301,7 @@
  UnicodeToAsciiForMemoryCard(wchar *src)
  {
  	static char aStr[256];

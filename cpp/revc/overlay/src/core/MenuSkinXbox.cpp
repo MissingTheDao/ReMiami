@@ -395,6 +395,12 @@ DrawHelpLine(CMenuManager *m, uint8 alpha)
 		HelpItem(X(340.0f), y, b, 1, nil, "RVC_XHB", alpha);
 		return;
 	}
+	if (m->m_nCurrScreen == MENUPAGE_CONSOLE_OPTIONS) {	// "START:resume game  up/down:select  <-/->:change  B:back"
+		HelpItem(X(200.0f), y, ud, 2, nil, "RVC_XHS", alpha);
+		HelpItem(X(340.0f), y, lr, 2, nil, "RVC_XHC", alpha);
+		HelpItem(X(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
+		return;
+	}
 	if (m->m_nCurrScreen == MENUPAGE_PAD_PICTURE) {
 		HelpItem(X(200.0f), y, lr, 2, nil, "RVC_XHC", alpha);
 		HelpItem(X(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
@@ -405,6 +411,10 @@ DrawHelpLine(CMenuManager *m, uint8 alpha)
 	HelpItem(X(340.0f), y, a, 1, nil, "RVC_XHS", alpha);
 	if (!bar)
 		HelpItem(X(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
+	if (SettingsSubTabs(m->m_nCurrScreen)) {	// "Y:advanced" (the face-button item grammar of "X:delete")
+		static const int yb[1] = { BUTTON_TRIANGLE };
+		HelpItem(X(530.0f), y, yb, 1, nil, "RVC_XHA", alpha);
+	}
 }
 
 // The mint selection bar behind the current item, with the Xbox's pulse: a white glow over it
@@ -479,7 +489,9 @@ SettingsSubTabs(int page)
 static bool
 HasSubTabs(int page)
 {
-	return page == MENUPAGE_STATS || page == MENUPAGE_BRIEFS || SettingsSubTabs(page);
+	// Display, Audio and Controls stay as on the console (Y opens their "advanced" list); the
+	// list shows "<page> | advanced" where Stats has its sub-tabs
+	return page == MENUPAGE_STATS || page == MENUPAGE_BRIEFS || page == MENUPAGE_CONSOLE_OPTIONS;
 }
 
 int
@@ -551,37 +563,19 @@ MenuSkinXboxInput(CMenuManager *m)
 	CPad *pad = CPad::GetPad(0);
 	const bool left = pad->GetDPadLeftJustDown() || pad->GetLeftJustDown(), right = pad->GetDPadRightJustDown() || pad->GetRightJustDown();
 	const bool up = pad->GetDPadUpJustDown() || pad->GetUpJustDown(), down = pad->GetDPadDownJustDown() || pad->GetDownJustDown();
-	if (SettingsSubTabs(m->m_nCurrScreen)) {
-		if (subBarFocus) {
-			if (left || right) {
-				if (m->m_nCurrScreen == MENUPAGE_CONSOLE_OPTIONS)
-					m->SwitchToNewScreen(optionsOrigin);
-				else {
-					extern int gConsoleOptionsSection;
-					optionsOrigin = m->m_nCurrScreen;
-					gConsoleOptionsSection = optionsOrigin == MENUPAGE_SOUND_SETTINGS ? 1 : optionsOrigin == MENUPAGE_CONSOLE_CONTROLS ? 2 : 0;
-					void ConsoleAudioRows(bool);
-					ConsoleAudioRows(true);
-					m->SwitchToNewScreen(MENUPAGE_CONSOLE_OPTIONS);
-				}
-				return true;
-			}
-			if (up)
-				subBarFocus = false;
-			return up || down;
-		}
-		if (down) {	// down from the last row: onto the sub-tab bar
-			int last = -1;
-			for (int e = 0; e < NUM_MENUROWS && aScreens[m->m_nCurrScreen].m_aEntries[e].m_Action != MENUACTION_NOTHING; e++)
-				if (aScreens[m->m_nCurrScreen].m_aEntries[e].m_Action != MENUACTION_GOBACK && aScreens[m->m_nCurrScreen].m_aEntries[e].m_Action != MENUACTION_LABEL)
-					last = e;
-			if (m->m_nCurrOption >= last) {
-				subBarFocus = true;
-				return true;
-			}
-		}
-	} else
-		subBarFocus = false;
+	(void)left; (void)right; (void)up; (void)down;
+	subBarFocus = false;
+	// Y (the help line's "Y:advanced") on Display, Audio and Controls opens their "advanced"
+	// list; B there goes back to the page
+	if (SettingsSubTabs(m->m_nCurrScreen) && m->m_nCurrScreen != MENUPAGE_CONSOLE_OPTIONS && pad->GetTriangleJustDown()) {
+		extern int gConsoleOptionsSection;
+		optionsOrigin = m->m_nCurrScreen;
+		gConsoleOptionsSection = optionsOrigin == MENUPAGE_SOUND_SETTINGS ? 1 : optionsOrigin == MENUPAGE_CONSOLE_CONTROLS ? 2 : 0;
+		ConsoleAudioRows(true);
+		aScreens[MENUPAGE_CONSOLE_OPTIONS].m_PreviousPage = optionsOrigin;
+		m->SwitchToNewScreen(MENUPAGE_CONSOLE_OPTIONS);
+		return true;
+	}
 	if (HasSubTabs(m->m_nCurrScreen) && !SettingsSubTabs(m->m_nCurrScreen) && (pad->GetDPadLeftJustDown() || pad->GetDPadRightJustDown() || pad->GetLeftJustDown() || pad->GetRightJustDown())) {
 		MenuSkinXboxSetSubTab(m->m_nCurrScreen, 1 - MenuSkinXboxSubTab(m->m_nCurrScreen));
 		barFocus = false;
