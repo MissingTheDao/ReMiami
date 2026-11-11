@@ -292,9 +292,6 @@ struct RawMatrix
 	float32 posw;
 
 	// NB: this is dst = src2*src1, i.e. src1 is applied first, then src2
-	static void mult(RawMatrix *dst, RawMatrix *src1, RawMatrix *src2);
-	static void transpose(RawMatrix *dst, RawMatrix *src);
-	static void setIdentity(RawMatrix *dst);
 };
 
 struct Matrix
@@ -638,8 +635,6 @@ extern int32 platform;
 extern bool32 streamAppendFrames;
 extern char *debugFile;
 
-int strcmp_ci(const char *s1, const char *s2);
-int strncmp_ci(const char *s1, const char *s2, int n);
 
 // 0x04000000	3.1
 // 0x08000000	3.2
@@ -689,5 +684,4 @@ bool writeChunkHeader(Stream *s, int32 type, int32 size);
 bool readChunkHeaderInfo(Stream *s, ChunkHeaderInfo *header);
 bool findChunk(Stream *s, uint32 type, uint32 *length, uint32 *version);
 
-int32 findPointer(void *p, void **list, int32 num);
 }

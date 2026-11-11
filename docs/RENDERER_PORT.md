@@ -701,6 +701,13 @@ there is logic, deletion where nothing calls it.
     formats, so the recording gives each reader its own format only). The legacy skin reader
     (pre-3.3 skins in the atomic's extension) is deleted: a scan of all 4,621 DFFs in the
     game's models finds no such chunk (all 275 skins are in the geometry's extension).
+    **Part 3 done 2026-11-11:** Quat::rotate (the ped IK uses it) is in Rust, checked by
+    `tests/golden/rwquat.txt` (4,000 rotations, bit for bit; `tests/golden/recorders/rwquat`);
+    the interpolator registry and Animation create/destroy are in Rust (`rwhanim.rs`; layout
+    and allocation only, the suites run them through the game's ped animations). Deleted for
+    lack of callers: Animation::getNumNodes, strcmp_ci, strncmp_ci, findPointer and the
+    RawMatrix functions (only the D3D9 pipelines, compiled out, used them). What is left of
+    7d1 is glue (texture anisotropy reading, the stream classes), which goes with 7d2 to 7d4.
   - **7d2. Statics and registration to Rust**: the class plugin lists and counters become Rust
     statics the headers reach through extern "C"; module open/close and the wgpu driver
     plugins register from Rust; the hooks of steps 3 to 7 collapse into direct Rust calls.

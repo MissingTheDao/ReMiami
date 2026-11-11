@@ -595,3 +595,151 @@ mod golden {
         assert!(bad.is_empty(), "differences (first {}):\n{}", bad.len(), bad.join("\n"));
     }
 }
+
+// ---------------------------------------------------------------- interpolator infos, Animation (anim.cpp)
+
+const MAXINTERPINFO: usize = 10;
+static mut INTERP_INFOS: [*mut AnimInterpolatorInfo; MAXINTERPINFO] = [std::ptr::null_mut(); MAXINTERPINFO];
+#[allow(clippy::mut_from_ref)]
+fn interp_infos() -> &'static mut [*mut AnimInterpolatorInfo; MAXINTERPINFO] {
+    unsafe { &mut *std::ptr::addr_of_mut!(INTERP_INFOS) }
+}
+
+/// AnimInterpolatorInfo::registerInterp: into the first free of ten slots.
+pub fn register_interp(info: *mut AnimInterpolatorInfo) {
+    match interp_infos().iter_mut().find(|p| p.is_null()) {
+        Some(slot) => *slot = info,
+        None => eprintln!("[RW] no room for interpolatorInfo"),
+    }
+}
+
+/// AnimInterpolatorInfo::unregisterInterp: frees the info (librw's allocator).
+///
+/// # Safety
+/// An info from librw's allocator, or one not registered.
+pub unsafe fn unregister_interp(info: *mut AnimInterpolatorInfo) {
+    if let Some(slot) = interp_infos().iter_mut().find(|p| **p == info) {
+        unsafe { crate::rwengine::rw_free(*slot as *mut c_void) };
+        *slot = std::ptr::null_mut();
+    }
+}
+
+/// AnimInterpolatorInfo::find
+///
+/// # Safety
+/// The registered infos are live.
+pub unsafe fn find_interp(id: i32) -> *mut AnimInterpolatorInfo {
+    interp_infos().iter().copied().find(|&p| !p.is_null() && unsafe { (*p).id } == id).unwrap_or(std::ptr::null_mut())
+}
+
+const MEMDUR_EVENT: u32 = 0x30000;
+const ID_ANIMANIMATION: u32 = 0x1B;
+
+/// Animation::create: one block holding the Animation, its keyframes and the custom data.
+///
+/// # Safety
+/// A live info; after Engine::init.
+pub unsafe fn animation_create(info: *mut AnimInterpolatorInfo, num_frames: i32, flags: i32, duration: f32) -> *mut Animation {
+    unsafe {
+        let i = &*info;
+        let sz = size_of::<Animation>() + (num_frames * i.anim_key_frame_size + i.custom_data_size) as usize;
+        let data = crate::rwengine::rw_malloc(sz, MEMDUR_EVENT | ID_ANIMANIMATION) as *mut u8;
+        if data.is_null() {
+            eprintln!("[RW] Couldn't allocate 0x{sz:X} bytes");
+            return std::ptr::null_mut();
+        }
+        let anim = data as *mut Animation;
+        let keyframes = data.add(size_of::<Animation>());
+        anim.write(Animation {
+            interp_info: info,
+            num_frames,
+            flags,
+            duration,
+            keyframes: keyframes as *mut c_void,
+            custom_data: keyframes.add((num_frames * i.anim_key_frame_size) as usize) as *mut c_void,
+        });
+        anim
+    }
+}
+
+/// # Safety
+/// As register_interp.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_interp_register(info: *mut AnimInterpolatorInfo) {
+    register_interp(info)
+}
+/// # Safety
+/// As unregister_interp.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_interp_unregister(info: *mut AnimInterpolatorInfo) {
+    unsafe { unregister_interp(info) }
+}
+/// # Safety
+/// As find_interp.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_interp_find(id: i32) -> *mut AnimInterpolatorInfo {
+    unsafe { find_interp(id) }
+}
+/// # Safety
+/// As animation_create.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_animation_create(info: *mut AnimInterpolatorInfo, num_frames: i32, flags: i32, duration: f32) -> *mut Animation {
+    unsafe { animation_create(info, num_frames, flags, duration) }
+}
+/// # Safety
+/// An animation from animation_create.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_animation_destroy(anim: *mut Animation) {
+    unsafe { crate::rwengine::rw_free(anim as *mut c_void) }
+}
+
+/// Quat::rotate: the rotation by `angle` (radians) about `axis` (normalized here), replacing
+/// `q` (op 0) or combined with it, q * rot (preconcat, 1) or rot * q (postconcat, 2).
+pub fn quat_rotate(q: &Quat, axis: &V3, angle: f32, op: i32) -> Quat {
+    let len = (axis.x * axis.x + axis.y * axis.y + axis.z * axis.z).sqrt();
+    let r = 1.0 / len;
+    let s = (angle / 2.0).sin();
+    // Quat::rotation: makeQuat(cos(a/2), scale(normalize(axis), sin(a/2)))
+    let rot = Quat { x: axis.x * r * s, y: axis.y * r * s, z: axis.z * r * s, w: (angle / 2.0).cos() };
+    match op {
+        0 => rot,
+        1 => qmult(q, &rot),
+        2 => qmult(&rot, q),
+        _ => *q,
+    }
+}
+
+/// # Safety
+/// `q`, `axis` valid.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_rwquat_rotate(q: *mut Quat, axis: *const V3, angle: f32, op: i32) {
+    unsafe { *q = quat_rotate(&*q, &*axis, angle, op) }
+}
+
+#[cfg(test)]
+mod golden_rotate {
+    //! Replays tests/golden/rwquat.txt (librw's Quat::rotate).
+    use super::*;
+
+    #[test]
+    fn matches_librw_golden() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/golden/rwquat.txt");
+        let text = std::fs::read_to_string(path).expect("tests/golden/rwquat.txt");
+        let f = |s: &str| f32::from_bits(u32::from_str_radix(s, 16).unwrap());
+        let (mut n, mut bad) = (0, Vec::new());
+        for line in text.lines() {
+            let w: Vec<&str> = line.split_whitespace().collect();
+            let q = Quat { x: f(w[1]), y: f(w[2]), z: f(w[3]), w: f(w[4]) };
+            let axis = V3 { x: f(w[5]), y: f(w[6]), z: f(w[7]) };
+            let r = quat_rotate(&q, &axis, f(w[8]), w[9].parse().unwrap());
+            let got = format!("{:08x} {:08x} {:08x} {:08x}", r.x.to_bits(), r.y.to_bits(), r.z.to_bits(), r.w.to_bits());
+            let want = w[11..15].join(" ");
+            n += 1;
+            if got != want && bad.len() < 6 {
+                bad.push(format!("{line}\n  got {got}"));
+            }
+        }
+        assert!(n >= 4000);
+        assert!(bad.is_empty(), "differences:\n{}", bad.join("\n"));
+    }
+}

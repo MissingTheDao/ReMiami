@@ -62,7 +62,6 @@ struct Animation
 	static Animation *create(AnimInterpolatorInfo*, int32 numFrames,
 	                         int32 flags, float duration);
 	void destroy(void);
-	int32 getNumNodes(void);
 	KeyFrameHeader *getAnimFrame(int32 n){
 		return (KeyFrameHeader*)((uint8*)this->keyframes +
 		                         n*this->interpInfo->animKeyFrameSize);

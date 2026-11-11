@@ -196,6 +196,21 @@ unsafe extern "C" fn mustrealloc_h(p: *mut c_void, sz: usize, hint: u32) -> *mut
 /// librw's defaultMemfuncs.
 pub const DEFAULT_MEMFUNCS: MemoryFunctions = MemoryFunctions { rwmalloc: malloc_h, rwrealloc: realloc_h, rwfree: free_h, rwmustmalloc: None, rwmustrealloc: None };
 
+/// rwMalloc with librw's memory functions (the engine's, as Engine::init set them).
+///
+/// # Safety
+/// After Engine::init.
+pub(crate) unsafe fn rw_malloc(sz: usize, hint: u32) -> *mut c_void {
+    unsafe { (memfuncs().rwmalloc)(sz, hint) }
+}
+/// rwFree
+///
+/// # Safety
+/// A pointer from rw_malloc (or librw's allocator), or null.
+pub(crate) unsafe fn rw_free(p: *mut c_void) {
+    unsafe { (memfuncs().rwfree)(p) }
+}
+
 fn memfuncs() -> &'static MemoryFunctions {
     unsafe { &*hooks().memfuncs }
 }
