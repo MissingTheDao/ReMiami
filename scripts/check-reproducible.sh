@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds HEAD twice from fresh clones in two different directories and compares the
-# binaries. usage: scripts/check-reproducible.sh [workdir]
+# binaries. usage: [REVC_SOURCE=<reVC copy>] scripts/check-reproducible.sh [workdir]
 #   default: a temporary dir under /var/tmp (on disk: /tmp is often RAM, and the two builds take
 #   ~0.5 GB), removed afterwards; a given workdir is kept.
 set -euo pipefail
@@ -12,6 +12,9 @@ for n in a b; do
   rm -rf "$WORK/$n"
   git clone -q "$ROOT" "$WORK/$n/revc-$n-$RANDOM"
 done
+# The reVC source isn't in the repository: each clone builds its C++ tree from the same copy.
+SOURCE=${REVC_SOURCE:-$ROOT/cpp/re3-miami/.reVC-original}
+for d in "$WORK"/a/* "$WORK"/b/*; do "$d/scripts/revc-source.sh" prepare "$SOURCE" > /dev/null; done
 sums=()
 for d in "$WORK"/a/* "$WORK"/b/*; do
   echo "== building $d"

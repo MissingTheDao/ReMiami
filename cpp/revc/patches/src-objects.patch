@@ -1,0 +1,160 @@
+--- a/src/objects/ObjectData.cpp
++++ b/src/objects/ObjectData.cpp
+@@ -8,128 +8,39 @@
+ 
+ CObjectInfo CObjectData::ms_aObjectInfo[NUMOBJECTINFO];
+ 
+-// Another ugly file reader
++// The object.dat parse and the defaults are in Rust (rust/revc/src/objectdata.rs); the table and
++// the model lookups stay here.
++static_assert(sizeof(CObjectInfo) == 32, "CObjectInfo layout (objectdata.rs)");
++extern "C" void revc_object_data_init(const uint8 *data, size_t len, CObjectInfo *infos);
++
++extern "C" int32
++revc_cpp_find_model(const char *name, size_t len)
++{
++	char buf[256];
++	if(len >= sizeof(buf))
++		len = sizeof(buf) - 1;
++	memcpy(buf, name, len);
++	buf[len] = '\0';
++	int id = -1;
++	if(CModelInfo::GetModelInfo(buf, &id) == nil){
++		debug("CObjectData: Cannot find object %s\n", buf);
++		return -1;
++	}
++	return id;
++}
++
++extern "C" void
++revc_cpp_set_object_id(int32 model, int16 id)
++{
++	CModelInfo::GetModelInfo(model)->SetObjectID(id);
++}
++
+ void
+ CObjectData::Initialise(const char *filename)
+ {
+-	char *p, *lp;
+-	char line[1024], name[256];
+-	int id;
+-	float percentSubmerged;
+-	int damageEffect, responseCase, camAvoid;
+-	CBaseModelInfo *mi;
+-	
+-	ms_aObjectInfo[0].m_fMass = 99999.0f;
+-	ms_aObjectInfo[0].m_fTurnMass = 99999.0f;
+-	ms_aObjectInfo[0].m_fAirResistance = 0.99f;
+-	ms_aObjectInfo[0].m_fElasticity = 0.1f;
+-	ms_aObjectInfo[0].m_fBuoyancy = GRAVITY * ms_aObjectInfo[0].m_fMass * 2.0f;
+-	ms_aObjectInfo[0].m_fUprootLimit = 0.0f;
+-	ms_aObjectInfo[0].m_fCollisionDamageMultiplier = 1.0f;
+-	ms_aObjectInfo[0].m_nCollisionDamageEffect = 0;
+-	ms_aObjectInfo[0].m_nSpecialCollisionResponseCases = 0;
+-	ms_aObjectInfo[0].m_bCameraToAvoidThisObject = false;
+-
+-	ms_aObjectInfo[1].m_fMass = 99999.0f;
+-	ms_aObjectInfo[1].m_fTurnMass = 99999.0f;
+-	ms_aObjectInfo[1].m_fAirResistance = 0.99f;
+-	ms_aObjectInfo[1].m_fElasticity = 0.1f;
+-	ms_aObjectInfo[1].m_fBuoyancy = ms_aObjectInfo[0].m_fBuoyancy;
+-	ms_aObjectInfo[1].m_fUprootLimit = 0.0f;
+-	ms_aObjectInfo[1].m_fCollisionDamageMultiplier = 1.0f;
+-	ms_aObjectInfo[1].m_nCollisionDamageEffect = 0;
+-	ms_aObjectInfo[1].m_nSpecialCollisionResponseCases = 0;
+-	ms_aObjectInfo[1].m_bCameraToAvoidThisObject = true;
+-
+-	ms_aObjectInfo[2].m_fMass = 99999.0f;
+-	ms_aObjectInfo[2].m_fTurnMass = 99999.0f;
+-	ms_aObjectInfo[2].m_fAirResistance = 0.99f;
+-	ms_aObjectInfo[2].m_fElasticity = 0.1f;
+-	ms_aObjectInfo[2].m_fBuoyancy = ms_aObjectInfo[0].m_fBuoyancy;
+-	ms_aObjectInfo[2].m_fUprootLimit = 0.0f;
+-	ms_aObjectInfo[2].m_fCollisionDamageMultiplier = 1.0f;
+-	ms_aObjectInfo[2].m_nCollisionDamageEffect = 0;
+-	ms_aObjectInfo[2].m_bCameraToAvoidThisObject = false;
+-	ms_aObjectInfo[2].m_nSpecialCollisionResponseCases = 4;
+-
+-	ms_aObjectInfo[3].m_fMass = 99999.0f;
+-	ms_aObjectInfo[3].m_fTurnMass = 99999.0f;
+-	ms_aObjectInfo[3].m_fAirResistance = 0.99f;
+-	ms_aObjectInfo[3].m_fElasticity = 0.1f;
+-	ms_aObjectInfo[3].m_fBuoyancy = ms_aObjectInfo[0].m_fBuoyancy;
+-	ms_aObjectInfo[3].m_fUprootLimit = 0.0f;
+-	ms_aObjectInfo[3].m_fCollisionDamageMultiplier = 1.0f;
+-	ms_aObjectInfo[3].m_nCollisionDamageEffect = 0;
+-	ms_aObjectInfo[3].m_nSpecialCollisionResponseCases = 4;
+-	ms_aObjectInfo[3].m_bCameraToAvoidThisObject = true;
+-
+ 	CFileMgr::SetDir("");
+-	CFileMgr::LoadFile(filename, work_buff, sizeof(work_buff), "r");
+-
+-	id = 4;
+-	p = (char*)work_buff;
+-	while(*p != '*'){
+-		// skip over white space and comments
+-		while(*p == ' ' || *p == '\n' || *p == '\r' || *p == ';')
+-			if(*p == ';')
+-				while(*p != '\n' && *p != '*')
+-					p++;
+-			else
+-				p++;
+-
+-		if(*p == '*')
+-			break;
+-
+-		// read one line
+-		lp = line;
+-		while(*p != '\n' && *p != '*'){
+-			*lp++ = *p == ',' ? ' ' : *p;
+-			p++;
+-		}
+-		if(*p == '\n')
+-			p++;
+-#ifdef FIX_BUGS
+-		*lp = '\0';	// FIX: game wrote '\n' here
+-#else
+-		*lp = '\n';
+-#endif
+-
+-		assert(id < NUMOBJECTINFO);
+-		sscanf(line, "%s %f %f %f %f %f %f %f %d %d %d", name,
+-			&ms_aObjectInfo[id].m_fMass,
+-			&ms_aObjectInfo[id].m_fTurnMass,
+-			&ms_aObjectInfo[id].m_fAirResistance,
+-			&ms_aObjectInfo[id].m_fElasticity,
+-			&percentSubmerged,
+-			&ms_aObjectInfo[id].m_fUprootLimit,
+-			&ms_aObjectInfo[id].m_fCollisionDamageMultiplier,
+-			&damageEffect, &responseCase, &camAvoid);
+-
+-		ms_aObjectInfo[id].m_fBuoyancy = 100.0f/percentSubmerged * GRAVITY *ms_aObjectInfo[id].m_fMass;
+-		ms_aObjectInfo[id].m_nCollisionDamageEffect = damageEffect;
+-		ms_aObjectInfo[id].m_nSpecialCollisionResponseCases = responseCase;
+-		ms_aObjectInfo[id].m_bCameraToAvoidThisObject = camAvoid;
+-
+-		mi = CModelInfo::GetModelInfo(name, nil);
+-		if (mi) {
+-			if (ms_aObjectInfo[0].m_fMass != ms_aObjectInfo[id].m_fMass
+-				|| ms_aObjectInfo[0].m_fCollisionDamageMultiplier != ms_aObjectInfo[id].m_fCollisionDamageMultiplier
+-				|| ms_aObjectInfo[0].m_nCollisionDamageEffect != ms_aObjectInfo[id].m_nCollisionDamageEffect
+-				|| ((ms_aObjectInfo[0].m_nSpecialCollisionResponseCases != ms_aObjectInfo[id].m_nSpecialCollisionResponseCases)
+-					&& (ms_aObjectInfo[2].m_nSpecialCollisionResponseCases != ms_aObjectInfo[id].m_nSpecialCollisionResponseCases))) {
+-				mi->SetObjectID(id++);
+-			} else if (ms_aObjectInfo[0].m_nSpecialCollisionResponseCases == ms_aObjectInfo[id].m_nSpecialCollisionResponseCases) {
+-				if (ms_aObjectInfo[0].m_bCameraToAvoidThisObject == ms_aObjectInfo[id].m_bCameraToAvoidThisObject)
+-					mi->SetObjectID(0);
+-				else
+-					mi->SetObjectID(1);
+-			} else if (ms_aObjectInfo[2].m_bCameraToAvoidThisObject == ms_aObjectInfo[id].m_bCameraToAvoidThisObject)
+-				mi->SetObjectID(2);
+-			else 
+-				mi->SetObjectID(3);
+-		} else
+-			debug("CObjectData: Cannot find object %s\n", name);
+-	}
++	ssize_t len = CFileMgr::LoadFile(filename, work_buff, sizeof(work_buff), "r");
++	revc_object_data_init(work_buff, len < 0 ? 0 : len, ms_aObjectInfo);
+ }
+ 
+ void

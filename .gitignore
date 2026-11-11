@@ -5,15 +5,12 @@
 # Build output
 /rust/target/
 /rust/target-*/
-/cpp/re3-miami/build/
 *.gguf
 /tools/
+# The reVC (re3-miami) C++ tree is not part of the repository: scripts/revc-source.sh builds it
+# from the player's own copy of the reVC source plus cpp/revc (patches and revc's own files).
+/cpp/re3-miami/
 # Copyrighted material that must stay local: reVC's extra game files (text, textures,
 # Xbox Neo data) belong in game/, and test screenshots show the game's art.
-/cpp/re3-miami/gamefiles/TEXT/
-/cpp/re3-miami/gamefiles/models/
-/cpp/re3-miami/gamefiles/neo/
-/cpp/re3-miami/utils/gxt/
-/cpp/re3-miami/vendor/milessdk/
 /tests/reference/
 /tests/reference-wgpu/

@@ -22,7 +22,13 @@ fn main() {
     let src = env::var_os("REVC_CPP_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| manifest.join("../../cpp/re3-miami"));
-    let src = src.canonicalize().unwrap_or_else(|e| panic!("re3-miami not found at {}: {e}", src.display()));
+    if !src.join("src/core/Frontend.cpp").exists() {
+        panic!(
+            "the reVC C++ tree is missing at {}.\nThe repository does not ship the reVC source: build it from your own copy with\n    scripts/revc-source.sh prepare <reVC source folder, archive or git URL>\n(see docs/BUILDING.md)",
+            src.display()
+        );
+    }
+    let src = src.canonicalize().unwrap();
     let build = PathBuf::from(env::var("OUT_DIR").unwrap()).join("cmake-build");
 
     let mut cfg = Command::new("cmake");
@@ -62,7 +68,7 @@ fn main() {
     }
 
     // Rebuild when the C++ tree changes. Directories make cargo walk them for mtimes.
-    for d in ["src", "vendor/librw/src", "CMakeLists.txt", "src/CMakeLists.txt"] {
+    for d in ["src", "vendor/librw/src", "CMakeLists.txt", "src/CMakeLists.txt", ".revc-source"] {
         println!("cargo:rerun-if-changed={}", src.join(d).display());
     }
     println!("cargo:rerun-if-env-changed=REVC_CPP_DIR");

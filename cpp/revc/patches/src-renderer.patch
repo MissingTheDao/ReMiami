@@ -1,0 +1,1114 @@
+--- a/src/renderer/Coronas.cpp
++++ b/src/renderer/Coronas.cpp
+@@ -1,4 +1,5 @@
+ #include "common.h"
++#include "Interpolation.h"
+ 
+ #include "main.h"
+ #include "General.h"
+@@ -194,6 +195,7 @@
+ 	aCoronas[i].blue = blue;
+ 	aCoronas[i].alpha = alpha;
+ 	aCoronas[i].coors = coors;
++	gCoronaOwner[i] = gLightOwner;
+ 	aCoronas[i].size = size;
+ 	aCoronas[i].someAngle = someAngle;
+ 	aCoronas[i].registeredThisFrame = true;
+--- a/src/renderer/Coronas.h
++++ b/src/renderer/Coronas.h
+@@ -46,6 +46,10 @@
+ {
+ 	static CRegisteredCorona aCoronas[NUMCORONAS];
+ public:
++	// revc: render interpolation moves the coronas of interpolated entities (core/Interpolation.cpp)
++	static CRegisteredCorona &GetCorona(int i) { return aCoronas[i]; }
++private:
++public:
+ 	enum {
+ 		SUN_CORE = 1,
+ 		SUN_CORONA
+--- a/src/renderer/Draw.cpp
++++ b/src/renderer/Draw.cpp
+@@ -108,6 +108,10 @@
+ #ifdef PROPER_SCALING	
+ float CDraw::ScaleY(float y)
+ {
+-	return ms_bProperScaling ? y : y * ((float)DEFAULT_SCREEN_HEIGHT/SCREEN_HEIGHT_NTSC);
++	// revc (plan task 13): the PS2 UI style lays the HUD out in 448 lines like the PS2 (the PC
++	// constants), the Xbox style in 480 lines (same pixel constants on its 480-line screen).
++	extern int8 gUiStyle;
++	bool proper = gUiStyle == 1 ? false : gUiStyle == 2 ? true : ms_bProperScaling;
++	return proper ? y : y * ((float)DEFAULT_SCREEN_HEIGHT/SCREEN_HEIGHT_NTSC);
+ }
+ #endif 
+\ No newline at end of file
+--- a/src/renderer/Font.cpp
++++ b/src/renderer/Font.cpp
+@@ -105,9 +105,11 @@
+ 		//Characters that are referred as '*I' are characters that contain icons for PS2/XBOX, but contain regular characters on PC
+ 		//in order to display them properly in the Keyboard controls menu.
+ 		//!2,!, *I,(R),  $,  %,  &,  ',  [,  ], *I,  +,  ,   -,  ., *I,
+-		15,  7, 31, 25, 20, 23, 21,  7, 11, 10, 26, 14,  6, 12,  6, 26,
++		// revc: the *I slots hold plain characters in the fonts revc draws (", *, /), so their
++		// widths are those characters' (were the console icons' widths: "up/ down")
++		15,  7, 10, 25, 20, 23, 21,  7, 11, 10, 12, 14,  6, 12,  6, 13,
+ 		//0, 1,  2,  3,  4,  5,  6,  7,  8,  9,  :, *I, *I, *I, *I,  ?,
+-		20,  7, 20, 20, 21, 20, 20, 19, 21, 20,  8, 30, 24, 30, 24, 19,
++		20,  7, 20, 20, 21, 20, 20, 19, 21, 20,  8,  7, 24, 14, 24, 19,	// revc: ; and = (*I) as above; shield and star stay
+ 		//TM,A,  B,  C,  D,  E,  F,  G,  H,  I,  J,  K,  L,  M,  N,  O,
+ 		20, 22, 22, 21, 22, 18, 18, 22, 22,  9, 14, 21, 18, 27, 21, 24,
+ 		//P, Q,  R,  S,  T,  U,  V,  W,  X,  Y,  Z, *I,  \, *I,  ¡,  °,
+@@ -398,6 +400,14 @@
+ 		ButtonSprite[BUTTON_RSTICK_DOWN].SetTexture("thumbryd");
+ 		ButtonSprite[BUTTON_RSTICK_LEFT].SetTexture("thumbrxl");
+ 		ButtonSprite[BUTTON_RSTICK_RIGHT].SetTexture("thumbrxr");
++		// revc: the button TXDs also have the D-pad and Select/Start (used by the PS2 menu skin's
++		// help box and by prompts when no glyph pack is installed).
++		ButtonSprite[BUTTON_DPAD_UP].SetTexture("up");
++		ButtonSprite[BUTTON_DPAD_RIGHT].SetTexture("right");
++		ButtonSprite[BUTTON_DPAD_DOWN].SetTexture("down");
++		ButtonSprite[BUTTON_DPAD_LEFT].SetTexture("left");
++		ButtonSprite[BUTTON_SELECT].SetTexture("select");
++		ButtonSprite[BUTTON_START].SetTexture("start");
+ 		CTxdStore::PopCurrentTxd();
+ 	}
+ 	else {
+@@ -505,7 +515,10 @@
+ 		RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &vertexAlphaState);
+ 		RwRenderStateGet(rwRENDERSTATETEXTURERASTER, &raster);
+ 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void *)TRUE);
+-		if (RenderState.bIsShadow)
++		// revc: a glyph set without this button (or the game's own TXDs for the new ones) draws nothing.
++		if (ButtonSprite[PS2Symbol].m_pTexture == nil)
++			;
++		else if (RenderState.bIsShadow)
+ 			ButtonSprite[PS2Symbol].Draw(rect, RenderState.color);
+ 		else
+ 			ButtonSprite[PS2Symbol].Draw(rect, CRGBA(255, 255, 255, RenderState.color.a));
+@@ -691,6 +704,13 @@
+ 			}
+ 			if (!RenderState.bIsShadow)
+ 				RenderState.color = color;
++			// revc: a string that ends with a token (e.g. a lone button glyph): stop on its
++			// terminator instead of stepping over it (the loop's ++ would skip the '\0' and
++			// read the next render state as text).
++			if (*pRenderStateBufPointer.pStr == '\0') {
++				pRenderStateBufPointer.pStr--;
++				continue;
++			}
+ 		}
+ 		wchar c = *pRenderStateBufPointer.pStr;
+ 		c -= ' ';
+@@ -1432,7 +1452,20 @@
+ {
+ 	Details.anonymous_23 = false;
+ 	wchar *s = str + 1;
+-	if (Details.color.r || Details.color.g || Details.color.b)
++	// revc: button tokens draw whatever the current colour is. The original only parses tokens
++	// while Details.color isn't black, and Details.color is the colour at the time the buffer is
++	// flushed, not the string's: after black text (e.g. "NOT USED" on the bindings page) the
++	// glyphs of a whole batch went missing.
++	bool buttonToken = false;
++#ifdef BUTTON_ICONS
++	switch (*s) {
++	case 'U': case 'D': case '<': case '>': case 'X': case 'O': case 'Q': case 'T': case 'K': case 'M':
++	case 'A': case 'J': case 'V': case 'C': case 'H': case 'L': case '(': case ')':
++	case 'E': case 'F': case 'G': case 'I': case 'S': case 'P':
++		buttonToken = true;
++	}
++#endif
++	if (Details.color.r || Details.color.g || Details.color.b || buttonToken)
+ 	{
+ 		switch (*s)
+ 		{
+@@ -1529,6 +1562,12 @@
+ 		case 'L': PS2Symbol = BUTTON_RSTICK_DOWN; break;
+ 		case '(': PS2Symbol = BUTTON_RSTICK_LEFT; break;
+ 		case ')': PS2Symbol = BUTTON_RSTICK_RIGHT; break;
++		case 'E': PS2Symbol = BUTTON_DPAD_UP; break;
++		case 'F': PS2Symbol = BUTTON_DPAD_RIGHT; break;
++		case 'G': PS2Symbol = BUTTON_DPAD_DOWN; break;
++		case 'I': PS2Symbol = BUTTON_DPAD_LEFT; break;
++		case 'S': PS2Symbol = BUTTON_SELECT; break;
++		case 'P': PS2Symbol = BUTTON_START; break;
+ #endif
+ 		default:
+ 			break;
+@@ -1582,6 +1621,12 @@
+ 		case 'L': PS2Symbol = BUTTON_RSTICK_DOWN; break;
+ 		case '(': PS2Symbol = BUTTON_RSTICK_LEFT; break;
+ 		case ')': PS2Symbol = BUTTON_RSTICK_RIGHT; break;
++		case 'E': PS2Symbol = BUTTON_DPAD_UP; break;
++		case 'F': PS2Symbol = BUTTON_DPAD_RIGHT; break;
++		case 'G': PS2Symbol = BUTTON_DPAD_DOWN; break;
++		case 'I': PS2Symbol = BUTTON_DPAD_LEFT; break;
++		case 'S': PS2Symbol = BUTTON_SELECT; break;
++		case 'P': PS2Symbol = BUTTON_START; break;
+ #endif
+ 		}
+ 	} else if (IsJapanese()) {
+@@ -1708,6 +1753,12 @@
+ 		case 'L': PS2Symbol = BUTTON_RSTICK_DOWN; break;
+ 		case '(': PS2Symbol = BUTTON_RSTICK_LEFT; break;
+ 		case ')': PS2Symbol = BUTTON_RSTICK_RIGHT; break;
++		case 'E': PS2Symbol = BUTTON_DPAD_UP; break;
++		case 'F': PS2Symbol = BUTTON_DPAD_RIGHT; break;
++		case 'G': PS2Symbol = BUTTON_DPAD_DOWN; break;
++		case 'I': PS2Symbol = BUTTON_DPAD_LEFT; break;
++		case 'S': PS2Symbol = BUTTON_SELECT; break;
++		case 'P': PS2Symbol = BUTTON_START; break;
+ #endif
+ 		}
+ 	while(*s != '~') s++;
+--- a/src/renderer/Font.h
++++ b/src/renderer/Font.h
+@@ -115,6 +115,14 @@
+ 	BUTTON_RSTICK_DOWN,
+ 	BUTTON_RSTICK_LEFT,
+ 	BUTTON_RSTICK_RIGHT,
++	// revc: D-pad and the two middle buttons (tokens ~E~ ~F~ ~G~ ~I~ up/right/down/left,
++	// ~S~ select/back/view, ~P~ start/menu); drawn only where a glyph set provides them.
++	BUTTON_DPAD_UP,
++	BUTTON_DPAD_RIGHT,
++	BUTTON_DPAD_DOWN,
++	BUTTON_DPAD_LEFT,
++	BUTTON_SELECT,
++	BUTTON_START,
+ 	MAX_BUTTON_ICONS
+ };
+ #endif // BUTTON_ICONS
+--- a/src/renderer/Hud.cpp
++++ b/src/renderer/Hud.cpp
+@@ -26,6 +26,16 @@
+ #include "General.h"
+ #include "VarConsole.h"
+ 
++// revc (plan task 13): the Xbox HUD is the PC/PS2 layout moved about 22 px left and 22 px down on
++// its 640x480 screen (measured on Xbox captures, docs/CONSOLE_STYLES.md): money, weapon, health,
++// armour, wanted level and clock. Positions only; sizes stay.
++extern int8 gUiStyle;
++#define HUD_GROUP_DX (gUiStyle == 2 ? 22.0f : 0.0f)
++#define HUD_GROUP_DY (gUiStyle == 2 ? 22.0f : 0.0f)
++#define HUD_FROM_RIGHT(a) SCREEN_SCALE_FROM_RIGHT((a) + HUD_GROUP_DX)
++#define HUD_Y(a) SCREEN_SCALE_Y((a) + HUD_GROUP_DY)
++
++
+ #if defined(FIX_BUGS)
+ 	#define SCREEN_SCALE_X_FIX(a) SCREEN_SCALE_X(a)
+ 	#define SCREEN_SCALE_Y_FIX(a) SCREEN_SCALE_Y(a)
+@@ -438,7 +448,7 @@
+ 			CFont::SetColor(MONEY_COLOR);
+ 
+ 			if (FrontEndMenuManager.m_PrefsShowHud) {
+-				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(110.0f), SCREEN_SCALE_Y(43.0f), sPrint);
++				CFont::PrintString(HUD_FROM_RIGHT(110.0f), HUD_Y(43.0f), sPrint);
+ 			}
+ 		}
+ 
+@@ -485,7 +495,7 @@
+ 					RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+ 					if (FrontEndMenuManager.m_PrefsShowHud)
+ 						Sprites[WeaponType].Draw(
+-							CRect(SCREEN_SCALE_FROM_RIGHT(99.0f), SCREEN_SCALE_Y(27.0f), SCREEN_SCALE_FROM_RIGHT(35.0f), SCREEN_SCALE_Y(91.0f)),
++							CRect(HUD_FROM_RIGHT(99.0f), HUD_Y(27.0f), HUD_FROM_RIGHT(35.0f), HUD_Y(91.0f)),
+ 							CRGBA(255, 255, 255, alpha),
+ 							0.015f, 0.015f,
+ 							1.0f, 0.0f,
+@@ -503,14 +513,14 @@
+ 							const float ySize = SCREEN_SCALE_Y(64.0f / 2.0f);
+ 							RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+ 							RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(weaponIcon));
+-							CSprite::RenderOneXLUSprite(SCREEN_SCALE_FROM_RIGHT(99.0f) + xSize, SCREEN_SCALE_Y(25.0f) + ySize, 1.0f, xSize, ySize,
++							CSprite::RenderOneXLUSprite(HUD_FROM_RIGHT(99.0f) + xSize, HUD_Y(25.0f) + ySize, 1.0f, xSize, ySize,
+ 								255, 255, 255, 255, 1.0f, 255);
+ 							RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+ #else
+ 							static CSprite2d sprite;
+ 							sprite.m_pTexture = weaponIcon;
+ 							sprite.Draw(
+-								CRect(SCREEN_SCALE_FROM_RIGHT(99.0f), SCREEN_SCALE_Y(27.0f), SCREEN_SCALE_FROM_RIGHT(35.0f), SCREEN_SCALE_Y(91.0f)),
++								CRect(HUD_FROM_RIGHT(99.0f), HUD_Y(27.0f), HUD_FROM_RIGHT(35.0f), HUD_Y(91.0f)),
+ 								CRGBA(255, 255, 255, alpha),
+ 								0.015f, 0.015f,
+ 								1.0f, 0.0f,
+@@ -537,7 +547,7 @@
+ 					AMMO_COLOR.a = alpha;
+ 					CFont::SetColor(AMMO_COLOR);
+ 					if (FrontEndMenuManager.m_PrefsShowHud)
+-						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(66.0f), SCREEN_SCALE_Y(90.0f), sPrint);
++						CFont::PrintString(HUD_FROM_RIGHT(66.0f), HUD_Y(90.0f), sPrint);
+ 					CFont::SetDropShadowPosition(0);
+ 				}
+ 			}
+@@ -582,11 +592,11 @@
+ 
+ 					CFont::SetColor(HEALTH_COLOR);
+ 					if (FrontEndMenuManager.m_PrefsShowHud) {
+-						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(110.0f), SCREEN_SCALE_Y(65.0f), sPrint);
++						CFont::PrintString(HUD_FROM_RIGHT(110.0f), HUD_Y(65.0f), sPrint);
+ 
+ 						if (!CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastHealthLoss || CTimer::GetTimeInMilliseconds() > CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastHealthLoss + 2000 || FRAMECOUNTER & 4) {
+ 							// CFont::SetColor(HEALTH_COLOR);
+-							CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(110.0f + 54.0f), SCREEN_SCALE_Y(65.0f), sPrintIcon);
++							CFont::PrintString(HUD_FROM_RIGHT(110.0f + 54.0f), HUD_Y(65.0f), sPrintIcon);
+ 						}
+ 					}
+ 				}
+@@ -609,11 +619,11 @@
+ 					CFont::SetColor(ARMOUR_COLOR);
+ 					if (FrontEndMenuManager.m_PrefsShowHud) {
+ 
+-						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(182.0f), SCREEN_SCALE_Y(65.0f), sPrint);
++						CFont::PrintString(HUD_FROM_RIGHT(182.0f), HUD_Y(65.0f), sPrint);
+ 
+ 						if (!CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastArmourLoss || CTimer::GetTimeInMilliseconds() > CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastArmourLoss + 2000 || FRAMECOUNTER & 4) {
+ 							// CFont::SetColor(ARMOUR_COLOR);
+-							CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(182.0f + 52.0f), SCREEN_SCALE_Y(65.0f), sPrintIcon);
++							CFont::PrintString(HUD_FROM_RIGHT(182.0f + 52.0f), HUD_Y(65.0f), sPrintIcon);
+ 						}
+ 					}
+ 				}
+@@ -649,17 +659,17 @@
+ 
+ 						WANTED_COLOR.a = alpha;
+ 						CFont::SetColor(WANTED_COLOR);
+-						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(110.0f + 23.0f * i), SCREEN_SCALE_Y(87.0f), sPrintIcon);
++						CFont::PrintString(HUD_FROM_RIGHT(110.0f + 23.0f * i), HUD_Y(87.0f), sPrintIcon);
+ 
+ 					} else if (playerPed->m_pWanted->m_nMinWantedLevel > i && FRAMECOUNTER & 4) {
+ 						WANTED_COLOR_FLASH.a = alpha;
+ 						CFont::SetColor(WANTED_COLOR_FLASH);
+-						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(110.0f + 23.0f * i), SCREEN_SCALE_Y(87.0f), sPrintIcon);
++						CFont::PrintString(HUD_FROM_RIGHT(110.0f + 23.0f * i), HUD_Y(87.0f), sPrintIcon);
+ 
+ 					} else if (playerPed->m_pWanted->GetWantedLevel() <= i) {
+ 						NOTWANTED_COLOR.a = alpha;
+ 						CFont::SetColor(NOTWANTED_COLOR);
+-						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(110.0f + 23.0f * i), SCREEN_SCALE_Y(87.0f), sPrintIcon);
++						CFont::PrintString(HUD_FROM_RIGHT(110.0f + 23.0f * i), HUD_Y(87.0f), sPrintIcon);
+ 					}
+ 				}
+ 			}
+@@ -697,7 +707,7 @@
+ 				else
+ 					colour = CRGBA(178, 0, 162, 180);
+ 				CFont::SetColor(colour);
+-				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(110.0f), SCREEN_SCALE_Y(113.0f), gUString);
++				CFont::PrintString(HUD_FROM_RIGHT(110.0f), HUD_Y(113.0f), gUString);
+ 				
+ 				if (CStats::FindChaseString(fCurAttentionLevel) != prevChaseString) {
+ 					prevChaseString = CStats::FindChaseString(fCurAttentionLevel);
+@@ -707,7 +717,7 @@
+ 				if (nMediaLevelCounter != 0) {
+ 					nMediaLevelCounter--;
+ 					UnicodeMakeUpperCase(gUString, CStats::FindChaseString(fCurAttentionLevel));
+-					CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(110.0f), SCREEN_SCALE_Y(138.0f), gUString);
++					CFont::PrintString(HUD_FROM_RIGHT(110.0f), HUD_Y(138.0f), gUString);
+ 				}
+ 			}
+ 		}
+@@ -938,7 +948,7 @@
+ 
+ 			CFont::SetColor(CLOCK_COLOR);
+ 			if (FrontEndMenuManager.m_PrefsShowHud)
+-				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(111.0f), SCREEN_SCALE_Y(22.0f), sPrint);
++				CFont::PrintString(HUD_FROM_RIGHT(111.0f), HUD_Y(22.0f), sPrint);
+ 		}
+ 
+ 		/*
+@@ -1951,6 +1961,37 @@
+ 	m_pZoneName = name;
+ }
+ 
++// revc (plan task 13): loads hud.txd again without touching the HUD's state, so texture packs
++// for another UI style (mods/packs/pc-*, ps2-*, xbox-*) take effect; the radar's sprites too.
++void CHud::ReloadTextures()
++{
++	for (int i = 0; i < NUM_HUD_SPRITES; ++i)
++		Sprites[i].Delete();
++	RwTexture **sights[] = { &gpSniperSightTex, &gpRocketSightTex, &gpLaserSightTex, &gpLaserDotTex, &gpViewFinderTex };
++	for (RwTexture **t : sights)
++		if (*t) {
++			RwTextureDestroy(*t);
++			*t = nil;
++		}
++	int slot = CTxdStore::FindTxdSlot("hud");
++	if (slot != -1)
++		CTxdStore::RemoveTxdSlot(slot);
++	slot = CTxdStore::AddTxdSlot("hud");
++	CTxdStore::LoadTxd(slot, "MODELS/HUD.TXD");
++	CTxdStore::AddRef(slot);
++	CTxdStore::PushCurrentTxd();
++	CTxdStore::SetCurrentTxd(slot);
++	for (int i = 0; i < NUM_HUD_SPRITES; i++)
++		Sprites[i].SetTexture(WeaponFilenames[i].name, WeaponFilenames[i].mask);
++	gpSniperSightTex = RwTextureRead("sitesniper", nil);
++	gpRocketSightTex = RwTextureRead("siterocket", nil);
++	gpLaserSightTex = RwTextureRead("sitelaser", nil);
++	gpLaserDotTex = RwTextureRead("laserdot", "laserdotm");
++	gpViewFinderTex = RwTextureRead("viewfinder_128", "viewfinder_128m");
++	CTxdStore::PopCurrentTxd();
++	CRadar::LoadTextures();
++}
++
+ void CHud::Shutdown()
+ {
+ 	for (int i = 0; i < NUM_HUD_SPRITES; ++i) {
+--- a/src/renderer/Hud.h
++++ b/src/renderer/Hud.h
+@@ -134,6 +134,7 @@
+ 	static void SetVehicleName(wchar *name);
+ 	static void SetZoneName(wchar *name);
+ 	static void Shutdown();
++	static void ReloadTextures();	// revc: hud.txd again (texture packs per UI style)
+ 	static float DrawFadeState(DRAW_FADE_STATE, int);
+ 	static void ResetWastedText(void);
+ };
+--- a/src/renderer/MBlur.cpp
++++ b/src/renderer/MBlur.cpp
+@@ -39,9 +39,9 @@
+ CMBlur::MotionBlurOpen(RwCamera *cam)
+ {
+ #ifdef EXTENDED_COLOURFILTER
++	// revc: the original filter below is colour filter mode POSTFX_PC; both are kept ready.
+ 	CPostFX::Open(cam);
+-	return TRUE;
+-#else
++#endif
+ #ifdef GTA_PS2
+ 	RwRect rect = {0, 0, 0, 0};
+ 	
+@@ -73,8 +73,11 @@
+ #else
+ 	RwRect rect = { 0, 0, 0, 0 };
+ 
+-	if(pFrontBuffer)
+-		MotionBlurClose();
++	// revc: only this filter's raster (MotionBlurClose also closes CPostFX, opened above).
++	if(pFrontBuffer){
++		RwRasterDestroy(pFrontBuffer);
++		pFrontBuffer = nil;
++	}
+ 	
+ #ifndef LIBRW
+ 	extern void _GetVideoMemInfo(LPDWORD total, LPDWORD avaible);
+@@ -142,7 +145,6 @@
+ 	
+ 	return TRUE;
+ #endif
+-#endif
+ }
+ 
+ RwBool
+@@ -150,14 +152,13 @@
+ {
+ #ifdef EXTENDED_COLOURFILTER
+ 	CPostFX::Close();
+-#else
++#endif
+ 	if(pFrontBuffer){
+ 		RwRasterDestroy(pFrontBuffer);
+ 		pFrontBuffer = nil;
+ 		
+ 		return TRUE;
+ 	}
+-#endif
+ 	return FALSE;
+ }
+ 
+@@ -332,8 +333,11 @@
+ CMBlur::MotionBlurRender(RwCamera *cam, uint32 red, uint32 green, uint32 blue, uint32 blur, int32 type, uint32 bluralpha)
+ {
+ #ifdef EXTENDED_COLOURFILTER
+-	CPostFX::Render(cam, red, green, blue, blur, type, bluralpha);
+-#else
++	if(CPostFX::EffectSwitch != CPostFX::POSTFX_PC){
++		CPostFX::Render(cam, red, green, blue, blur, type, bluralpha);
++		return;
++	}
++#endif
+ 	PUSH_RENDERGROUP("CMBlur::MotionBlurRender");
+ 	RwRGBA color = { (RwUInt8)red, (RwUInt8)green, (RwUInt8)blue, (RwUInt8)blur };
+ #ifdef GTA_PS2
+@@ -351,7 +355,6 @@
+ 	}
+ #endif
+ 	POP_RENDERGROUP();
+-#endif
+ }
+ 
+ static uint8 DrunkBlurRed = 128;
+--- a/src/renderer/ParticleMgr.cpp
++++ b/src/renderer/ParticleMgr.cpp
+@@ -21,235 +21,14 @@
+ 		m_aParticles[i].m_pParticles = nil;
+ }
+ 
++// The particle.cfg parser is in Rust (rust/revc/src/particlecfg.rs); the table stays here.
++static_assert(sizeof(tParticleSystemData) == 160 && offsetof(tParticleSystemData, m_ColorFadeTime) == 124, "particle layout (particlecfg.rs)");
++extern "C" void revc_particle_cfg_load(const uint8 *data, size_t len, tParticleSystemData *table);
++
+ void cParticleSystemMgr::LoadParticleData()
+ {
+ 	CFileMgr::SetDir("DATA");
+-	CFileMgr::LoadFile(ParticleFilename, work_buff, ARRAY_SIZE(work_buff), "r");
++	ssize_t len = CFileMgr::LoadFile(ParticleFilename, work_buff, ARRAY_SIZE(work_buff), "r");
+ 	CFileMgr::SetDir("");
+-	
+-	tParticleSystemData *entry = nil;
+-	int32 type = PARTICLE_FIRST;
+-	
+-	char *lineStart = (char *)work_buff;
+-	char *lineEnd = lineStart + 1;
+-	
+-	char line[500];
+-	char delims[4];
+-
+-	while ( true )
+-	{
+-		ASSERT(lineStart != nil);
+-		ASSERT(lineEnd != nil);
+-		
+-		while ( *lineEnd != '\n' )
+-			++lineEnd;
+-		
+-		int32 lineLength = lineEnd - lineStart;
+-		
+-		ASSERT(lineLength < 500);
+-
+-		strncpy(line, lineStart, lineLength);
+-		
+-		line[lineLength] = '\0';
+-		
+-		if ( !strcmp(line, ";the end") )
+-			break;
+-		
+-		if ( *line != ';' )
+-		{
+-			int32 param = CFG_PARAM_FIRST;
+-
+-			strcpy(delims, " \t");
+-			
+-			char *value = strtok(line, delims);
+-			
+-			ASSERT(value != nil);
+-			
+-			do
+-			{	
+-				switch ( param )
+-				{
+-					case CFG_PARAM_PARTICLE_TYPE_NAME:
+-						ASSERT(type < MAX_PARTICLES);
+-						entry = &m_aParticles[type];
+-						ASSERT(entry != nil);
+-						entry->m_Type = (tParticleType)type++;
+-						strcpy(entry->m_aName, value);
+-						break;
+-
+-					case CFG_PARAM_RENDER_COLOURING_R:
+-						entry->m_RenderColouring.red = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_RENDER_COLOURING_G:
+-						entry->m_RenderColouring.green = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_RENDER_COLOURING_B:
+-						entry->m_RenderColouring.blue = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_INITIAL_COLOR_VARIATION:
+-						entry->m_InitialColorVariation = Min(atoi(value), 100);
+-						break;
+-
+-					case CFG_PARAM_FADE_DESTINATION_COLOR_R:
+-						entry->m_FadeDestinationColor.red = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_FADE_DESTINATION_COLOR_G:
+-						entry->m_FadeDestinationColor.green = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_FADE_DESTINATION_COLOR_B:
+-						entry->m_FadeDestinationColor.blue = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_COLOR_FADE_TIME:
+-						entry->m_ColorFadeTime = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_DEFAULT_INITIAL_RADIUS:
+-						entry->m_fDefaultInitialRadius = atof(value);
+-						break;
+-
+-					case CFG_PARAM_EXPANSION_RATE:
+-						entry->m_fExpansionRate = atof(value);
+-						break;
+-
+-					case CFG_PARAM_INITIAL_INTENSITY:
+-						entry->m_nFadeToBlackInitialIntensity = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_FADE_TIME:
+-						entry->m_nFadeToBlackTime = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_FADE_AMOUNT:
+-						entry->m_nFadeToBlackAmount = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_INITIAL_ALPHA_INTENSITY:
+-						entry->m_nFadeAlphaInitialIntensity = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_FADE_ALPHA_TIME:
+-						entry->m_nFadeAlphaTime = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_FADE_ALPHA_AMOUNT:
+-						entry->m_nFadeAlphaAmount = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_INITIAL_ANGLE:
+-						entry->m_nZRotationInitialAngle = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_CHANGE_TIME:
+-						entry->m_nZRotationChangeTime = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_ANGLE_CHANGE_AMOUNT:
+-						entry->m_nZRotationAngleChangeAmount = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_INITIAL_Z_RADIUS:
+-						entry->m_fInitialZRadius = atof(value);
+-						break;
+-
+-					case CFG_PARAM_Z_RADIUS_CHANGE_TIME:
+-						entry->m_nZRadiusChangeTime = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_Z_RADIUS_CHANGE_AMOUNT:
+-						entry->m_fZRadiusChangeAmount = atof(value);
+-						break;
+-
+-					case CFG_PARAM_ANIMATION_SPEED:
+-						entry->m_nAnimationSpeed = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_START_ANIMATION_FRAME:
+-						entry->m_nStartAnimationFrame = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_FINAL_ANIMATION_FRAME:
+-						entry->m_nFinalAnimationFrame = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_ROTATION_SPEED:
+-						entry->m_nRotationSpeed = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_GRAVITATIONAL_ACCELERATION:
+-						entry->m_fGravitationalAcceleration = atof(value);
+-						break;
+-
+-					case CFG_PARAM_FRICTION_DECCELERATION:
+-						entry->m_nFrictionDecceleration = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_LIFE_SPAN:
+-						entry->m_nLifeSpan = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_POSITION_RANDOM_ERROR:
+-						entry->m_fPositionRandomError = atof(value);
+-						break;
+-
+-					case CFG_PARAM_VELOCITY_RANDOM_ERROR:
+-						entry->m_fVelocityRandomError = atof(value);
+-						break;
+-
+-					case CFG_PARAM_EXPANSION_RATE_ERROR:
+-						entry->m_fExpansionRateError = atof(value);
+-						break;
+-
+-					case CFG_PARAM_ROTATION_RATE_ERROR:
+-						entry->m_nRotationRateError = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_LIFE_SPAN_ERROR_SHAPE:
+-						entry->m_nLifeSpanErrorShape = atoi(value);
+-						break;
+-
+-					case CFG_PARAM_TRAIL_LENGTH_MULTIPLIER:
+-						entry->m_fTrailLengthMultiplier = atof(value);
+-						break;
+-						
+-					case CFG_PARAM_STRETCH_VALUE_X:
+-						entry->m_vecTextureStretch.x = atof(value);
+-						break;
+-
+-					case CFG_PARAM_STRETCH_VALUE_Y:
+-						entry->m_vecTextureStretch.y = atof(value);
+-						break;
+-
+-					case CFG_PARAM_WIND_FACTOR:
+-						entry->m_fWindFactor = atof(value);
+-						break;
+-
+-					case CFG_PARAM_PARTICLE_CREATE_RANGE:
+-						entry->m_fCreateRange = SQR(atof(value));
+-						break;
+-
+-					case CFG_PARAM_FLAGS:
+-						entry->Flags = atoi(value);
+-						break;
+-				}
+-				
+-				value = strtok(nil, delims);
+-
+-				param++;
+-
+-				if ( param > CFG_PARAM_LAST )
+-					param = CFG_PARAM_FIRST;
+-		
+-			} while ( value != nil );
+-		}
+-		
+-		lineEnd++;
+-		lineStart = lineEnd;
+-		lineEnd++;
+-	}
++	revc_particle_cfg_load(work_buff, len < 0 ? 0 : len, m_aParticles);
+ }
+--- a/src/renderer/Renderer.cpp
++++ b/src/renderer/Renderer.cpp
+@@ -1,5 +1,6 @@
+ #define WITHD3D
+ #include "common.h"
++#include "Interpolation.h"
+ 
+ #include "main.h"
+ #include "Lights.h"
+@@ -86,6 +87,16 @@
+ 	gSortedVehiclesAndPeds.Shutdown();
+ }
+ 
++// revc: lights an entity registers during its PreRender (coronas, bright lights) remember it, so
++// the render interpolation can draw them where the entity is drawn (core/Interpolation.cpp).
++static void
++PreRenderOwned(CEntity *e)
++{
++	gLightOwner = e;
++	e->PreRender();
++	gLightOwner = nil;
++}
++
+ void
+ CRenderer::PreRender(void)
+ {
+@@ -93,19 +104,19 @@
+ 	CLink<CVisibilityPlugins::AlphaObjectInfo> *node;
+ 
+ 	for(i = 0; i < ms_nNoOfVisibleEntities; i++)
+-		ms_aVisibleEntityPtrs[i]->PreRender();
++		PreRenderOwned(ms_aVisibleEntityPtrs[i]);
+ 
+ #ifdef NEW_RENDERER
+ 	if(gbNewRenderer){
+ 		for(i = 0; i < ms_nNoOfVisibleVehicles; i++)
+-			ms_aVisibleVehiclePtrs[i]->PreRender();
++			PreRenderOwned(ms_aVisibleVehiclePtrs[i]);
+ 		// How is this done with cWorldStream?
+ 		for(i = 0; i < ms_nNoOfVisibleBuildings; i++)
+-			ms_aVisibleBuildingPtrs[i]->PreRender();
++			PreRenderOwned(ms_aVisibleBuildingPtrs[i]);
+ 		for(node = CVisibilityPlugins::m_alphaBuildingList.head.next;
+ 		    node != &CVisibilityPlugins::m_alphaBuildingList.tail;
+ 		    node = node->next)
+-			((CEntity*)node->item.entity)->PreRender();
++			PreRenderOwned((CEntity*)node->item.entity);
+ 	}
+ #endif
+ 
+@@ -113,13 +124,13 @@
+ #ifdef SQUEEZE_PERFORMANCE
+ 		if (ms_aInVisibleEntityPtrs[i]->IsVehicle() && ((CVehicle*)ms_aInVisibleEntityPtrs[i])->IsHeli())
+ #endif
+-		ms_aInVisibleEntityPtrs[i]->PreRender();
++		PreRenderOwned(ms_aInVisibleEntityPtrs[i]);
+ 	}
+ 
+ 	for(node = CVisibilityPlugins::m_alphaEntityList.head.next;
+ 	    node != &CVisibilityPlugins::m_alphaEntityList.tail;
+ 	    node = node->next)
+-		((CEntity*)node->item.entity)->PreRender();
++		PreRenderOwned((CEntity*)node->item.entity);
+ 
+ 	CHeli::SpecialHeliPreRender();
+ 	CShadows::RenderExtraPlayerShadows();
+--- a/src/renderer/Shadows.cpp
++++ b/src/renderer/Shadows.cpp
+@@ -1237,7 +1237,8 @@
+ 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE,       (void *)TRUE);
+ 	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS,    (void *)rwTEXTUREADDRESSWRAP);
+ 
+-	ShadowsStoredToBeRendered = 0;
++	// Not cleared here: with the fixed-timestep loop a game step can be drawn several times, so the
++	// list is cleared at the start of each step instead (ClearPerStepRenderLists() in main.cpp).
+ 
+ 	POP_RENDERGROUP();
+ }
+--- a/src/renderer/SpecialFX.cpp
++++ b/src/renderer/SpecialFX.cpp
+@@ -1,4 +1,5 @@
+ #include "common.h"
++#include "Interpolation.h"
+ 
+ #include "SpecialFX.h"
+ #include "RenderBuffer.h"
+@@ -976,6 +977,7 @@
+ 	aBrightLights[NumBrightLights].m_up = up;
+ 	aBrightLights[NumBrightLights].m_side = side;
+ 	aBrightLights[NumBrightLights].m_front = front;
++	gBrightLightOwner[NumBrightLights] = gLightOwner;
+ 	aBrightLights[NumBrightLights].m_type = type;
+ 	aBrightLights[NumBrightLights].m_red = red;
+ 	aBrightLights[NumBrightLights].m_green = green;
+@@ -1179,7 +1181,8 @@
+ 
+ 	RenderOutGeometryBuffer();
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+-	NumBrightLights = 0;
++	// NumBrightLights is cleared at the start of each game step (ClearPerStepRenderLists() in main.cpp),
++	// so a step drawn several times keeps its lights.
+ }
+ 
+ void
+@@ -1316,7 +1319,7 @@
+ 	}
+ 
+ 	RenderOutGeometryBuffer();
+-	NumShinyTexts = 0;
++	// NumShinyTexts is cleared at the start of each game step (ClearPerStepRenderLists() in main.cpp).
+ 
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+--- a/src/renderer/SpecialFX.h
++++ b/src/renderer/SpecialFX.h
+@@ -172,7 +172,14 @@
+ 	static int NumBrightLights;
+ 	static CBrightLight aBrightLights[NUMBRIGHTLIGHTS];
+ public:
++	// revc: render interpolation moves the lights of interpolated entities (core/Interpolation.cpp)
++	static int GetNum(void) { return NumBrightLights; }
++	static CBrightLight &Get(int i) { return aBrightLights[i]; }
++private:
++public:
+ 	static void Init(void);
++	// Called when a new game step starts (ClearPerStepRenderLists() in main.cpp).
++	static void ClearForNewStep(void) { NumBrightLights = 0; }
+ 	static void RegisterOne(CVector pos, CVector up, CVector side, CVector front,
+ 		uint8 type, uint8 red = 0, uint8 green = 0, uint8 blue = 0);
+ 	static void Render(void);
+@@ -206,6 +213,8 @@
+ 	static CShinyText aShinyTexts[NUMSHINYTEXTS];
+ public:
+ 	static void Init(void);
++	// Called when a new game step starts (ClearPerStepRenderLists() in main.cpp).
++	static void ClearForNewStep(void) { NumShinyTexts = 0; }
+ 	static void RegisterOne(CVector p0, CVector p1, CVector p2, CVector p3,
+ 		float u0, float v0, float u1, float v1, float u2, float v2, float u3, float v3,
+ 		uint8 type, uint8 red, uint8 green, uint8 blue, float maxDist); //not used
+--- a/src/renderer/Timecycle.cpp
++++ b/src/renderer/Timecycle.cpp
+@@ -134,132 +134,160 @@
+ float CTimeCycle::m_fShadowDisplacementX[16];
+ float CTimeCycle::m_fShadowDisplacementY[16];
+ 
++// The timecyc.dat parse is in Rust (rust/revc/src/timecyc.rs, struct Tables: the same 52 tables
++// in this order); the tables stay here.
++struct RevcTimecycTables {
++    uint8 m_nAmbientRed[NUMHOURS][NUMWEATHERS];
++    uint8 m_nAmbientGreen[NUMHOURS][NUMWEATHERS];
++    uint8 m_nAmbientBlue[NUMHOURS][NUMWEATHERS];
++    uint8 m_nAmbientRed_Obj[NUMHOURS][NUMWEATHERS];
++    uint8 m_nAmbientGreen_Obj[NUMHOURS][NUMWEATHERS];
++    uint8 m_nAmbientBlue_Obj[NUMHOURS][NUMWEATHERS];
++    uint8 m_nAmbientRed_Bl[NUMHOURS][NUMWEATHERS];
++    uint8 m_nAmbientGreen_Bl[NUMHOURS][NUMWEATHERS];
++    uint8 m_nAmbientBlue_Bl[NUMHOURS][NUMWEATHERS];
++    uint8 m_nAmbientRed_Obj_Bl[NUMHOURS][NUMWEATHERS];
++    uint8 m_nAmbientGreen_Obj_Bl[NUMHOURS][NUMWEATHERS];
++    uint8 m_nAmbientBlue_Obj_Bl[NUMHOURS][NUMWEATHERS];
++    uint8 m_nDirectionalRed[NUMHOURS][NUMWEATHERS];
++    uint8 m_nDirectionalGreen[NUMHOURS][NUMWEATHERS];
++    uint8 m_nDirectionalBlue[NUMHOURS][NUMWEATHERS];
++    uint8 m_nSkyTopRed[NUMHOURS][NUMWEATHERS];
++    uint8 m_nSkyTopGreen[NUMHOURS][NUMWEATHERS];
++    uint8 m_nSkyTopBlue[NUMHOURS][NUMWEATHERS];
++    uint8 m_nSkyBottomRed[NUMHOURS][NUMWEATHERS];
++    uint8 m_nSkyBottomGreen[NUMHOURS][NUMWEATHERS];
++    uint8 m_nSkyBottomBlue[NUMHOURS][NUMWEATHERS];
++    uint8 m_nSunCoreRed[NUMHOURS][NUMWEATHERS];
++    uint8 m_nSunCoreGreen[NUMHOURS][NUMWEATHERS];
++    uint8 m_nSunCoreBlue[NUMHOURS][NUMWEATHERS];
++    uint8 m_nSunCoronaRed[NUMHOURS][NUMWEATHERS];
++    uint8 m_nSunCoronaGreen[NUMHOURS][NUMWEATHERS];
++    uint8 m_nSunCoronaBlue[NUMHOURS][NUMWEATHERS];
++    int8 m_fSunSize[NUMHOURS][NUMWEATHERS];
++    int8 m_fSpriteSize[NUMHOURS][NUMWEATHERS];
++    int8 m_fSpriteBrightness[NUMHOURS][NUMWEATHERS];
++    uint8 m_nShadowStrength[NUMHOURS][NUMWEATHERS];
++    uint8 m_nLightShadowStrength[NUMHOURS][NUMWEATHERS];
++    uint8 m_nPoleShadowStrength[NUMHOURS][NUMWEATHERS];
++    int16 m_fFarClip[NUMHOURS][NUMWEATHERS];
++    int16 m_fFogStart[NUMHOURS][NUMWEATHERS];
++    uint8 m_fLightsOnGroundBrightness[NUMHOURS][NUMWEATHERS];
++    uint8 m_nLowCloudsRed[NUMHOURS][NUMWEATHERS];
++    uint8 m_nLowCloudsGreen[NUMHOURS][NUMWEATHERS];
++    uint8 m_nLowCloudsBlue[NUMHOURS][NUMWEATHERS];
++    uint8 m_nFluffyCloudsTopRed[NUMHOURS][NUMWEATHERS];
++    uint8 m_nFluffyCloudsTopGreen[NUMHOURS][NUMWEATHERS];
++    uint8 m_nFluffyCloudsTopBlue[NUMHOURS][NUMWEATHERS];
++    uint8 m_nFluffyCloudsBottomRed[NUMHOURS][NUMWEATHERS];
++    uint8 m_nFluffyCloudsBottomGreen[NUMHOURS][NUMWEATHERS];
++    uint8 m_nFluffyCloudsBottomBlue[NUMHOURS][NUMWEATHERS];
++    uint8 m_fBlurRed[NUMHOURS][NUMWEATHERS];
++    uint8 m_fBlurGreen[NUMHOURS][NUMWEATHERS];
++    uint8 m_fBlurBlue[NUMHOURS][NUMWEATHERS];
++    uint8 m_fWaterRed[NUMHOURS][NUMWEATHERS];
++    uint8 m_fWaterGreen[NUMHOURS][NUMWEATHERS];
++    uint8 m_fWaterBlue[NUMHOURS][NUMWEATHERS];
++    uint8 m_fWaterAlpha[NUMHOURS][NUMWEATHERS];
++};
++static_assert(sizeof(RevcTimecycTables) == 9072, "timecyc tables (timecyc.rs)");
++extern "C" void revc_timecyc_parse(const uint8 *data, size_t len, RevcTimecycTables *out);
++
++extern "C" ssize_t revc_import_read(int kind, const char *rel, uint8 *buf, size_t cap);
++int VisualStyleIndex(void);
++
++// revc (plan task 13): the PS2 visual style uses the PS2's own time cycle (5 rows differ from the
++// PC's) when the player has imported a PS2 disc; otherwise, and in every other style, the game's.
++static ssize_t
++LoadTimecycFile(void)
++{
++	if (VisualStyleIndex() == 1) {
++		ssize_t len = revc_import_read(1, "data/timecyc.dat", work_buff, sizeof(work_buff));
++		if (len > 0) {
++			debug("CTimeCycle: PS2 timecyc.dat (imported)\n");
++			return len;
++		}
++	}
++	CFileMgr::SetDir("DATA");
++	ssize_t len = CFileMgr::LoadFile("TIMECYC.DAT", work_buff, sizeof(work_buff), "rb");
++	CFileMgr::SetDir("");
++	return len;
++}
++
++// Called when the visual style changes: the PS2 style may bring its own time cycle.
+ void
+-CTimeCycle::Initialise(void)
++TimeCycleReloadForStyle(void)
+ {
+-	int w, h;
+-	int li, bi;
+-	char line[1040];
+-
+-	int ambR, ambG, ambB;
+-	int ambobjR, ambobjG, ambobjB;
+-	int ambblR, ambblG, ambblB;
+-	int ambobjblR, ambobjblG, ambobjblB;
+-	int dirR, dirG, dirB;
+-	int skyTopR, skyTopG, skyTopB;
+-	int skyBotR, skyBotG, skyBotB;
+-	int sunCoreR, sunCoreG, sunCoreB;
+-	int sunCoronaR, sunCoronaG, sunCoronaB;
+-	float sunSz, sprSz, sprBght;
+-	int shad, lightShad, poleShad;
+-	float farClp, fogSt, lightGnd;
+-	int cloudR, cloudG, cloudB;
+-	int fluffyTopR, fluffyTopG, fluffyTopB;
+-	int fluffyBotR, fluffyBotG, fluffyBotB;
+-	float blurR, blurG, blurB;
+-	float waterR, waterG, waterB, waterA;
++	static int loadedPs2 = -1;
++	int ps2 = VisualStyleIndex() == 1;
++	if (ps2 == loadedPs2)
++		return;
++	loadedPs2 = ps2;
++	CTimeCycle::Initialise();
++}
+ 
++void
++CTimeCycle::Initialise(void)
++{
+ 	debug("Intialising CTimeCycle...\n");
+ 
+-	CFileMgr::SetDir("DATA");
+-	CFileMgr::LoadFile("TIMECYC.DAT", work_buff, sizeof(work_buff), "rb");
+-	CFileMgr::SetDir("");
++	ssize_t len = LoadTimecycFile();
+ 
+-	line[0] = '\0';
+-	bi = 0;
+-	for(w = 0; w < NUMWEATHERS; w++)
+-		for(h = 0; h < NUMHOURS; h++){
+-			li = 0;
+-			while(work_buff[bi] == '/' || work_buff[bi] == '\n' ||
+-			      work_buff[bi] == '\0' || work_buff[bi] == ' ' || work_buff[bi] == '\r'){
+-				while(work_buff[bi] != '\n' && work_buff[bi] != '\0' && work_buff[bi] != '\r')
+-					bi++;
+-				bi++;
+-			}
+-			while(work_buff[bi] != '\n'
+-#ifdef FIX_BUGS
+-			&& work_buff[bi] != '\0'
+-#endif
+-			)
+-				line[li++] = work_buff[bi++];
+-			line[li] = '\0';
+-			bi++;
+-
+-			sscanf(line, "%d %d %d  %d %d %d  %d %d %d  %d %d %d "
+-			             "%d %d %d  %d %d %d  %d %d %d "
+-			             "%d %d %d  %d %d %d  %f %f %f %d %d %d %f %f %f "
+-			             "%d %d %d  %d %d %d  %d %d %d  %f %f %f  %f %f %f %f",
+-				&ambR, &ambG, &ambB,
+-				 &ambobjR, &ambobjG, &ambobjB,
+-				 &ambblR, &ambblG, &ambblB,
+-				 &ambobjblR, &ambobjblG, &ambobjblB,
+-				&dirR, &dirG, &dirB,
+-				 &skyTopR, &skyTopG, &skyTopB,
+-				 &skyBotR, &skyBotG, &skyBotB,
+-				&sunCoreR, &sunCoreG, &sunCoreB,
+-				 &sunCoronaR, &sunCoronaG, &sunCoronaB,
+-				 &sunSz, &sprSz, &sprBght,
+-				 &shad, &lightShad, &poleShad,
+-				 &farClp, &fogSt, &lightGnd,
+-				&cloudR, &cloudG, &cloudB,
+-				 &fluffyTopR, &fluffyTopG, &fluffyTopB,
+-				 &fluffyBotR, &fluffyBotG, &fluffyBotB,
+-				 &blurR, &blurG, &blurB,
+-				 &waterR, &waterG, &waterB, &waterA);
+-
+-			m_nAmbientRed[h][w] = ambR;
+-			m_nAmbientGreen[h][w] = ambG;
+-			m_nAmbientBlue[h][w] = ambB;
+-			m_nAmbientRed_Obj[h][w] = ambobjR;
+-			m_nAmbientGreen_Obj[h][w] = ambobjG;
+-			m_nAmbientBlue_Obj[h][w] = ambobjB;
+-			m_nAmbientRed_Bl[h][w] = ambblR;
+-			m_nAmbientGreen_Bl[h][w] = ambblG;
+-			m_nAmbientBlue_Bl[h][w] = ambblB;
+-			m_nAmbientRed_Obj_Bl[h][w] = ambobjblR;
+-			m_nAmbientGreen_Obj_Bl[h][w] = ambobjblG;
+-			m_nAmbientBlue_Obj_Bl[h][w] = ambobjblB;
+-			m_nDirectionalRed[h][w] = dirR;
+-			m_nDirectionalGreen[h][w] = dirG;
+-			m_nDirectionalBlue[h][w] = dirB;
+-			m_nSkyTopRed[h][w] = skyTopR;
+-			m_nSkyTopGreen[h][w] = skyTopG;
+-			m_nSkyTopBlue[h][w] = skyTopB;
+-			m_nSkyBottomRed[h][w] = skyBotR;
+-			m_nSkyBottomGreen[h][w] = skyBotG;
+-			m_nSkyBottomBlue[h][w] = skyBotB;
+-			m_nSunCoreRed[h][w] = sunCoreR;
+-			m_nSunCoreGreen[h][w] = sunCoreG;
+-			m_nSunCoreBlue[h][w] = sunCoreB;
+-			m_nSunCoronaRed[h][w] = sunCoronaR;
+-			m_nSunCoronaGreen[h][w] = sunCoronaG;
+-			m_nSunCoronaBlue[h][w] = sunCoronaB;
+-			m_fSunSize[h][w] = sunSz * 10.0f;
+-			m_fSpriteSize[h][w] = sprSz * 10.0f;
+-			m_fSpriteBrightness[h][w] = sprBght * 10.0f;
+-			m_nShadowStrength[h][w] = shad;
+-			m_nLightShadowStrength[h][w] = lightShad;
+-			m_nPoleShadowStrength[h][w] = poleShad;
+-			m_fFarClip[h][w] = farClp;
+-			m_fFogStart[h][w] = fogSt;
+-			m_fLightsOnGroundBrightness[h][w] = lightGnd * 10.0f;
+-			m_nLowCloudsRed[h][w] = cloudR;
+-			m_nLowCloudsGreen[h][w] = cloudG;
+-			m_nLowCloudsBlue[h][w] = cloudB;
+-			m_nFluffyCloudsTopRed[h][w] = fluffyTopR;
+-			m_nFluffyCloudsTopGreen[h][w] = fluffyTopG;
+-			m_nFluffyCloudsTopBlue[h][w] = fluffyTopB;
+-			m_nFluffyCloudsBottomRed[h][w] = fluffyBotR;
+-			m_nFluffyCloudsBottomGreen[h][w] = fluffyBotG;
+-			m_nFluffyCloudsBottomBlue[h][w] = fluffyBotB;
+-			m_fBlurRed[h][w] = blurR;
+-			m_fBlurGreen[h][w] = blurG;
+-			m_fBlurBlue[h][w] = blurB;
+-			m_fWaterRed[h][w] = waterR;
+-			m_fWaterGreen[h][w] = waterG;
+-			m_fWaterBlue[h][w] = waterB;
+-			m_fWaterAlpha[h][w] = waterA;
+-		}
++	static RevcTimecycTables t;
++	memset(&t, 0, sizeof(t));
++	revc_timecyc_parse(work_buff, len < 0 ? 0 : len, &t);
++	memcpy(m_nAmbientRed, t.m_nAmbientRed, sizeof(m_nAmbientRed));
++	memcpy(m_nAmbientGreen, t.m_nAmbientGreen, sizeof(m_nAmbientGreen));
++	memcpy(m_nAmbientBlue, t.m_nAmbientBlue, sizeof(m_nAmbientBlue));
++	memcpy(m_nAmbientRed_Obj, t.m_nAmbientRed_Obj, sizeof(m_nAmbientRed_Obj));
++	memcpy(m_nAmbientGreen_Obj, t.m_nAmbientGreen_Obj, sizeof(m_nAmbientGreen_Obj));
++	memcpy(m_nAmbientBlue_Obj, t.m_nAmbientBlue_Obj, sizeof(m_nAmbientBlue_Obj));
++	memcpy(m_nAmbientRed_Bl, t.m_nAmbientRed_Bl, sizeof(m_nAmbientRed_Bl));
++	memcpy(m_nAmbientGreen_Bl, t.m_nAmbientGreen_Bl, sizeof(m_nAmbientGreen_Bl));
++	memcpy(m_nAmbientBlue_Bl, t.m_nAmbientBlue_Bl, sizeof(m_nAmbientBlue_Bl));
++	memcpy(m_nAmbientRed_Obj_Bl, t.m_nAmbientRed_Obj_Bl, sizeof(m_nAmbientRed_Obj_Bl));
++	memcpy(m_nAmbientGreen_Obj_Bl, t.m_nAmbientGreen_Obj_Bl, sizeof(m_nAmbientGreen_Obj_Bl));
++	memcpy(m_nAmbientBlue_Obj_Bl, t.m_nAmbientBlue_Obj_Bl, sizeof(m_nAmbientBlue_Obj_Bl));
++	memcpy(m_nDirectionalRed, t.m_nDirectionalRed, sizeof(m_nDirectionalRed));
++	memcpy(m_nDirectionalGreen, t.m_nDirectionalGreen, sizeof(m_nDirectionalGreen));
++	memcpy(m_nDirectionalBlue, t.m_nDirectionalBlue, sizeof(m_nDirectionalBlue));
++	memcpy(m_nSkyTopRed, t.m_nSkyTopRed, sizeof(m_nSkyTopRed));
++	memcpy(m_nSkyTopGreen, t.m_nSkyTopGreen, sizeof(m_nSkyTopGreen));
++	memcpy(m_nSkyTopBlue, t.m_nSkyTopBlue, sizeof(m_nSkyTopBlue));
++	memcpy(m_nSkyBottomRed, t.m_nSkyBottomRed, sizeof(m_nSkyBottomRed));
++	memcpy(m_nSkyBottomGreen, t.m_nSkyBottomGreen, sizeof(m_nSkyBottomGreen));
++	memcpy(m_nSkyBottomBlue, t.m_nSkyBottomBlue, sizeof(m_nSkyBottomBlue));
++	memcpy(m_nSunCoreRed, t.m_nSunCoreRed, sizeof(m_nSunCoreRed));
++	memcpy(m_nSunCoreGreen, t.m_nSunCoreGreen, sizeof(m_nSunCoreGreen));
++	memcpy(m_nSunCoreBlue, t.m_nSunCoreBlue, sizeof(m_nSunCoreBlue));
++	memcpy(m_nSunCoronaRed, t.m_nSunCoronaRed, sizeof(m_nSunCoronaRed));
++	memcpy(m_nSunCoronaGreen, t.m_nSunCoronaGreen, sizeof(m_nSunCoronaGreen));
++	memcpy(m_nSunCoronaBlue, t.m_nSunCoronaBlue, sizeof(m_nSunCoronaBlue));
++	memcpy(m_fSunSize, t.m_fSunSize, sizeof(m_fSunSize));
++	memcpy(m_fSpriteSize, t.m_fSpriteSize, sizeof(m_fSpriteSize));
++	memcpy(m_fSpriteBrightness, t.m_fSpriteBrightness, sizeof(m_fSpriteBrightness));
++	memcpy(m_nShadowStrength, t.m_nShadowStrength, sizeof(m_nShadowStrength));
++	memcpy(m_nLightShadowStrength, t.m_nLightShadowStrength, sizeof(m_nLightShadowStrength));
++	memcpy(m_nPoleShadowStrength, t.m_nPoleShadowStrength, sizeof(m_nPoleShadowStrength));
++	memcpy(m_fFarClip, t.m_fFarClip, sizeof(m_fFarClip));
++	memcpy(m_fFogStart, t.m_fFogStart, sizeof(m_fFogStart));
++	memcpy(m_fLightsOnGroundBrightness, t.m_fLightsOnGroundBrightness, sizeof(m_fLightsOnGroundBrightness));
++	memcpy(m_nLowCloudsRed, t.m_nLowCloudsRed, sizeof(m_nLowCloudsRed));
++	memcpy(m_nLowCloudsGreen, t.m_nLowCloudsGreen, sizeof(m_nLowCloudsGreen));
++	memcpy(m_nLowCloudsBlue, t.m_nLowCloudsBlue, sizeof(m_nLowCloudsBlue));
++	memcpy(m_nFluffyCloudsTopRed, t.m_nFluffyCloudsTopRed, sizeof(m_nFluffyCloudsTopRed));
++	memcpy(m_nFluffyCloudsTopGreen, t.m_nFluffyCloudsTopGreen, sizeof(m_nFluffyCloudsTopGreen));
++	memcpy(m_nFluffyCloudsTopBlue, t.m_nFluffyCloudsTopBlue, sizeof(m_nFluffyCloudsTopBlue));
++	memcpy(m_nFluffyCloudsBottomRed, t.m_nFluffyCloudsBottomRed, sizeof(m_nFluffyCloudsBottomRed));
++	memcpy(m_nFluffyCloudsBottomGreen, t.m_nFluffyCloudsBottomGreen, sizeof(m_nFluffyCloudsBottomGreen));
++	memcpy(m_nFluffyCloudsBottomBlue, t.m_nFluffyCloudsBottomBlue, sizeof(m_nFluffyCloudsBottomBlue));
++	memcpy(m_fBlurRed, t.m_fBlurRed, sizeof(m_fBlurRed));
++	memcpy(m_fBlurGreen, t.m_fBlurGreen, sizeof(m_fBlurGreen));
++	memcpy(m_fBlurBlue, t.m_fBlurBlue, sizeof(m_fBlurBlue));
++	memcpy(m_fWaterRed, t.m_fWaterRed, sizeof(m_fWaterRed));
++	memcpy(m_fWaterGreen, t.m_fWaterGreen, sizeof(m_fWaterGreen));
++	memcpy(m_fWaterBlue, t.m_fWaterBlue, sizeof(m_fWaterBlue));
++	memcpy(m_fWaterAlpha, t.m_fWaterAlpha, sizeof(m_fWaterAlpha));
+ 
+ 	m_FogReduction = 0;
+ 
+@@ -314,6 +342,7 @@
+ void
+ CTimeCycle::Update(void)
+ {
++	TimeCycleReloadForStyle();	// revc: the PS2 style's own time cycle (plan task 13)
+ 	int h1 = CClock::GetHours();
+ 	int h2 = (h1+1)%24;
+ 	int w1 = CWeather::OldWeatherType;

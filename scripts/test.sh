@@ -21,6 +21,10 @@
 # Output and logs: rust/target/test-output/
 set -uo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# The C++ tree is generated (scripts/revc-source.sh); warn when edits there are not exported yet.
+if [[ -z ${REVC_CPP_DIR:-} && -f $ROOT/cpp/re3-miami/.revc-source ]]; then
+  "$ROOT/scripts/revc-source.sh" check > /dev/null 2>&1 || echo "WARNING: cpp/re3-miami has edits not exported to cpp/revc (scripts/revc-source.sh export)"
+fi
 BLESS=0; KEEP=0; WGPU=0; SCENARIOS=()
 for a in "$@"; do
   case "$a" in

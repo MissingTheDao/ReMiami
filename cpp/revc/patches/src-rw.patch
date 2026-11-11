@@ -1,0 +1,533 @@
+--- a/src/rw/ClumpRead.cpp
++++ b/src/rw/ClumpRead.cpp
+@@ -1,223 +1,26 @@
+ #include "common.h"
+ 
+-struct rpGeometryList
+-{
+-	RpGeometry **geometries;
+-	int32 numGeoms;
+-};
+-
+-struct rpAtomicBinary
+-{
+-	RwInt32 frameIndex;
+-	RwInt32 geomIndex;
+-	RwInt32 flags;
+-	RwInt32 unused;
+-};
+-
+-static int32 numberGeometrys;
+-static int32 streamPosition;
+-static rpGeometryList gGeomList;
+-static rwFrameList gFrameList;
+-static RpClumpChunkInfo gClumpInfo;
+-
+-rpGeometryList*
+-GeometryListStreamRead1(RwStream *stream, rpGeometryList *geomlist)
+-{
+-	int i;
+-	RwUInt32 size, version;
+-	RwInt32 numGeoms;
+-
+-	numberGeometrys = 0;
+-	if(!RwStreamFindChunk(stream, rwID_STRUCT, &size, &version))
+-		return nil;
+-	assert(size == 4);
+-	if(RwStreamRead(stream, &numGeoms, 4) != 4)
+-		return nil;
+-
+-	numberGeometrys = numGeoms/2;
+-	geomlist->numGeoms = numGeoms;
+-	if(geomlist->numGeoms > 0){
+-		geomlist->geometries = (RpGeometry**)RwMalloc(geomlist->numGeoms * sizeof(RpGeometry*));
+-		if(geomlist->geometries == nil)
+-			return nil;
+-		memset(geomlist->geometries, 0, geomlist->numGeoms * sizeof(RpGeometry*));
+-	}else
+-		geomlist->geometries = nil;
+-
+-	for(i = 0; i < numberGeometrys; i++){
+-		if(!RwStreamFindChunk(stream, rwID_GEOMETRY, nil, &version))
+-			return nil;
+-		geomlist->geometries[i] = RpGeometryStreamRead(stream);
+-		if(geomlist->geometries[i] == nil)
+-			return nil;
+-	}
+-
+-	return geomlist;
+-}
+-
+-rpGeometryList*
+-GeometryListStreamRead2(RwStream *stream, rpGeometryList *geomlist)
+-{
+-	int i;
+-	RwUInt32 version;
+-
+-	for(i = numberGeometrys; i < geomlist->numGeoms; i++){
+-		if(!RwStreamFindChunk(stream, rwID_GEOMETRY, nil, &version))
+-			return nil;
+-		geomlist->geometries[i] = RpGeometryStreamRead(stream);
+-		if(geomlist->geometries[i] == nil)
+-			return nil;
+-	}
+-
+-	return geomlist;
+-}
+-
+-void
+-GeometryListDeinitialize(rpGeometryList *geomlist)
+-{
+-	int i;
+-
+-	for(i = 0; i < geomlist->numGeoms; i++)
+-		if(geomlist->geometries[i])
+-			RpGeometryDestroy(geomlist->geometries[i]);
+-
+-	if(geomlist->numGeoms){
+-		RwFree(geomlist->geometries);
+-		geomlist->numGeoms = 0;
+-	}
+-}
+-
+-RpAtomic*
+-ClumpAtomicStreamRead(RwStream *stream, rwFrameList *frmList, rpGeometryList *geomList)
+-{
+-	RwUInt32 size, version;
+-	rpAtomicBinary a;
+-	RpAtomic *atomic;
+-
+-	numberGeometrys = 0;
+-	if(!RwStreamFindChunk(stream, rwID_STRUCT, &size, &version))
+-		return nil;
+-	assert(size <= sizeof(rpAtomicBinary));
+-	if(RwStreamRead(stream, &a, size) != size)
+-		return nil;
+-
+-	atomic = RpAtomicCreate();
+-	if(atomic == nil)
+-		return nil;
+-
+-	RpAtomicSetFlags(atomic, a.flags);
+-
+-	if(frmList->numFrames){
+-		assert(a.frameIndex < frmList->numFrames);
+-		RpAtomicSetFrame(atomic, frmList->frames[a.frameIndex]);
+-	}
+-
+-	if(geomList->numGeoms){
+-		assert(a.geomIndex < geomList->numGeoms);
+-		RpAtomicSetGeometry(atomic, geomList->geometries[a.geomIndex], 0);
+-	}else{
+-		RpGeometry *geom;
+-		if(!RwStreamFindChunk(stream, rwID_GEOMETRY, nil, &version)){
+-			RpAtomicDestroy(atomic);
+-			return nil;
+-		}
+-		geom = RpGeometryStreamRead(stream);
+-		if(geom == nil){
+-			RpAtomicDestroy(atomic);
+-			return nil;
+-		}
+-		RpAtomicSetGeometry(atomic, geom, 0);
+-		RpGeometryDestroy(geom);
+-	}
+-
+-	return atomic;
+-}
++// revc (stage 2 step 2): the vehicles' two-part clump read goes to the Rust reader
++// (rw/DffRead.cpp): the first half keeps the chunk, the second builds the clump. re3's own
++// geometry/frame list readers on top of librw's stream readers are gone with those.
++bool RevcClumpGtaStreamRead1(RwStream *stream);
++rw::Clump *RevcClumpGtaStreamRead2(RwStream *stream);
++void RevcClumpGtaCancel(void);
+ 
+ bool
+ RpClumpGtaStreamRead1(RwStream *stream)
+ {
+-	RwUInt32 size, version;
+-
+-	if(!RwStreamFindChunk(stream, rwID_STRUCT, &size, &version))
+-		return false;
+-	if(version >= 0x33000){
+-		assert(size == 12);
+-		if(RwStreamRead(stream, &gClumpInfo, 12) != 12)
+-			return false;
+-	}else{
+-		assert(size == 4);
+-		if(RwStreamRead(stream, &gClumpInfo, 4) != 4)
+-			return false;
+-	}
+-
+-	if(!RwStreamFindChunk(stream, rwID_FRAMELIST, nil, &version))
+-		return false;
+-	if(rwFrameListStreamRead(stream, &gFrameList) == nil)
+-		return false;
+-
+-	if(!RwStreamFindChunk(stream, rwID_GEOMETRYLIST, nil, &version)){
+-		rwFrameListDeinitialize(&gFrameList);
+-		return false;
+-	}
+-	if(GeometryListStreamRead1(stream, &gGeomList) == nil){
+-		rwFrameListDeinitialize(&gFrameList);
+-		return false;
+-	}
+-	streamPosition = STREAMPOS(stream);
+-	return true;
++	return RevcClumpGtaStreamRead1(stream);
+ }
+ 
+ RpClump*
+ RpClumpGtaStreamRead2(RwStream *stream)
+ {
+-	int i;
+-	RwUInt32 version;
+-	RpAtomic *atomic;
+-	RpClump *clump;
+-
+-	clump = RpClumpCreate();
+-	if(clump == nil)
+-		return nil;
+-
+-	RwStreamSkip(stream, streamPosition - STREAMPOS(stream));
+-
+-	if(GeometryListStreamRead2(stream, &gGeomList) == nil){
+-		GeometryListDeinitialize(&gGeomList);
+-		rwFrameListDeinitialize(&gFrameList);
+-		RpClumpDestroy(clump);
+-		return nil;
+-	}
+-
+-	RpClumpSetFrame(clump, gFrameList.frames[0]);
+-
+-	for(i = 0; i < gClumpInfo.numAtomics; i++){
+-		if(!RwStreamFindChunk(stream, rwID_ATOMIC, nil, &version)){
+-			GeometryListDeinitialize(&gGeomList);
+-			rwFrameListDeinitialize(&gFrameList);
+-			RpClumpDestroy(clump);
+-			return nil;
+-		}
+-
+-		atomic = ClumpAtomicStreamRead(stream, &gFrameList, &gGeomList);
+-		if(atomic == nil){
+-			GeometryListDeinitialize(&gGeomList);
+-			rwFrameListDeinitialize(&gFrameList);
+-			RpClumpDestroy(clump);
+-			return nil;
+-		}
+-
+-		RpClumpAddAtomic(clump, atomic);
+-	}
+-
+-	GeometryListDeinitialize(&gGeomList);
+-	rwFrameListDeinitialize(&gFrameList);
+-	return clump;
++	return RevcClumpGtaStreamRead2(stream);
+ }
+ 
+ void
+ RpClumpGtaCancelStream(void)
+ {
+-	GeometryListDeinitialize(&gGeomList);
+-	rwFrameListDeinitialize(&gFrameList);
+-	gFrameList.numFrames = 0;
++	RevcClumpGtaCancel();
+ }
+--- a/src/rw/NodeName.cpp
++++ b/src/rw/NodeName.cpp
+@@ -32,12 +32,12 @@
+ 	return nil;
+ }
+ 
+-RwStream*
+-NodeNameStreamRead(RwStream *stream, RwInt32 binaryLength, void *object, RwInt32 offsetInObject, RwInt32 sizeInObject)
++// revc: what NodeNameStreamRead stores, from a name read in Rust (rust/revc/src/dffload.rs).
++void
++SetFrameNodeNameData(RwFrame *frame, const char *name, RwInt32 len)
+ {
+-	RwStreamRead(stream, NODENAMEEXT(object), binaryLength);
+-	NODENAMEEXT(object)[binaryLength] = '\0';
+-	return stream;
++	memcpy(NODENAMEEXT(frame), name, len);
++	NODENAMEEXT(frame)[len] = '\0';
+ }
+ 
+ RwStream*
+@@ -62,7 +62,7 @@
+                                 NodeNameDestructor,
+                                 NodeNameCopy);
+ 	RwFrameRegisterPluginStream(ID_NODENAME,
+-		NodeNameStreamRead,
++		nil /* revc: read in Rust (rw/DffRead.cpp) */,
+ 		NodeNameStreamWrite,
+ 		NodeNameStreamGetSize);
+ 	return gPluginOffset != -1;
+--- a/src/rw/RwHelper.cpp
++++ b/src/rw/RwHelper.cpp
+@@ -111,10 +111,7 @@
+ {
+ 	if(!bDebugRenderGroups)
+ 		return;
+-#if defined(RW_OPENGL)
+-	if(GLAD_GL_KHR_debug)
+-		glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, name);
+-#elif defined(RW_D3D9)
++#if defined(RW_D3D9)
+ 	static WCHAR tmp[256];
+ 	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, name, -1, tmp, sizeof(tmp));
+ 	D3DPERF_BeginEvent(0xFFFFFFFF, tmp);
+@@ -126,10 +123,7 @@
+ {
+ 	if(!bDebugRenderGroups)
+ 		return;
+-#if defined(RW_OPENGL)
+-	if(GLAD_GL_KHR_debug)
+-		glPopDebugGroup();
+-#elif defined(RW_D3D9)
++#if defined(RW_D3D9)
+ 	D3DPERF_EndEvent();
+ #endif
+ }
+--- a/src/rw/TexRead.cpp
++++ b/src/rw/TexRead.cpp
+@@ -37,6 +37,141 @@
+ #define READNATIVE(stream, tex, size) RWSRCGLOBAL(stdFunc[rwSTANDARDNATIVETEXTUREREAD](stream, tex, size))
+ #endif
+ 
++#ifdef LIBRW_HOST
++// revc (docs/RENDERER_PORT.md, stage 2 step 1): texture natives (PC D3D8, Xbox) are read in Rust
++// (rust/revc/src/txdload.rs); librw's platform readers are gone. The WGPU raster is built here
++// the way librw's D3D8 reader + Raster::convertTexToCurrentPlatform built it; checked against
++// their recorded result by the formats test (tests/golden/textures.txt, TxdHash below).
++extern "C" {
++struct RevcNativeTex {
++	char name[32], mask[32];
++	uint32 filterAddressing;
++	int32 format, type, width, height, depth, numLevels, dxt, hasAlpha;
++	uint8 *data;
++	size_t size;
++};
++int revc_txd_read_native(const uint8 *body, size_t len, RevcNativeTex *out);
++void revc_txd_free(RevcNativeTex *tex);
++}
++
++static rw::Texture*
++TextureFromNative(const RevcNativeTex &t)
++{
++	using namespace rw;
++	Raster *ras;
++	size_t off = 0;
++	if(t.dxt){
++		// as dxt_to_wgpu (vendor/librw/src/raster.cpp)
++		ras = Raster::create(t.width, t.height, t.depth, t.format | t.type | Raster::DONTALLOCATE);
++		if(ras == nil)
++			return nil;
++		ras->format = t.format;
++		wgpu::allocateDXT(ras, t.dxt, t.numLevels, t.hasAlpha);
++		for(int32 i = 0; i < ras->getNumLevels(); i++){
++			int32 lw = t.width >> i, lh = t.height >> i;
++			size_t n = wgpu::dxtLevelSize(t.dxt, lw < 1 ? 1 : lw, lh < 1 ? 1 : lh);
++			uint8 *dst = ras->lock(i, Raster::LOCKWRITE | Raster::LOCKNOFETCH);
++			if(dst && off + n <= t.size)
++				memcpy(dst, t.data + off, n);
++			off += n;
++			ras->unlock(i);
++		}
++	}else{
++		// as convertTexToCurrentPlatform's fallback: RGBA8 raster, levels from images
++		int32 format = Raster::C8888 | Raster::TEXTURE | (t.format & (Raster::MIPMAP | Raster::AUTOMIPMAP));
++		ras = Raster::create(t.width, t.height, 32, format);
++		if(ras == nil)
++			return nil;
++		for(int32 i = 0; i < t.numLevels; i++){
++			int32 lw = t.width >> i, lh = t.height >> i;
++			if(lw < 1) lw = 1;
++			if(lh < 1) lh = 1;
++			size_t n = (size_t)lw * lh * 4;
++			if(off + n > t.size)
++				break;
++			Image *img = Image::create(lw, lh, 32);
++			img->pixels = t.data + off;	// not owned (flags stay 0)
++			img->stride = lw * 4;
++			if(i == 0)
++				ras->setFromImage(img);
++			else{
++				ras->lock(i, Raster::LOCKWRITE | Raster::LOCKNOFETCH);
++				ras->setFromImage(img);
++				ras->unlock(i);
++			}
++			img->pixels = nil;
++			img->destroy();
++			off += n;
++		}
++	}
++	Texture *tex = Texture::create(ras);
++	strncpy(tex->name, t.name, 32);
++	strncpy(tex->mask, t.mask, 32);
++	tex->filterAddressing = t.filterAddressing;
++	return tex;
++}
++
++// A hash of everything the renderer reads of a texture (FNV-1a 64: texture fields, raster
++// fields, every level byte), for tests/golden/textures*.txt. Those were recorded from librw's
++// readers before they were removed; REVC_TXD_GOLDEN=file reports every texture to Rust
++// (rust/revc/src/txdload.rs), which the formats test compares with the file.
++static uint64
++TxdHash(rw::Texture *tex)
++{
++	using namespace rw;
++	uint64 h = 0xcbf29ce484222325ull;
++	auto mix = [&h](const void *p, size_t n){
++		const uint8 *b = (const uint8*)p;
++		for(size_t i = 0; i < n; i++){ h ^= b[i]; h *= 0x100000001b3ull; }
++	};
++	auto mixi = [&mix](int32 v){ mix(&v, 4); };
++	Raster *r = tex->raster;
++	wgpu::WgpuRaster *n = GETWGPURASTEREXT(r);
++	mix(tex->mask, strnlen(tex->mask, 32));
++	mixi(tex->filterAddressing);
++	mixi(r->width); mixi(r->height); mixi(r->depth); mixi(r->format); mixi(r->type);
++	mixi(r->flags); mixi(r->stride); mixi(r->platform);
++	mixi(n->numLevels); mixi(n->hasAlpha); mixi(n->dxt); mixi(n->autogenMipmap);
++	mixi(n->baseWidth); mixi(n->baseHeight);
++	for(int32 i = 0; i < n->numLevels; i++){
++		int32 lw = n->baseWidth >> i, lh = n->baseHeight >> i;
++		if(lw < 1) lw = 1;
++		if(lh < 1) lh = 1;
++		size_t sz = n->dxt ? wgpu::dxtLevelSize(n->dxt, lw, lh) : (size_t)lw * lh * 4;
++		mixi(n->levels[i] != nil);
++		if(n->levels[i])
++			mix(n->levels[i], sz);
++	}
++	return h;
++}
++
++extern "C" void revc_txd_golden_line(const char *name, unsigned long long hash);
++
++static bool
++ReadNative(RwStream *stream, RwTexture **tex, RwUInt32 size)
++{
++	uint8 *body = new uint8[size];
++	if(RwStreamRead(stream, body, size) != size){
++		delete[] body;
++		return false;
++	}
++	RwTexture *rtex = nil;
++	RevcNativeTex nt;
++	if(revc_txd_read_native(body, size, &nt)){
++		rtex = TextureFromNative(nt);
++		revc_txd_free(&nt);
++	}
++	delete[] body;
++	static bool golden = getenv("REVC_TXD_GOLDEN") != nil;
++	if(rtex && golden)
++		revc_txd_golden_line(rtex->name, (unsigned long long)TxdHash(rtex));
++	*tex = rtex;
++	return rtex != nil;
++}
++#else
++#define ReadNative(stream, tex, size) READNATIVE(stream, tex, size)
++#endif
++
+ RwTexture*
+ RwTextureGtaStreamRead(RwStream *stream)
+ {
+@@ -48,7 +183,7 @@
+ 
+ 	float preloadTime = (float)CTimer::GetCurrentTimeInCycles() / (float)CTimer::GetCyclesPerMillisecond();
+ 
+-	if(!READNATIVE(stream, &tex, size))
++	if(!ReadNative(stream, &tex, size))
+ 		return nil;
+ 
+ 	if (gGameState == GS_INIT_PLAYING_GAME) {
+@@ -185,10 +320,6 @@
+ 	caps->subplatform = 0;
+ 	caps->dxtSupport = 0;
+ 	// TODO: more later
+-#ifdef RW_GL3
+-	caps->subplatform = rw::gl3::gl3Caps.gles;
+-	caps->dxtSupport = rw::gl3::gl3Caps.dxtSupported;
+-#endif
+ #ifdef RW_D3D9
+ 	caps->dxtSupport = 1;	// TODO, probably
+ #endif
+@@ -293,11 +424,7 @@
+ {
+ #ifdef LIBRW
+ 	// TODO
+-#ifdef RW_OPENGL
+-	return false;
+-#else
+ 	return true;
+-#endif
+ #else
+ 	return _rwD3D8CheckValidTextureFormat(D3DFMT_DXT1) && _rwD3D8CheckValidTextureFormat(D3DFMT_DXT3);
+ #endif
+@@ -391,12 +518,6 @@
+ 		return false;
+ 	}
+ 
+-#ifdef RW_GL3
+-	// so we can read back DXT with GLES
+-	// only works for textures that are not yet loaded
+-	// so let's hope that is the case for all
+-	rw::gl3::needToReadBackTextures = true;
+-#endif
+ 	
+ #ifdef DISABLE_VSYNC_ON_TEXTURE_CONVERSION
+ 	// let's disable vsync and frame limiter to speed up texture conversion
+@@ -434,9 +555,6 @@
+ 					delete []buf;
+ 					delete pDir;
+ 					CStreaming::RemoveTxd(i);
+-#ifdef RW_GL3
+-					rw::gl3::needToReadBackTextures = false;
+-#endif
+ 					return false;
+ 				}
+ 
+@@ -469,9 +587,6 @@
+ 	RwStreamClose(img, nil);
+ 	delete []buf;
+ 
+-#ifdef RW_GL3
+-	rw::gl3::needToReadBackTextures = false;
+-#endif
+ 
+ 	if (!pDir->WriteDirFile("models\\txd.dir")) {
+ 		DealWithTxdWriteError(i, TXDSTORESIZE, "CVT_ERR");
+--- a/src/rw/TxdStore.cpp
++++ b/src/rw/TxdStore.cpp
+@@ -5,6 +5,7 @@
+ #include "Streaming.h"
+ #include "RwHelper.h"
+ #include "TxdStore.h"
++#include "TexMods.h"
+ 
+ CPool<TxdDef,TxdDef> *CTxdStore::ms_pTxdPool;
+ RwTexDictionary *CTxdStore::ms_pStoredTxd;
+@@ -130,6 +131,7 @@
+ 
+ 	if(RwStreamFindChunk(stream, rwID_TEXDICTIONARY, nil, nil)){
+ 		def->texDict = RwTexDictionaryGtaStreamRead(stream);
++		TexModsApply(def->texDict, def->name);
+ 		return def->texDict != nil;
+ 	}
+ 	printf("Failed to load TXD\n");
+@@ -170,6 +172,7 @@
+ {
+ 	TxdDef *def = GetSlot(slot);
+ 	def->texDict = RwTexDictionaryGtaStreamRead2(stream, def->texDict);
++	TexModsApply(def->texDict, def->name);
+ 	return def->texDict != nil;
+ }
+ 
+--- a/src/rw/TxdStore.h
++++ b/src/rw/TxdStore.h
+@@ -41,4 +41,5 @@
+ 		return ms_pTxdPool->GetSlot(slot);
+ 	}
+ 	static bool isTxdLoaded(int slot);
++	static int GetNumSlots(void) { return ms_pTxdPool->GetSize(); }
+ };

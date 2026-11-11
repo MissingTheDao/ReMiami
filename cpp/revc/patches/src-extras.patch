@@ -1,0 +1,433 @@
+--- a/src/extras/custompipes.cpp
++++ b/src/extras/custompipes.cpp
+@@ -502,9 +502,6 @@
+ void
+ CustomPipeRegister(void)
+ {
+-#ifdef RW_OPENGL
+-	CustomPipeRegisterGL();
+-#endif
+ 
+ 	CustomMatOffset = rw::Material::registerPlugin(sizeof(CustomMatExt), MAKECHUNKID(rwVENDORID_ROCKSTAR, 0x80),
+ 		CustomMatCtor, nil, CustomMatCopy);
+--- a/src/extras/postfx.cpp
++++ b/src/extras/postfx.cpp
+@@ -11,6 +11,7 @@
+ #include "RwHelper.h"
+ #include "Camera.h"
+ #include "MBlur.h"
++#include "Timer.h"
+ #include "postfx.h"
+ 
+ RwRaster *CPostFX::pFrontBuffer;
+@@ -28,22 +29,20 @@
+ void *colourfilterVC_PS;
+ void *contrast_PS;
+ #endif
+-#ifdef RW_OPENGL
+-int32 u_blurcolor;
+-int32 u_contrastAdd;
+-int32 u_contrastMult;
+-rw::gl3::Shader *colourFilterVC;
+-rw::gl3::Shader *contrast;
+-#endif
++
++// Lights.cpp: whether the time cycle's blur colours tint the lighting. The PC filter does that
++// as the original game did (with trails on).
++bool
++CPostFX::UseBlurColours(void)
++{
++	if(EffectSwitch == POSTFX_PC)
++		return CMBlur::BlurOn;
++	return EffectSwitch != POSTFX_SIMPLE;
++}
+ 
+ void
+ CPostFX::InitOnce(void)
+ {
+-#ifdef RW_OPENGL
+-	u_blurcolor = rw::gl3::registerUniform("u_blurcolor");
+-	u_contrastAdd = rw::gl3::registerUniform("u_contrastAdd");
+-	u_contrastMult = rw::gl3::registerUniform("u_contrastMult");
+-#endif
+ }
+ 
+ void
+@@ -108,8 +107,11 @@
+ 	RwIm2DVertexSetIntRGBA(&Vertex[3], 255, 255, 255, 255);
+ 
+ 
+-	RwIm2DVertexSetScreenX(&Vertex2[0], zero + 2.0f);
+-	RwIm2DVertexSetScreenY(&Vertex2[0], zero + 2.0f);
++	// revc (plan task 13): the trail offset is 2 px at the consoles' 448 lines; keep it the same
++	// fraction of the screen at any resolution.
++	float off = 2.0f * RwRasterGetHeight(RwCameraGetRaster(cam)) / 448.0f;
++	RwIm2DVertexSetScreenX(&Vertex2[0], zero + off);
++	RwIm2DVertexSetScreenY(&Vertex2[0], zero + off);
+ 	RwIm2DVertexSetScreenZ(&Vertex2[0], RwIm2DGetNearScreenZ());
+ 	RwIm2DVertexSetCameraZ(&Vertex2[0], RwCameraGetNearClipPlane(cam));
+ 	RwIm2DVertexSetRecipCameraZ(&Vertex2[0], 1.0f/RwCameraGetNearClipPlane(cam));
+@@ -117,8 +119,8 @@
+ 	RwIm2DVertexSetV(&Vertex2[0], 0.0f, 1.0f/RwCameraGetNearClipPlane(cam));
+ 	RwIm2DVertexSetIntRGBA(&Vertex2[0], 255, 255, 255, 255);
+ 
+-	RwIm2DVertexSetScreenX(&Vertex2[1], 2.0f);
+-	RwIm2DVertexSetScreenY(&Vertex2[1], ymax + 2.0f);
++	RwIm2DVertexSetScreenX(&Vertex2[1], zero + off);
++	RwIm2DVertexSetScreenY(&Vertex2[1], ymax + off);
+ 	RwIm2DVertexSetScreenZ(&Vertex2[1], RwIm2DGetNearScreenZ());
+ 	RwIm2DVertexSetCameraZ(&Vertex2[1], RwCameraGetNearClipPlane(cam));
+ 	RwIm2DVertexSetRecipCameraZ(&Vertex2[1], 1.0f/RwCameraGetNearClipPlane(cam));
+@@ -126,8 +128,8 @@
+ 	RwIm2DVertexSetV(&Vertex2[1], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
+ 	RwIm2DVertexSetIntRGBA(&Vertex2[1], 255, 255, 255, 255);
+ 
+-	RwIm2DVertexSetScreenX(&Vertex2[2], xmax + 2.0f);
+-	RwIm2DVertexSetScreenY(&Vertex2[2], ymax + 2.0f);
++	RwIm2DVertexSetScreenX(&Vertex2[2], xmax + off);
++	RwIm2DVertexSetScreenY(&Vertex2[2], ymax + off);
+ 	RwIm2DVertexSetScreenZ(&Vertex2[2], RwIm2DGetNearScreenZ());
+ 	RwIm2DVertexSetCameraZ(&Vertex2[2], RwCameraGetNearClipPlane(cam));
+ 	RwIm2DVertexSetRecipCameraZ(&Vertex2[2], 1.0f/RwCameraGetNearClipPlane(cam));
+@@ -135,8 +137,8 @@
+ 	RwIm2DVertexSetV(&Vertex2[2], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
+ 	RwIm2DVertexSetIntRGBA(&Vertex2[2], 255, 255, 255, 255);
+ 
+-	RwIm2DVertexSetScreenX(&Vertex2[3], xmax + 2.0f);
+-	RwIm2DVertexSetScreenY(&Vertex2[3], zero + 2.0f);
++	RwIm2DVertexSetScreenX(&Vertex2[3], xmax + off);
++	RwIm2DVertexSetScreenY(&Vertex2[3], zero + off);
+ 	RwIm2DVertexSetScreenZ(&Vertex2[3], RwIm2DGetNearScreenZ());
+ 	RwIm2DVertexSetCameraZ(&Vertex2[3], RwCameraGetNearClipPlane(cam));
+ 	RwIm2DVertexSetRecipCameraZ(&Vertex2[3], 1.0f/RwCameraGetNearClipPlane(cam));
+@@ -151,28 +153,6 @@
+ #include "shaders/obj/contrastPS.inc"
+ 	contrast_PS = rw::d3d::createPixelShader(contrastPS_cso);
+ #endif
+-#ifdef RW_OPENGL
+-	using namespace rw::gl3;
+-
+-	{
+-#include "shaders/obj/im2d_vert.inc"
+-#include "shaders/obj/colourfilterVC_frag.inc"
+-	const char *vs[] = { shaderDecl, header_vert_src, im2d_vert_src, nil };
+-	const char *fs[] = { shaderDecl, header_frag_src, colourfilterVC_frag_src, nil };
+-	colourFilterVC = Shader::create(vs, fs);
+-	assert(colourFilterVC);
+-	}
+-
+-	{
+-#include "shaders/obj/im2d_vert.inc"
+-#include "shaders/obj/contrast_frag.inc"
+-	const char *vs[] = { shaderDecl, header_vert_src, im2d_vert_src, nil };
+-	const char *fs[] = { shaderDecl, header_frag_src, contrast_frag_src, nil };
+-	contrast = Shader::create(vs, fs);
+-	assert(contrast);
+-	}
+-
+-#endif
+ }
+ 
+ void
+@@ -196,16 +176,6 @@
+ 		contrast_PS = nil;
+ 	}
+ #endif
+-#ifdef RW_OPENGL
+-	if(colourFilterVC){
+-		colourFilterVC->destroy();
+-		colourFilterVC = nil;
+-	}
+-	if(contrast){
+-		contrast->destroy();
+-		contrast = nil;
+-	}
+-#endif
+ }
+ 
+ void
+@@ -226,7 +196,8 @@
+ 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+ 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+ 
+-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, BlurOn ? Vertex2 : Vertex, 4, Index, 6);
++	// revc: the previous frame is always drawn shifted, as on PS2/Xbox/PC with trails on.
++	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex2, 4, Index, 6);
+ 
+ 
+ 	RwIm2DVertexSetIntRGBA(&Vertex2[0], r, g, b, a);
+@@ -242,7 +213,7 @@
+ 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+ 
+ 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
+-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, BlurOn ? Vertex2 : Vertex, 4, Index, 6);
++	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex2, 4, Index, 6);
+ }
+ 
+ void
+@@ -282,11 +253,9 @@
+ 
+ 		rw::d3d::im2dOverridePS = contrast_PS;
+ #endif
+-#ifdef RW_OPENGL
+-		rw::gl3::im2dOverrideShader = contrast;
+-		contrast->use();
+-		glUniform3fv(contrast->uniformLocations[u_contrastMult], 1, mult);
+-		glUniform3fv(contrast->uniformLocations[u_contrastAdd], 1, add);
++#ifdef RW_WGPU
++		float params[8] = { mult[0], mult[1], mult[2], 0.0f, add[0], add[1], add[2], 0.0f };
++		rw::wgpu::setIm2DOverride(2, params);
+ #endif
+ 	}else{
+ 		float f = Intensity;
+@@ -299,18 +268,17 @@
+ 		rw::d3d::d3ddevice->SetPixelShaderConstantF(10, blurcolors, 1);
+ 		rw::d3d::im2dOverridePS = colourfilterVC_PS;
+ #endif
+-#ifdef RW_OPENGL
+-		rw::gl3::im2dOverrideShader = colourFilterVC;
+-		colourFilterVC->use();
+-		glUniform4fv(colourFilterVC->uniformLocations[u_blurcolor], 1, blurcolors);
++#ifdef RW_WGPU
++		float params[8] = { blurcolors[0], blurcolors[1], blurcolors[2], blurcolors[3] };
++		rw::wgpu::setIm2DOverride(1, params);
+ #endif
+ 	}
+ 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
+ #ifdef RW_D3D9
+ 	rw::d3d::im2dOverridePS = nil;
+ #endif
+-#ifdef RW_OPENGL
+-	rw::gl3::im2dOverrideShader = nil;
++#ifdef RW_WGPU
++	rw::wgpu::setIm2DOverride(0, nil);
+ #endif
+ }
+ 
+@@ -446,9 +414,17 @@
+ 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+ 
+ 	if(NeedFrontBuffer(type)){
+-		RwRasterPushContext(pFrontBuffer);
+-		RwRasterRenderFast(RwCameraGetRaster(cam), 0, 0);
+-		RwRasterPopContext();
++		// revc (plan task 13): the trails feed back once per game step (30 Hz) as on the
++		// consoles, whatever the display rate: frames drawn between two steps blend with the
++		// same previous image, so the trail length and colour don't depend on the frame rate.
++		static uint32 lastStep = ~0u;
++		bool trailsOnly = MotionBlurOn && type != MOTION_BLUR_SNIPER && CMBlur::Drunkness == 0.0f;
++		if(!trailsOnly || bJustInitialised || CTimer::GetFrameCounter() != lastStep){
++			RwRasterPushContext(pFrontBuffer);
++			RwRasterRenderFast(RwCameraGetRaster(cam), 0, 0);
++			RwRasterPopContext();
++			lastStep = CTimer::GetFrameCounter();
++		}
+ 		bJustInitialised = false;
+ 	}else
+ 		bJustInitialised = true;
+--- a/src/extras/postfx.h
++++ b/src/extras/postfx.h
+@@ -9,7 +9,8 @@
+ 		POSTFX_OFF,
+ 		POSTFX_SIMPLE,
+ 		POSTFX_NORMAL,
+-		POSTFX_MOBILE
++		POSTFX_MOBILE,
++		POSTFX_PC	// revc: the original PC filter (CMBlur), last so saved settings keep their meaning
+ 	};
+ 	static RwRaster *pFrontBuffer;
+ 	static RwRaster *pBackBuffer;
+@@ -40,7 +41,7 @@
+ 	static bool NeedBackBuffer(void);
+ 	static bool NeedFrontBuffer(int32 type);
+ 	static void GetBackBuffer(RwCamera *cam);
+-	static bool UseBlurColours(void) { return EffectSwitch != POSTFX_SIMPLE; }
++	static bool UseBlurColours(void);
+ };
+ 
+ #endif
+--- a/src/extras/screendroplets.cpp
++++ b/src/extras/screendroplets.cpp
+@@ -57,9 +57,6 @@
+ #ifdef RW_D3D9
+ static void *screenDroplet_PS;
+ #endif
+-#ifdef RW_GL3
+-static rw::gl3::Shader *screenDroplet;
+-#endif
+ 
+ // platform specific
+ static void openim2d_uv2(void);
+@@ -115,17 +112,6 @@
+ #include "shaders/obj/screenDroplet_PS.inc"
+ 	screenDroplet_PS = rw::d3d::createPixelShader(screenDroplet_PS_cso);
+ #endif
+-#ifdef RW_GL3
+-	using namespace rw::gl3;
+-	{
+-#include "shaders/obj/im2d_UV2_vert.inc"
+-#include "shaders/obj/screenDroplet_frag.inc"
+-	const char *vs[] = { shaderDecl, header_vert_src, im2d_UV2_vert_src, nil };
+-	const char *fs[] = { shaderDecl, header_frag_src, screenDroplet_frag_src, nil };
+-	screenDroplet = Shader::create(vs, fs);
+-	assert(screenDroplet);
+-	}
+-#endif
+ 
+ 	ms_initialised = 1;
+ }
+@@ -148,12 +134,6 @@
+ 		screenDroplet_PS = nil;
+ 	}
+ #endif
+-#ifdef RW_GL3
+-	if(screenDroplet){
+-		screenDroplet->destroy();
+-		screenDroplet = nil;
+-	}
+-#endif
+ 
+ 	closeim2d_uv2();
+ }
+@@ -210,10 +190,7 @@
+ 	rw::d3d::im2dOverridePS = screenDroplet_PS;
+ 	rw::d3d::setTexture(1, ms_screenTex);
+ #endif
+-#ifdef RW_GL3
+-	rw::gl3::im2dOverrideShader = screenDroplet;
+-	rw::gl3::setTexture(1, ms_screenTex);
+-#endif
++	// RW_WGPU: RenderIndexedPrimitive_UV2 below passes ms_screenTex itself.
+ 
+ 	RenderBuffer::ClearRenderBuffer();
+ 	for(drop = &ms_drops[0]; drop < &ms_drops[MAXDROPS]; drop++)
+@@ -225,10 +202,6 @@
+ 	rw::d3d::im2dOverridePS = nil;
+ 	rw::d3d::setTexture(1, nil);
+ #endif
+-#ifdef RW_GL3
+-	rw::gl3::im2dOverrideShader = nil;
+-	rw::gl3::setTexture(1, nil);
+-#endif
+ 
+ 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, FALSE);
+ 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+@@ -705,113 +678,26 @@
+ }
+ #endif
+ 
+-#ifdef RW_GL3
+-// different than im2d
+-#define NUMINDICES 1024
+-#define NUMVERTICES 1024
+-
+-static rw::gl3::AttribDesc im2d_UV2_attribDesc[4] = {
+-	{ rw::gl3::ATTRIB_POS,        GL_FLOAT,         GL_FALSE, 4,
+-		sizeof(Im2DVertexUV2), 0 },
+-	{ rw::gl3::ATTRIB_COLOR,      GL_UNSIGNED_BYTE, GL_TRUE,  4,
+-		sizeof(Im2DVertexUV2), offsetof(Im2DVertexUV2, r) },
+-	{ rw::gl3::ATTRIB_TEXCOORDS0, GL_FLOAT,         GL_FALSE, 2,
+-		sizeof(Im2DVertexUV2), offsetof(Im2DVertexUV2, u) },
+-	{ rw::gl3::ATTRIB_TEXCOORDS1, GL_FLOAT,         GL_FALSE, 2,
+-		sizeof(Im2DVertexUV2), offsetof(Im2DVertexUV2, u2) }
+-};
+-
+-static int primTypeMap[] = {
+-	GL_POINTS,	// invalid
+-	GL_LINES,
+-	GL_LINE_STRIP,
+-	GL_TRIANGLES,
+-	GL_TRIANGLE_STRIP,
+-	GL_TRIANGLE_FAN,
+-	GL_POINTS
+-};
+-
+-static int32 u_xform;
+-
+-uint32 im2D_UV2_Vbo, im2D_UV2_Ibo;
+-#ifdef RW_GL_USE_VAOS
+-uint32 im2D_UV2_Vao;
+-#endif
+ 
++#ifdef RW_WGPU
++// revc: the WGPU device draws two-coordinate Im2D itself (rwwgpu.h).
+ void
+ openim2d_uv2(void)
+ {
+-	u_xform = rw::gl3::registerUniform("u_xform", rw::gl3::UNIFORM_VEC4);	// this doesn't add a new one, so it's safe
+-
+-	glGenBuffers(1, &im2D_UV2_Ibo);
+-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, im2D_UV2_Ibo);
+-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, NUMINDICES*2, nil, GL_STREAM_DRAW);
+-
+-	glGenBuffers(1, &im2D_UV2_Vbo);
+-	glBindBuffer(GL_ARRAY_BUFFER, im2D_UV2_Vbo);
+-	glBufferData(GL_ARRAY_BUFFER, NUMVERTICES*sizeof(Im2DVertexUV2), nil, GL_STREAM_DRAW);
+-
+-#ifdef RW_GL_USE_VAOS
+-	glGenVertexArrays(1, &im2D_UV2_Vao);
+-	glBindVertexArray(im2D_UV2_Vao);
+-	setAttribPointers(im2d_UV2_attribDesc, 4);
+-#endif
+ }
+ 
+ void
+ closeim2d_uv2(void)
+ {
+-	glDeleteBuffers(1, &im2D_UV2_Ibo);
+-	glDeleteBuffers(1, &im2D_UV2_Vbo);
+-#ifdef RW_GL_USE_VAOS
+-	glDeleteVertexArrays(1, &im2D_UV2_Vao);
+-#endif
+ }
+ 
+ void
+ RenderIndexedPrimitive_UV2(RwPrimitiveType primType, Im2DVertexUV2 *vertices, RwInt32 numVertices, RwImVertexIndex *indices, RwInt32 numIndices)
+ {
+-	using namespace rw;
+-	using namespace gl3;
+-
+-	GLfloat xform[4];
+-	Camera *cam;
+-	cam = (Camera*)engine->currentCamera;
+-
+-#ifdef RW_GL_USE_VAOS
+-	glBindVertexArray(im2D_UV2_Vao);
+-#endif
+-
+-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, im2D_UV2_Ibo);
+-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, NUMINDICES*2, nil, GL_STREAM_DRAW);
+-	glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, numIndices*2, indices);
+-
+-	glBindBuffer(GL_ARRAY_BUFFER, im2D_UV2_Vbo);
+-	glBufferData(GL_ARRAY_BUFFER, NUMVERTICES*sizeof(Im2DVertexUV2), nil, GL_STREAM_DRAW);
+-	glBufferSubData(GL_ARRAY_BUFFER, 0, numVertices*sizeof(Im2DVertexUV2), vertices);
+-
+-	xform[0] = 2.0f/cam->frameBuffer->width;
+-	xform[1] = -2.0f/cam->frameBuffer->height;
+-	xform[2] = -1.0f;
+-	xform[3] = 1.0f;
+-
+-	if(im2dOverrideShader)
+-		im2dOverrideShader->use();
+-	else
+-		assert(0);//im2dShader->use();
+-#ifndef RW_GL_USE_VAOS
+-	setAttribPointers(im2d_UV2_attribDesc, 4);
+-#endif
+-
+-	setUniform(u_xform, xform);
+-
+-	flushCache();
+-	glDrawElements(primTypeMap[primType], numIndices,
+-	               GL_UNSIGNED_SHORT, nil);
+-#ifndef RW_GL_USE_VAOS
+-	disableAttribPointers(im2d_UV2_attribDesc, 4);
+-#endif
++	rw::wgpu::im2DRenderIndexedPrimitiveUV2((rw::PrimitiveType)primType, vertices, numVertices, indices, numIndices,
++		ScreenDroplets::ms_screenTex);
+ }
+ #endif
+ 
++
+ #endif

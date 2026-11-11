@@ -1,0 +1,1484 @@
+--- a/src/save/Date.cpp
++++ b/src/save/Date.cpp
+@@ -1,6 +1,9 @@
+ #include "common.h"
+ #include "Date.h"
+ 
++// Comparison in Rust (rust/revc/src/savegame.rs).
++extern "C" int revc_date_compare(const CDate *a, const CDate *b);
++
+ CDate::CDate()
+ {
+ 	m_nYear = 0;
+@@ -11,73 +14,9 @@
+ 	m_nMonth = 0;
+ }
+ 
+-bool
+-CDate::operator>(const CDate &right)
+-{
+-	if (m_nYear > right.m_nYear)
+-		return true;
+-	if (m_nYear != right.m_nYear)
+-		return false;
+-
+-	if (m_nMonth > right.m_nMonth)
+-		return true;
+-	if (m_nMonth != right.m_nMonth)
+-		return false;
+-
+-	if (m_nDay > right.m_nDay)
+-		return true;
+-	if (m_nDay != right.m_nDay)
+-		return false;
+-
+-	if (m_nHour > right.m_nHour)
+-		return true;
+-	if (m_nHour != right.m_nHour)
+-		return false;
+-
+-	if (m_nMinute > right.m_nMinute)
+-		return true;
+-	if (m_nMinute != right.m_nMinute)
+-		return false;
+-	return m_nSecond > right.m_nSecond;
+-}
+-
+-bool
+-CDate::operator<(const CDate &right)
+-{
+-	if (m_nYear < right.m_nYear)
+-		return true;
+-	if (m_nYear != right.m_nYear)
+-		return false;
+-
+-	if (m_nMonth < right.m_nMonth)
+-		return true;
+-	if (m_nMonth != right.m_nMonth)
+-		return false;
+-
+-	if (m_nDay < right.m_nDay)
+-		return true;
+-	if (m_nDay != right.m_nDay)
+-		return false;
+-
+-	if (m_nHour < right.m_nHour)
+-		return true;
+-	if (m_nHour != right.m_nHour)
+-		return false;
+-
+-	if (m_nMinute < right.m_nMinute)
+-		return true;
+-	if (m_nMinute != right.m_nMinute)
+-		return false;
+-	return m_nSecond < right.m_nSecond;
+-}
+-
+-bool
+-CDate::operator==(const CDate &right)
+-{
+-	if (m_nYear != right.m_nYear || m_nMonth != right.m_nMonth || m_nDay != right.m_nDay || m_nHour != right.m_nHour || m_nMinute != right.m_nMinute)
+-		return false;
+-	return m_nSecond == right.m_nSecond;
+-}
++bool CDate::operator>(const CDate &right) { return revc_date_compare(this, &right) > 0; }
++bool CDate::operator<(const CDate &right) { return revc_date_compare(this, &right) < 0; }
++bool CDate::operator==(const CDate &right) { return revc_date_compare(this, &right) == 0; }
+ 
+ void
+ CDate::PopulateDateFields(int8 &second, int8 &minute, int8 &hour, int8 &day, int8 &month, int16 year)
+@@ -88,4 +27,4 @@
+ 	m_nDay = day;
+ 	m_nMonth = month;
+ 	m_nYear = year;
+-}
+\ No newline at end of file
++}
+--- a/src/save/GenericGameStorage.cpp
++++ b/src/save/GenericGameStorage.cpp
+@@ -92,329 +92,268 @@
+ #define ReadDataFromBufferPointer(buf, to) memcpy(&to, buf, sizeof(to)); buf += align4bytes(sizeof(to));
+ #define WriteDataToBufferPointer(buf, from) memcpy(buf, &from, sizeof(from)); buf += align4bytes(sizeof(from));
+ 
+-#define LoadSaveDataBlock()\
+-do {\
+-	if (!ReadDataFromFile(file, (uint8 *) &size, 4))\
+-		return false;\
+-	size = align4bytes(size);\
+-	if (!ReadDataFromFile(file, work_buff, size))\
+-		return false;\
+-	buf = work_buff;\
+-} while (0)
+-
+-#define ReadDataFromBlock(msg,load_func)\
+-do {\
+-	debug(msg);\
+-	ReadDataFromBufferPointer(buf, size);\
+-	load_func(buf, size);\
+-	size = align4bytes(size);\
+-	buf += size;\
+-} while (0)
+-
+-#define WriteSaveDataBlock(save_func, msg)\
+-do {\
+-	size = 0;\
+-	buf = work_buff;\
+-	reserved = 0;\
+-	MakeSpaceForSizeInBufferPointer(presize, buf, postsize);\
+-	save_func(buf, &size);\
+-	debug(msg"== %i \n", size);\
+-	CopySizeAndPreparePointer(presize, buf, postsize, reserved, size);\
+-	if (!PcSaveHelper.PcClassSaveRoutine(file, work_buff, buf - work_buff))\
+-		return false;\
+-	totalSize += buf - work_buff;\
+-} while (0)
+ 
+-bool
+-GenericSave(int file)
+-{
+-	uint8 *buf, *presize, *postsize;
+-	uint32 size;
+-	uint32 reserved;
+-
+-	uint32 totalSize;
+-	
+-	wchar *lastMissionPassed;
+-	wchar suffix[6];
+-	wchar saveName[24];
+-	SYSTEMTIME saveTime;
+-	CPad *currPad;
+ 
+-	CheckSum = 0;
+-	buf = work_buff;
+-	reserved = 0;
+ 
+-	// Save simple vars
+-	lastMissionPassed = TheText.Get(CStats::LastMissionPassedName[0] ? CStats::LastMissionPassedName : "ITBEG");
+-	AsciiToUnicode("...'", suffix);
+-	suffix[3] = L'\0';
+-#ifdef FIX_BUGS
+-	// fix buffer overflow
+-	int len = UnicodeStrlen(lastMissionPassed);
+-	if (len > ARRAY_SIZE(saveName)-1)
+-		len = ARRAY_SIZE(saveName)-1;
+-	memcpy(saveName, lastMissionPassed, sizeof(wchar) * len);
+-#else
+-	TextCopy(saveName, lastMissionPassed);
+-	int len = UnicodeStrlen(saveName);
+-#endif
+-	saveName[len] = '\0';
+-	if (len > ARRAY_SIZE(saveName)-2)
+-		TextCopy(&saveName[ARRAY_SIZE(saveName)-ARRAY_SIZE(suffix)], suffix);
+-	saveName[ARRAY_SIZE(saveName)-1] = '\0';
+-	WriteDataToBufferPointer(buf, saveName);
+-	GetLocalTime(&saveTime);
+-	WriteDataToBufferPointer(buf, saveTime);
++// The save file container (header layout, chunk framing, padding, checksum, the walk over the
++// blocks) is in Rust: rust/revc/src/savegame.rs. Here: the header's values to and from the game's
++// globals, and each block's Save/Load function in the original order.
++struct RevcSimpleVars
++{
++	wchar name[24];
++	SYSTEMTIME time;
++	int32 sizeAndQuicksave;
++	int32 level;
++	float camera[3];
++	uint32 msPerGameMinute;
++	uint32 lastClockTick;
++	uint8 hours;
++	uint8 minutes;
++	int16 padMode;
++	uint32 timeMs;
++	float timeScale;
++	float timeStep;
++	float timeStepNonClipped;
++	uint32 frameCounter;
++	float tsTimeStep;
++	float tsFramesPerUpdate;
++	float tsTimeScale;
++	int16 oldWeather;
++	int16 newWeather;
++	int16 forcedWeather;
++	float weatherInterpolation;
++	int32 weatherInList;
++	float carZoom;
++	float pedZoom;
++	int32 area;
++	uint8 allTaxisNitro;
++	uint8 invertLook;
++	int32 extraColour;
++	int32 extraColourOn;
++	float extraColourInter;
++	int32 radioPositions[NUM_RADIOS];
++};
++static_assert(sizeof(SYSTEMTIME) == 16, "SYSTEMTIME layout");
++static_assert(sizeof(RevcSimpleVars) == 212, "RevcSimpleVars must match savegame::SimpleVars");
++
++extern "C" {
++void revc_save_build(uint8 **out, size_t *len, int32 *checksum);
++void revc_save_free(uint8 *p, size_t len);
++int revc_save_load(const uint8 *data, size_t len);
++int revc_save_start_info(const uint8 *data, size_t len, int32 *level, float *pos);
++
++// Header values from the game (the name is the last passed mission's title; Rust shortens it).
++void
++revc_save_gather_vars(RevcSimpleVars *v)
++{
++	memset(v, 0, sizeof(*v));
++	const wchar *title = TheText.Get(CStats::LastMissionPassedName[0] ? CStats::LastMissionPassedName : "ITBEG");
++	for (int i = 0; i < 24 && title[i]; i++)
++		v->name[i] = title[i];
++	GetLocalTime(&v->time);
+ #ifdef MISSION_REPLAY
+-	int32 data = IsQuickSave << 24 | SIZE_OF_ONE_GAME_IN_BYTES;
+-	WriteDataToBufferPointer(buf, data);
+-#else
+-	WriteDataToBufferPointer(buf, SIZE_OF_ONE_GAME_IN_BYTES);
+-#endif
+-	WriteDataToBufferPointer(buf, CGame::currLevel);
+-	WriteDataToBufferPointer(buf, TheCamera.GetPosition().x);
+-	WriteDataToBufferPointer(buf, TheCamera.GetPosition().y);
+-	WriteDataToBufferPointer(buf, TheCamera.GetPosition().z);
+-	WriteDataToBufferPointer(buf, CClock::ms_nMillisecondsPerGameMinute);
+-	WriteDataToBufferPointer(buf, CClock::ms_nLastClockTick);
+-	WriteDataToBufferPointer(buf, CClock::ms_nGameClockHours);
+-	WriteDataToBufferPointer(buf, CClock::ms_nGameClockMinutes);
+-	currPad = CPad::GetPad(0);
+-	WriteDataToBufferPointer(buf, currPad->Mode);
+-	WriteDataToBufferPointer(buf, CTimer::m_snTimeInMilliseconds);
+-	WriteDataToBufferPointer(buf, CTimer::ms_fTimeScale);
+-	WriteDataToBufferPointer(buf, CTimer::ms_fTimeStep);
+-	WriteDataToBufferPointer(buf, CTimer::ms_fTimeStepNonClipped);
+-	WriteDataToBufferPointer(buf, CTimer::m_FrameCounter);
+-	WriteDataToBufferPointer(buf, CTimeStep::ms_fTimeStep);
+-	WriteDataToBufferPointer(buf, CTimeStep::ms_fFramesPerUpdate);
+-	WriteDataToBufferPointer(buf, CTimeStep::ms_fTimeScale);
+-	WriteDataToBufferPointer(buf, CWeather::OldWeatherType);
+-	WriteDataToBufferPointer(buf, CWeather::NewWeatherType);
+-	WriteDataToBufferPointer(buf, CWeather::ForcedWeatherType);
+-	WriteDataToBufferPointer(buf, CWeather::InterpolationValue);
+-	WriteDataToBufferPointer(buf, CWeather::WeatherTypeInList);
+-#ifdef COMPATIBLE_SAVES
+-	// converted to float for compatibility with original format
+-	// TODO: maybe remove this? not really gonna break anything vital
+-	float f = TheCamera.CarZoomIndicator;
+-	WriteDataToBufferPointer(buf, f);
+-	f = TheCamera.PedZoomIndicator;
+-	WriteDataToBufferPointer(buf, f);
++	v->sizeAndQuicksave = IsQuickSave << 24 | SIZE_OF_ONE_GAME_IN_BYTES;
+ #else
+-	WriteDataToBufferPointer(buf, TheCamera.CarZoomIndicator);
+-	WriteDataToBufferPointer(buf, TheCamera.PedZoomIndicator);
++	v->sizeAndQuicksave = SIZE_OF_ONE_GAME_IN_BYTES;
+ #endif
+-	WriteDataToBufferPointer(buf, CGame::currArea);
+-	WriteDataToBufferPointer(buf, CVehicle::bAllTaxisHaveNitro);
+-	WriteDataToBufferPointer(buf, CPad::bInvertLook4Pad);
+-	WriteDataToBufferPointer(buf, CTimeCycle::m_ExtraColour);
+-	WriteDataToBufferPointer(buf, CTimeCycle::m_bExtraColourOn);
+-	WriteDataToBufferPointer(buf, CTimeCycle::m_ExtraColourInter);
++	v->level = CGame::currLevel;
++	v->camera[0] = TheCamera.GetPosition().x;
++	v->camera[1] = TheCamera.GetPosition().y;
++	v->camera[2] = TheCamera.GetPosition().z;
++	v->msPerGameMinute = CClock::ms_nMillisecondsPerGameMinute;
++	v->lastClockTick = CClock::ms_nLastClockTick;
++	v->hours = CClock::ms_nGameClockHours;
++	v->minutes = CClock::ms_nGameClockMinutes;
++	v->padMode = CPad::GetPad(0)->Mode;
++	v->timeMs = CTimer::m_snTimeInMilliseconds;
++	v->timeScale = CTimer::ms_fTimeScale;
++	v->timeStep = CTimer::ms_fTimeStep;
++	v->timeStepNonClipped = CTimer::ms_fTimeStepNonClipped;
++	v->frameCounter = CTimer::m_FrameCounter;
++	v->tsTimeStep = CTimeStep::ms_fTimeStep;
++	v->tsFramesPerUpdate = CTimeStep::ms_fFramesPerUpdate;
++	v->tsTimeScale = CTimeStep::ms_fTimeScale;
++	v->oldWeather = CWeather::OldWeatherType;
++	v->newWeather = CWeather::NewWeatherType;
++	v->forcedWeather = CWeather::ForcedWeatherType;
++	v->weatherInterpolation = CWeather::InterpolationValue;
++	v->weatherInList = CWeather::WeatherTypeInList;
++	// Floats in the file (COMPATIBLE_SAVES).
++	v->carZoom = TheCamera.CarZoomIndicator;
++	v->pedZoom = TheCamera.PedZoomIndicator;
++	v->area = CGame::currArea;
++	v->allTaxisNitro = CVehicle::bAllTaxisHaveNitro;
++	v->invertLook = CPad::bInvertLook4Pad;
++	v->extraColour = CTimeCycle::m_ExtraColour;
++	v->extraColourOn = CTimeCycle::m_bExtraColourOn;
++	v->extraColourInter = CTimeCycle::m_ExtraColourInter;
+ 	PopulateRadioStationPositionList();
+-	WriteDataToBufferPointer(buf, RadioStationPosition);
+-	assert(buf - work_buff == SIZE_OF_SIMPLEVARS);
+-
+-	// Save scripts, block is nested within the same block as simple vars for some reason
+-	presize = buf;
+-	buf += 4;
+-	postsize = buf;
+-	CTheScripts::SaveAllScripts(buf, &size);
+-	debug("ScriptSize== %i \n", size);
+-	CopySizeAndPreparePointer(presize, buf, postsize, reserved, size);
+-	if (!PcSaveHelper.PcClassSaveRoutine(file, work_buff, buf - work_buff))
+-		return false;
+-
+-	totalSize = buf - work_buff;
++	memcpy(v->radioPositions, RadioStationPosition, sizeof(RadioStationPosition));
++}
+ 
+-	// Save the rest
+-	WriteSaveDataBlock(CPools::SavePedPool, "PedPoolSize");
+-	WriteSaveDataBlock(CGarages::Save, "GaragesSize");
+-	WriteSaveDataBlock(CGameLogic::Save, "GameLogicSize");
+-	WriteSaveDataBlock(CPools::SaveVehiclePool, "VehPoolSize");
+-	WriteSaveDataBlock(CPools::SaveObjectPool, "ObjectPoolSize");
+-	WriteSaveDataBlock(ThePaths.Save, "ThePathsSize");
+-	WriteSaveDataBlock(CCranes::Save, "CranesSize");
+-	WriteSaveDataBlock(CPickups::Save, "PickUpsSize");
+-	WriteSaveDataBlock(gPhoneInfo.Save, "PhoneInfoSize");
+-	WriteSaveDataBlock(CRestart::SaveAllRestartPoints, "RestartPointsBufferSize");
+-	WriteSaveDataBlock(CRadar::SaveAllRadarBlips, "RadarBlipsBufferSize");
+-	WriteSaveDataBlock(CTheZones::SaveAllZones, "AllZonesBufferSize");
+-	WriteSaveDataBlock(CGangs::SaveAllGangData, "AllGangDataSize");
+-	WriteSaveDataBlock(CTheCarGenerators::SaveAllCarGenerators, "AllCarGeneratorsSize");
+-	WriteSaveDataBlock(CParticleObject::SaveParticle, "ParticlesSize");
+-	WriteSaveDataBlock(cAudioScriptObject::SaveAllAudioScriptObjects, "AllAudioScriptObjectsSize");
+-	WriteSaveDataBlock(CScriptPaths::Save, "ScriptPathsSize");
+-	WriteSaveDataBlock(CWorld::Players[CWorld::PlayerInFocus].SavePlayerInfo, "PlayerInfoSize");
+-	WriteSaveDataBlock(CStats::SaveStats, "StatsSize");
+-	WriteSaveDataBlock(CSetPieces::Save, "SetPiecesSize");
+-	WriteSaveDataBlock(CStreaming::MemoryCardSave, "StreamingSize");
+-	WriteSaveDataBlock(CPedType::Save, "PedTypeSize");
+-
+-	// sure just write garbage data repeatedly ...
+-#ifndef THIS_IS_STUPID
+-	memset(work_buff, 0, sizeof(work_buff));
++// A loaded header into the game.
++void
++revc_save_apply_vars(const RevcSimpleVars *v)
++{
++#ifdef MISSION_REPLAY // a hack to keep compatibility but get new data from save
++	int8 qs = v->sizeAndQuicksave >> 24;
++#endif
++	CGame::currLevel = (eLevelName)v->level;
++	TheCamera.GetMatrix().GetPosition().x = v->camera[0];
++	TheCamera.GetMatrix().GetPosition().y = v->camera[1];
++	TheCamera.GetMatrix().GetPosition().z = v->camera[2];
++	CClock::ms_nMillisecondsPerGameMinute = v->msPerGameMinute;
++	CClock::ms_nLastClockTick = v->lastClockTick;
++	CClock::ms_nGameClockHours = v->hours;
++	CClock::ms_nGameClockMinutes = v->minutes;
++	CPad::GetPad(0)->Mode = v->padMode;
++	CTimer::m_snTimeInMilliseconds = v->timeMs;
++	CTimer::ms_fTimeScale = v->timeScale;
++	CTimer::ms_fTimeStep = v->timeStep;
++	CTimer::ms_fTimeStepNonClipped = v->timeStepNonClipped;
++	CTimer::m_FrameCounter = v->frameCounter;
++	CTimeStep::ms_fTimeStep = v->tsTimeStep;
++	CTimeStep::ms_fFramesPerUpdate = v->tsFramesPerUpdate;
++	CTimeStep::ms_fTimeScale = v->tsTimeScale;
++	CWeather::OldWeatherType = v->oldWeather;
++	CWeather::NewWeatherType = v->newWeather;
++	CWeather::ForcedWeatherType = v->forcedWeather;
++	CWeather::InterpolationValue = v->weatherInterpolation;
++	CWeather::WeatherTypeInList = v->weatherInList;
++	TheCamera.CarZoomIndicator = v->carZoom;
++	TheCamera.PedZoomIndicator = v->pedZoom;
++	CGame::currArea = v->area;
++	CVehicle::bAllTaxisHaveNitro = v->allTaxisNitro;
++#ifndef LOAD_INI_SETTINGS
++	CPad::bInvertLook4Pad = v->invertLook;
++#endif
++	CTimeCycle::m_ExtraColour = v->extraColour;
++	CTimeCycle::m_bExtraColourOn = v->extraColourOn;
++	CTimeCycle::m_ExtraColourInter = v->extraColourInter;
++	memcpy(RadioStationPosition, v->radioPositions, sizeof(RadioStationPosition));
++#ifdef MISSION_REPLAY
++	WaitForSave = 0;
++	if (FrontEndMenuManager.m_nCurrSaveSlot == PAUSE_SAVE_SLOT && qs == 3)
++		WaitForMissionActivate = CTimer::GetTimeInMilliseconds() + 2000;
+ #endif
++}
+ 
+-	// Write padding
+-	for (int i = 0; i < 4; i++) {
+-		size = align4bytes(SIZE_OF_ONE_GAME_IN_BYTES - totalSize - 4);
+-		if (size > sizeof(work_buff))
+-			size = sizeof(work_buff);
+-		if (size > 4) {
+-			if (!PcSaveHelper.PcClassSaveRoutine(file, work_buff, size))
+-				return false;
+-			totalSize += size;
+-		}
++// Block -1 is the scripts (nested in the header chunk), 0..21 the rest in file order.
++void
++revc_save_block(int index, uint8 *buf, uint32 *size)
++{
++	*size = 0;
++	switch (index) {
++	case -1: CTheScripts::SaveAllScripts(buf, size); break;
++	case 0: CPools::SavePedPool(buf, size); break;
++	case 1: CGarages::Save(buf, size); break;
++	case 2: CGameLogic::Save(buf, size); break;
++	case 3: CPools::SaveVehiclePool(buf, size); break;
++	case 4: CPools::SaveObjectPool(buf, size); break;
++	case 5: ThePaths.Save(buf, size); break;
++	case 6: CCranes::Save(buf, size); break;
++	case 7: CPickups::Save(buf, size); break;
++	case 8: gPhoneInfo.Save(buf, size); break;
++	case 9: CRestart::SaveAllRestartPoints(buf, size); break;
++	case 10: CRadar::SaveAllRadarBlips(buf, size); break;
++	case 11: CTheZones::SaveAllZones(buf, size); break;
++	case 12: CGangs::SaveAllGangData(buf, size); break;
++	case 13: CTheCarGenerators::SaveAllCarGenerators(buf, size); break;
++	case 14: CParticleObject::SaveParticle(buf, size); break;
++	case 15: cAudioScriptObject::SaveAllAudioScriptObjects(buf, size); break;
++	case 16: CScriptPaths::Save(buf, size); break;
++	case 17: CWorld::Players[CWorld::PlayerInFocus].SavePlayerInfo(buf, size); break;
++	case 18: CStats::SaveStats(buf, size); break;
++	case 19: CSetPieces::Save(buf, size); break;
++	case 20: CStreaming::MemoryCardSave(buf, size); break;
++	case 21: CPedType::Save(buf, size); break;
+ 	}
+-	
+-	// Write checksum and close
+-	CFileMgr::Write(file, (const char *) &CheckSum, sizeof(CheckSum));
++}
++
++// The chunk goes into work_buff first, as the original read it: some Load functions leave
++// pointers into their buffer, which later chunks overwrite (behaviour kept as it was).
++void
++revc_load_block(int index, const uint8 *chunk, size_t chunkLen, size_t offset, uint32 size)
++{
++	memcpy(work_buff, chunk, chunkLen < sizeof(work_buff) ? chunkLen : sizeof(work_buff));
++	uint8 *buf = work_buff + offset;
++	switch (index) {
++	case -1: CTheScripts::LoadAllScripts(buf, size); break;
++	case 0: CPools::LoadPedPool(buf, size); break;
++	case 1: CGarages::Load(buf, size); break;
++	case 2: CGameLogic::Load(buf, size); break;
++	case 3: CPools::LoadVehiclePool(buf, size); break;
++	case 4:
++		CProjectileInfo::RemoveAllProjectiles();
++		CObject::DeleteAllTempObjects();
++		CPools::LoadObjectPool(buf, size);
++		break;
++	case 5: ThePaths.Load(buf, size); break;
++	case 6: CCranes::Load(buf, size); break;
++	case 7: CPickups::Load(buf, size); break;
++	case 8: gPhoneInfo.Load(buf, size); break;
++	case 9: CRestart::LoadAllRestartPoints(buf, size); break;
++	case 10: CRadar::LoadAllRadarBlips(buf, size); break;
++	case 11: CTheZones::LoadAllZones(buf, size); break;
++	case 12: CGangs::LoadAllGangData(buf, size); break;
++	case 13:
++		CTheCarGenerators::LoadAllCarGenerators(buf, size);
++		CParticle::ReloadConfig();
++		break;
++	case 14: CParticleObject::LoadParticle(buf, size); break;
++	case 15: cAudioScriptObject::LoadAllAudioScriptObjects(buf, size); break;
++	case 16: CScriptPaths::Load(buf, size); break;
++	case 17: CWorld::Players[CWorld::PlayerInFocus].LoadPlayerInfo(buf, size); break;
++	case 18: CStats::LoadStats(buf, size); break;
++	case 19: CSetPieces::Load(buf, size); break;
++	case 20: CStreaming::MemoryCardLoad(buf, size); break;
++	case 21: CPedType::Load(buf, size); break;
++	}
++}
++}
++
++bool
++GenericSave(int file)
++{
++	uint8 *data;
++	size_t len;
++	revc_save_build(&data, &len, &CheckSum);
++	CFileMgr::Write(file, (const char *)data, len);
++	revc_save_free(data, len);
+ 	if (CFileMgr::GetErrorReadWrite(file)) {
+ 		PcSaveHelper.nErrorCode = SAVESTATUS_ERR_SAVE_WRITE;
+-		if (!CloseFile(file))
+-			PcSaveHelper.nErrorCode = SAVESTATUS_ERR_SAVE_CLOSE;
+-
++		strncpy(SaveFileNameJustSaved, ValidSaveName, sizeof(ValidSaveName) - 1);
+ 		return false;
+ 	}
+-
+-	CPad::FixPadsAfterSave();	
++	CPad::FixPadsAfterSave();
+ 	return true;
+ }
+ 
++// A save is about 200 KB; anything past this is never read.
++enum { MAX_SAVE_FILE_SIZE = 1024 * 1024 };
++
+ bool
+ GenericLoad()
+ {
+-	uint8 *buf;
+-	int32 file;
+-	uint32 size;
+-#ifdef MISSION_REPLAY
+-	int8 qs;
+-#endif
+-
+-	int32 saveSize;
+-	CPad *currPad;
+-
+-	// Load SimpleVars and Scripts
+ 	CheckSum = 0;
+-	CDate dummy; // unused
+ 	CPad::ResetCheats();
+-	if (!ReadInSizeofSaveFileBuffer(file, size))
++	int32 file = CFileMgr::OpenFile(LoadFileName, "rb");
++	if (file == 0) {
++		PcSaveHelper.nErrorCode = SAVESTATUS_ERR_LOAD_OPEN;
++		return false;
++	}
++	// One read of the whole file (it ends before MAX_SAVE_FILE_SIZE, so the end-of-file flag that
++	// GetErrorReadWrite reports is expected here); a short file fails in revc_save_load.
++	uint8 *data = new uint8[MAX_SAVE_FILE_SIZE];
++	size_t len = CFileMgr::Read(file, (const char *)data, MAX_SAVE_FILE_SIZE);
++	bool ok = revc_save_load(data, len);
++	delete[] data;
++	if (!ok) {
++		PcSaveHelper.nErrorCode = SAVESTATUS_ERR_LOAD_READ;
++		if (!CloseFile(file))
++			PcSaveHelper.nErrorCode = SAVESTATUS_ERR_LOAD_CLOSE;
+ 		return false;
+-	size = align4bytes(size);
+-	ReadDataFromFile(file, work_buff, size);
+-	buf = (work_buff + 0x40);
+-	ReadDataFromBufferPointer(buf, saveSize);
+-#ifdef MISSION_REPLAY // a hack to keep compatibility but get new data from save
+-	qs = saveSize >> 24;
+-#endif
+-	ReadDataFromBufferPointer(buf, CGame::currLevel);
+-	ReadDataFromBufferPointer(buf, TheCamera.GetMatrix().GetPosition().x);
+-	ReadDataFromBufferPointer(buf, TheCamera.GetMatrix().GetPosition().y);
+-	ReadDataFromBufferPointer(buf, TheCamera.GetMatrix().GetPosition().z);
+-	ReadDataFromBufferPointer(buf, CClock::ms_nMillisecondsPerGameMinute);
+-	ReadDataFromBufferPointer(buf, CClock::ms_nLastClockTick);
+-	ReadDataFromBufferPointer(buf, CClock::ms_nGameClockHours);
+-	ReadDataFromBufferPointer(buf, CClock::ms_nGameClockMinutes);
+-	currPad = CPad::GetPad(0);
+-	ReadDataFromBufferPointer(buf, currPad->Mode);
+-	ReadDataFromBufferPointer(buf, CTimer::m_snTimeInMilliseconds);
+-	ReadDataFromBufferPointer(buf, CTimer::ms_fTimeScale);
+-	ReadDataFromBufferPointer(buf, CTimer::ms_fTimeStep);
+-	ReadDataFromBufferPointer(buf, CTimer::ms_fTimeStepNonClipped);
+-	ReadDataFromBufferPointer(buf, CTimer::m_FrameCounter);
+-	ReadDataFromBufferPointer(buf, CTimeStep::ms_fTimeStep);
+-	ReadDataFromBufferPointer(buf, CTimeStep::ms_fFramesPerUpdate);
+-	ReadDataFromBufferPointer(buf, CTimeStep::ms_fTimeScale);
+-	ReadDataFromBufferPointer(buf, CWeather::OldWeatherType);
+-	ReadDataFromBufferPointer(buf, CWeather::NewWeatherType);
+-	ReadDataFromBufferPointer(buf, CWeather::ForcedWeatherType);
+-#ifdef SECUROM
+-	if (CTimer::m_FrameCounter > 72000){
+-		buf += align4bytes(4);
+ 	}
+-#endif
+-	ReadDataFromBufferPointer(buf, CWeather::InterpolationValue);
+-	ReadDataFromBufferPointer(buf, CWeather::WeatherTypeInList);
+-#ifdef COMPATIBLE_SAVES
+-	// converted to float for compatibility with original format
+-	// TODO: maybe remove this? not really gonna break anything vital
+-	float f;
+-	ReadDataFromBufferPointer(buf, f);
+-	TheCamera.CarZoomIndicator = f;
+-	ReadDataFromBufferPointer(buf, f);
+-	TheCamera.PedZoomIndicator = f;
+-#else
+-	ReadDataFromBufferPointer(buf, TheCamera.CarZoomIndicator);
+-	ReadDataFromBufferPointer(buf, TheCamera.PedZoomIndicator);
+-#endif
+-	ReadDataFromBufferPointer(buf, CGame::currArea);
+-	ReadDataFromBufferPointer(buf, CVehicle::bAllTaxisHaveNitro);
+-#ifdef LOAD_INI_SETTINGS
+-	buf += align4bytes(sizeof(CPad::bInvertLook4Pad));
+-#else
+-	ReadDataFromBufferPointer(buf, CPad::bInvertLook4Pad);
+-#endif
+-	ReadDataFromBufferPointer(buf, CTimeCycle::m_ExtraColour);
+-	ReadDataFromBufferPointer(buf, CTimeCycle::m_bExtraColourOn);
+-	ReadDataFromBufferPointer(buf, CTimeCycle::m_ExtraColourInter);
+-	ReadDataFromBufferPointer(buf, RadioStationPosition);
+-	assert(buf - work_buff == SIZE_OF_SIMPLEVARS);
+-#ifdef MISSION_REPLAY
+-	WaitForSave = 0;
+-	if (FrontEndMenuManager.m_nCurrSaveSlot == PAUSE_SAVE_SLOT && qs == 3)
+-		WaitForMissionActivate = CTimer::GetTimeInMilliseconds() + 2000;
+-#endif
+-	ReadDataFromBlock("Loading Scripts \n", CTheScripts::LoadAllScripts);
+-
+-	// Load the rest
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading PedPool \n", CPools::LoadPedPool);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Garages \n", CGarages::Load);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading GameLogic \n", CGameLogic::Load);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Vehicles \n", CPools::LoadVehiclePool);
+-	LoadSaveDataBlock();
+-	CProjectileInfo::RemoveAllProjectiles();
+-	CObject::DeleteAllTempObjects();
+-	ReadDataFromBlock("Loading Objects \n", CPools::LoadObjectPool);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Paths \n", ThePaths.Load);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Cranes \n", CCranes::Load);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Pickups \n", CPickups::Load);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Phoneinfo \n", gPhoneInfo.Load);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Restart \n", CRestart::LoadAllRestartPoints);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Radar Blips \n", CRadar::LoadAllRadarBlips);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Zones \n", CTheZones::LoadAllZones);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Gang Data \n", CGangs::LoadAllGangData);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Car Generators \n", CTheCarGenerators::LoadAllCarGenerators);
+-	CParticle::ReloadConfig();
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Particles \n", CParticleObject::LoadParticle);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading AudioScript Objects \n", cAudioScriptObject::LoadAllAudioScriptObjects);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading ScriptPaths \n", CScriptPaths::Load);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Player Info \n", CWorld::Players[CWorld::PlayerInFocus].LoadPlayerInfo);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Stats \n", CStats::LoadStats);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Set Pieces \n", CSetPieces::Load);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading Streaming Stuff \n", CStreaming::MemoryCardLoad);
+-	LoadSaveDataBlock();
+-	ReadDataFromBlock("Loading PedType Stuff \n", CPedType::Load);
+ 
+ 	DMAudio.SetMusicMasterVolume(FrontEndMenuManager.m_PrefsMusicVolume);
+ 	DMAudio.SetEffectsMasterVolume(FrontEndMenuManager.m_PrefsSfxVolume);
+@@ -542,65 +481,32 @@
+ 	return SlotFileName[slot];
+ }
+ 
++// The block and checksum walk is in Rust (revc-formats::save::check, checked against this
++// function's original with tests/golden/savecheck.txt); the file is read here.
++extern "C" int revc_save_check(const uint8 *data, size_t len, int32 *level);
++
+ bool
+ CheckDataNotCorrupt(int32 slot, char *name)
+ {
+-#ifdef FIX_BUGS
+ 	char filename[MAX_PATH];
+-#else
+-	char filename[100];
+-#endif
+-
+-	int32 blocknum = 0;
+-	eLevelName level = LEVEL_GENERIC;
+-	CheckSum = 0;
+-	uint32 bytes_processed = 0;
+ 	sprintf(filename, "%s%i%s", DefaultPCSaveFileName, slot + 1, ".b");
+ 	int file = CFileMgr::OpenFile(filename, "rb");
+ 	if (file == 0)
+ 		return false;
+ 	strcpy(name, filename);
+-	while (SIZE_OF_ONE_GAME_IN_BYTES - sizeof(uint32) > bytes_processed && blocknum < 40) {
+-		int32 blocksize;
+-		if (!ReadDataFromFile(file, (uint8*)&blocksize, sizeof(blocksize))) {
+-			CloseFile(file);
+-			return false;
+-		}
+-		if (blocksize > align4bytes(sizeof(work_buff)))
+-			blocksize = sizeof(work_buff) - sizeof(uint32);
+-		if (!ReadDataFromFile(file, work_buff, align4bytes(blocksize))) {
+-			CloseFile(file);
+-			return false;
+-		}
+ 
+-		CheckSum += ((uint8*)&blocksize)[0];
+-		CheckSum += ((uint8*)&blocksize)[1];
+-		CheckSum += ((uint8*)&blocksize)[2];
+-		CheckSum += ((uint8*)&blocksize)[3];
+-		uint8 *_work_buf = work_buff;
+-		for (int i = 0; i < align4bytes(blocksize); i++) {
+-			CheckSum += *_work_buf++;
+-			bytes_processed++;
+-		}
+-
+-		if (blocknum == 0)
+-			memcpy(&level, work_buff+4, sizeof(level));
+-		blocknum++;
+-	}
+-	int32 _checkSum;
+-	if (ReadDataFromFile(file, (uint8*)&_checkSum, sizeof(_checkSum))) {
+-		if (CloseFile(file)) {
+-			if (CheckSum == _checkSum) {
+-				m_LevelToLoad = level;
+-				return true;
+-			}
+-			return false;
+-		}
+-		return false;
+-	}
+-
+-	CloseFile(file);
+-	return false;
++	// The check never reads more than about 260 KB (40 blocks of at most 55000 bytes, stopping
++	// after one game's size); a longer file only has unused bytes at the end.
++	enum { MAX_CHECKED_SIZE = 1024 * 1024 };
++	uint8 *buf = new uint8[MAX_CHECKED_SIZE];
++	size_t len = CFileMgr::Read(file, (const char*)buf, MAX_CHECKED_SIZE);
++	bool closed = CloseFile(file);
++	int32 level = LEVEL_GENERIC;
++	bool ok = closed && revc_save_check(buf, len, &level);
++	delete[] buf;
++	if (ok)
++		m_LevelToLoad = (eLevelName)level;
++	return ok;
+ }
+ 
+ bool
+@@ -620,11 +526,11 @@
+ 			PcSaveHelper.nErrorCode = SAVESTATUS_ERR_LOAD_CLOSE;
+ 		return false;
+ 	} else {
+-		uint8 *_buf = buf + sizeof(int32) + sizeof(wchar[24]) + sizeof(SYSTEMTIME) + sizeof(SIZE_OF_ONE_GAME_IN_BYTES);
+-		ReadDataFromBufferPointer(_buf, CGame::currLevel);
+-		ReadDataFromBufferPointer(_buf, TheCamera.GetMatrix().GetPosition().x);
+-		ReadDataFromBufferPointer(_buf, TheCamera.GetMatrix().GetPosition().y);
+-		ReadDataFromBufferPointer(_buf, TheCamera.GetMatrix().GetPosition().z);
++		int32 level;
++		float pos[3];
++		revc_save_start_info(buf, sizeof(buf), &level, pos);
++		CGame::currLevel = (eLevelName)level;
++		TheCamera.GetMatrix().GetPosition() = CVector(pos[0], pos[1], pos[2]);
+ 		CStreaming::RemoveUnusedBigBuildings(CGame::currLevel);
+ 		CStreaming::RemoveUnusedBuildings(CGame::currLevel);
+ 
+@@ -644,573 +550,45 @@
+ }
+ 
+ #ifdef FIX_INCOMPATIBLE_SAVES
+-#define LoadSaveDataBlockNoCheck(buf, file, size) \
+-do { \
+-	CFileMgr::Read(file, (const char *)&size, sizeof(size)); \
+-	size = align4bytes(size); \
+-	CFileMgr::Read(file, (const char *)work_buff, size); \
+-	buf = work_buff; \
+-} while(0)
+-
+-#define WriteSavaDataBlockNoFunc(buf, file, size) \
+-do { \
+-	if (!PcSaveHelper.PcClassSaveRoutine(file, buf, size)) \
+-		goto fail; \
+-	totalSize += size; \
+-} while(0)
+-
+-#define FixSaveDataBlock(fix_func, file, size) \
+-do { \
+-	ReadDataFromBufferPointer(buf, size); \
+-	memset(work_buff2, 0, sizeof(work_buff2)); \
+-	buf2 = work_buff2; \
+-	reserved = 0; \
+-	MakeSpaceForSizeInBufferPointer(presize, buf2, postsize); \
+-	fix_func(save_type, buf, buf2, &size); \
+-	CopySizeAndPreparePointer(presize, buf2, postsize, reserved, size); \
+-	if (!PcSaveHelper.PcClassSaveRoutine(file, work_buff2, buf2 - work_buff2)) \
+-		goto fail; \
+-	totalSize += buf2 - work_buff2; \
+-} while(0)
+-
+-#define ReadDataFromBufferPointerWithSize(buf, to, size) memcpy(&to, buf, size); buf += align4bytes(size)
+-
+-#define ReadBuf(buf, to) memcpy(&to, buf, sizeof(to)); buf += sizeof(to)
+-#define WriteBuf(buf, from) memcpy(buf, &from, sizeof(from)); buf += sizeof(from)
+-#define CopyBuf(from, to, size) memcpy(to, from, size); to += (size); from += (size)
+-#define CopyPtr(from, to) memcpy(to, from, 4); to += 4; from += 8
+-#define SkipBuf(buf, size) buf += (size)
+-#define SkipBoth(from, to, size) to += (size); from += (size)
+-#define SkipPtr(from, to) to += 4; from += 8
+-
+-// unfortunately we need a 2nd buffer of the same size to store the fixed output ...
+-static uint8 work_buff2[sizeof(work_buff)];
+-
+-enum
+-{
+-	SAVE_TYPE_NONE = 0,
+-	SAVE_TYPE_32_BIT = 1,
+-	SAVE_TYPE_64_BIT = 2,
+-	SAVE_TYPE_MSVC = 4,
+-	SAVE_TYPE_GCC = 8,
+-	SAVE_TYPE_STEAM = 16,
+-};
+-
+-uint8
+-GetSaveType(char *savename)
+-{
+-	uint8 save_type = SAVE_TYPE_NONE;
+-	int file = CFileMgr::OpenFile(savename, "rb");
+-
+-	uint32 size;
+-	CFileMgr::Read(file, (const char *)&size, sizeof(size));
+-
+-	uint8 *buf = work_buff;
+-	CFileMgr::Read(file, (const char *)work_buff, size); // simple vars + scripts
+-
+-	buf += 0x40 + sizeof(int32) + sizeof(int32) + sizeof(float) * 3;
+-
+-	int8 steam_byte;
+-	ReadDataFromBufferPointer(buf, steam_byte);
+-
+-	if (steam_byte == -3)
+-		save_type |= SAVE_TYPE_STEAM;
+-
+-	LoadSaveDataBlockNoCheck(buf, file, size); // ped pool
+-
+-	LoadSaveDataBlockNoCheck(buf, file, size); // garages
+-	ReadDataFromBufferPointer(buf, size);
+-
+-	// store for later after we know how much data we need to skip
+-	ReadDataFromBufferPointerWithSize(buf, work_buff2, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file, size); // game logic
+-	LoadSaveDataBlockNoCheck(buf, file, size); // vehicle pool
+-	LoadSaveDataBlockNoCheck(buf, file, size); // object pool
+-	LoadSaveDataBlockNoCheck(buf, file, size); // paths
+-
+-	LoadSaveDataBlockNoCheck(buf, file, size); // cranes
+-
+-	CFileMgr::CloseFile(file);
+-
+-	ReadDataFromBufferPointer(buf, size);
+-
+-	if (size == 1000)
+-		save_type |= SAVE_TYPE_32_BIT;
+-	else if (size == 1160)
+-		save_type |= SAVE_TYPE_64_BIT;
+-	else
+-		assert(0); // this should never happen
+-
+-	buf = work_buff2;
+-
+-	buf += 1964; // skip everything before the first garage
+-	buf += save_type & SAVE_TYPE_32_BIT ? 28 : 40; // skip first garage up to m_vecCorner1
+-
+-	CVector2D vecCorner1;
+-	float fInfZ, fSupZ;
+-
+-	ReadBuf(buf, vecCorner1);
+-	ReadBuf(buf, fInfZ);
+-	SkipBuf(buf, sizeof(CVector2D));
+-	SkipBuf(buf, sizeof(CVector2D));
+-	ReadBuf(buf, fSupZ);
+-
+-	// SET_GARAGE -914.129028 -1263.540039 10.706000 -907.137024 -1246.625977 -906.299988 -1266.900024 14.421000
+-	if (vecCorner1.x == -914.129028f && vecCorner1.y == -1263.540039f &&
+-		fInfZ == 10.706000f && fSupZ == 14.421000f)
+-		save_type |= SAVE_TYPE_MSVC;
+-	else
+-		save_type |= SAVE_TYPE_GCC;
+-
+-	return save_type;
+-}
+-
+-static void
+-FixSimpleVarsAndScripts(uint8 save_type, uint8 *buf, uint8 *buf2, uint32 *size)
+-{
+-	uint8 *buf_start = buf;
+-	uint8 *buf2_start = buf2;
+-	uint32 read = *size;
+-	uint32 written = *size - (sizeof(int8) + 3);
+-
+-	uint32 pre_steam = 0x40 + sizeof(int32) + sizeof(int32) + sizeof(float) * 3;
+-	uint32 post_steam = *size - (sizeof(int8) + 3) - pre_steam;
+-
+-	CopyBuf(buf, buf2, pre_steam);
+-	SkipBuf(buf, sizeof(int8) + 3);
+-	CopyBuf(buf, buf2, post_steam);
+-
+-	*size = 0;
+-
+-	assert(buf - buf_start == read);
+-	assert(buf2 - buf2_start == written);
+-
+-	*size = written;
+-}
+-
+-static void
+-FixGarages(uint8 save_type, uint8 *buf, uint8 *buf2, uint32 *size)
+-{
+-	// hardcoded: 7876
+-	// x86 msvc: 7340
+-	// x86 gcc: 7020
+-	// amd64 msvc: 7852
+-	// amd64 gcc: 7660
+-
+-	uint8 *buf_start = buf;
+-	uint8 *buf2_start = buf2;
+-	uint32 read;
+-	uint32 written = 7340;
+-
+-	if (save_type & SAVE_TYPE_32_BIT && save_type & SAVE_TYPE_GCC)
+-		read = 7020;
+-	else if (save_type & SAVE_TYPE_64_BIT && save_type & SAVE_TYPE_GCC)
+-		read = 7660;
+-	else
+-		read = 7852;
+-
+-	uint32 ptrsize = save_type & SAVE_TYPE_32_BIT ? 4 : 8;
+-
+-	CopyBuf(buf, buf2, 4 * 6);
+-	CopyBuf(buf, buf2, 4 * TOTAL_COLLECTCARS_GARAGES);
+-	CopyBuf(buf, buf2, 4);
+-
+-	if (save_type & SAVE_TYPE_GCC)
+-	{
+-		for (int32 i = 0; i < NUM_GARAGE_STORED_CARS; i++)
+-		{
+-			for (int32 j = 0; j < TOTAL_HIDEOUT_GARAGES; j++)
+-			{
+-				CopyBuf(buf, buf2, 4 + sizeof(CVector) + sizeof(CVector));
+-				uint8 nFlags8;
+-				ReadBuf(buf, nFlags8);
+-				int32 nFlags32 = nFlags8;
+-				WriteBuf(buf2, nFlags32);
+-				CopyBuf(buf, buf2, 1 * 6);
+-				SkipBuf(buf, 1);
+-				SkipBuf(buf2, 2);
+-			}
+-		}
+-	}
+-	else
+-	{
+-		CopyBuf(buf, buf2, sizeof(CStoredCar) * NUM_GARAGE_STORED_CARS * TOTAL_HIDEOUT_GARAGES);
+-	}
+-
+-	for (int32 i = 0; i < NUM_GARAGES; i++)
+-	{
+-		CopyBuf(buf, buf2, 1 * 7);
+-		SkipBoth(buf, buf2, 1);
+-		CopyBuf(buf, buf2, 4);
+-		SkipBuf(buf, ptrsize - 4); // write 4 bytes padding if 8 byte pointer, if not, write 0
+-		SkipBuf(buf, ptrsize * 2);
+-		SkipBuf(buf2, 4 * 2);
+-		CopyBuf(buf, buf2, 1 * 7);
+-		SkipBoth(buf, buf2, 1);
+-		CopyBuf(buf, buf2, sizeof(CVector2D) * 3 + 4 * 17 + 1);
+-		SkipBoth(buf, buf2, 3);
+-		SkipBuf(buf, ptrsize);
+-		SkipBuf(buf2, 4);
+-
+-		if (save_type & SAVE_TYPE_GCC)
+-			SkipBuf(buf, save_type & SAVE_TYPE_64_BIT ? 36 + 4 : 36); // sizeof(CStoredCar) on gcc 64/32 before fix
+-		else
+-			SkipBuf(buf, sizeof(CStoredCar));
+-
+-		SkipBuf(buf2, sizeof(CStoredCar));
+-	}
+-
+-	*size = 0;
+-
+-	assert(buf - buf_start == read);
+-	assert(buf2 - buf2_start == written);
+-
+-	*size = 7876;
+-}
+-
+-static void
+-FixCranes(uint8 save_type, uint8 *buf, uint8 *buf2, uint32 *size)
+-{
+-	uint8 *buf_start = buf;
+-	uint8 *buf2_start = buf2;
+-	uint32 read = 2 * sizeof(uint32) + 0x480; // sizeof(aCranes)
+-	uint32 written = 2 * sizeof(uint32) + 0x3E0; // see CRANES_SAVE_SIZE
+-
+-	CopyBuf(buf, buf2, 4 + 4);
+-
+-	for (int32 i = 0; i < NUM_CRANES; i++)
+-	{
+-		CopyPtr(buf, buf2);
+-		CopyPtr(buf, buf2);
+-		CopyBuf(buf, buf2, 14 * 4 + sizeof(CVector) * 3 + sizeof(CVector2D));
+-		SkipBuf(buf, 4);
+-		CopyPtr(buf, buf2);
+-		CopyBuf(buf, buf2, 4 + 7 * 1);
+-		SkipBuf(buf, 5);
+-		SkipBuf(buf2, 1);
+-	}
+-
+-	*size = 0;
+-
+-	assert(buf - buf_start == read);
+-	assert(buf2 - buf2_start == written);
+-
+-	*size = written;
+-}
+-
+-static void
+-FixPickups(uint8 save_type, uint8 *buf, uint8 *buf2, uint32 *size)
+-{
+-	uint8 *buf_start = buf;
+-	uint8 *buf2_start = buf2;
+-	uint32 read = 0x5400 + sizeof(uint16) + sizeof(uint16) + sizeof(int32) * NUMCOLLECTEDPICKUPS; // sizeof(aPickUps)
+-	uint32 written = 0x4440 + sizeof(uint16) + sizeof(uint16) + sizeof(int32) * NUMCOLLECTEDPICKUPS; // see PICKUPS_SAVE_SIZE
+-
+-	for (int32 i = 0; i < NUMPICKUPS; i++)
+-	{
+-		CopyBuf(buf, buf2, sizeof(CVector) + 4);
+-		CopyPtr(buf, buf2);
+-		CopyPtr(buf, buf2);
+-		CopyBuf(buf, buf2, 4 * 2 + 2 * 3 + 8 + 1 * 3);
+-		SkipBuf(buf, 7);
+-		SkipBuf(buf2, 3);
+-	}
+-
+-	CopyBuf(buf, buf2, 2);
+-	SkipBoth(buf, buf2, 2);
+-
+-	CopyBuf(buf, buf2, NUMCOLLECTEDPICKUPS * 4);
+-
+-	*size = 0;
+-
+-	assert(buf - buf_start == read);
+-	assert(buf2 - buf2_start == written);
+-
+-	*size = written;
+-}
+-
+-static void
+-FixPhoneInfo(uint8 save_type, uint8 *buf, uint8 *buf2, uint32 *size)
+-{
+-	uint8 *buf_start = buf;
+-	uint8 *buf2_start = buf2;
+-	uint32 read = 0x1138; // sizeof(CPhoneInfo)
+-	uint32 written = 0xA30; // see PHONEINFO_SAVE_SIZE
+-
+-	CopyBuf(buf, buf2, 4 + 4);
+-
+-	for (int32 i = 0; i < NUMPHONES; i++)
+-	{
+-		CopyBuf(buf, buf2, sizeof(CVector));
+-		SkipBuf(buf, 4);
+-		SkipPtr(buf, buf2);
+-		SkipPtr(buf, buf2);
+-		SkipPtr(buf, buf2);
+-		SkipPtr(buf, buf2);
+-		SkipPtr(buf, buf2);
+-		SkipPtr(buf, buf2);
+-		CopyBuf(buf, buf2, 4);
+-		SkipBuf(buf, 4);
+-		CopyPtr(buf, buf2);
+-		CopyBuf(buf, buf2, 4 + 1);
+-		SkipBoth(buf, buf2, 3);
+-	}
+-
+-	*size = 0;
+-
+-	assert(buf - buf_start == read);
+-	assert(buf2 - buf2_start == written);
+-
+-	*size = written;
+-}
+-
+-static void
+-FixParticles(uint8 save_type, uint8 *buf, uint8 *buf2, uint32 *size)
+-{
+-	uint8 *buf_start = buf;
+-	uint8 *buf2_start = buf2;
+-
+-	int32 numObjects;
+-	ReadBuf(buf, numObjects);
+-	WriteBuf(buf2, numObjects);
+-
+-	uint32 read = 0x98 * (numObjects + 1) + 4; // sizeof(CParticleObject)
+-	uint32 written = 0x84 * (numObjects + 1) + 4; // see PARTICLE_OBJECT_SIZEOF
+-
+-	for (int32 i = 0; i < numObjects; i++)
+-	{
+-		// CPlaceable
+-		CopyBuf(buf, buf2, 4 * 4 * 4);
+-		SkipPtr(buf, buf2);
+-		CopyBuf(buf, buf2, 1);
+-		SkipBuf(buf, 7);
+-		SkipBuf(buf2, 3);
+-
+-		// CParticleObject
+-		SkipPtr(buf, buf2);
+-		SkipPtr(buf, buf2);
+-		SkipPtr(buf, buf2);
+-		CopyBuf(buf, buf2, 4 * 3 + 2 * 1 + 2 * 2);
+-		SkipBoth(buf, buf2, 2);
+-		CopyBuf(buf, buf2, sizeof(CVector) + 2 * 4 + sizeof(CRGBA) + 2 * 1);
+-		SkipBoth(buf, buf2, 2);
+-	}
+-
+-	SkipBuf(buf, 0x98); // sizeof(CParticleObject)
+-	SkipBuf(buf2, 0x84); // see PARTICLE_OBJECT_SIZEOF
+-
+-	*size = 0;
+-
+-	assert(buf - buf_start == read);
+-	assert(buf2 - buf2_start == written);
+-
+-	*size = written;
+-}
+-
+-static void
+-FixScriptPaths(uint8 save_type, uint8 *buf, uint8 *buf2, uint32 *size)
+-{
+-	uint8 *buf_start = buf;
+-	uint8 *buf2_start = buf2;
+-	uint32 read = 0x108; // sizeof(CScriptPath) * 3
+-	uint32 written = 0x9C; // see SCRIPTPATHS_SAVE_SIZE
+-
+-	for (int32 i = 0; i < 3; i++)
+-	{
+-		int32 numNodes;
+-		ReadBuf(buf, numNodes);
+-		WriteBuf(buf2, numNodes);
+-		SkipBuf(buf, 4);
+-		SkipPtr(buf, buf2);
+-		CopyBuf(buf, buf2, 4 * 5);
+-		SkipBuf(buf, 4);
+-
+-		for (int32 i = 0; i < 6; i++)
+-		{
+-			CopyPtr(buf, buf2);
+-		}
+-
+-		for (int32 i = 0; i < numNodes; i++)
+-		{
+-			CopyBuf(buf, buf2, sizeof(CPlaneNode));
+-			read += sizeof(CPlaneNode);
+-			written += sizeof(CPlaneNode);
+-		}
+-	}
+-
+-	*size = 0;
+-
+-	assert(buf - buf_start == read);
+-	assert(buf2 - buf2_start == written);
+-
+-	*size = written;
+-}
++// Saves from other builds (64-bit, GCC, Steam): the type detection and the rewrite into this
++// build's layout are in Rust (rust/revc/src/savefix.rs). Here: the files. A rewritten save keeps
++// the old file next to it as <name>.<time>.bak, as the original did.
++extern "C" int revc_save_fix(const uint8 *data, size_t len, uint8 **out, size_t *out_len);
+ 
+ bool
+-FixSave(int32 slot, uint8 save_type)
++FixSave(int32 slot)
+ {
+-	if (save_type & SAVE_TYPE_32_BIT && save_type & SAVE_TYPE_MSVC && !(save_type & SAVE_TYPE_STEAM))
+-		return true;
+-
+-	bool success = false;
+-
+-	uint8 *buf, *presize, *postsize, *buf2;
+-	uint32 size;
+-	uint32 reserved;
+-
+-	uint32 totalSize;
+-
+ 	char savename[MAX_PATH];
+ 	char savename_bak[MAX_PATH];
+-
+ 	sprintf(savename, "%s%i%s", DefaultPCSaveFileName, slot + 1, ".b");
+-	sprintf(savename_bak, "%s%i%s.%lld.bak", DefaultPCSaveFileName, slot + 1, ".b", time(nil));
+ 
+-	assert(caserename(savename, savename_bak) == 0);
+-
+-	int file_in = CFileMgr::OpenFile(savename_bak, "rb");
+-	int file_out = CFileMgr::OpenFileForWriting(savename);
+-
+-	CheckSum = 0;
+-	totalSize = 0;
+-
+-	CFileMgr::Read(file_in, (const char *)&size, sizeof(size));
+-	size = align4bytes(size);
++	int file = CFileMgr::OpenFile(savename, "rb");
++	if (file == 0)
++		return false;
++	enum { MAX_FILE_SIZE = 1024 * 1024 };
++	uint8 *buf = new uint8[MAX_FILE_SIZE];
++	size_t len = CFileMgr::Read(file, (const char*)buf, MAX_FILE_SIZE);
++	CFileMgr::CloseFile(file);
+ 
+-	buf = work_buff;
+-	CFileMgr::Read(file_in, (const char *)work_buff, size); // simple vars + scripts
++	uint8 *fixed = nil;
++	size_t fixed_len = 0;
++	int result = revc_save_fix(buf, len, &fixed, &fixed_len);
++	delete[] buf;
++	if (result != 2)
++		return result == 1;
+ 
+-	if (save_type & SAVE_TYPE_STEAM && save_type & SAVE_TYPE_MSVC && save_type & SAVE_TYPE_32_BIT) {
+-		memset(work_buff2, 0, sizeof(work_buff2));
+-		buf2 = work_buff2;
+-		FixSimpleVarsAndScripts(save_type, buf, buf2, &size);
+-		if (!PcSaveHelper.PcClassSaveRoutine(file_out, work_buff2, size))
+-			goto fail;
+-		totalSize += size;
+-	} else
+-		WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // ped pool
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // garages
+-	if (!(save_type & SAVE_TYPE_STEAM && save_type & SAVE_TYPE_MSVC && save_type & SAVE_TYPE_32_BIT))
+-		FixSaveDataBlock(FixGarages, file_out, size);
+-	else
+-		WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // game logic
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // vehicle pool
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // object pool
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // paths
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // cranes
+-	if (save_type & SAVE_TYPE_64_BIT)
+-		FixSaveDataBlock(FixCranes, file_out, size);
+-	else
+-		WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // pickups
+-	if (save_type & SAVE_TYPE_64_BIT)
+-		FixSaveDataBlock(FixPickups, file_out, size);
+-	else
+-		WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // phoneinfo
+-	if (save_type & SAVE_TYPE_64_BIT)
+-		FixSaveDataBlock(FixPhoneInfo, file_out, size);
+-	else
+-		WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // restart
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // radar blips
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // zones
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // gang data
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // car generators
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // particles
+-	if (save_type & SAVE_TYPE_64_BIT)
+-		FixSaveDataBlock(FixParticles, file_out, size);
+-	else
+-		WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // audio script objects
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // script paths
+-	if (save_type & SAVE_TYPE_64_BIT)
+-		FixSaveDataBlock(FixScriptPaths, file_out, size);
+-	else
+-		WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // player info
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // stats
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // set pieces
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // streaming
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	LoadSaveDataBlockNoCheck(buf, file_in, size); // ped type
+-	WriteSavaDataBlockNoFunc(buf, file_out, size);
+-
+-	memset(work_buff, 0, sizeof(work_buff));
+-
+-	for (int i = 0; i < 4; i++) {
+-		size = align4bytes(SIZE_OF_ONE_GAME_IN_BYTES - totalSize - 4);
+-		if (size > sizeof(work_buff))
+-			size = sizeof(work_buff);
+-		if (size > 4) {
+-			if (!PcSaveHelper.PcClassSaveRoutine(file_out, work_buff, size))
+-				goto fail;
+-			totalSize += size;
++	sprintf(savename_bak, "%s%i%s.%lld.bak", DefaultPCSaveFileName, slot + 1, ".b", (long long)time(nil));
++	bool success = false;
++	if (caserename(savename, savename_bak) == 0) {
++		file = CFileMgr::OpenFileForWriting(savename);
++		if (file != 0) {
++			success = CFileMgr::Write(file, (const char*)fixed, fixed_len) != 0 && !CFileMgr::GetErrorReadWrite(file);
++			CFileMgr::CloseFile(file);
+ 		}
+ 	}
+-
+-	if (!CFileMgr::Write(file_out, (const char *)&CheckSum, sizeof(CheckSum)))
+-		goto fail;
+-
+-	success = true;
+-
+-fail:;
+-	CFileMgr::CloseFile(file_in);
+-	CFileMgr::CloseFile(file_out);
+-
++	revc_save_free(fixed, fixed_len);
+ 	return success;
+ }
+-
+-#undef LoadSaveDataBlockNoCheck
+-#undef WriteSavaDataBlockNoFunc
+-#undef FixSaveDataBlock
+-#undef ReadDataFromBufferPointerWithSize
+-#undef ReadBuf
+-#undef WriteBuf
+-#undef CopyBuf
+-#undef CopyPtr
+-#undef SkipBuf
+-#undef SkipBoth
+-#undef SkipPtr
+ #endif
+ 
+ #ifdef MISSION_REPLAY
+--- a/src/save/GenericGameStorage.h
++++ b/src/save/GenericGameStorage.h
+@@ -26,8 +26,7 @@
+ int align4bytes(int32 size);
+ 
+ #ifdef FIX_INCOMPATIBLE_SAVES
+-uint8 GetSaveType(char *savename);
+-bool FixSave(int32 slot, uint8 save_type);
++bool FixSave(int32 slot);
+ #endif
+ 
+ extern char DefaultPCSaveFileName[260];
+--- a/src/save/PCSave.cpp
++++ b/src/save/PCSave.cpp
+@@ -89,6 +89,26 @@
+ 	return true;
+ }
+ 
++// The slot list (header check, name, date line, the "corrupted" message) is in Rust
++// (rust/revc/src/savegame.rs); the file check and the incompatible-save fix are C++ for now.
++extern "C" {
++void revc_save_slot_info(int32 slot, const uint8 *header, size_t len, int32 (*check)(int32), int32 japanese, int32 *state,
++                         wchar *name, wchar *date);
++
++static int32
++CheckAndFixSlot(int32 slot)
++{
++	char savename[MAX_PATH];
++	if (!CheckDataNotCorrupt(slot, savename))
++		return 0;
++#ifdef FIX_INCOMPATIBLE_SAVES
++	if (!FixSave(slot))
++		return 0;
++#endif
++	return 1;
++}
++}
++
+ void
+ C_PcSave::PopulateSlotInfo()
+ {
+@@ -98,69 +118,21 @@
+ 		SlotSaveDate[i][0] = '\0';
+ 	}
+ 	for (int i = 0; i < SLOT_COUNT; i++) {
+-#ifdef FIX_BUGS
+ 		char savename[MAX_PATH];
+-#else
+-		char savename[52];
+-#endif
+-		struct {
+-			int size;
+-			wchar FileName[24];
+-			SYSTEMTIME SaveDateTime;
+-		} header;
++		uint8 header[4 + sizeof(wchar[24]) + sizeof(SYSTEMTIME)];
++		memset(header, 0, sizeof(header));
+ 		sprintf(savename, "%s%i%s", DefaultPCSaveFileName, i + 1, ".b");
+ 		int file = CFileMgr::OpenFile(savename, "rb");
+ 		if (file != 0) {
+-			CFileMgr::Read(file, (char*)&header, sizeof(header));
+-			if (strncmp((char*)&header, TopLineEmptyFile, sizeof(TopLineEmptyFile)-1) != 0) {
+-				Slots[i] = SLOT_OK;
+-				memcpy(SlotFileName[i], &header.FileName, sizeof(header.FileName));
+-				
+-				SlotFileName[i][24] = '\0';
+-			}
++			CFileMgr::Read(file, (char *)header, sizeof(header));
+ 			CFileMgr::CloseFile(file);
+ 		}
+-		if (Slots[i] == SLOT_OK) {
+-			if (CheckDataNotCorrupt(i, savename)) {
+-#ifdef FIX_INCOMPATIBLE_SAVES
+-				if (!FixSave(i, GetSaveType(savename))) {
+-					CMessages::InsertNumberInString(TheText.Get("FEC_SLC"), i + 1, -1, -1, -1, -1, -1, SlotFileName[i]);
+-					Slots[i] = SLOT_CORRUPTED;
+-					continue;
+-				}
+-#endif
+-				SYSTEMTIME st;
+-				memcpy(&st, &header.SaveDateTime, sizeof(SYSTEMTIME));
+-				const char *month;
+-				switch (st.wMonth)
+-				{
+-				case 1: month = "JAN"; break;
+-				case 2: month = "FEB"; break;
+-				case 3: month = "MAR"; break;
+-				case 4: month = "APR"; break;
+-				case 5: month = "MAY"; break;
+-				case 6: month = "JUN"; break;
+-				case 7: month = "JUL"; break;
+-				case 8: month = "AUG"; break;
+-				case 9: month = "SEP"; break;
+-				case 10: month = "OCT"; break;
+-				case 11: month = "NOV"; break;
+-				case 12: month = "DEC"; break;
+-				default: assert(0);
+-				}
+-				char date[70];
+ #ifdef MORE_LANGUAGES
+-				if (CGame::japaneseGame)
+-					sprintf(date, "%02d %02d %04d %02d:%02d:%02d", st.wDay, st.wMonth, st.wYear, st.wHour, st.wMinute, st.wSecond);
+-				else
+-#endif // MORE_LANGUAGES
+-					sprintf(date, "%02d %s %04d %02d:%02d:%02d", st.wDay, UnicodeToAsciiForSaveLoad(TheText.Get(month)), st.wYear, st.wHour, st.wMinute, st.wSecond);
+-				AsciiToUnicode(date, SlotSaveDate[i]);
+-
+-			} else {
+-				CMessages::InsertNumberInString(TheText.Get("FEC_SLC"), i + 1, -1, -1, -1, -1, -1, SlotFileName[i]);
+-				Slots[i] = SLOT_CORRUPTED;
+-			}
+-		}
++		int32 japanese = CGame::japaneseGame;
++#else
++		int32 japanese = 0;
++#endif
++		revc_save_slot_info(i, file != 0 ? header : nil, sizeof(header), CheckAndFixSlot, japanese, &Slots[i], SlotFileName[i],
++		                    SlotSaveDate[i]);
+ 	}
+ }

@@ -1,0 +1,448 @@
+--- a/src/audio/eax/eax.h
++++ b/src/audio/eax/eax.h
+@@ -50,7 +50,7 @@
+ 
+ 
+ #else // AUDIO_OAL
+-	#include <AL/al.h>
++	#include "rust_al.h" // AL type names only
+ 	#include <string.h>
+ 
+ 	#ifndef GUID_DEFINED
+--- a/src/audio/oal/channel.h
++++ b/src/audio/oal/channel.h
+@@ -1,10 +1,7 @@
+ #pragma once
+ 
+ #ifdef AUDIO_OAL
+-#include "oal/oal_utils.h"
+-#include <AL/al.h>
+-#include <AL/alext.h>
+-#include <AL/efx.h>
++#include "oal/rust_al.h"
+ 
+ 
+ class CChannel
+--- a/src/audio/oal/stream.cpp
++++ b/src/audio/oal/stream.cpp
+@@ -30,6 +30,7 @@
+ #include <condition_variable>
+ #include "MusicManager.h"
+ #include "stream.h"
++#include "rust_al.h" // AL calls below are implemented by the Rust mixer
+ 
+ std::thread	gAudioThread;
+ std::mutex gAudioThreadQueueMutex;
+@@ -1290,6 +1291,8 @@
+ 	else 
+ 		m_pSoundFile = nil;
+ 
++	if ( m_pSoundFile && m_pSoundFile->IsOpened() && getenv("REVC_AUDIO_PAN_LOG") )	// revc diagnostics
++		fprintf(stderr, "[revc-audio] stream %s: %u channels, %u Hz\n", m_aFilename, m_pSoundFile->GetChannels(), m_pSoundFile->GetSampleRate());
+ 	if ( m_pSoundFile && m_pSoundFile->IsOpened() )
+ 	{
+ 		uint32 bufSize = m_pSoundFile->GetBufferSize();
+--- a/src/audio/oal/stream.h
++++ b/src/audio/oal/stream.h
+@@ -1,7 +1,7 @@
+ #pragma once
+ 
+ #ifdef AUDIO_OAL
+-#include <AL/al.h>
++#include "rust_al.h"
+ 
+ #define NUM_STREAMBUFFERS 8
+ 
+@@ -36,7 +36,11 @@
+ 	uint32 GetBufferSamples()
+ 	{
+ 		//return (GetAvgSamplesPerSec() >> 2) - (GetSampleCount() % GetChannels());
+-		return (GetAvgSamplesPerSec() / 4); // 250ms
++		// revc fix: 250 ms in whole frames. channels * rate / 4 is odd for 22050 Hz stereo
++		// (Audio/police.mp3, the radio in police cars and ambulances): a block then ended inside a
++		// frame and the stereo split (CStream::FillBuffer, channelSize = size / 2) fell on an odd
++		// byte, so the right channel played byte-shifted samples: loud crackle on the right only.
++		return (GetAvgSamplesPerSec() / 4) / GetChannels() * GetChannels(); // 250ms
+ 	}
+ 	
+ 	uint32 GetBufferSize()
+--- a/src/audio/sampman_oal.cpp
++++ b/src/audio/sampman_oal.cpp
+@@ -8,11 +8,6 @@
+ 
+ #ifdef _WIN32
+ #include <io.h>
+-#include <AL/al.h>
+-#include <AL/alc.h>
+-#include <AL/alext.h>
+-#include <AL/efx.h>
+-#include <AL/efx-presets.h>
+ 
+ // for user MP3s
+ #include <direct.h>
+@@ -31,8 +26,7 @@
+ 
+ #include "sampman.h"
+ 
+-#include "oal/oal_utils.h"
+-#include "oal/aldlist.h"
++#include "oal/rust_al.h"
+ #include "oal/channel.h"
+ 
+ #include <utility>
+@@ -63,15 +57,13 @@
+ int           usingEAX=0;
+ int           usingEAX3=0;
+ //int         speaker_type=0;
+-ALCdevice    *ALDevice = NULL;
+-ALCcontext   *ALContext = NULL;
+ unsigned int _maxSamples;
+ float        _fPrevEaxRatioDestination; 
+ bool         _effectsSupported = false;
+ bool         _usingEFX;
+ float        _fEffectsLevel;
+-ALuint       ALEffect = AL_EFFECT_NULL;
+-ALuint       ALEffectSlot = AL_EFFECTSLOT_NULL;
++// The reverb lives in the Rust mixer; there is no effect object. Kept for CChannel::SetReverbMix.
++ALuint       ALEffectSlot = 0;
+ struct
+ { 
+ 	const char *id;
+@@ -151,96 +143,44 @@
+ 	return _effectsSupported; // usingEAX || usingEAX3 || _usingEFX;
+ }
+ 
++// Reverb runs in the Rust mixer (rust/revc-audio/src/reverb.rs).
++extern "C" void revc_reverb_set(float density, float diffusion, float gain, float gainHF, float decayTime,
++                                float decayHFRatio, float reflectionsGain, float reflectionsDelay,
++                                float lateGain, float lateDelay);
++
++static float RustReverb_mBToGain(float mB) { return mB > -10000.0f ? powf(10.0f, mB / 2000.0f) : 0.0f; }
++
+ void EAX_SetAll(const EAXLISTENERPROPERTIES *allparameters)
+ {
+-	if ( usingEAX || usingEAX3 )
+-		EAX3_Set(ALEffect, allparameters);
+-	else
+-		EFX_Set(ALEffect, allparameters);
+-}
+-
++	// EAX3 preset -> EFX reverb parameters (the conversion OpenAL's EFX_Set used).
++	const EAXLISTENERPROPERTIES *p = allparameters;
++	revc_reverb_set(Clamp(powf(p->flEnvironmentSize, 3.0f) / 16.0f, 0.0f, 1.0f),
++	                p->flEnvironmentDiffusion,
++	                RustReverb_mBToGain((float)p->lRoom),
++	                RustReverb_mBToGain((float)p->lRoomHF),
++	                p->flDecayTime,
++	                p->flDecayHFRatio,
++	                Clamp(RustReverb_mBToGain((float)p->lReflections), 0.0f, 3.16f),
++	                p->flReflectionsDelay,
++	                Clamp(RustReverb_mBToGain((float)p->lReverb), 0.0f, 10.0f),
++	                p->flReverbDelay);
++}
++
++// There is one audio "provider": the Rust mixer playing through SDL3. It always supports effects and
++// runs the reverb in EFX mode (fixed cave preset, effects level from the surroundings), which is what
++// the default OpenAL Soft provider did.
+ static void
+ add_providers()
+ {
+-	SampleManager.SetNum3DProvidersAvailable(0);
+-
+-	static ALDeviceList DeviceList;
+-	ALDeviceList *pDeviceList = &DeviceList;
+-
+-	if ((pDeviceList) && (pDeviceList->GetNumDevices()))
+-	{
+-		const int devNumber = Min(pDeviceList->GetNumDevices(), MAXPROVIDERS);
+-		int n = 0;
+-		
+-		//for (int i = 0; i < devNumber; i++) 
+-		int i = pDeviceList->GetDefaultDevice();
+-		{
+-			if ( n < MAXPROVIDERS )
+-			{ 
+-				providers[n].id = pDeviceList->GetDeviceName(i);
+-				strcpy(providers[n].name, "OPENAL SOFT");
+-				providers[n].sources = pDeviceList->GetMaxNumSources(i);
+-				SampleManager.Set3DProviderName(n, providers[n].name);
+-				n++;
+-			}
+-
+-			if ( alGetEnumValue("AL_EFFECT_EAXREVERB") != 0
+-				|| pDeviceList->IsExtensionSupported(i, ADEXT_EAX2)
+-				|| pDeviceList->IsExtensionSupported(i, ADEXT_EAX3) 
+-				|| pDeviceList->IsExtensionSupported(i, ADEXT_EAX4)
+-				|| pDeviceList->IsExtensionSupported(i, ADEXT_EAX5) )
+-			{ 
+-				providers[n - 1].bSupportsFx = true;
+-				if ( n < MAXPROVIDERS )
+-				{ 
+-					providers[n].id = pDeviceList->GetDeviceName(i);
+-					strcpy(providers[n].name, "OPENAL SOFT EAX");
+-					providers[n].sources = pDeviceList->GetMaxNumSources(i);
+-					providers[n].bSupportsFx = true;
+-					SampleManager.Set3DProviderName(n, providers[n].name);
+-					n++;
+-				}
+-				
+-				if ( n < MAXPROVIDERS )
+-				{ 
+-					providers[n].id = pDeviceList->GetDeviceName(i);
+-					strcpy(providers[n].name, "OPENAL SOFT EAX3");
+-					providers[n].sources = pDeviceList->GetMaxNumSources(i);
+-					providers[n].bSupportsFx = true;
+-					SampleManager.Set3DProviderName(n, providers[n].name);
+-					n++;
+-				}
+-			}
+-		}
+-		SampleManager.SetNum3DProvidersAvailable(n);
+-	
+-		for(int j=n;j<MAXPROVIDERS;j++)
+-			SampleManager.Set3DProviderName(j, NULL);
+-
+-		// devices are gone now
+-		//defaultProvider = pDeviceList->GetDefaultDevice();
+-		//if ( defaultProvider > MAXPROVIDERS )
+-		defaultProvider = 0;
+-	}
+-}
+-
+-static void
+-release_existing()
+-{
+-	if ( IsFXSupported() )
+-	{
+-		if ( alIsEffect(ALEffect) )
+-		{
+-			alEffecti(ALEffect, AL_EFFECT_TYPE, AL_EFFECT_NULL);
+-		}
+-		
+-		if (alIsAuxiliaryEffectSlot(ALEffectSlot))
+-		{
+-			alAuxiliaryEffectSloti(ALEffectSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL);
+-		}
+-	}
+-
+-	DEV("release_existing()\n");
++	providers[0].id = "SDL3";
++	strcpy(providers[0].name, "SDL3");
++	providers[0].sources = MAXCHANNELS;
++	providers[0].bSupportsFx = true;
++	SampleManager.Set3DProviderName(0, providers[0].name);
++	SampleManager.SetNum3DProvidersAvailable(1);
++	for(int j = 1; j < MAXPROVIDERS; j++)
++		SampleManager.Set3DProviderName(j, NULL);
++	defaultProvider = 0;
+ }
+ 
+ static bool8
+@@ -248,59 +188,17 @@
+ {
+ 	if ( curprovider == index )
+ 		return TRUE;
+-	
+ 	curprovider = index;
+-	
+-	release_existing();
+-	
+-	if ( curprovider != -1 )
+-	{
+-		DEV("set_new_provider()\n");
+-		
+-		usingEAX = 0;
+-		usingEAX3 = 0;
+-		_usingEFX = false;
+-		
+-		if ( !strcmp(&providers[index].name[strlen(providers[index].name) - strlen(" EAX3")], " EAX3") 
+-				&& alcIsExtensionPresent(ALDevice, (ALCchar*)ALC_EXT_EFX_NAME) )
+-		{
+-			
+-			usingEAX = 1;
+-			usingEAX3 = 1;
+-			alAuxiliaryEffectSloti(ALEffectSlot, AL_EFFECTSLOT_EFFECT, ALEffect);
+-			EAX_SetAll(&FinishEAX3);
++	if ( curprovider == -1 )
++		return FALSE;
+ 
+-			DEV("EAX3\n");
+-		}
+-		else if ( alcIsExtensionPresent(ALDevice, (ALCchar*)ALC_EXT_EFX_NAME) )
+-		{
+-			
+-			if ( !strcmp(&providers[index].name[strlen(providers[index].name) - strlen(" EAX")], " EAX"))
+-			{
+-				usingEAX = 1;
+-				DEV("EAX1\n");
+-			}
+-			else
+-			{
+-				_usingEFX = true;
+-				DEV("EFX\n");
+-			}
+-			alAuxiliaryEffectSloti(ALEffectSlot, AL_EFFECTSLOT_EFFECT, ALEffect);
+-			EAX_SetAll(&EAX30_ORIGINAL_PRESETS[EAX_ENVIRONMENT_CAVE]);
+-		}
+-		
+-		//SampleManager.SetSpeakerConfig(speaker_type);
+-		
+-		if ( IsFXSupported() )
+-		{
+-			for ( int32 i = 0; i < MAXCHANNELS; i++ )
+-				aChannel[i].SetReverbMix(ALEffectSlot, 0.0f);
+-		}
+-		
+-		return TRUE;
+-	}
+-	
+-	return FALSE;
++	usingEAX = 0;
++	usingEAX3 = 0;
++	_usingEFX = true;
++	EAX_SetAll(&EAX30_ORIGINAL_PRESETS[EAX_ENVIRONMENT_CAVE]);
++	for ( int32 i = 0; i < MAXCHANNELS; i++ )
++		aChannel[i].SetReverbMix(ALEffectSlot, 0.0f);
++	return TRUE;
+ }
+ 
+ static bool8
+@@ -765,8 +663,6 @@
+ 	if ( _bSampmanInitialised )
+ 		return TRUE;
+ 
+-	EFXInit();
+-
+ 	for(int i = 0; i < MAX_STREAMS; i++)
+ 		aStream[i] = new CStream(ALStreamSources[i], ALStreamBuffers[i]);
+ 
+@@ -801,9 +697,6 @@
+ 		_fEffectsLevel = 0.0f;
+ 			
+ 		_maxSamples = 0;
+-		
+-		ALDevice = NULL;
+-		ALContext = NULL;
+ 	}
+ 	
+ 	{
+@@ -840,42 +733,9 @@
+ 		int index = 0;
+ 		_maxSamples = Min(MAXCHANNELS, providers[index].sources);
+ 		
+-		ALCint attr[] = {ALC_FREQUENCY,MAX_FREQ,
+-						ALC_MONO_SOURCES, MAX_DIGITAL_MIXER_CHANNELS - MAX2DCHANNELS,
+-						ALC_STEREO_SOURCES, MAX2DCHANNELS,
+-						0,
+-						};
+-		
+-		ALDevice  = alcOpenDevice(providers[index].id);
+-		ASSERT(ALDevice != NULL);
+-		
+-		ALContext = alcCreateContext(ALDevice, attr);
+-		ASSERT(ALContext != NULL);
+-		
+-		alcMakeContextCurrent(ALContext);
+-	
+-		const char* ext=(const char*)alGetString(AL_EXTENSIONS);
+-		ASSERT(strstr(ext,"AL_SOFT_loop_points")!=NULL);
+-		if ( strstr(ext,"AL_SOFT_loop_points")==NULL )
+-		{
+-			Terminate();
+-			return FALSE;
+-		}
+-		
+-		alListenerf (AL_GAIN,     1.0f);
+-		alListener3f(AL_POSITION, 0.0f, 0.0f, 0.0f);
+-		alListener3f(AL_VELOCITY, 0.0f, 0.0f, 0.0f);
+-		ALfloat orientation[6] = { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f };
+-		alListenerfv(AL_ORIENTATION, orientation);
+-		
+-		alDistanceModel(AL_INVERSE_DISTANCE_CLAMPED);
+-		
+-		if ( alcIsExtensionPresent(ALDevice, (ALCchar*)ALC_EXT_EFX_NAME) )
+-		{ 
+-			_effectsSupported = providers[index].bSupportsFx;
+-			alGenAuxiliaryEffectSlots(1, &ALEffectSlot);
+-			alGenEffects(1, &ALEffect);
+-		}
++		// Output device, listener and reverb are in the Rust host (opened by CChannel::InitChannels
++		// and the stream sources below). Sources are listener-relative; the listener faces +Y, up +Z.
++		_effectsSupported = providers[index].bSupportsFx;
+ 
+ 		alGenSources(MAX_STREAMS*2, ALStreamSources[0]);
+ 		for ( int32 i = 0; i < MAX_STREAMS; i++ )
+@@ -898,10 +758,6 @@
+ 		
+ 		if ( IsFXSupported() )
+ 		{
+-			/**/
+-			alAuxiliaryEffectSloti(ALEffectSlot, AL_EFFECTSLOT_EFFECT, ALEffect);
+-			/**/
+-			
+ 			for ( int32 i = 0; i < MAXCHANNELS; i++ )
+ 				aChannel[i].SetReverbMix(ALEffectSlot, 0.0f);
+ 		}
+@@ -1078,24 +934,6 @@
+ 	for ( int32 i = 0; i < NUM_CHANNELS; i++ )
+ 		aChannel[i].Term();
+ 
+-	if ( IsFXSupported() )
+-	{
+-		if ( alIsEffect(ALEffect) )
+-		{
+-			alEffecti(ALEffect, AL_EFFECT_TYPE, AL_EFFECT_NULL);
+-			alDeleteEffects(1, &ALEffect);
+-			ALEffect = AL_EFFECT_NULL;
+-		}
+-		
+-		if (alIsAuxiliaryEffectSlot(ALEffectSlot))
+-		{
+-			alAuxiliaryEffectSloti(ALEffectSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL);
+-			
+-			alDeleteAuxiliaryEffectSlots(1, &ALEffectSlot);
+-			ALEffectSlot = AL_EFFECTSLOT_NULL;
+-		}
+-	}
+-
+ 	for ( int32 i = 0; i < MAX_STREAMS; i++ )
+ 	{
+ 		alDeleteBuffers(NUM_STREAMBUFFERS, ALStreamBuffers[i]);
+@@ -1104,18 +942,6 @@
+ 	
+ 	CChannel::DestroyChannels();
+ 	
+-	if ( ALContext )
+-	{
+-		alcMakeContextCurrent(NULL);
+-		alcSuspendContext(ALContext);
+-		alcDestroyContext(ALContext);
+-	}
+-	if ( ALDevice )
+-		alcCloseDevice(ALDevice);
+-	
+-	ALDevice = NULL;
+-	ALContext = NULL;
+-	
+ 	_fPrevEaxRatioDestination = 0.0f;
+ 	_usingEFX                 = false;
+ 	_fEffectsLevel            = 0.0f;
+@@ -1508,7 +1334,6 @@
+ 	{
+ 		if ( IsFXSupported() )
+ 		{
+-			alAuxiliaryEffectSloti(ALEffectSlot, AL_EFFECTSLOT_EFFECT, ALEffect);
+ 			
+ 			if ( nReverbFlag != FALSE )
+ 				aChannel[nChannel].SetReverbMix(ALEffectSlot, _fEffectsLevel);
+@@ -1524,6 +1349,10 @@
+ 	ASSERT( nChannel < NUM_CHANNELS );
+ 	
+ 	uintptr addr;
++	// revc diagnostics (REVC_AUDIO_PAN_LOG): which sample each channel plays
++	static int panLog = -1;
++	if ( panLog < 0 ) panLog = getenv("REVC_AUDIO_PAN_LOG") != nil;
++	if ( panLog ) fprintf(stderr, "[revc-audio] channel %u sample %u bank %u\n", nChannel, nSfx, nBank);
+ 	
+ 	if ( nSfx < SAMPLEBANK_MAX )
+ 	{

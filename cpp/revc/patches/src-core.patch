@@ -1,0 +1,5101 @@
+--- a/src/core/CdStreamPosix.cpp
++++ b/src/core/CdStreamPosix.cpp
+@@ -3,6 +3,7 @@
+ #include "crossplatform.h"
+ #include <signal.h>
+ #include <pthread.h>
++#include <atomic>
+ #include <semaphore.h>
+ #include <sys/types.h>
+ #include <unistd.h>
+@@ -82,14 +83,18 @@
+ 
+ #endif
+ 
++// The fields the game thread and the stream thread both use are atomics (sequentially
++// consistent): CdStreamSync sets bLocked and then checks nSectorsToRead, the stream thread clears
++// nSectorsToRead and then checks bLocked; as plain fields both could read stale values, the
++// thread would skip the wake-up and CdStreamSync wait forever (seen as a hang while loading a save).
+ struct CdReadInfo
+ {
+ 	uint32 nSectorOffset;
+-	uint32 nSectorsToRead;
++	std::atomic<uint32> nSectorsToRead;
+ 	void *pBuffer;
+-	bool bLocked;
+-	bool bReading;
+-	int32 nStatus;
++	std::atomic<bool> bLocked;
++	std::atomic<bool> bReading;
++	std::atomic<int32> nStatus;
+ #ifdef ONE_THREAD_PER_CHANNEL
+ 	int8 nThreadStatus; // 0: created 1:priority set up 2:abort now
+ 	pthread_t pChannelThread;
+--- a/src/core/Clock.cpp
++++ b/src/core/Clock.cpp
+@@ -23,16 +23,43 @@
+ bool gbFreezeTime;
+ #endif
+ 
++// The clock logic is in Rust (rust/revc/src/clock.rs); the state stays here and is bound once.
++struct RevcClockView {
++	uint8 *hours, *minutes;
++	uint16 *seconds;
++	uint8 *storedHours, *storedMinutes;
++	uint16 *storedSeconds;
++	uint32 *msPerGameMinute, *lastClockTick;
++	bool *clockHasBeenStored;
++	int32 *daysPassed;
++	bool *fastTime, *freezeTime;
++};
++extern "C" {
++void revc_clock_bind(const RevcClockView *v);
++void revc_clock_initialise(uint32 scale, uint32 now);
++void revc_clock_update(uint32 now, bool fastForward);
++void revc_clock_set(uint8 h, uint8 m, uint32 now);
++int32 revc_clock_minutes_until(uint8 h, uint8 m);
++bool revc_clock_in_range(uint8 h1, uint8 h2);
++void revc_clock_store(void);
++void revc_clock_restore(void);
++}
++
+ void
+ CClock::Initialise(uint32 scale)
+ {
+ 	debug("Initialising CClock...\n");
+-	ms_nGameClockHours = 12;
+-	ms_nGameClockMinutes = 0;
+-	ms_nGameClockSeconds = 0;
+-	ms_nMillisecondsPerGameMinute = scale;
+-	ms_nLastClockTick = CTimer::GetTimeInMilliseconds();
+-	ms_bClockHasBeenStored = false;
++#ifdef MASTER
++	static bool gbFreezeTime = false;
++#endif
++	static const RevcClockView view = {
++		&ms_nGameClockHours, &ms_nGameClockMinutes, &ms_nGameClockSeconds,
++		&ms_Stored_nGameClockHours, &ms_Stored_nGameClockMinutes, &ms_Stored_nGameClockSeconds,
++		&ms_nMillisecondsPerGameMinute, &ms_nLastClockTick, &ms_bClockHasBeenStored,
++		&CStats::DaysPassed, &gbFastTime, &gbFreezeTime,
++	};
++	revc_clock_bind(&view);
++	revc_clock_initialise(scale, CTimer::GetTimeInMilliseconds());
+ 	debug("CClock ready\n");
+ #ifndef MASTER
+ 	VarConsole.Add("Time (hour of day)", &ms_nGameClockHours, 1, 0, 23, true);
+@@ -43,94 +70,35 @@
+ void
+ CClock::Update(void)
+ {
+-	if(CPad::GetPad(1)->GetRightShoulder1())
+-	{
+-		ms_nGameClockMinutes += 8;
+-		ms_nLastClockTick = CTimer::GetTimeInMilliseconds();
+-		
+-		if(ms_nGameClockMinutes >= 60)
+-		{
+-			ms_nGameClockHours++;
+-			ms_nGameClockMinutes = 0;
+-			if(ms_nGameClockHours >= 24)
+-				ms_nGameClockHours = 0;
+-		}
+-		
+-	}
+-#ifndef MASTER
+-	else if (gbFreezeTime)
+-		ms_nLastClockTick = CTimer::GetTimeInMilliseconds();
+-#endif
+-	else if(CTimer::GetTimeInMilliseconds() - ms_nLastClockTick > ms_nMillisecondsPerGameMinute || gbFastTime)
+-	{
+-		ms_nGameClockMinutes++;
+-		ms_nLastClockTick += ms_nMillisecondsPerGameMinute;
+-		
+-		if ( gbFastTime )
+-			ms_nLastClockTick = CTimer::GetTimeInMilliseconds();
+-		
+-		if(ms_nGameClockMinutes >= 60)
+-		{
+-			ms_nGameClockHours++;
+-			ms_nGameClockMinutes = 0;
+-			if(ms_nGameClockHours >= 24)
+-			{
+-				CStats::DaysPassed++;
+-				ms_nGameClockHours = 0;
+-			}
+-		}
+-	}
+-	ms_nGameClockSeconds = 60 * (CTimer::GetTimeInMilliseconds() - ms_nLastClockTick) / ms_nMillisecondsPerGameMinute;
++	revc_clock_update(CTimer::GetTimeInMilliseconds(), CPad::GetPad(1)->GetRightShoulder1());
+ }
+ 
+ void
+ CClock::SetGameClock(uint8 h, uint8 m)
+ {
+-	while (m >= 60) {
+-		m -= 60;
+-		h++;
+-	}
+-	ms_nGameClockMinutes = m;
+-	while (h >= 24)
+-		h -= 24;
+-	ms_nGameClockHours = h;
+-	ms_nGameClockSeconds = 0;
+-	ms_nLastClockTick = CTimer::GetTimeInMilliseconds();
++	revc_clock_set(h, m, CTimer::GetTimeInMilliseconds());
+ }
+ 
+ int32
+ CClock::GetGameClockMinutesUntil(uint8 h, uint8 m)
+ {
+-	int32 now, then;
+-	now = ms_nGameClockHours*60 + ms_nGameClockMinutes;
+-	then = h*60 + m;
+-	if(then < now)
+-		then += 24*60;
+-	return then-now;
++	return revc_clock_minutes_until(h, m);
+ }
+ 
+ bool
+ CClock::GetIsTimeInRange(uint8 h1, uint8 h2)
+ {
+-	if(h1 > h2)
+-		return ms_nGameClockHours >= h1 || ms_nGameClockHours < h2;
+-	else
+-		return ms_nGameClockHours >= h1 && ms_nGameClockHours < h2;
++	return revc_clock_in_range(h1, h2);
+ }
+ 
+ void
+ CClock::StoreClock(void)
+ {
+-	ms_Stored_nGameClockHours = ms_nGameClockHours;
+-	ms_Stored_nGameClockMinutes = ms_nGameClockMinutes;
+-	ms_Stored_nGameClockSeconds = ms_nGameClockSeconds;
+-	ms_bClockHasBeenStored = true;
++	revc_clock_store();
+ }
+ 
+ void
+ CClock::RestoreClock(void)
+ {
+-	ms_nGameClockHours = ms_Stored_nGameClockHours;
+-	ms_nGameClockMinutes = ms_Stored_nGameClockMinutes;
+-	ms_nGameClockSeconds = ms_Stored_nGameClockSeconds;
++	revc_clock_restore();
+ }
+--- a/src/core/config.h
++++ b/src/core/config.h
+@@ -336,10 +336,10 @@
+ //#define DISABLE_CUTSCENE_SHADOWS
+ 
+ // Pad
+-#if !defined(RW_GL3) && defined(_WIN32)
++#if !defined RW_WGPU && defined(_WIN32)
+ #define XINPUT
+ #endif
+-#if defined XINPUT || (defined RW_GL3 && !defined LIBRW_SDL2 && !defined GTA_HANDHELD)
++#if defined XINPUT || (defined RW_WGPU && !defined LIBRW_SDL2 && !defined GTA_HANDHELD)
+ #define DETECT_JOYSTICK_MENU // Then we'll expect user to enter Controller->Detect joysticks if his joystick isn't detected at the start.
+ #endif
+ #define DETECT_PAD_INPUT_SWITCH // Adds automatic switch of pad related stuff between controller and kb/m
+@@ -500,3 +500,11 @@
+ #if defined(GTA_PS2) && defined(EXTERNAL_3D_SOUND)
+ #error EXTERNAL_3D_SOUND cannot work on PS2
+ #endif
++
++// revc WGPU platform (plan task 12): textures load straight from gta3.img; no txd.img cache in
++// a platform-specific format.
++#ifdef RW_WGPU
++#undef USE_TXD_CDIMAGE
++// All render extras work on WGPU: EXTENDED_COLOURFILTER (CPostFX shaders), EXTENDED_PIPELINES
++// and NEW_RENDERER (extras/custompipes_wgpu.cpp), SCREEN_DROPLETS (the device's UV2 Im2D).
++#endif
+--- a/src/core/ControllerConfig.cpp
++++ b/src/core/ControllerConfig.cpp
+@@ -43,7 +43,7 @@
+ 	}
+ }
+ 
+-#ifdef RW_GL3
++#if defined RW_WGPU
+ int MapIdToButtonId(int mapId) {
+ 	switch (mapId) {
+ 		case HOST_PAD_BUTTON_A: // Cross
+@@ -97,7 +97,7 @@
+ 		if (m_NewState.rgbButtons[i] & 0x80 && !(m_OldState.rgbButtons[i] & 0x80))
+ 			return i + 1;
+ 	}
+-#elif defined RW_GL3
++#elif defined RW_WGPU
+ 	if (m_NewState.isGamepad) {
+ 		for (int32 i = 0; i < MAX_BUTTONS; i++) {
+ 			if (m_NewState.mappedButtons[i] && !(m_OldState.mappedButtons[i]))
+@@ -342,6 +342,8 @@
+ uint32 CControllerConfigManager::ms_padButtonsInited = 0;
+ #endif
+ 
++extern "C" void PadLayoutApply(int layout);
++
+ void CControllerConfigManager::InitDefaultControlConfigJoyPad(uint32 buttons)
+ {
+ #ifdef XINPUT
+@@ -362,6 +364,16 @@
+ 
+ 	ms_padButtonsInited = btn;
+ 
++#ifdef LIBRW_HOST
++	// revc: a fresh setup of a gamepad (no saved bindings, or "restore defaults") gets the Xbox
++	// Standard layout (user 2026-11-10); re3's old pad layout stays selectable as ORIGINAL PC.
++	// Saved bindings are never touched (buttonMin != 0: only new buttons would be added).
++	if (buttonMin == 0 && btn >= 12) {
++		PadLayoutApply(0);
++		return;
++	}
++#endif
++
+ 	#define IF_BTN_IN_RANGE(n) \
+ 		case n: \
+ 		if (n <= buttonMin) \
+@@ -723,6 +735,18 @@
+ 	}
+ }
+ 
++// revc: analog trigger positions (0..255, left/right) from the host, so accelerate and brake on a
++// trigger are analog like the Xbox version's (on the PS2 they were pressure-sensitive buttons,
++// which the game reads the same way).
++uint8 gPadTriggerAnalog[2];
++static int16
++TriggerOr255(int32 button, eControllerType type)
++{
++	if (type == JOYSTICK && (button == 5 || button == 6))
++		return Max(gPadTriggerAnalog[button - 5], (uint8)1);
++	return 255;
++}
++
+ void CControllerConfigManager::AffectControllerStateOn_ButtonDown_Driving(int32 button, eControllerType type, CControllerState &state)
+ {
+ #ifdef BIND_VEHICLE_FIREWEAPON
+@@ -744,11 +768,11 @@
+ 	if (button == GetControllerKeyAssociatedWithAction(VEHICLE_HANDBRAKE, type))
+ 		state.RightShoulder1 = 255;
+ 	if (button == GetControllerKeyAssociatedWithAction(VEHICLE_ACCELERATE, type))
+-		state.Cross = 255;
++		state.Cross = TriggerOr255(button, type);
+ 	if (button == GetControllerKeyAssociatedWithAction(VEHICLE_CHANGE_RADIO_STATION, type))
+ 		state.LeftShoulder1 = 255;
+ 	if (button == GetControllerKeyAssociatedWithAction(VEHICLE_BRAKE, type))
+-		state.Square = 255;
++		state.Square = TriggerOr255(button, type);
+ 	if (button == GetControllerKeyAssociatedWithAction(TOGGLE_SUBMISSIONS, type))
+ 		state.RightShock = 255;
+ 	
+@@ -2407,6 +2431,86 @@
+ 	return NULL;
+ }
+ 
++// revc: the Xbox version's two controller layouts (goal "Xbox-version controller scheme"; see
++// Claude outputs/xbox-research/XBOX_RESEARCH.md). Our own table of which pad button does what,
++// written from what the Xbox release's STANDARD (triggers) and CLASSIC (PS2-style) layouts assign;
++// the sticks (movement, camera, car look in Standard) are not bindings. Button numbers are the
++// game's PS2-style ones (MapIdToButtonId): 1 B, 2 A, 3 X, 4 Y, 5 LT, 6 RT, 7 LB (the Xbox's White),
++// 8 RB (Black), 9 Back, 10 L3, 11 R3, 12 Start, 13-16 D-pad up/right/down/left; 0 = none.
++// The third column is re3's original PC pad layout ("ORIGINAL PC"). Xbox Standard is the default
++// for new setups and "restore defaults" (user 2026-11-10).
++struct PadLayoutEntry { e_ControllerAction action; uint8 standard, classic, pc; };
++static const PadLayoutEntry padLayouts[] = {
++	{ PED_FIREWEAPON,                     6, 1, 1 },
++	{ PED_CYCLE_WEAPON_RIGHT,            14, 14, 6 },
++	{ PED_CYCLE_WEAPON_LEFT,             16, 16, 5 },
++	{ GO_FORWARD,                         0, 0, 13 },
++	{ GO_BACK,                            0, 0, 15 },
++	{ GO_LEFT,                            0, 0, 16 },
++	{ GO_RIGHT,                           0, 0, 14 },
++	{ PED_SNIPER_ZOOM_IN,                 3, 3, 3 },
++	{ PED_SNIPER_ZOOM_OUT,                2, 2, 2 },
++	{ VEHICLE_ENTER_EXIT,                 4, 4, 4 },
++	{ CAMERA_CHANGE_VIEW_ALL_SITUATIONS,  7, 7, 9 },
++	{ PED_JUMPING,                        3, 3, 3 },
++	{ PED_SPRINT,                         2, 2, 2 },
++	{ PED_LOOKBEHIND,                    11, 11, 11 },
++	{ PED_DUCK,                          10, 10, 10 },
++	{ PED_ANSWER_PHONE,                  13, 13, 7 },	// the Xbox's pick-up button
++	{ VEHICLE_FIREWEAPON,                11, 1, 1 },
++	{ VEHICLE_ACCELERATE,                 6, 2, 2 },
++	{ VEHICLE_BRAKE,                      5, 3, 3 },
++	{ VEHICLE_CHANGE_RADIO_STATION,       8, 8, 7 },
++	{ VEHICLE_HORN,                      10, 10, 10 },
++	{ TOGGLE_SUBMISSIONS,                 3, 11, 11 },
++	{ VEHICLE_HANDBRAKE,                  1, 6, 8 },
++	{ PED_1RST_PERSON_LOOK_LEFT,          0, 0, 0 },
++	{ PED_1RST_PERSON_LOOK_RIGHT,         0, 0, 0 },
++	{ VEHICLE_LOOKLEFT,                   0, 16, 5 },	// Standard: right stick
++	{ VEHICLE_LOOKRIGHT,                  0, 14, 6 },
++	{ VEHICLE_LOOKBEHIND,                 0, 0, 0 },
++	{ VEHICLE_TURRETLEFT,                 0, 0, 0 },
++	{ VEHICLE_TURRETRIGHT,                0, 0, 0 },
++	{ VEHICLE_TURRETUP,                   0, 0, 0 },
++	{ VEHICLE_TURRETDOWN,                 0, 0, 0 },
++	{ PED_CYCLE_TARGET_LEFT,             16, 0, 0 },
++	{ PED_CYCLE_TARGET_RIGHT,            14, 5, 0 },
++	{ PED_CENTER_CAMERA_BEHIND_PLAYER,    8, 5, 0 },
++	{ PED_LOCK_TARGET,                    5, 6, 8 },
++	{ PED_1RST_PERSON_LOOK_UP,            0, 0, 0 },
++	{ PED_1RST_PERSON_LOOK_DOWN,          0, 0, 0 },
++};
++
++// 0 Xbox Standard, 1 Xbox Classic, 2 original PC, -1 none of them (the player's own bindings).
++extern "C" int
++PadLayoutCurrent(void)
++{
++	bool match[3] = { true, true, true };
++	for (int i = 0; i < ARRAY_SIZE(padLayouts); i++) {
++		int32 key = ControlsManager.m_aSettings[padLayouts[i].action][JOYSTICK].m_Key;
++		match[0] &= key == padLayouts[i].standard;
++		match[1] &= key == padLayouts[i].classic;
++		match[2] &= key == padLayouts[i].pc;
++	}
++	return match[0] ? 0 : match[1] ? 1 : match[2] ? 2 : -1;
++}
++
++extern "C" void
++PadLayoutApply(int layout)
++{
++	for (int i = 0; i < ARRAY_SIZE(padLayouts); i++) {
++		e_ControllerAction action = padLayouts[i].action;
++		int32 key = layout == 0 ? padLayouts[i].standard : layout == 1 ? padLayouts[i].classic : padLayouts[i].pc;
++		ControlsManager.ClearSettingsAssociatedWithAction(action, JOYSTICK);
++		if (key != 0)
++			ControlsManager.SetControllerKeyAssociatedWithAction(action, key, JOYSTICK);
++	}
++}
++
++#ifdef LIBRW_HOST
++extern "C" int hostActiveInputKind(void);
++#endif
++
+ wchar *CControllerConfigManager::GetControllerSettingTextJoystick(e_ControllerAction action)
+ {
+ 	if (m_aSettings[action][JOYSTICK].m_Key == 0) 
+@@ -2414,6 +2518,19 @@
+ 
+ 	static wchar NewStringWithNumber[30];
+ 
++#if defined LIBRW_HOST && defined BUTTON_ICONS
++	// revc: while a controller is in use, the button's glyph instead of "JOY n" (n is the
++	// PS2-style number MapIdToButtonId gives: 1 circle, 2 cross, 3 square, 4 triangle, 5/6 L2/R2,
++	// 7/8 L1/R1, 9 select, 10/11 L3/R3, 12 start, 13-16 D-pad up/right/down/left).
++	static const char *glyphTokens[17] = { nil, "~O~", "~X~", "~Q~", "~T~", "~M~", "~V~", "~K~", "~J~",
++		"~S~", "~A~", "~C~", "~P~", "~E~", "~F~", "~G~", "~I~" };
++	int key = m_aSettings[action][JOYSTICK].m_Key;
++	if (hostActiveInputKind() != 0 && key > 0 && key < 17) {
++		AsciiToUnicode(glyphTokens[key], NewStringWithNumber);
++		return NewStringWithNumber;
++	}
++#endif
++
+ 	CMessages::InsertNumberInString(TheText.Get("FEC_JBO"),		// JOY ~1~
+ 		m_aSettings[action][JOYSTICK].m_Key, -1, -1, -1, -1, -1,
+ 		NewStringWithNumber);
+@@ -2802,7 +2919,7 @@
+ 		else
+ 			m_aButtonStates[i] = false;
+ 	}
+-#elif defined RW_GL3
++#elif defined RW_WGPU
+ 	if (m_NewState.isGamepad) {
+ 		for (int32 i = 0; i < MAX_BUTTONS; i++) {
+ 			if (i == HOST_PAD_BUTTON_GUIDE)
+--- a/src/core/ControllerConfig.h
++++ b/src/core/ControllerConfig.h
+@@ -106,7 +106,7 @@
+ 
+ #define ACTIONNAME_LENGTH 40
+ 
+-#ifdef RW_GL3
++#if defined RW_WGPU
+ struct GlfwJoyState {
+ 	int8 id;
+ 	bool isGamepad;
+@@ -132,7 +132,7 @@
+ 	};
+ 
+ 	bool                  m_bFirstCapture;
+-#if defined RW_GL3
++#if defined RW_WGPU
+ 	GlfwJoyState           m_OldState;
+ 	GlfwJoyState           m_NewState;
+ #else
+@@ -222,7 +222,7 @@
+ 	void  ResetSettingOrder                   (e_ControllerAction action);
+ };
+ 
+-#ifndef RW_GL3
++#if !defined RW_WGPU
+ VALIDATE_SIZE(CControllerConfigManager, 0x143C);
+ #endif
+ 
+--- a/src/core/Directory.cpp
++++ b/src/core/Directory.cpp
+@@ -15,16 +15,32 @@
+ 	delete[] entries;
+ }
+ 
++// The record handling is in Rust (rust/revc/src/directory.rs); the object stays here.
++static_assert(sizeof(CDirectory::DirectoryInfo) == 32 && sizeof(CDirectory) == 16 && offsetof(CDirectory, numEntries) == 12,
++              "CDirectory layout (directory.rs)");
++extern "C" {
++void revc_dir_add_file(CDirectory *dir, const uint8 *data, size_t len);
++void revc_dir_add(CDirectory *dir, const CDirectory::DirectoryInfo *info);
++bool revc_dir_find(const CDirectory *dir, const char *name, uint32 *offset, uint32 *size);
++}
++
+ void
+ CDirectory::ReadDirFile(const char *filename)
+ {
+-	int fd;
+-	DirectoryInfo dirinfo;
+-
+-	fd = CFileMgr::OpenFile(filename, "rb");
+-	while(CFileMgr::Read(fd, (char*)&dirinfo, sizeof(dirinfo)))
+-		AddItem(dirinfo);
++	int fd = CFileMgr::OpenFile(filename, "rb");
++	size_t len = 0, cap = 64 * sizeof(DirectoryInfo);
++	uint8 *data = (uint8*)malloc(cap);
++	int n;
++	while((n = CFileMgr::Read(fd, (char*)data + len, sizeof(DirectoryInfo))) > 0){
++		len += n;
++		if(len + sizeof(DirectoryInfo) > cap){
++			cap *= 2;
++			data = (uint8*)realloc(data, cap);
++		}
++	}
+ 	CFileMgr::CloseFile(fd);
++	revc_dir_add_file(this, data, len);
++	free(data);
+ }
+ 
+ bool
+@@ -41,14 +57,7 @@
+ void
+ CDirectory::AddItem(const DirectoryInfo &dirinfo)
+ {
+-	assert(numEntries < maxEntries);
+-#ifdef FIX_BUGS
+-	// don't add if already exists
+-	uint32 offset, size;
+-	if(FindItem(dirinfo.name, offset, size))
+-		return;
+-#endif
+-	entries[numEntries++] = dirinfo;
++	revc_dir_add(this, &dirinfo);
+ }
+ 
+ void
+@@ -62,13 +71,5 @@
+ bool
+ CDirectory::FindItem(const char *name, uint32 &offset, uint32 &size)
+ {
+-	int i;
+-
+-	for(i = 0; i < numEntries; i++)
+-		if(!CGeneral::faststricmp(entries[i].name, name)){
+-			offset = entries[i].offset;
+-			size = entries[i].size;
+-			return true;
+-		}
+-	return false;
++	return revc_dir_find(this, name, &offset, &size);
+ }
+--- a/src/core/FileLoader.cpp
++++ b/src/core/FileLoader.cpp
+@@ -17,6 +17,7 @@
+ #include "RwHelper.h"
+ #include "NodeName.h"
+ #include "TxdStore.h"
++#include "TexMods.h"
+ #include "PathFind.h"
+ #include "ObjectData.h"
+ #include "DummyObject.h"
+@@ -162,6 +163,20 @@
+ 		if(RwStreamFindChunk(stream, rwID_TEXDICTIONARY, nil, nil))
+ 			txd = RwTexDictionaryGtaStreamRead(stream);
+ 		RwStreamClose(stream, nil);
++		if(txd){
++			// Mods address these by file name (MODELS\GENERIC\WHEELS.TXD -> "wheels").
++			char name[64];
++			const char *base = filename;
++			for(const char *c = filename; *c; c++)
++				if(*c == '\\' || *c == '/')
++					base = c + 1;
++			strncpy(name, base, sizeof(name) - 1);
++			name[sizeof(name) - 1] = '\0';
++			char *dot = strrchr(name, '.');
++			if(dot)
++				*dot = '\0';
++			TexModsApply(txd, name);
++		}
+ 	}
+ 	if(txd == nil)
+ 		txd = RwTexDictionaryCreate();
+--- a/src/core/Frontend.cpp
++++ b/src/core/Frontend.cpp
+@@ -63,7 +63,47 @@
+ #define hasNativeList(screen) (screen == MENUPAGE_SKIN_SELECT || screen == MENUPAGE_KEYBOARD_CONTROLS)
+ 
+ #ifdef SCROLLABLE_PAGES
+-#define MAX_VISIBLE_OPTION 12
++// revc: the PS2 menu skin keeps the list above its help box and tabs (core/MenuSkinPS2.cpp).
++bool MenuSkinPS2Active(int page, bool gameNotLoaded);
++bool MenuSkinPS2Input(CMenuManager *m);
++// revc: the Xbox menu skin (core/MenuSkinXbox.cpp)
++bool MenuSkinXboxActive(int page, bool gameNotLoaded);
++bool MenuSkinXboxInput(CMenuManager *m);
++void MenuSkinXboxDraw(CMenuManager *m, uint8 alpha);
++void MenuSkinXboxTitle(wchar *title, uint8 alpha);
++void MenuSkinXboxLogo(uint8 alpha);
++void MenuSkinXboxUnload(void);
++#define XBOX_SKIN_ON MenuSkinXboxActive(m_nCurrScreen, m_bGameNotLoaded)
++// PS2 skin frame offsets (measured on the console at 640x448, research menu comparison): the logo
++// 21 px right and 11 down, the page title 20 px left and 22 down of the PC's places.
++#define PS2_SKIN_ON MenuSkinPS2Active(m_nCurrScreen, m_bGameNotLoaded)
++#define PS2_LOGO_DX (PS2_SKIN_ON ? MENU_X(21.0f) : 0.0f)
++#define PS2_LOGO_DY (PS2_SKIN_ON ? MENU_Y(11.0f) : 0.0f)
++#define PS2_TITLE_DX (PS2_SKIN_ON ? MENU_X(20.0f) : 0.0f)
++#define PS2_TITLE_DY (PS2_SKIN_ON ? MENU_Y(22.0f) : 0.0f)
++// the PS2 calls the load page and its confirmations "load"
++#define PS2_PAGE_TITLE TheText.Get(PS2_SKIN_ON && (m_nCurrScreen == MENUPAGE_CHOOSE_LOAD_SLOT || m_nCurrScreen == MENUPAGE_NEW_GAME_RELOAD || \
++	m_nCurrScreen == MENUPAGE_LOAD_SLOT_CONFIRM) ? "RVC_XTL" : aScreens[m_nCurrScreen].m_ScreenName)
++// Xbox skin rows: 44.5 px apart from y 150 in 480 lines (measured), labels at 139, values at 331;
++// the menu's y units are 448 lines.
++#define XBOX_ROW_Y(i) ((150.0f + 44.5f * ((i) - firstOption)) * 448.0f / 480.0f)
++#define XBOX_Y (448.0f / 480.0f)	// Xbox capture pixels (480 lines) to the menu's 448-line units
++bool MenuSkinXboxText(float x, float y, float height, const wchar *text, const CRGBA &col, int align);
++void MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool tail = true);
++bool MenuSkinXboxDialog(int page);
++float MenuSkinXboxWedge(float y, float progress, uint8 alpha);
++void MenuSkinXboxDialogBack(uint8 alpha);
++int MenuSkinXboxTab(int page);
++#define XBOX_DIALOG_ON (XBOX_SKIN_ON && MenuSkinXboxDialog(m_nCurrScreen))
++// PS2 skin fades (measured): a page change 167 ms, opening the menu 234 ms.
++static bool gPs2FadeIsPageChange;
++extern "C" void revc_device_set_im2d_offset(float dx, float dy);
++#define RADIO_SKIN_ON MenuSkinPS2Active(m_nCurrScreen, m_bGameNotLoaded)
++#define RADIO_SKIN_DX (RADIO_SKIN_ON ? MENU_X(-93.0f) : XBOX_SKIN_ON ? MENU_X(-8.0f) : 0.0f)
++#define RADIO_SKIN_DY (RADIO_SKIN_ON ? MENU_Y(-30.0f) : XBOX_SKIN_ON ? MENU_Y(283.0f * 448.0f / 480.0f - MENURADIO_SELECTOR_START_Y) : 0.0f)
++#define MAX_VISIBLE_OPTION (MenuSkinPS2Active(m_nCurrScreen, m_bGameNotLoaded) ? 7 : \
++	MenuSkinXboxActive(m_nCurrScreen, m_bGameNotLoaded) ? (m_nCurrScreen == MENUPAGE_SOUND_SETTINGS ? 3 : \
++		m_nCurrScreen == MENUPAGE_CHOOSE_LOAD_SLOT || m_nCurrScreen == MENUPAGE_CHOOSE_DELETE_SLOT ? 12 : 5) : 12)
+ #define MAX_VISIBLE_OPTION_ON_SCREEN (hasNativeList(m_nCurrScreen) ? MAX_VISIBLE_LIST_ROW : MAX_VISIBLE_OPTION)
+ #define SCREEN_HAS_AUTO_SCROLLBAR (m_nTotalListRow > MAX_VISIBLE_OPTION && !hasNativeList(m_nCurrScreen))
+ 
+@@ -208,11 +248,30 @@
+ 	CFont::SetWrapx(MENU_X_RIGHT_ALIGNED(MENU_X_MARGIN)); \
+ 	CFont::SetRightJustifyWrap(MENU_X_LEFT_ALIGNED(MENU_X_MARGIN));
+ 
++// revc: the PS2 menu skin puts sliders right after their label (x 311 of 640, measured).
++// PS2 Audio: two columns, the music bar at x 191, the sfx bar at 336 (measured)
++#define PS2_AUDIO_ON (MenuSkinPS2Active(m_nCurrScreen, m_bGameNotLoaded) && m_nCurrScreen == MENUPAGE_SOUND_SETTINGS)
++#define SLIDER_LEFT_X (PS2_AUDIO_ON ? (aScreens[m_nCurrScreen].m_aEntries[i].m_Action == MENUACTION_MUSICVOLUME ? 191.0f : 336.0f) : \
++	MenuSkinPS2Active(m_nCurrScreen, m_bGameNotLoaded) ? 311.0f : XBOX_SKIN_ON ? 323.0f : MENUSLIDER_X)
++static bool
++IsSliderAction(int action)
++{
++	switch (action) {
++	case MENUACTION_BRIGHTNESS: case MENUACTION_DRAWDIST: case MENUACTION_MUSICVOLUME:
++	case MENUACTION_SFXVOLUME: case MENUACTION_MOUSESENS: case MENUACTION_MP3VOLUMEBOOST:
++#ifdef CUSTOM_FRONTEND_OPTIONS
++	case MENUACTION_CFO_SLIDER:
++#endif
++		return true;
++	}
++	return false;
++}
++
+ // value must be between 0.0-1.0
+ #define ProcessSlider(value, origY, increaseAction, decreaseAction, hoverEndX, onlyWhenHoveringRow) \
+ 	do { \
+ 		float y = origY MINUS_SCROLL_OFFSET; \
+-		lastActiveBarX = DisplaySlider(MENU_X_LEFT_ALIGNED(MENUSLIDER_X), MENU_Y(y), MENU_Y(MENUSLIDER_SMALLEST_BAR), MENU_Y(MENUSLIDER_BIGGEST_BAR), MENU_X(MENUSLIDER_UNK), value, MENU_X(3.0f)); \
++		lastActiveBarX = DisplaySlider(MENU_X_LEFT_ALIGNED(SLIDER_LEFT_X), MENU_Y(y), MENU_Y(PS2_AUDIO_ON ? 10.0f : MENUSLIDER_SMALLEST_BAR), MENU_Y(PS2_AUDIO_ON ? 40.0f : MENUSLIDER_BIGGEST_BAR), MENU_X(MENUSLIDER_UNK), value, MENU_X(3.0f)); \
+ 		if (i != m_nCurrOption || !itemsAreSelectable) \
+ 			break; \
+ 		 \
+@@ -225,7 +284,7 @@
+ 			break; \
+ 		} \
+ 		m_nHoverOption = increaseAction; \
+-		if (m_nMousePosX < MENU_X_LEFT_ALIGNED(MENUSLIDER_X)) \
++		if (m_nMousePosX < MENU_X_LEFT_ALIGNED(SLIDER_LEFT_X)) \
+ 			m_nHoverOption = HOVEROPTION_NOT_HOVERING; \
+ 		\
+ 		if (onlyWhenHoveringRow && (m_nMousePosY < MENU_Y(y) || m_nMousePosY > MENU_Y(MENUSLIDER_BIGGEST_BAR + y))) \
+@@ -459,7 +518,7 @@
+ 
+ 	if (m_nCurrScreen == MENUPAGE_CHOOSE_SAVE_SLOT)
+ 		m_nCurrOption = 8;
+-	m_nMenuFadeAlpha = 0;
++	m_nMenuFadeAlpha = 0; gPs2FadeIsPageChange = true;
+ 	m_nOptionHighlightTransitionBlend = 0;
+ 	m_LastScreenSwitch = CTimer::GetTimeInMillisecondsPauseMode();
+ }
+@@ -571,7 +630,7 @@
+ 	DoRWStuffEndOfFrame();
+ 	m_AllowNavigation = false;
+ 	m_firstStartCounter = -50; // to start from black
+-	m_nMenuFadeAlpha = 0;
++	m_nMenuFadeAlpha = 0; gPs2FadeIsPageChange = false;
+ 	m_nCurrOption = 0;
+ 	m_nOptionHighlightTransitionBlend = 0;
+ 	CentreMousePointer();
+@@ -633,7 +692,7 @@
+ 		Point.y = SCREEN_HEIGHT / 2;
+ 		ClientToScreen(PSGLOBAL(window), &Point);
+ 		SetCursorPos(Point.x, Point.y);
+-#elif defined RW_GL3
++#elif defined RW_WGPU
+ 		hostSetCursorPos(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
+ #endif
+ 
+@@ -786,11 +845,82 @@
+ 	SaveSettings();
+ }
+ 
++#ifdef LIBRW_HOST
++extern "C" int hostActiveInputKind(void);
++#endif
++
++// "BACK" of pages that draw it themselves (key bindings, player setup), with the back button's
++// glyph (triangle: Y on Xbox-style pads) while a controller is in use.
++static wchar*
++BackLabel(void)
++{
++#ifdef LIBRW_HOST
++	if (hostActiveInputKind() != 0) {
++		static wchar buf[64];
++		AsciiToUnicode("~T~ ", buf);
++		UnicodeStrcpy(buf + 4, TheText.Get("FEDS_TB"));
++		return buf;
++	}
++#endif
++	return TheText.Get("FEDS_TB");
++}
++
++// Menu entries whose value left/right changes (sliders, toggles, selectors); the rest open a
++// page or do something when confirmed.
++static bool
++MenuActionAdjustable(int action)
++{
++	switch (action) {
++	case MENUACTION_CFO_SLIDER: case MENUACTION_CFO_SELECT: case MENUACTION_CFO_DYNAMIC:
++	case MENUACTION_INVERTPADY: case MENUACTION_CTRLDISPLAY: case MENUACTION_FRAMESYNC:
++	case MENUACTION_FRAMELIMIT: case MENUACTION_TRAILS: case MENUACTION_SUBTITLES:
++	case MENUACTION_WIDESCREEN: case MENUACTION_BRIGHTNESS: case MENUACTION_MUSICVOLUME:
++	case MENUACTION_SFXVOLUME: case MENUACTION_RADIO: case MENUACTION_LEGENDS:
++	case MENUACTION_RADARMODE: case MENUACTION_HUD: case MENUACTION_SHOWHEADBOB:
++	case MENUACTION_INVVERT: case MENUACTION_SCREENRES: case MENUACTION_AUDIOHW:
++	case MENUACTION_SPEAKERCONF: case MENUACTION_CTRLMETHOD: case MENUACTION_DYNAMICACOUSTIC:
++	case MENUACTION_MOUSESTEER: case MENUACTION_DRAWDIST: case MENUACTION_MOUSESENS:
++	case MENUACTION_MP3VOLUMEBOOST:
++#ifdef GAMEPAD_MENU
++	case MENUACTION_CTRLVIBRATION: case MENUACTION_CTRLCONFIG:
++#endif
++		return true;
++	}
++	return false;
++}
++
++// The menu's helper line ("LEFT, RIGHT, MOUSEWHEEL TO ADJUST", "APPLY") with the pad's button
++// glyphs instead while a controller is the input in use (font tokens: ~<~ ~>~ stick left/right,
++// ~X~ the bottom face button); keyboard and mouse keep the game's text.
++static wchar*
++HelperString(const char *key)
++{
++#ifdef LIBRW_HOST
++	if (hostActiveInputKind() != 0) {
++		static wchar buf[64];
++		const char *pad = nil;
++		if (strcmp(key, "FET_MIG") == 0)
++			pad = "~<~ ~>~ ADJUST";
++		else if (strcmp(key, "FET_APP") == 0)
++			pad = "~X~ APPLY";
++		else if (strcmp(key, "FET_CIG") == 0)
++			pad = "~X~ CHANGE, THEN PRESS THE NEW BUTTON";
++		if (pad) {
++			AsciiToUnicode(pad, buf);
++			return buf;
++		}
++	}
++#endif
++	return TheText.Get(key);
++}
++
+ void
+ CMenuManager::DisplayHelperText(char *text)
+ {
+ 	if (m_nMenuFadeAlpha != 255)
+ 		return;
++	if (MenuSkinPS2Active(m_nCurrScreen, m_bGameNotLoaded) || XBOX_SKIN_ON)
++		return;	// revc: the console skins show their own help instead of the PC's helper line
+ 
+ 	// there was a unused static bool
+ 	static uint32 LastFlash = 0;
+@@ -804,7 +934,7 @@
+ 	// We're using SCREEN_STRETCH_FROM_RIGHT, because we also stretch black borders
+ 	if (text) {
+ 		CFont::SetColor(CRGBA(255, 255, 255, 255));
+-		CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN), TheText.Get(text));
++		CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN), HelperString(text));
+ 		return;
+ 	}
+ 
+@@ -824,7 +954,7 @@
+ 	// TODO: name this cases?
+ 	switch (m_nHelperTextMsgId) {
+ 		case 1:
+-			CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN), TheText.Get("FET_APP"));
++			CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN), HelperString("FET_APP"));
+ 			break;
+ 		case 2:
+ 			CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN), TheText.Get("FET_HRD"));
+@@ -839,6 +969,30 @@
+ 			CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN), TheText.Get("FET_RSC"));
+ 			break;
+ 		default:
++#ifdef LIBRW_HOST
++			// With a controller: entries that change with left/right show the stick glyphs
++			// ("ADJUST"); entries that open a page or do something show the confirm button.
++			if (hostActiveInputKind() != 0) {
++				int action = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action;
++				if (action == MENUACTION_NOTHING || action == MENUACTION_LABEL)
++					return;
++				bool adjustable = MenuActionAdjustable(action);
++#ifdef CUSTOM_FRONTEND_OPTIONS
++				// Dynamic entries without a value of their own are buttons.
++				if (action == MENUACTION_CFO_DYNAMIC && aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_CFODynamic->drawFunc == nil)
++					adjustable = false;
++				// Entries that show a status but act on confirm.
++				if (action == MENUACTION_CFO_DYNAMIC && strcmp(aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_EntryName, "RVC_DSC") == 0)
++					adjustable = false;
++#endif
++				if (!adjustable) {
++					static wchar buf[32];
++					AsciiToUnicode("~X~ SELECT", buf);
++					CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN), buf);
++					return;
++				}
++			}
++#endif
+ 			if (aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_NO)
+ 				return;
+ 
+@@ -846,7 +1000,7 @@
+ 				aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_SFXVOLUME) {
+ 
+ 				CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN),
+-					m_nPrefsAudio3DProviderIndex == NO_AUDIO_PROVIDER ? TheText.Get("FEH_NA") : TheText.Get("FET_MIG"));
++					m_nPrefsAudio3DProviderIndex == NO_AUDIO_PROVIDER ? TheText.Get("FEH_NA") : HelperString("FET_MIG"));
+ 				return;
+ 			}
+ 
+@@ -857,10 +1011,10 @@
+ #ifdef LIBRW_HOST
+ 				// The SDL3 host changes resolution live, so it's available in-game too.
+ 				CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN),
+-					TheText.Get("FET_MIG"));
++					HelperString("FET_MIG"));
+ #else
+ 				CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN),
+-					m_bGameNotLoaded ? TheText.Get("FET_MIG") : TheText.Get("FEH_NA"));
++					m_bGameNotLoaded ? HelperString("FET_MIG") : TheText.Get("FEH_NA"));
+ #endif
+ 				return;
+ 			}
+@@ -869,7 +1023,7 @@
+ 				aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_SPEAKERCONF) {
+ 
+ 				CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN),
+-					m_nPrefsAudio3DProviderIndex == NO_AUDIO_PROVIDER ? TheText.Get("FEH_NA") : TheText.Get("FET_MIG"));
++					m_nPrefsAudio3DProviderIndex == NO_AUDIO_PROVIDER ? TheText.Get("FEH_NA") : HelperString("FET_MIG"));
+ 				return;
+ 			}
+ 
+@@ -878,12 +1032,12 @@
+ 
+ 			if (aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_MP3VOLUMEBOOST) {
+ 				CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN),
+-					m_nPrefsAudio3DProviderIndex == NO_AUDIO_PROVIDER ? TheText.Get("FEH_NA") : TheText.Get("FET_MIG"));
++					m_nPrefsAudio3DProviderIndex == NO_AUDIO_PROVIDER ? TheText.Get("FEH_NA") : HelperString("FET_MIG"));
+ 				return;
+ 			}
+ 
+ 			CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN),
+-				m_nCurrScreen != MENUPAGE_STATS ? TheText.Get("FET_MIG") : TheText.Get("FEH_SSA"));
++				m_nCurrScreen != MENUPAGE_STATS ? HelperString("FET_MIG") : TheText.Get("FEH_SSA"));
+ 
+ 			break;
+ 	}
+@@ -892,6 +1046,9 @@
+ int
+ CMenuManager::DisplaySlider(float x, float y, float mostLeftBarSize, float mostRightBarSize, float rectSize, float progress, float spacing) 
+ {
++	// revc: Xbox skin: the Xbox's wedge bar instead of the PC's ticks (core/MenuSkinXbox.cpp)
++	if (XBOX_SKIN_ON)
++		return MenuSkinXboxWedge(y, progress, FadeIn(255));
+ 	CRGBA color;
+ 	float maxBarHeight;
+ 
+@@ -943,6 +1100,16 @@
+ void
+ CMenuManager::DrawStandardMenus(bool activeScreen)
+ {
++#ifdef CUSTOM_FRONTEND_OPTIONS
++	// revc: the controller layout picture page draws its pad and callouts, then the entries.
++	extern void DrawPadPicture(void);
++	if (m_nCurrScreen == MENUPAGE_PAD_PICTURE && activeScreen)
++		DrawPadPicture();
++	// revc: the PS2 Controls page shows the DualShock 2 picture under its rows (core/PadPicture.cpp)
++	extern void DrawPadPicturePS2(void);
++	if (m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS && activeScreen && PS2_SKIN_ON)
++		DrawPadPicturePS2();
++#endif
+ 	float nextYToUse = 0.0f; // III leftover, set but unused in VC
+ 	bool itemsAreSelectable = true;
+ 	CFont::SetBackgroundOff();
+@@ -969,13 +1136,21 @@
+ 		case MENUPAGE_CHOOSE_LOAD_SLOT:
+ 		case MENUPAGE_CHOOSE_DELETE_SLOT:
+ 		case MENUPAGE_CHOOSE_SAVE_SLOT:
++			if (XBOX_SKIN_ON)	// revc: the Xbox's light-blue, slightly tilted list box (measured)
++				CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(162.0f), MENU_Y(80.0f * XBOX_Y), MENU_X_LEFT_ALIGNED(497.0f), MENU_Y(96.0f * XBOX_Y),
++					MENU_X_LEFT_ALIGNED(176.0f), MENU_Y(380.0f * XBOX_Y), MENU_X_LEFT_ALIGNED(502.0f), MENU_Y(376.0f * XBOX_Y),
++					CRGBA(105, 198, 247, FadeIn(215)));
++			else
+ 			CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(38.0f), MENU_Y(85.0f),
+ 				MENU_X_LEFT_ALIGNED(615.0f), MENU_Y(75.0f),
+ 				MENU_X_LEFT_ALIGNED(30.0f), MENU_Y(320.0f), 
+ 				MENU_X_LEFT_ALIGNED(605.0f), MENU_Y(330.0f), CRGBA(LIST_BACKGROUND_COLOR.r, LIST_BACKGROUND_COLOR.g, LIST_BACKGROUND_COLOR.b, FadeIn(LIST_BACKGROUND_COLOR.a)));
+ 			break;
+ 		case MENUPAGE_SOUND_SETTINGS:
++			// revc: the PS2 skin has the picker lower left, beside its help box (measured).
++			revc_device_set_im2d_offset(RADIO_SKIN_DX, RADIO_SKIN_DY);
+ 			PrintRadioSelector();
++			revc_device_set_im2d_offset(0.0f, 0.0f);
+ 			break;
+ 		case MENUPAGE_STATS:
+ 			PrintStats();
+@@ -985,15 +1160,25 @@
+ 			break;
+ 	}
+ 
++	if (XBOX_DIALOG_ON)
++		MenuSkinXboxDialogBack(FadeIn(255));	// revc: Xbox dialog layers under the page's text
++
+ 	// Page name
+ 	if (aScreens[m_nCurrScreen].m_ScreenName[0] != '\0') {
+ 
+ 		SET_FONT_FOR_MENU_HEADER
++		if (XBOX_SKIN_ON) {
++			// revc: Xbox skin, the title top left (core/MenuSkinXbox.cpp)
++			CFont::SetScale(MENU_X(MENUHEADER_WIDTH * 0.95f), MENU_Y(MENUHEADER_HEIGHT * 0.95f));
++			// a dialog keeps the Load page's title, as on the Xbox
++			MenuSkinXboxTitle(TheText.Get(aScreens[XBOX_DIALOG_ON ? MENUPAGE_CHOOSE_LOAD_SLOT : m_nCurrScreen].m_ScreenName), FadeIn(255));
++		} else {
+ 		CFont::SetColor(CRGBA(30, 30, 30, FadeIn(255)));
+-		CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(MENUHEADER_POS_X) - MENU_X(7.f), SCREEN_SCALE_Y(MENUHEADER_POS_Y + 7.f), TheText.Get(aScreens[m_nCurrScreen].m_ScreenName));
++		CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(MENUHEADER_POS_X) - MENU_X(7.f) - PS2_TITLE_DX, SCREEN_SCALE_Y(MENUHEADER_POS_Y + 7.f) + PS2_TITLE_DY, PS2_PAGE_TITLE);
+ 
+ 		CFont::SetColor(CRGBA(HEADER_COLOR.r, HEADER_COLOR.g, HEADER_COLOR.b, FadeIn(255)));
+-		CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(MENUHEADER_POS_X), SCREEN_SCALE_Y(MENUHEADER_POS_Y), TheText.Get(aScreens[m_nCurrScreen].m_ScreenName));
++		CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(MENUHEADER_POS_X) - PS2_TITLE_DX, SCREEN_SCALE_Y(MENUHEADER_POS_Y) + PS2_TITLE_DY, PS2_PAGE_TITLE);
++		}
+ 	}
+ 
+ 	// Label
+@@ -1037,6 +1222,16 @@
+ 			break;
+ 		}
+ 
++		if (XBOX_DIALOG_ON) {
++			// revc: Xbox dialog: the question centred in the blue panel, pink capitals
++			CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
++			CFont::SetScale(MENU_X(BIGTEXT_X_SCALE * 0.75f), MENU_Y(BIGTEXT_Y_SCALE * 0.75f));
++			CFont::SetColor(CRGBA(255, 154, 227, FadeIn(255)));
++			CFont::SetCentreOn();
++			CFont::SetCentreSize(MENU_X(340.0f));
++			CFont::PrintString(MENU_X_LEFT_ALIGNED(300.0f), MENU_Y(180.0f * 448.0f / 480.0f), str);
++			CFont::SetCentreOff();
++		} else
+ 		CFont::PrintString(MENU_X_LEFT_ALIGNED(100.0f), MENU_Y(97.0f), str);
+ 		CFont::SetWrapx(MENU_X_RIGHT_ALIGNED(xMargin));
+ 		CFont::SetRightJustifyWrap(MENU_X_LEFT_ALIGNED(xMargin));
+@@ -1399,7 +1594,10 @@
+ 				}
+ 
+ 				// Highlight trapezoid
+-				if (activeScreen && i == m_nCurrOption && itemsAreSelectable && section == 0) {
++				if (activeScreen && i == m_nCurrOption && itemsAreSelectable && section == 0 && !XBOX_SKIN_ON &&
++				    !PS2_AUDIO_ON &&	// revc: the PS2 audio page draws its own label boxes
++				    !(PS2_SKIN_ON && (aScreens[m_nCurrScreen].m_aEntries[i].m_Action == MENUACTION_GOBACK ||
++				      aScreens[m_nCurrScreen].m_aEntries[i].m_Y MINUS_SCROLL_OFFSET >= 360))) {	// revc: nothing to highlight under the PS2 tabs
+ 
+ 					int leftXMax, rightXMin;
+ 
+@@ -1437,6 +1635,21 @@
+ 						rightXMin = 600;
+ 						leftXMax = 40;
+ 					}
++					// revc: PS2 skin, a box just around the label (console): labels with a value end at
++					// the colon column (269), slider labels at 290, others are centred on 320.
++					if (PS2_SKIN_ON && !(saveSlot >= SAVESLOT_1 && saveSlot <= SAVESLOT_8)) {
++						bool slider = action == MENUACTION_DRAWDIST || action == MENUACTION_BRIGHTNESS || action == MENUACTION_MUSICVOLUME ||
++							action == MENUACTION_SFXVOLUME || action == MENUACTION_MP3VOLUMEBOOST || action == MENUACTION_MOUSESENS
++#ifdef CUSTOM_FRONTEND_OPTIONS
++							|| action == MENUACTION_CFO_SLIDER
++#endif
++							;
++						float right = slider ? 290.0f : rightText ? 269.0f + Max(0.0f, 20.0f + curOptionWidth - 269.0f) : 320.0f + curOptionWidth / 2.0f;
++						if (m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS)	// left-aligned rows from 160
++							right = 160.0f + curOptionWidth;
++						rightXMin = right + 4;
++						leftXMax = right - curOptionWidth - 4;
++					}
+ 
+ 					int y = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Y MINUS_SCROLL_OFFSET;
+ 					int topYMax = y;
+@@ -1489,7 +1702,8 @@
+ 						if (CTimer::GetTimeInMillisecondsPauseMode() - lastBlendChange > 20
+ 							|| blendChangeCounter > 20
+ 							) {
+-							m_nOptionHighlightTransitionBlend += 50;
++							// revc: per 20 ms; PC ~100 ms, the PS2 skin's slide 167 ms (measured 133-200 ms)
++							m_nOptionHighlightTransitionBlend += MenuSkinPS2Active(m_nCurrScreen, m_bGameNotLoaded) ? 31 : 50;
+ 							lastBlendChange = CTimer::GetTimeInMillisecondsPauseMode();
+ 							blendChangeCounter = 0;
+ 						}
+@@ -1501,6 +1715,245 @@
+ 					}
+ 				}
+ 
++#ifdef LIBRW_HOST
++				// With a controller: "Back" entries show the button that goes back (triangle, as
++				// in the console menus: Y on Xbox-style pads).
++				static wchar backBuf[64];
++				if (section == 1 && leftText && hostActiveInputKind() != 0 &&
++				    aScreens[m_nCurrScreen].m_aEntries[i].m_Action == MENUACTION_GOBACK && UnicodeStrlen(leftText) < 56) {
++					AsciiToUnicode("~T~ ", backBuf);
++					UnicodeStrcpy(backBuf + 4, leftText);
++					leftText = backBuf;
++				}
++#endif
++				// A centred entry with a value (e.g. BUTTON PROMPTS on the centred Controller Setup
++				// page): label and value as one centred line, so a long value can't run into the
++				// label (the value is otherwise right-aligned at the page margin).
++				bool centredPair = section == 1 && leftText && rightText && CFont::Details.centre && !XBOX_SKIN_ON &&
++					!(PS2_SKIN_ON && m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS) &&
++					!(aScreens[m_nCurrScreen].m_aEntries[i].m_SaveSlot >= SAVESLOT_1 && aScreens[m_nCurrScreen].m_aEntries[i].m_SaveSlot <= SAVESLOT_8);
++				if (centredPair) {
++					float y = MENU_Y(aScreens[m_nCurrScreen].m_aEntries[i].m_Y MINUS_SCROLL_OFFSET);
++					float wl = CFont::GetStringWidth(leftText, true);
++					float wr = CFont::GetStringWidth(rightText, true);
++					float gap = MENU_X(16.0f);
++					float x = MENU_X_LEFT_ALIGNED(aScreens[m_nCurrScreen].m_aEntries[i].m_X) - (wl + gap + wr) / 2.0f;
++					CFont::SetCentreOff();
++					CFont::SetRightJustifyOff();
++					float wrap = CFont::Details.wrapX;
++					CFont::SetWrapx(SCREEN_WIDTH);
++					CFont::PrintString(x, y, leftText);
++					CFont::PrintString(x + wl + gap, y, rightText);
++					CFont::SetWrapx(wrap);
++					CFont::SetCentreOn();
++					leftText = nil;
++					rightText = nil;
++				}
++
++				// revc: Xbox skin, save-slot lists (Load): the slot rows stay as the PC lays them out,
++				// the selected one on the mint bar across the list (as on the Xbox).
++				// Xbox: eight rows 35 px apart from y 105 in the list box, the slot name in black in the
++				// Xbox menu font with its date under it; the mint bar across the selected one.
++				if (section == 1 && XBOX_SKIN_ON &&
++				    aScreens[m_nCurrScreen].m_aEntries[i].m_SaveSlot >= SAVESLOT_1 && aScreens[m_nCurrScreen].m_aEntries[i].m_SaveSlot <= SAVESLOT_8) {
++					int k = aScreens[m_nCurrScreen].m_aEntries[i].m_SaveSlot - SAVESLOT_1;
++					float y = MENU_Y((105.0f + 35.0f * k) * XBOX_Y);
++					if (i == m_nCurrOption && itemsAreSelectable && activeScreen)
++						MenuSkinXboxSelection(MENU_X_LEFT_ALIGNED(160.0f), y - MENU_Y(4.0f), MENU_X_LEFT_ALIGNED(488.0f), y + MENU_Y(30.0f * XBOX_Y), FadeIn(255));
++					if (leftText && MenuSkinXboxText(MENU_X_LEFT_ALIGNED(168.0f), y, MENU_Y(21.0f * XBOX_Y), leftText, CRGBA(0, 0, 0, FadeIn(255)), 0)) {
++						if (rightText)
++							MenuSkinXboxText(MENU_X_LEFT_ALIGNED(255.0f), y + MENU_Y(17.0f * XBOX_Y), MENU_Y(14.0f * XBOX_Y), rightText, CRGBA(0, 0, 0, FadeIn(255)), 0);
++						leftText = nil;
++						rightText = nil;
++					}
++				}
++				// revc: Xbox menu skin (core/MenuSkinXbox.cpp): labels at x 139, values at 331, rows
++				// 44.5 px apart; the mint bar behind the current label; nothing over the icon bar
++				// (B goes back, as its help line says).
++				// Xbox skin, controller picture page: BACK hidden (B goes back); its other entry as one
++				// centred line between the pad and the icon bar, on the mint bar when selected.
++				if (section == 1 && XBOX_SKIN_ON && m_nCurrScreen == MENUPAGE_PAD_PICTURE && leftText) {
++					if (aScreens[m_nCurrScreen].m_aEntries[i].m_Action != MENUACTION_GOBACK) {
++						float y = MENU_Y(332.0f * 448.0f / 480.0f);
++						float gap = MENU_X(16.0f);
++						float wl = CFont::GetStringWidth(leftText, true), wr = rightText ? CFont::GetStringWidth(rightText, true) : 0.0f;
++						float total = wl + (rightText ? gap + wr : 0.0f);
++						float x = MENU_X_LEFT_ALIGNED(320.0f) - total / 2.0f;
++						if (i == m_nCurrOption && itemsAreSelectable && activeScreen)
++							MenuSkinXboxSelection(x - MENU_X(8.0f), y - MENU_Y(3.0f), x + total + MENU_X(8.0f), y + MENU_Y(22.0f), FadeIn(255));
++						float wrap = CFont::Details.wrapX;
++						CFont::SetWrapx(SCREEN_WIDTH);
++						CFont::SetCentreOff();
++						CFont::SetRightJustifyOff();
++						CFont::PrintString(x, y, leftText);
++						if (rightText)
++							CFont::PrintString(x + wl + gap, y, rightText);
++						CFont::SetWrapx(wrap);
++					}
++					leftText = nil;
++					rightText = nil;
++				}
++				if (section == 1 && XBOX_SKIN_ON && m_nCurrScreen != MENUPAGE_PAD_PICTURE &&	// the controller page keeps its layout
++				    !(aScreens[m_nCurrScreen].m_aEntries[i].m_SaveSlot >= SAVESLOT_1 && aScreens[m_nCurrScreen].m_aEntries[i].m_SaveSlot <= SAVESLOT_8)) {
++					float y = MENU_Y(XBOX_ROW_Y(i));
++					if (XBOX_DIALOG_ON && aScreens[m_nCurrScreen].m_aEntries[i].m_Action != MENUACTION_LABEL && leftText) {
++						// the dialog's two choices side by side at the bottom of the panel, the
++						// current one on the mint box
++						int k = 0;
++						for (int e = 0; e < i; e++)
++							if (aScreens[m_nCurrScreen].m_aEntries[e].m_Action != MENUACTION_LABEL)
++								k++;
++						float cx = MENU_X_LEFT_ALIGNED(k == 0 ? 165.0f : 365.0f), dy = MENU_Y(290.0f * 448.0f / 480.0f);
++						CFont::SetScale(MENU_X(BIGTEXT_X_SCALE), MENU_Y(BIGTEXT_Y_SCALE));
++						float w = CFont::GetStringWidth(leftText, true);
++						if (i == m_nCurrOption)
++							MenuSkinXboxSelection(cx - w / 2 - MENU_X(10.0f), dy - MENU_Y(8.0f), cx + w / 2 + MENU_X(10.0f), dy + MENU_Y(30.0f), FadeIn(255));
++						CFont::SetCentreOn();
++						CFont::SetCentreSize(SCREEN_WIDTH);
++						CFont::PrintString(cx, dy, leftText);
++						CFont::SetCentreOff();
++						leftText = nil;
++						rightText = nil;
++					}
++					if (XBOX_ROW_Y(i) < 340.0f * 448.0f / 480.0f && aScreens[m_nCurrScreen].m_aEntries[i].m_Action != MENUACTION_LABEL &&
++					    aScreens[m_nCurrScreen].m_aEntries[i].m_Action != MENUACTION_GOBACK) {
++						float wrap = CFont::Details.wrapX;
++						CFont::SetWrapx(SCREEN_WIDTH);
++						CFont::SetCentreOff();
++						CFont::SetRightJustifyOff();
++						CFont::SetScale(MENU_X(BIGTEXT_X_SCALE * 1.2f), MENU_Y(BIGTEXT_Y_SCALE * 1.2f));	// the Xbox's item size
++						{	// the Xbox's own wording for these rows
++							const char *n = aScreens[m_nCurrScreen].m_aEntries[i].m_EntryName;
++							int act = aScreens[m_nCurrScreen].m_aEntries[i].m_Action;
++							if (act == MENUACTION_MUSICVOLUME) leftText = TheText.Get("RVC_XMU");
++							else if (act == MENUACTION_SFXVOLUME) leftText = TheText.Get("RVC_XSF");
++							else if (strcmp(n, "RVC_PLY") == 0) { leftText = TheText.Get("RVC_XSC"); rightText = nil; }	// the layout shows on the page it opens
++							else if (strcmp(n, "FEC_ILU") == 0) leftText = TheText.Get("RVC_XIV");
++						}
++						if (leftText) {
++							if (i == m_nCurrOption && itemsAreSelectable && activeScreen) {
++								float w = CFont::GetStringWidth(leftText, true);
++								// the radio station row's bar spans label to value (x 125-565, measured)
++								bool wholeRow = aScreens[m_nCurrScreen].m_aEntries[i].m_Action == MENUACTION_RADIO;
++								MenuSkinXboxSelection(MENU_X_LEFT_ALIGNED(139.0f) - MENU_X(wholeRow ? 14.0f : 8.0f), y - MENU_Y(3.0f),
++									wholeRow ? MENU_X_LEFT_ALIGNED(565.0f) : MENU_X_LEFT_ALIGNED(139.0f) + w + MENU_X(8.0f), y + MENU_Y(25.0f), FadeIn(255), !wholeRow);
++							}
++							CFont::PrintString(MENU_X_LEFT_ALIGNED(139.0f), y, leftText);
++						}
++						if (rightText) {
++							// a label longer than the Xbox's own pushes its value right
++							// values column: 331 (display), 378 for the radio station, 435 on controls
++							float vx = MENU_X_LEFT_ALIGNED(m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS ? 435.0f :
++								aScreens[m_nCurrScreen].m_aEntries[i].m_Action == MENUACTION_RADIO ? 378.0f : 331.0f);
++							if (leftText)
++								vx = Max(vx, MENU_X_LEFT_ALIGNED(139.0f) + CFont::GetStringWidth(leftText, true) + MENU_X(14.0f));
++							CFont::PrintString(vx, y, rightText);
++						}
++						CFont::SetWrapx(wrap);
++					}
++					leftText = nil;
++					rightText = nil;
++				}
++				// revc: PS2 menu skin: nothing in the tab area at the bottom (the Map page's BACK
++				// sits there; on the PS2 the triangle button goes back, as its help box says).
++				if (section == 1 && MenuSkinPS2Active(m_nCurrScreen, m_bGameNotLoaded) &&
++				    (aScreens[m_nCurrScreen].m_aEntries[i].m_Y MINUS_SCROLL_OFFSET >= 360 || aScreens[m_nCurrScreen].m_aEntries[i].m_Action == MENUACTION_GOBACK)) {
++					leftText = nil;
++					rightText = nil;
++				}
++				// revc: PS2 Audio page in the console's two columns: "music" and "sfx" headings over
++				// their bars, "radio station" with the station's name under it (measured 640x448);
++				// the label's green box drawn here (the PC highlight follows the rows).
++				if (section == 1 && leftText && PS2_AUDIO_ON) {
++					int act = aScreens[m_nCurrScreen].m_aEntries[i].m_Action;
++					float cx = act == MENUACTION_MUSICVOLUME ? 253.0f : act == MENUACTION_SFXVOLUME ? 375.0f : 229.0f;
++					float ly = act == MENUACTION_RADIO ? 198.0f : 74.0f;
++					if (act == MENUACTION_MUSICVOLUME) leftText = TheText.Get("RVC_XMU");
++					else if (act == MENUACTION_SFXVOLUME) leftText = TheText.Get("RVC_XSF");
++					float w = CFont::GetStringWidth(leftText, true);
++					if (i == m_nCurrOption && itemsAreSelectable && activeScreen)
++						CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(cx) - w / 2 - MENU_X(5.0f), MENU_Y(ly - 3.0f), MENU_X_LEFT_ALIGNED(cx) + w / 2 + MENU_X(5.0f), MENU_Y(ly - 5.0f),
++							MENU_X_LEFT_ALIGNED(cx) - w / 2 - MENU_X(5.0f), MENU_Y(ly + 19.0f), MENU_X_LEFT_ALIGNED(cx) + w / 2 + MENU_X(5.0f), MENU_Y(ly + 17.0f),
++							CRGBA(25, 130, 70, FadeIn(255)));
++					CFont::SetRightJustifyOff();
++					CFont::SetCentreOn();
++					CFont::SetCentreSize(SCREEN_WIDTH);
++					CFont::PrintString(MENU_X_LEFT_ALIGNED(cx), MENU_Y(ly), leftText);
++					if (act == MENUACTION_RADIO && rightText)
++						CFont::PrintString(MENU_X_LEFT_ALIGNED(cx), MENU_Y(ly + 30.0f), rightText);
++					CFont::SetCentreOff();
++					leftText = nil;
++					rightText = nil;
++				}
++				// revc: PS2 Controls page: "label : value" left-aligned from x 160 (console)
++				if (section == 1 && leftText && PS2_SKIN_ON && m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS) {
++					float y = MENU_Y(aScreens[m_nCurrScreen].m_aEntries[i].m_Y MINUS_SCROLL_OFFSET);
++					if (strcmp(aScreens[m_nCurrScreen].m_aEntries[i].m_EntryName, "RVC_PLY") == 0)
++						leftText = TheText.Get("RVC_P2C");
++					static wchar line[160];
++					UnicodeStrcpy(line, leftText);
++					if (rightText) {
++						int n = UnicodeStrlen(line);
++						AsciiToUnicode(" : ", line + n);
++						UnicodeStrcpy(line + n + 3, rightText);
++					}
++					CFont::SetCentreOff();
++					CFont::SetRightJustifyOff();
++					float wrap = CFont::Details.wrapX;
++					CFont::SetWrapx(SCREEN_WIDTH);
++					CFont::PrintString(MENU_X_LEFT_ALIGNED(160.0f), y, line);
++					CFont::SetWrapx(wrap);
++					leftText = nil;
++					rightText = nil;
++				}
++				// revc: PS2 menu skin: "LABEL : VALUE" lined up on the colon, as on the PS2's
++				// option pages (label ends at 269, colon at 286, value from 302 in 640 wide;
++				// core/MenuSkinPS2.cpp).
++				if (section == 1 && leftText && rightText && MenuSkinPS2Active(m_nCurrScreen, m_bGameNotLoaded) &&
++				    !(aScreens[m_nCurrScreen].m_aEntries[i].m_SaveSlot >= SAVESLOT_1 && aScreens[m_nCurrScreen].m_aEntries[i].m_SaveSlot <= SAVESLOT_8)) {
++					float y = MENU_Y(aScreens[m_nCurrScreen].m_aEntries[i].m_Y MINUS_SCROLL_OFFSET);
++					static wchar colon[2] = { ':', 0 };
++					CFont::SetCentreOff();
++					float wrap = CFont::Details.wrapX;
++					CFont::SetWrapx(SCREEN_WIDTH);
++					// a label too long for the left half pushes the colon right (it would wrap)
++					float lw = CFont::GetStringWidth(leftText, true);
++					float dx = Max(0.0f, MENU_X_LEFT_ALIGNED(20.0f) + lw - MENU_X_LEFT_ALIGNED(269.0f));
++					CFont::SetRightJustifyOn();
++					CFont::SetRightJustifyWrap(0.0f);	// long labels stay on one line
++					CFont::PrintString(MENU_X_LEFT_ALIGNED(269.0f) + dx, y, leftText);
++					CFont::SetRightJustifyOff();
++					CFont::PrintString(MENU_X_LEFT_ALIGNED(282.0f) + dx, y, colon);
++					CFont::PrintString(MENU_X_LEFT_ALIGNED(302.0f) + dx, y, rightText);
++					CFont::SetWrapx(wrap);
++					leftText = nil;
++					rightText = nil;
++				}
++				// PS2 skin, a label without a value: a slider's label ends just before the slider,
++				// others (e.g. SCREEN POSITION) are centred on the page.
++				if (section == 1 && leftText && !rightText && MenuSkinPS2Active(m_nCurrScreen, m_bGameNotLoaded) &&
++				    aScreens[m_nCurrScreen].m_aEntries[i].m_Action != MENUACTION_LABEL &&
++				    !(aScreens[m_nCurrScreen].m_aEntries[i].m_SaveSlot >= SAVESLOT_1 && aScreens[m_nCurrScreen].m_aEntries[i].m_SaveSlot <= SAVESLOT_8)) {
++					float y = MENU_Y(aScreens[m_nCurrScreen].m_aEntries[i].m_Y MINUS_SCROLL_OFFSET);
++					float wrap = CFont::Details.wrapX;
++					CFont::SetWrapx(SCREEN_WIDTH);
++					if (IsSliderAction(aScreens[m_nCurrScreen].m_aEntries[i].m_Action)) {
++						CFont::SetCentreOff();
++						CFont::SetRightJustifyOn();
++						CFont::SetRightJustifyWrap(0.0f);
++						CFont::PrintString(MENU_X_LEFT_ALIGNED(290.0f), y, leftText);
++						CFont::SetRightJustifyOff();
++					} else {
++						CFont::SetRightJustifyOff();
++						CFont::SetCentreOn();
++						CFont::SetCentreSize(SCREEN_WIDTH);
++						CFont::PrintString(MENU_X_LEFT_ALIGNED(320.0f), y, leftText);
++						CFont::SetCentreOff();
++					}
++					CFont::SetWrapx(wrap);
++					leftText = nil;
++				}
++
+ 				if (section == 1) {
+ 					if (leftText) {
+ 						CFont::PrintString(MENU_X_LEFT_ALIGNED(aScreens[m_nCurrScreen].m_aEntries[i].m_X), MENU_Y(aScreens[m_nCurrScreen].m_aEntries[i].m_Y MINUS_SCROLL_OFFSET), leftText);
+@@ -1561,7 +2014,7 @@
+ 					}
+ 
+ #ifdef CUSTOM_FRONTEND_OPTIONS
+-#define SLIDER_Y(pos) (aScreens[m_nCurrScreen].m_aEntries[i].m_Y - 5.f)
++#define SLIDER_Y(pos) (XBOX_SKIN_ON ? XBOX_ROW_Y(i) - 5.f + scrollOffset : PS2_AUDIO_ON ? 116.0f + scrollOffset : aScreens[m_nCurrScreen].m_aEntries[i].m_Y - 5.f)
+ #else
+ #define SLIDER_Y(pos) pos
+ #endif
+@@ -1617,7 +2070,7 @@
+ 	#define SCROLLBAR_WIDTH 9.5f
+ 	#define SCROLLBAR_TOP_Y 84
+ 
+-	if (activeScreen && SCREEN_HAS_AUTO_SCROLLBAR) {
++	if (activeScreen && SCREEN_HAS_AUTO_SCROLLBAR && !XBOX_SKIN_ON && !PS2_SKIN_ON) {	// revc: the console menus have no scrollbar
+ 		// Scrollbar background
+ 		CSprite2d::DrawRect(CRect(MENU_X_RIGHT_ALIGNED(SCROLLBAR_RIGHT_X - 2), MENU_Y(SCROLLBAR_TOP_Y),
+ 			MENU_X_RIGHT_ALIGNED(SCROLLBAR_RIGHT_X - 2 - SCROLLBAR_WIDTH), SCREEN_SCALE_FROM_BOTTOM(SCROLLBAR_BOTTOM_Y)), CRGBA(30, 30, 30, FadeIn(150)));
+@@ -1650,6 +2103,7 @@
+ 		case MENUPAGE_CONTROLLER_PC:
+ 		case MENUPAGE_SOUND_SETTINGS:
+ 		case MENUPAGE_DISPLAY_SETTINGS:
++		case MENUPAGE_CONSOLE_DISPLAY:
+ 		case MENUPAGE_MOUSE_CONTROLS:
+ 			DisplayHelperText(nil);
+ 			break;
+@@ -1728,6 +2182,12 @@
+ 	for (int optionIdx = 0; optionIdx < numOptions; nextY = MENU_Y(++optionIdx * rowHeight + yStart)) {
+ 		int nextX = xStart;
+ 		int bindingsForThisOpt = 0;
++		int shownBindings = 0;
++#ifdef LIBRW_HOST
++		bool padView = hostActiveInputKind() != 0;
++#else
++		bool padView = false;
++#endif
+ 		int contSetOrder = SETORDER_1;
+ 		CFont::SetColor(CRGBA(255, 255, 255, FadeIn(255)));
+ 
+@@ -1943,9 +2403,18 @@
+ 		for (; contSetOrder < MAX_SETORDERS && controllerAction != -1; contSetOrder++) {
+ #endif
+ 			wchar *settingText = ControlsManager.GetControllerSettingTextWithOrderNumber((e_ControllerAction)controllerAction, (eContSetOrder)contSetOrder);
++#ifdef LIBRW_HOST
++			// revc, controller view (Xbox-style): with a pad in use only the pad binding is drawn;
++			// the others still count (the page's empty-binding rule is unchanged).
++			if (settingText && padView && ControlsManager.m_aSettings[controllerAction][JOYSTICK].m_ContSetOrder != contSetOrder) {
++				++bindingsForThisOpt;
++				continue;
++			}
++#endif
+ 			if (settingText) {
+ 				++bindingsForThisOpt;
+-				if (bindingsForThisOpt > 1) {
++				++shownBindings;
++				if (shownBindings > 1) {
+ 					wchar *seperator = TheText.Get("FEC_IBT");
+ 					CFont::SetColor(CRGBA(255, 255, 255, FadeIn(255)));
+ 					CFont::PrintString(nextX, nextY, seperator);
+@@ -1960,9 +2429,9 @@
+ 					nextX += CFont::GetStringWidth(settingText, true) + bindingMargin;
+ 			}
+ 		}
+-		if (controllerAction == -1) {
++		if (controllerAction == -1 || (padView && controllerAction >= 0 && bindingsForThisOpt > 0 && shownBindings == 0)) {
+ 			CFont::SetColor(CRGBA(0, 0, 0, FadeIn(255)));
+-			CFont::PrintString(nextX, nextY, TheText.Get("FEC_NUS")); // not used
++			CFont::PrintString(nextX, nextY, TheText.Get("FEC_NUS")); // not used (in the controller view: no pad binding)
+ 
+ 		} else if (controllerAction == -2) {
+ 			CFont::SetColor(CRGBA(0, 0, 0, FadeIn(255)));
+@@ -2277,12 +2746,17 @@
+ 	CFont::SetDropShadowPosition(2);
+ 	CFont::SetDropColor(CRGBA(0, 0, 0, FadeIn(255)));
+ 	CFont::SetColor(CRGBA(MENUOPTION_COLOR.r, MENUOPTION_COLOR.g, MENUOPTION_COLOR.b, FadeIn(255)));
+-	CFont::PrintString(MENU_X_RIGHT_ALIGNED(CONTSETUP_BACK_RIGHT - 2.0f), SCREEN_SCALE_FROM_BOTTOM(CONTSETUP_BACK_BOTTOM - 4.0f), TheText.Get("FEDS_TB"));
++	CFont::PrintString(MENU_X_RIGHT_ALIGNED(CONTSETUP_BACK_RIGHT - 2.0f), SCREEN_SCALE_FROM_BOTTOM(CONTSETUP_BACK_BOTTOM - 4.0f), BackLabel());
+ }
+ 
++void ConsoleAudioRows(bool console);
++
+ void
+ CMenuManager::DrawFrontEnd()
+ {
++	// revc: the console styles' Audio page rows (core/MenuScreensCustom.cpp)
++	extern int8 gUiStyle;
++	ConsoleAudioRows(gUiStyle != 0);
+ 	CFont::SetAlphaFade(255.0f);
+ 	CSprite2d::InitPerFrame();
+ 	CFont::InitPerFrame();
+@@ -2307,6 +2781,8 @@
+ 	DrawBackground(false);
+ }
+ 
++void MenuSkinPS2Draw(CMenuManager *m, uint8 alpha, float cornerX, float cornerY);
++
+ void
+ CMenuManager::DrawBackground(bool transitionCall)
+ {
+@@ -2443,6 +2919,53 @@
+ 				break;
+ 		}
+ 
++		// revc: PS2 skin, the console's panel per page (640x448, research menu comparison; TL, TR, BL, BR)
++		if (PS2_SKIN_ON) {
++			int pg = m_nCurrScreen;
++			const float *c = nil;
++			static const float audio[8] = { 100, 44, 562, 24, 54, 370, 604, 296 };
++			static const float brief[8] = { 56, 64, 570, 68, 100, 338, 604, 296 };
++			static const float controls[8] = { 56, 64, 588, 68, 44, 372, 610, 296 };
++			static const float display[8] = { 100, 44, 564, 36, 100, 344, 586, 298 };
++			static const float load[8] = { 56, 64, 596, 36, 54, 354, 594, 296 };
++			static const float map[8] = { 88, 22, 572, 62, 60, 370, 590, 298 };
++			static const float stats[8] = { 62, 64, 578, 36, 74, 352, 576, 298 };
++			static const float confirm[8] = { 66, 64, 592, 62, 57, 368, 603, 296 };
++			if (pg == MENUPAGE_SOUND_SETTINGS) c = audio;
++			else if (pg == MENUPAGE_BRIEFS) c = brief;
++			else if (pg == MENUPAGE_CONTROLLER_PC || pg == MENUPAGE_PAD_PICTURE || pg == MENUPAGE_CONSOLE_CONTROLS) c = controls;
++			else if (pg == MENUPAGE_DISPLAY_SETTINGS || pg == MENUPAGE_CONSOLE_DISPLAY || pg == MENUPAGE_GRAPHICS_SETTINGS || pg == MENUPAGE_LANGUAGE_SETTINGS) c = display;
++			else if (pg == MENUPAGE_CHOOSE_LOAD_SLOT) c = load;
++			else if (pg == MENUPAGE_MAP) c = map;
++			else if (pg == MENUPAGE_STATS) c = stats;
++			else if (pg == MENUPAGE_NEW_GAME_RELOAD || pg == MENUPAGE_LOAD_SLOT_CONFIRM || pg == MENUPAGE_DELETE_SLOT_CONFIRM) c = confirm;
++			if (c) {
++				menuBg.topLeft_x = c[0]; menuBg.topLeft_y = c[1];
++				menuBg.topRight_x = c[2]; menuBg.topRight_y = c[3];
++				menuBg.bottomLeft_x = c[4]; menuBg.bottomLeft_y = c[5];
++				menuBg.bottomRight_x = c[6]; menuBg.bottomRight_y = c[7];
++			}
++		}
++		// revc: Xbox skin, the Xbox's panel shape per page (measured on the captures, 480 lines)
++		if (XBOX_SKIN_ON) {
++			static const float xboxPanels[7][8] = {	// TL, TR, BL, BR
++				{ 88, 42, 580, 56, 46, 378, 596, 372 },	// load
++				{ 96, 44, 566, 78, 88, 378, 582, 378 },	// map
++				{ 104, 46, 582, 54, 72, 378, 572, 378 },	// brief
++				{ 70, 66, 552, 80, 74, 378, 578, 378 },	// stats
++				{ 78, 50, 552, 80, 90, 378, 586, 378 },	// controls
++				{ 78, 38, 580, 44, 74, 378, 572, 378 },	// audio
++				{ 84, 84, 552, 80, 60, 378, 580, 378 },	// display
++			};
++			int t = MenuSkinXboxTab(m_nCurrScreen);
++			if (t >= 0) {
++				const float *c = xboxPanels[t];
++				menuBg.topLeft_x = c[0]; menuBg.topLeft_y = c[1] * XBOX_Y;
++				menuBg.topRight_x = c[2]; menuBg.topRight_y = c[3] * XBOX_Y;
++				menuBg.bottomLeft_x = c[4]; menuBg.bottomLeft_y = c[5] * XBOX_Y;
++				menuBg.bottomRight_x = c[6]; menuBg.bottomRight_y = c[7] * XBOX_Y;
++			}
++		}
+ 		menuBg.UpdateMultipliers();
+ 		if (m_firstStartCounter == 255)
+ 			m_nOptionHighlightTransitionBlend = 0;
+@@ -2455,7 +2978,8 @@
+ 		if (CTimer::GetTimeInMillisecondsPauseMode() - LastFade > 30
+ 			|| forceFadeInCounter > 30
+ 			) {
+-			m_nMenuFadeAlpha += 20;
++			// revc: per 30 ms; the PC's fade takes ~390 ms, the PS2 skin's 167 ms / 234 ms.
++			m_nMenuFadeAlpha += !MenuSkinPS2Active(m_nCurrScreen, m_bGameNotLoaded) ? 20 : gPs2FadeIsPageChange ? 46 : 33;
+ 			if (m_firstStartCounter < 255) {
+ 				m_firstStartCounter = Min(m_firstStartCounter + 20, 255);
+ 			}
+@@ -2518,9 +3042,9 @@
+ 
+ 	if (m_nCurrScreen != MENUPAGE_OUTRO)
+ 		if (m_firstStartCounter == 255) {
+-			m_aFrontEndSprites[MENUSPRITE_VCLOGO].Draw(CRect(SCREEN_STRETCH_X(27.0f), MENU_Y(8.0f), SCREEN_STRETCH_X(27.0f) + MENU_X(130.f), MENU_Y(138.0f)), CRGBA(255, 255, 255, 255));
++			XBOX_SKIN_ON ? MenuSkinXboxLogo(255) : m_aFrontEndSprites[MENUSPRITE_VCLOGO].Draw(CRect(SCREEN_STRETCH_X(27.0f) + PS2_LOGO_DX, MENU_Y(8.0f) + PS2_LOGO_DY, SCREEN_STRETCH_X(27.0f) + MENU_X(130.f) + PS2_LOGO_DX, MENU_Y(138.0f) + PS2_LOGO_DY), CRGBA(255, 255, 255, 255));
+ 		} else {
+-			m_aFrontEndSprites[MENUSPRITE_VCLOGO].Draw(CRect(SCREEN_STRETCH_X(27.0f), MENU_Y(8.0f), SCREEN_STRETCH_X(27.0f) + MENU_X(130.f), MENU_Y(138.0f)), CRGBA(255, 255, 255, FadeIn(255)));
++			XBOX_SKIN_ON ? MenuSkinXboxLogo(FadeIn(255)) : m_aFrontEndSprites[MENUSPRITE_VCLOGO].Draw(CRect(SCREEN_STRETCH_X(27.0f) + PS2_LOGO_DX, MENU_Y(8.0f) + PS2_LOGO_DY, SCREEN_STRETCH_X(27.0f) + MENU_X(130.f) + PS2_LOGO_DX, MENU_Y(138.0f) + PS2_LOGO_DY), CRGBA(255, 255, 255, FadeIn(255)));
+ 		}
+ 
+ 	if (m_ShowEmptyBindingError) {
+@@ -2538,7 +3062,11 @@
+ 		}
+ 	}
+ 
+-	if (m_bShowMouse) {
++	// revc: PS2 UI style (core/MenuSkinPS2.cpp); its help box sits on the panel's bottom-right corner
++	MenuSkinPS2Draw(this, FadeIn(255), SCREEN_STRETCH_X(menuBg.bottomRight_x), SCREEN_STRETCH_Y(menuBg.bottomRight_y));
++	MenuSkinXboxDraw(this, FadeIn(255));	// revc: Xbox UI style (core/MenuSkinXbox.cpp)
++
++	if (m_bShowMouse && !MenuSkinPS2Active(m_nCurrScreen, m_bGameNotLoaded) && !XBOX_SKIN_ON) {	// revc: no PC cursor in the console skins
+ 		CRect mouse(0.0f, 0.0f, MENU_X(35.0f), MENU_Y(35.0f));
+ 		CRect shad(MENU_X(10.0f), MENU_Y(3.0f), MENU_X(45.0f), MENU_Y(38.0f));
+ 
+@@ -2924,7 +3452,7 @@
+ 	CFont::SetDropColor(CRGBA(0, 0, 0, FadeIn(255)));
+ 
+ 	// Back button
+-	CFont::PrintString(MENU_X_RIGHT_ALIGNED(PLAYERSETUP_LIST_RIGHT - 3), SCREEN_SCALE_FROM_BOTTOM(PLAYERSETUP_LIST_BOTTOM - 5), TheText.Get("FEDS_TB"));
++	CFont::PrintString(MENU_X_RIGHT_ALIGNED(PLAYERSETUP_LIST_RIGHT - 3), SCREEN_SCALE_FROM_BOTTOM(PLAYERSETUP_LIST_BOTTOM - 5), BackLabel());
+ 	CFont::SetRightJustifyOff();
+ 
+ 	if (!strcmp(m_aSkinName, m_PrefsSkinFile)) {
+@@ -3389,6 +3917,14 @@
+ 	static float scrollY = 0;
+ 
+ 	int rowNum = CStats::ConstructStatLine(99999);
++	// revc: Xbox skin: the stats box and rating where the Xbox has them, lines in its menu font
++	const bool xbox = XBOX_SKIN_ON;
++	const float xboxShift = xbox ? MENU_Y(118.0f * XBOX_Y - 142.0f) : 0.0f;
++	if (xbox)
++		CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(92.0f), MENU_Y(118.0f * XBOX_Y), MENU_X_LEFT_ALIGNED(540.0f), MENU_Y(118.0f * XBOX_Y),
++			MENU_X_LEFT_ALIGNED(100.0f), MENU_Y(295.0f * XBOX_Y), MENU_X_LEFT_ALIGNED(533.0f), MENU_Y(290.0f * XBOX_Y),
++			CRGBA(LIST_BACKGROUND_COLOR.r, LIST_BACKGROUND_COLOR.g, LIST_BACKGROUND_COLOR.b, FadeIn(LIST_BACKGROUND_COLOR.a)));
++	else
+ 	CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(90.0f), MENU_Y(142.0f),
+ 		MENU_X_LEFT_ALIGNED(543.0f), MENU_Y(142.f),
+ 		MENU_X_LEFT_ALIGNED(107.0f), MENU_Y(316.f),
+@@ -3465,6 +4001,13 @@
+ 				alpha = 255.0f;
+ 
+ 			CFont::SetColor(CRGBA(0, 0, 0, FadeIn(Min(255.f, alpha))));
++			if (xbox) {	// the Xbox's columns (the same standard font)
++				CFont::SetRightJustifyOff();
++				CFont::PrintString(MENU_X_LEFT_ALIGNED(110.0f), y + xboxShift, gUString);
++				CFont::SetRightJustifyOn();
++				CFont::PrintString(MENU_X_LEFT_ALIGNED(527.0f), y + xboxShift, gUString2);
++				continue;
++			}
+ 			CFont::SetRightJustifyOff();
+ 			CFont::PrintString(MENU_X_LEFT_ALIGNED(STATS_ROW_LEFT_MARGIN), y, gUString);
+ 			CFont::SetRightJustifyOn();
+@@ -3477,14 +4020,14 @@
+ 	CFont::SetCentreOn();
+ 	CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
+ 	CFont::SetScale(MENU_X(0.65f), MENU_Y(1.05f));
+-	CFont::PrintString(MENU_X_LEFT_ALIGNED(STATS_RATING_X), MENU_Y(STATS_RATING_Y_1), TheText.Get("CRIMRA"));
++	CFont::PrintString(MENU_X_LEFT_ALIGNED(xbox ? 315.0f : STATS_RATING_X), MENU_Y(xbox ? 64.0f * XBOX_Y : STATS_RATING_Y_1), TheText.Get("CRIMRA"));
+ 
+ 	CFont::SetCentreOff();
+ 	CFont::SetRightJustifyOff();
+ 
+ 	// FIX: Game does that in a weird way, alignment and spacing is now ok
+ 
+-	sprintf(gString, "(%d)", CStats::FindCriminalRatingNumber());
++	sprintf(gString, PS2_SKIN_ON ? " [%d]" : "(%d)", CStats::FindCriminalRatingNumber());	// revc: the PS2 writes "Citizen [0]"
+ 	AsciiToUnicode(gString, gUString);
+ 
+ 	UnicodeStrcpy(gUString2, CStats::FindCriminalRatingString());
+@@ -3499,7 +4042,9 @@
+ 	CFont::SetColor(CRGBA(0, 0, 0, FadeIn(255)));
+ 	CFont::SetDropShadowPosition(0);
+ 
+-	CFont::PrintString(MENU_X_LEFT_ALIGNED(STATS_RATING_X) - CFont::GetStringWidth(gUString2, true) / 2.f, MENU_Y(STATS_RATING_Y_2), gUString2);
++	if (xbox)	// centred under the heading, a little larger, as on the Xbox
++		CFont::SetScale(MENU_X(SMALLTEXT_X_SCALE * 1.25f), MENU_Y(SMALLTEXT_Y_SCALE * 1.25f));
++	CFont::PrintString(MENU_X_LEFT_ALIGNED(xbox ? 315.0f : STATS_RATING_X) - CFont::GetStringWidth(gUString2, true) / 2.f, MENU_Y(xbox ? 92.0f * XBOX_Y : STATS_RATING_Y_2), gUString2);
+ }
+ 
+ void
+@@ -3715,11 +4260,11 @@
+ 			break;
+ 		}
+ 		case MENUPAGE_SOUND_SETTINGS:
+-			if (CheckHover(MENU_X_LEFT_ALIGNED(177.f), MENU_X_LEFT_ALIGNED(238.f), MENU_Y(MENURADIO_SELECTOR_START_Y - 13.f), MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT - 8.f))) {
++			if (CheckHover(MENU_X_LEFT_ALIGNED(177.f) + RADIO_SKIN_DX, MENU_X_LEFT_ALIGNED(238.f) + RADIO_SKIN_DX, MENU_Y(MENURADIO_SELECTOR_START_Y - 13.f) + RADIO_SKIN_DY, MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT - 8.f) + RADIO_SKIN_DY)) {
+ 					m_nHoverOption = HOVEROPTION_PREV_RADIO;
+ 			}
+ 
+-			if (CheckHover(MENU_X_LEFT_ALIGNED(422.f), MENU_X_LEFT_ALIGNED(491.f), MENU_Y(MENURADIO_SELECTOR_START_Y - 13.f), MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT - 8.f))) {
++			if (CheckHover(MENU_X_LEFT_ALIGNED(422.f) + RADIO_SKIN_DX, MENU_X_LEFT_ALIGNED(491.f) + RADIO_SKIN_DX, MENU_Y(MENURADIO_SELECTOR_START_Y - 13.f) + RADIO_SKIN_DY, MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT - 8.f) + RADIO_SKIN_DY)) {
+ 					m_nHoverOption = HOVEROPTION_NEXT_RADIO;
+ 			}
+ 			break;
+@@ -4297,6 +4842,8 @@
+ 
+ 	if (!m_AllowNavigation && m_firstStartCounter == 255)
+ 		m_AllowNavigation = true;
++	if (MenuSkinPS2Input(this) || MenuSkinXboxInput(this))	// revc: console menu skin tabs
++		return;
+ 	if (!m_bShowMouse && m_nCurrScreen != MENUPAGE_MAP && (m_nMouseOldPosX != m_nMousePosX || m_nMouseOldPosY != m_nMousePosY)) {
+ 		m_bShowMouse = true;
+ 	}
+@@ -4547,7 +5094,8 @@
+ 		}
+ 	}
+ 	if (changeValueBy != 0) {
+-		if ((m_nCurrScreen == MENUPAGE_SOUND_SETTINGS || m_nCurrScreen == MENUPAGE_DISPLAY_SETTINGS || m_nCurrScreen == MENUPAGE_CONTROLLER_PC || m_nCurrScreen == MENUPAGE_MOUSE_CONTROLS)
++		if ((m_nCurrScreen == MENUPAGE_SOUND_SETTINGS || m_nCurrScreen == MENUPAGE_DISPLAY_SETTINGS || m_nCurrScreen == MENUPAGE_CONTROLLER_PC || m_nCurrScreen == MENUPAGE_MOUSE_CONTROLS ||
++		     m_nCurrScreen == MENUPAGE_CONSOLE_DISPLAY || m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS)
+ 			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_NOTHING
+ 			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_LABEL
+ 			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_YES
+@@ -4957,7 +5505,7 @@
+ 					ControlsManager.MakeControllerActionsBlank();
+ 					ControlsManager.InitDefaultControlConfiguration();
+ 					ControlsManager.InitDefaultControlConfigMouse(MousePointerStateHelper.GetMouseSetUp());
+-#if !defined RW_GL3
++#if !defined RW_WGPU
+ 					if (AllValidWinJoys.m_aJoys[JOYSTICK1].m_bInitialised) {
+ 						DIDEVCAPS devCaps;
+ 						devCaps.dwSize = sizeof(DIDEVCAPS);
+@@ -5720,6 +6268,7 @@
+ void
+ CMenuManager::UnloadTextures()
+ {
++	MenuSkinXboxUnload();	// revc: the Xbox skin's sprites (core/MenuSkinXbox.cpp)
+ 	if (m_nCurrScreen == MENUPAGE_SOUND_SETTINGS)
+ 		DMAudio.StopFrontEndTrack();
+ 
+--- a/src/core/Frontend.h
++++ b/src/core/Frontend.h
+@@ -229,6 +229,9 @@
+ #ifdef DETECT_JOYSTICK_MENU
+ 	MENUPAGE_DETECT_JOYSTICK,
+ #endif
++	MENUPAGE_PAD_PICTURE,	// revc: the Xbox-style controller layout picture (core/PadPicture.cpp)
++	MENUPAGE_CONSOLE_DISPLAY,	// revc: the consoles' Display page (UI styles PS2/Xbox, plan task 13)
++	MENUPAGE_CONSOLE_CONTROLS,	// revc: the consoles' Controls page
+ #endif
+ #ifdef MISSION_REPLAY
+ 	MENUPAGE_MISSION_RETRY,
+--- a/src/core/main.cpp
++++ b/src/core/main.cpp
+@@ -23,6 +23,7 @@
+ #include "Glass.h"
+ #include "WaterCannon.h"
+ #include "SpecialFX.h"
++#include "Interpolation.h"
+ #include "Shadows.h"
+ #include "Skidmarks.h"
+ #include "Antennas.h"
+@@ -1097,8 +1098,8 @@
+ 		    "D3D9 "
+ #elif defined RWLIBS
+ 		    "D3D8 "
+-#elif defined RW_GL3
+-		    "OpenGL "
++#elif defined RW_WGPU
++		    "WGPU "
+ #endif
+ #if defined AUDIO_OAL
+ 		    "OAL "
+@@ -1413,6 +1414,42 @@
+ 	POP_RENDERGROUP();
+ }
+ 
++// revc (plan task 13): the console UI styles lay the HUD out as on the console's 4:3 screen,
++// scaled by the screen height and centred (pillarboxed) on wider screens: the HUD code sees a 4:3
++// screen and the device moves its 2D draws to the centre.
++extern int8 gUiStyle;
++// Graphics menu HUD AREA ([Graphics] HudArea): 0 corners (the console layout anchored to the
++// screen's edges, default; user 2026-11-11), 1 the 4:3 area centred as on the console.
++int8 gConsoleHudArea = 0;
++extern "C" void revc_device_set_im2d_offset(float dx, float dy);
++static int32 consoleHudSavedWidth;
++static float consoleHudSavedAspect;
++
++static void
++ConsoleHudBegin(void)
++{
++	float w43 = Floor(SCREEN_HEIGHT * 4.0f / 3.0f);
++	if (gUiStyle == 0 || gConsoleHudArea == 0 || w43 >= SCREEN_WIDTH)
++		return;
++	CFont::DrawFonts();	// text queued before (pickup texts) is placed on the whole screen
++	consoleHudSavedWidth = RsGlobal.width;
++	consoleHudSavedAspect = CDraw::GetAspectRatio();
++	revc_device_set_im2d_offset(Floor((RsGlobal.width - w43) / 2.0f), 0.0f);
++	RsGlobal.width = (int32)w43;
++	CDraw::SetAspectRatio(4.0f / 3.0f);
++}
++
++static void
++ConsoleHudEnd(void)
++{
++	if (consoleHudSavedWidth == 0)
++		return;
++	RsGlobal.width = consoleHudSavedWidth;
++	CDraw::SetAspectRatio(consoleHudSavedAspect);
++	revc_device_set_im2d_offset(0.0f, 0.0f);
++	consoleHudSavedWidth = 0;
++}
++
+ void
+ Render2dStuff(void)
+ {
+@@ -1465,6 +1502,7 @@
+ 		CSprite2d::DrawRect(CRect(SCREEN_WIDTH / 2 + SCREEN_SCALE_X(210), 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), black);
+ 	}
+ 
++	ConsoleHudBegin();
+ 	MusicManager.DisplayRadioStationName();
+ 	TheConsole.Display();
+ #ifdef GTA_SCENE_EDIT
+@@ -1481,6 +1519,7 @@
+ 	CGarages::PrintMessages();
+ 	CPad::PrintErrorMessage();
+ 	CFont::DrawFonts();
++	ConsoleHudEnd();
+ #ifndef MASTER
+ 	COcclusion::Render();
+ #endif
+@@ -1517,16 +1556,43 @@
+ #ifdef MOBILE_IMPROVEMENTS
+ 	if (CDraw::FadeValue != 0)
+ #endif
++	ConsoleHudBegin();
+ 	CHud::DrawAfterFade();
+ 	CFont::DrawFonts();
++	ConsoleHudEnd();
+ 	CCredits::Render();
+ 	POP_RENDERGROUP();
+ }
+ 
+-void
+-Idle(void *arg)
++// Idle() is split so the Rust host can run the simulation at a fixed 30 Hz and render at the
++// display rate (task 8). IdleSimulate() is one game step; IdleRender() draws the current state.
++// Idle(arg) keeps the original behaviour: one step, then a render unless arg is nil.
++
++// Effects registered for drawing during a game step (shadows, vehicle lights, shiny texts). They
++// used to be cleared after drawing; now a step can be drawn several times, so they are cleared when
++// the next step starts.
++static void
++ClearPerStepRenderLists(void)
++{
++	CShadows::ShadowsStoredToBeRendered = 0;
++	CBrightLights::ClearForNewStep();
++	CShinyTexts::ClearForNewStep();
++}
++
++// Regression harness only (skel/host/testhooks.cpp): work that must happen once per game step,
++// whatever the display rate. nil in normal play.
++void (*gTestStepHook)(void);
++// Same, called while drawing, after the render interpolation has been applied.
++void (*gTestRenderHook)(void);
++
++// One simulation step. Returns false when nothing must be rendered (restart or load requested).
++bool
++IdleSimulate(void)
+ {
++	ClearPerStepRenderLists();
+ 	CTimer::Update();
++	if(gTestStepHook)
++		gTestStepHook();
+ 
+ 	tbInit();
+ 
+@@ -1548,25 +1614,62 @@
+ 	if(CGame::bDemoMode && CTimer::GetTimeInMilliseconds() > (3*60 + 30)*1000 && !CCutsceneMgr::IsCutsceneProcessing()){
+ 		WANT_TO_LOAD = false;
+ 		FrontEndMenuManager.m_bWantToRestart = true;
+-		return;
++		return false;
+ 	}
+ 
+ 	if(FrontEndMenuManager.m_bWantToRestart || FOUND_GAME_TO_LOAD)
+ 	{
+-		return;
++		return false;
+ 	}
+ 	
+ 	SetLightsWithTimeOfDayColour(Scene.world);
++	return true;
++}
+ 
+-	if(arg == nil)
++// Draws the current game state. `afterSimulation` is false for extra frames drawn between two
++// simulation steps: per-entity PreRender (effects, wheel spin etc.) then isn't repeated, since it
++// belongs to a game step, not to a displayed frame.
++static void IdleRenderFrame(bool afterSimulation);
++
++// Position of the displayed frame between the last game step and the next (0..1), set by the
++// skeleton before IdleRender(); used for render interpolation (Interpolation.cpp).
++float gRenderAlpha = 0.0f;
++
++void
++IdleRender(bool afterSimulation)
++{
++	if(afterSimulation){
++		IdleRenderFrame(true);
++		Interpolation::RestoreAfterRender();
+ 		return;
++	}
++	// An extra frame of the same game step: time doesn't advance, so anything animated while
++	// drawing (HUD fades, blinking etc.) moves at the game-step rate, not per displayed frame.
++	float step = CTimer::GetTimeStep(), stepNC = CTimer::GetTimeStepNonClipped();
++	CTimer::SetTimeStep(0.0f);
++	CTimer::SetTimeStepNonClipped(0.0f);
++	IdleRenderFrame(false);
++	Interpolation::RestoreAfterRender();
++	CTimer::SetTimeStep(step);
++	CTimer::SetTimeStepNonClipped(stepNC);
++}
++
++static void
++IdleRenderFrame(bool afterSimulation)
++{
++	if(!afterSimulation){
++		// Per-frame resets that IdleSimulate() otherwise does (timebars, 2D batches, fonts).
++		tbInit();
++		CSprite2d::InitPerFrame();
++		CFont::InitPerFrame();
++	}
+ 
+ 	PUSH_MEMID(MEMID_RENDER);
+ 
+ 	if(!FrontEndMenuManager.m_bMenuActive && TheCamera.GetScreenFadeStatus() != FADE_2)
+ 	{
+ 		// This is from SA, but it's nice for windowed mode
+-#if defined(GTA_PC) && !defined(RW_GL3)
++#if defined(GTA_PC) && !defined RW_WGPU
+ 		RwV2d pos;
+ 		pos.x = SCREEN_WIDTH / 2.0f;
+ 		pos.y = SCREEN_HEIGHT / 2.0f;
+@@ -1587,9 +1690,16 @@
+ 		tbEndTimer("CnstrRenderList");
+ 
+ 		tbStartTimer(0, "PreRender");
+-		CRenderer::PreRender();
++		if(afterSimulation)
++			CRenderer::PreRender();
+ 		tbEndTimer("PreRender");
+ 
++		// Draw camera and moving entities between the last two game steps. After PreRender, which
++		// updates game state and must see the real transforms; undone in IdleRender().
++		Interpolation::ApplyForRender(gRenderAlpha);
++		if(gTestRenderHook)
++			gTestRenderHook();
++
+ #ifdef FIX_BUGS
+ 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void *)FALSE); // TODO: temp? this fixes OpenGL render but there should be a better place for this
+ 		// This has to be done BEFORE RwCameraBeginUpdate
+@@ -1631,7 +1741,11 @@
+ 
+ #ifdef SCREEN_DROPLETS
+ 		CPostFX::GetBackBuffer(Scene.camera);
+-		ScreenDroplets::Process();
++		// Spawning, moving and fading drops is per game step (the original's 30 fps frames):
++		// on the extra frames between steps time doesn't advance, so new drops would pile up
++		// (about 10 times too many at 320 Hz) without fading.
++		if(afterSimulation)
++			ScreenDroplets::Process();
+ 		ScreenDroplets::Render();
+ #endif
+ 
+@@ -1639,6 +1753,10 @@
+ 		TheCamera.RenderMotionBlur();
+ 		tbEndTimer("RenderMotionBlur");
+ 
++#ifdef RW_WGPU
++		// revc: the 3D scene is done; the HUD goes on top at window resolution.
++		rw::wgpu::beginOverlay();
++#endif
+ 		tbStartTimer(0, "Render2dStuff");
+ 		Render2dStuff();
+ 		tbEndTimer("Render2dStuff");
+@@ -1691,6 +1809,16 @@
+ }
+ 
+ void
++Idle(void *arg)
++{
++	if(!IdleSimulate())
++		return;
++	if(arg == nil)
++		return;
++	IdleRender(true);
++}
++
++void
+ FrontendIdle(void)
+ {
+ 	CDraw::CalculateAspectRatio();
+--- a/src/core/main.h
++++ b/src/core/main.h
+@@ -40,6 +40,10 @@
+ bool DoRWStuffStartOfFrame(int16 TopRed, int16 TopGreen, int16 TopBlue, int16 BottomRed, int16 BottomGreen, int16 BottomBlue, int16 Alpha);
+ bool DoRWStuffStartOfFrame_Horizon(int16 TopRed, int16 TopGreen, int16 TopBlue, int16 BottomRed, int16 BottomGreen, int16 BottomBlue, int16 Alpha);
+ void DoRWStuffEndOfFrame(void);
++// Idle() split for the fixed-timestep loop (see main.cpp).
++bool IdleSimulate(void);
++void IdleRender(bool afterSimulation);
++extern float gRenderAlpha;
+ void PreAllocateRwObjects(void);
+ void InitialiseGame(void);
+ void LoadingScreen(const char *str1, const char *str2, const char *splashscreen);
+--- a/src/core/MenuScreensCustom.cpp
++++ b/src/core/MenuScreensCustom.cpp
+@@ -48,7 +48,11 @@
+ 	#define VIDEOMODE_SELECTOR
+ #endif
+ 
+-#ifdef MULTISAMPLING
++#ifdef RW_WGPU
++	// revc: the wgpu renderer's Antialiasing setting replaces MSAA; it switches live.
++	const char *antialiasingNames[] = { "FEM_OFF", "RVC_AA1", "RVC_AA2", "RVC_AA3", "RVC_AA4", "RVC_AA5", "RVC_AA6", "RVC_AA7", "RVC_AA8" };
++	#define MULTISAMPLING_SELECTOR MENUACTION_CFO_SELECT, "RVC_AA", { new CCFOSelect(&rw::wgpu::antialiasing, "Graphics", "Antialiasing", antialiasingNames, ARRAY_SIZE(antialiasingNames), false) }, 0, 0, MENUALIGN_LEFT,
++#elif defined MULTISAMPLING
+ 	#define MULTISAMPLING_SELECTOR MENUACTION_CFO_DYNAMIC, "FED_AAS", { new CCFODynamic((int8*)&FrontEndMenuManager.m_nPrefsMSAALevel, "Graphics", "MultiSampling", MultiSamplingDraw, MultiSamplingButtonPress) }, 0, 0, MENUALIGN_LEFT,
+ #else
+ 	#define MULTISAMPLING_SELECTOR
+@@ -88,10 +92,24 @@
+ #endif
+ 
+ #ifdef EXTENDED_COLOURFILTER
++	// revc: UI style (PC / PS2 / Xbox): button glyph variants now, console HUD and menus later
++	// (plan task 13); the visual style presets set it too.
++	extern int8 gUiStyle;
++	static const char *uiStyleOpts[] = { "RVC_VS0", "RVC_VS1", "RVC_VS2" };
++	// where the console HUD goes on wide screens: the corners, or the console's 4:3 area
++	extern int8 gConsoleHudArea;
++	static const char *hudAreaOpts[] = { "RVC_HU0", "RVC_HU1" };
++	// revc: one choice for the platform look (plan task 13); see VisualStyleButtonPress.
++	wchar *VisualStyleDraw(bool *disabled, bool userHovering);
++	void VisualStyleButtonPress(int8 action);
++	#define VISUAL_STYLE_SELECTOR MENUACTION_CFO_DYNAMIC, "RVC_VST", { new CCFODynamic(nil, nil, nil, VisualStyleDraw, VisualStyleButtonPress) }, 0, 0, MENUALIGN_LEFT, \
++		MENUACTION_CFO_SELECT, "RVC_UIS", { new CCFOSelect(&gUiStyle, "Graphics", "UiStyle", uiStyleOpts, ARRAY_SIZE(uiStyleOpts), false) }, 0, 0, MENUALIGN_LEFT, \
++		MENUACTION_CFO_SELECT, "RVC_HUA", { new CCFOSelect(&gConsoleHudArea, "Graphics", "HudArea", hudAreaOpts, ARRAY_SIZE(hudAreaOpts), false) }, 0, 0, MENUALIGN_LEFT,
+ 	#define POSTFX_SELECTORS \
+ 		MENUACTION_CFO_SELECT, "FED_CLF", { new CCFOSelect((int8*)&CPostFX::EffectSwitch, "Graphics", "ColourFilter", filterNames, ARRAY_SIZE(filterNames), false) }, 0, 0, MENUALIGN_LEFT, \
+ 		MENUACTION_CFO_SELECT, "FED_MBL", { new CCFOSelect((int8*)&CPostFX::MotionBlurOn, "Graphics", "MotionBlur", off_on, 2, false) }, 0, 0, MENUALIGN_LEFT,
+ #else
++	#define VISUAL_STYLE_SELECTOR
+ 	#define POSTFX_SELECTORS
+ #endif	
+ 
+@@ -107,9 +125,198 @@
+ 	#define SELECT_CONTROLLER_TYPE
+ #endif
+ 
+-const char *filterNames[] = { "FEM_NON", "FEM_SIM", "FEM_NRM", "FEM_MOB" };
++// revc: NORMAL is the PS2/Xbox filter (labelled so); PC is the original PC filter.
++const char *filterNames[] = { "FEM_NON", "FEM_SIM", "RVC_FPS", "FEM_MOB", "RVC_FPC" };
+ const char *off_on[] = { "FEM_OFF", "FEM_ON" };
+ 
++#if defined LIBRW_HOST && defined BUTTON_ICONS
++// Which controller's button glyphs prompts show: AUTO follows the pad in use (skel/host/glyphs.cpp).
++const char *buttonPromptOpts[] = { "FEM_AUT", "RVC_GXB", "RVC_GPS", "RVC_GNS", "RVC_GSD", "RVC_GSC" };
++extern int8 gButtonPromptsOverride;
++// revc: the Xbox version's controller layouts (STANDARD: triggers, CLASSIC: PS2-style); CUSTOM
++// ORIGINAL PC (re3's old pad layout), CUSTOM when the pad bindings match none; left/right cycles.
++extern "C" int PadLayoutCurrent(void);
++extern "C" void PadLayoutApply(int layout);
++void SaveINIControllerSettings(void);
++static wchar*
++PadLayoutDraw(bool *disabled, bool userHovering)
++{
++	int cur = PadLayoutCurrent();
++	return TheText.Get(cur == 0 ? "RVC_PLS" : cur == 1 ? "RVC_PLC" : cur == 2 ? "RVC_PLO" : "RVC_PLX");
++}
++static void
++PadLayoutButtonPress(int8 action)
++{
++	// Confirm opens the picture of the layout (Xbox-style); left/right switch layouts.
++	if (action == FEOPTION_ACTION_SELECT) {
++		FrontEndMenuManager.SwitchToNewScreen(MENUPAGE_PAD_PICTURE);
++		return;
++	}
++	if (action != FEOPTION_ACTION_LEFT && action != FEOPTION_ACTION_RIGHT)
++		return;
++	// Xbox Standard -> Xbox Classic -> original PC (left goes the other way); Custom starts over.
++	int cur = PadLayoutCurrent();
++	int next = cur < 0 ? 0 : action == FEOPTION_ACTION_LEFT ? (cur + 2) % 3 : (cur + 1) % 3;
++	PadLayoutApply(next);
++	SaveINIControllerSettings();
++}
++wchar *PadPictureContextDraw(bool *disabled, bool userHovering);
++void PadPictureContextPress(int8 action);
++#define PAD_LAYOUT_SELECTOR MENUACTION_CFO_DYNAMIC, "RVC_PLY", { new CCFODynamic(nil, nil, nil, PadLayoutDraw, PadLayoutButtonPress) }, 0, 0, MENUALIGN_CENTER,
++
++// revc: assets from the player's own console discs (goal "Asset import from original discs"):
++// shows what is imported; selecting it asks for a disc image (.iso) and imports in the background.
++extern "C" int revc_import_status(int kind);
++extern "C" int revc_import_busy(void);
++extern "C" void revc_import_prompt(void);
++extern "C" void revc_import_message(char *buf, int size);
++static wchar*
++ConsoleDiscsDraw(bool *disabled, bool userHovering)
++{
++	if (revc_import_busy())
++		return TheText.Get("RVC_DSB");
++	char msg[16];
++	revc_import_message(msg, sizeof(msg));
++	if (strncmp(msg, "failed", 6) == 0)
++		return TheText.Get("RVC_DSF");
++	bool xbox = revc_import_status(0) != 0, ps2 = revc_import_status(1) != 0;
++	return TheText.Get(xbox && ps2 ? "RVC_DSA" : xbox ? "RVC_DSX" : ps2 ? "RVC_DSP" : "RVC_DSN");
++}
++static void
++ConsoleDiscsButtonPress(int8 action)
++{
++	if (action == FEOPTION_ACTION_SELECT)
++		revc_import_prompt();
++}
++#define CONSOLE_DISCS_ENTRY MENUACTION_CFO_DYNAMIC, "RVC_DSC", { new CCFODynamic(nil, nil, nil, ConsoleDiscsDraw, ConsoleDiscsButtonPress) }, 0, 0, MENUALIGN_CENTER,
++#define BUTTON_PROMPTS_SELECTOR MENUACTION_CFO_SELECT, "RVC_GLY", { new CCFOSelect(&gButtonPromptsOverride, "Controller", "ButtonPrompts", buttonPromptOpts, ARRAY_SIZE(buttonPromptOpts), false) }, 0, 0, MENUALIGN_CENTER,
++#else
++#define BUTTON_PROMPTS_SELECTOR
++#define PAD_LAYOUT_SELECTOR
++#define CONSOLE_DISCS_ENTRY
++#endif
++
++#ifdef EXTENDED_COLOURFILTER
++// revc: Visual style presets (plan task 13). Each sets the colour filter, the PS2 alpha test and,
++// when neo/neo.txd is there, the Neo pipelines (vehicle reflections, rim light, world lightmaps,
++// road gloss): PC = the PC release, PS2, Xbox (PS2/Xbox filter plus Neo: the reference look),
++// Mobile. The individual options stay; any other mix shows as Custom.
++// control: the control method, which picks the camera (user 2026-11-11: the console styles use the
++// consoles' camera): Classic on PS2/Xbox (level follow camera, turn toward the stick), Standard
++// (mouse camera) for PC; -1 = left as it is.
++// trails: the motion blur option (CPostFX::MotionBlurOn), on by default on both consoles.
++// ui: the UI style (skel/host/glyphs.cpp gUiStyle: 0 PC, 1 PS2, 2 Xbox; -1 = left as it is).
++// lod: the draw distance (LOD scale). PS2 and Xbox use 1.0 with no slider (PS2 m_PrefsLOD, Xbox XBE
++// ms_lodDistScale; docs/CONSOLE_STYLES.md), the PC release defaults to 1.2; 0 = left as it is.
++struct VisualStyle { int8 filter; bool alphaTest; bool neo; float lod; int8 ui; bool trails; int8 control; const char *name; };
++static const VisualStyle visualStyles[] = {
++	{ CPostFX::POSTFX_PC, false, false, 1.2f, 0, false, CONTROL_STANDARD, "RVC_VS0" },
++	{ CPostFX::POSTFX_NORMAL, true, false, 1.0f, 1, true, CONTROL_CLASSIC, "RVC_VS1" },
++	{ CPostFX::POSTFX_NORMAL, true, true, 1.0f, 2, true, CONTROL_CLASSIC, "RVC_VS2" },
++	{ CPostFX::POSTFX_MOBILE, false, false, 0.0f, -1, false, -1, "RVC_VS3" },
++};
++
++static bool
++NeoAvailable(void)
++{
++#ifdef EXTENDED_PIPELINES
++	return CustomPipes::neoTxd != nil;
++#else
++	return false;
++#endif
++}
++
++// Index into visualStyles, or -1 for a mix of settings no preset has.
++static int
++CurrentVisualStyle(void)
++{
++	for (int i = 0; i < (int)ARRAY_SIZE(visualStyles); i++) {
++		const VisualStyle &s = visualStyles[i];
++		if (CPostFX::EffectSwitch != s.filter)
++			continue;
++		if (s.lod > 0.0f && Abs(FrontEndMenuManager.m_PrefsLOD - s.lod) > 0.01f)
++			continue;
++		if (s.ui >= 0 && gUiStyle != s.ui)
++			continue;
++		if (CPostFX::MotionBlurOn != s.trails)
++			continue;
++		if (s.control >= 0 && FrontEndMenuManager.m_ControlMethod != s.control)
++			continue;
++#ifdef PS2_ALPHA_TEST
++		if (!!gPS2alphaTest != s.alphaTest)
++			continue;
++#endif
++#ifdef EXTENDED_PIPELINES
++		if (NeoAvailable() &&
++		    ((CustomPipes::VehiclePipeSwitch == CustomPipes::VEHICLEPIPE_NEO) != s.neo || CustomPipes::RimlightEnable != s.neo ||
++		     CustomPipes::LightmapEnable != s.neo || CustomPipes::GlossEnable != s.neo))
++			continue;
++#endif
++		return i;
++	}
++	return -1;
++}
++
++// Index into visualStyles of the current settings (-1 Custom), for the rest of the game.
++int
++VisualStyleIndex(void)
++{
++	return CurrentVisualStyle();
++}
++
++static void
++ApplyVisualStyle(int i)
++{
++	const VisualStyle &s = visualStyles[i];
++	CPostFX::EffectSwitch = s.filter;
++	if (s.lod > 0.0f)
++		FrontEndMenuManager.m_PrefsLOD = CRenderer::ms_lodDistScale = s.lod;
++	if (s.ui >= 0)
++		gUiStyle = s.ui;
++	CPostFX::MotionBlurOn = s.trails;
++	if (s.control >= 0) {
++		FrontEndMenuManager.m_ControlMethod = s.control;
++		CCamera::m_bUseMouse3rdPerson = s.control == CONTROL_STANDARD;
++	}
++#ifdef PS2_ALPHA_TEST
++	gPS2alphaTest = s.alphaTest;
++#endif
++#ifdef EXTENDED_PIPELINES
++	if (NeoAvailable()) {
++		CustomPipes::VehiclePipeSwitch = s.neo ? CustomPipes::VEHICLEPIPE_NEO : CustomPipes::VEHICLEPIPE_MATFX;
++		CustomPipes::RimlightEnable = s.neo;
++		CustomPipes::LightmapEnable = s.neo;
++		CustomPipes::GlossEnable = s.neo;
++	}
++#endif
++}
++
++void
++VisualStyleButtonPress(int8 action)
++{
++	if (action != FEOPTION_ACTION_LEFT && action != FEOPTION_ACTION_RIGHT && action != FEOPTION_ACTION_SELECT)
++		return;
++	const int n = ARRAY_SIZE(visualStyles);
++	int cur = CurrentVisualStyle();
++	int next;
++	if (action == FEOPTION_ACTION_LEFT)
++		next = cur < 0 ? n - 1 : (cur + n - 1) % n;
++	else
++		next = cur < 0 ? 0 : (cur + 1) % n;
++	ApplyVisualStyle(next);
++	FrontEndMenuManager.SaveSettings();
++}
++
++wchar*
++VisualStyleDraw(bool *disabled, bool userHovering)
++{
++	int cur = CurrentVisualStyle();
++	return TheText.Get(cur < 0 ? "RVC_VSC" : visualStyles[cur].name);
++}
++#else
++int VisualStyleIndex(void) { return -1; }
++#endif
++
+ void RestoreDefGraphics(int8 action) {
+ 	if (action != FEOPTION_ACTION_SELECT)
+ 		return;
+@@ -117,21 +324,18 @@
+ 	#ifdef PS2_ALPHA_TEST
+ 		gPS2alphaTest = false;
+ 	#endif
++	#ifdef RW_WGPU
++		rw::wgpu::antialiasing = 0;
++	#endif
+ 	#ifdef MULTISAMPLING
+ 		FrontEndMenuManager.m_nPrefsMSAALevel = FrontEndMenuManager.m_nDisplayMSAALevel = 0;
+ 	#endif
+ 	#ifdef NO_ISLAND_LOADING
+-	    	if (!FrontEndMenuManager.m_bGameNotLoaded) {
+-	    		FrontEndMenuManager.m_PrefsIslandLoading = FrontEndMenuManager.ISLAND_LOADING_LOW;
+-				CStreaming::RemoveUnusedBigBuildings(CGame::currLevel);
+-				CStreaming::RemoveUnusedBuildings(CGame::currLevel);
+-				CStreaming::RequestIslands(CGame::currLevel);
+-		        CStreaming::LoadAllRequestedModels(true);
+-	    	} else
+-	    		FrontEndMenuManager.m_PrefsIslandLoading = FrontEndMenuManager.ISLAND_LOADING_LOW;
++		// revc: map memory is no longer an option; everything stays loaded.
++		FrontEndMenuManager.m_PrefsIslandLoading = FrontEndMenuManager.ISLAND_LOADING_HIGH;
+ 	#endif
+ 	#ifdef GRAPHICS_MENU_OPTIONS // otherwise Frontend will handle those
+-		FrontEndMenuManager.m_PrefsFrameLimiter = true;
++		FrontEndMenuManager.m_PrefsFrameLimiter = false;	// revc: no limiter option
+ 		FrontEndMenuManager.m_PrefsVsyncDisp = true;
+ 		#ifdef LEGACY_MENU_OPTIONS
+ 			FrontEndMenuManager.m_PrefsVsync = true;
+@@ -306,7 +510,7 @@
+ 
+ wchar* DetectJoystickDraw(bool* disabled, bool userHovering) {
+ 
+-#if defined RW_GL3 && !defined LIBRW_SDL2
++#if defined RW_WGPU && !defined LIBRW_SDL2
+ 	int numButtons;
+ 	int found = -1;
+ 	const char *joyname;
+@@ -420,13 +624,11 @@
+ 		MENUACTION_MUSICVOLUME,		"FEA_MUS", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 40, 76, MENUALIGN_LEFT,
+ 		MENUACTION_SFXVOLUME,		"FEA_SFX", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
+ 		MENUACTION_MP3VOLUMEBOOST,	"FEA_MPB", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
+-#ifdef EXTERNAL_3D_SOUND
+-		MENUACTION_AUDIOHW,			"FEA_3DH", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
+-		MENUACTION_SPEAKERCONF,		"FEA_SPK", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
+-#endif
++		// No "Audio hardware" / "Speaker setup" rows: audio always goes through the Rust host's
++		// mixer (SDL3), so there is no OpenAL provider or speaker mode to pick.
+ 		MENUACTION_DYNAMICACOUSTIC,	"FET_DAM", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
+ 		MENUACTION_RADIO,			"FEA_RSS", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
+-#ifdef EXTERNAL_3D_SOUND
++#if 0 // EXTERNAL_3D_SOUND layout with the two rows above
+ 		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 367, MENUALIGN_CENTER,
+ #else
+ 		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 327, MENUALIGN_CENTER,
+@@ -441,9 +643,8 @@
+ 		MENUACTION_DRAWDIST,	"FEM_LOD", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
+ 		DENSITY_SLIDERS
+ #ifdef LEGACY_MENU_OPTIONS
+-		MENUACTION_FRAMESYNC,	"FEM_VSC", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
++		MENUACTION_FRAMESYNC,	"RVC_VSY", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
+ #endif
+-		MENUACTION_FRAMELIMIT,	"FEM_FRM", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
+ #if defined LEGACY_MENU_OPTIONS && !defined EXTENDED_COLOURFILTER
+ 		MENUACTION_TRAILS,		"FED_TRA", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
+ #endif
+@@ -455,7 +656,6 @@
+ 		MENUACTION_SCREENRES,	"FED_RES", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
+ 		VIDEOMODE_SELECTOR
+ 		MULTISAMPLING_SELECTOR
+-		ISLAND_LOADING_SELECTOR
+ 		DUALPASS_SELECTOR
+ 		CUTSCENE_BORDERS_TOGGLE
+ 		FREE_CAM_TOGGLE
+@@ -640,6 +840,8 @@
+ #ifdef DETECT_JOYSTICK_MENU
+ 		MENUACTION_CHANGEMENU,	"FEC_JOD", {nil, SAVESLOT_NONE, MENUPAGE_DETECT_JOYSTICK}, 0, 0, MENUALIGN_CENTER,
+ #endif
++		PAD_LAYOUT_SELECTOR
++		BUTTON_PROMPTS_SELECTOR
+ 		MENUACTION_CHANGEMENU,	"FEC_MOU", {nil, SAVESLOT_NONE, MENUPAGE_MOUSE_CONTROLS}, 0, 0, MENUALIGN_CENTER,
+ 		MENUACTION_RESTOREDEF,	"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_CONTROLLER_PC}, 320, 0, MENUALIGN_CENTER,
+ 		MENUACTION_GOBACK,		"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 320, 0, MENUALIGN_CENTER,
+@@ -659,6 +861,7 @@
+ #endif
+ 		 MENUACTION_CHANGEMENU,		"FEO_LAN", {nil, SAVESLOT_NONE, MENUPAGE_LANGUAGE_SETTINGS}, 0, 0, MENUALIGN_CENTER,
+ 		 MENUACTION_PLAYERSETUP,	"FET_PS", {nil, SAVESLOT_NONE, MENUPAGE_SKIN_SELECT}, 0, 0, MENUALIGN_CENTER,
++		 CONSOLE_DISCS_ENTRY
+ 		 MENUACTION_GOBACK,			"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 0, 0, MENUALIGN_CENTER,
+    },
+ 
+@@ -783,13 +986,12 @@
+ 		MENUACTION_WIDESCREEN,	"FED_WIS", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
+ 		VIDEOMODE_SELECTOR
+ #ifdef LEGACY_MENU_OPTIONS
+-		MENUACTION_FRAMESYNC,	"FEM_VSC", {nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS}, 0, 0, MENUALIGN_LEFT,
++		MENUACTION_FRAMESYNC,	"RVC_VSY", {nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS}, 0, 0, MENUALIGN_LEFT,
+ #endif
+-		MENUACTION_FRAMELIMIT,	"FEM_FRM", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
+ 		MULTISAMPLING_SELECTOR
+-		ISLAND_LOADING_SELECTOR
+ 		DUALPASS_SELECTOR
+ #ifdef EXTENDED_COLOURFILTER
++		VISUAL_STYLE_SELECTOR
+ 		POSTFX_SELECTORS
+ #elif defined LEGACY_MENU_OPTIONS
+ 		MENUACTION_TRAILS,		"FED_TRA", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
+@@ -809,6 +1011,39 @@
+ 	},
+ #endif
+ 
++	// MENUPAGE_PAD_PICTURE (revc): the pad with what each button does, as on the Xbox's controls
++	// screen; drawn by DrawPadPicture (core/PadPicture.cpp).
++	{ "RVC_PPT", MENUPAGE_CONTROLLER_PC, new CCustomScreenLayout({0, 0, 0, false, false, 30}), nil,
++		MENUACTION_CFO_DYNAMIC,	"RVC_PPV", { new CCFODynamic(nil, nil, nil, PadPictureContextDraw, PadPictureContextPress) }, 320, 360, MENUALIGN_CENTER,
++		MENUACTION_GOBACK,		"FEDS_TB", {nil, SAVESLOT_NONE, MENUPAGE_NONE}, 320, 385, MENUALIGN_CENTER,
++	},
++
++	// MENUPAGE_CONSOLE_DISPLAY (revc, plan task 13): the PS2/Xbox Display page, its rows only
++	// (brightness, trails, subtitles, wide screen, radar mode, hud mode; the trails row is the
++	// motion blur setting). The PC Display/Graphics pages keep the rest (pause menu > Options).
++	// rows 30 px apart from y 77 as on the PS2 (the Xbox skin places its rows itself)
++	{ "FEH_DIS", MENUPAGE_PAUSE_MENU, new CCustomScreenLayout({40, 77, 30, true}), nil,
++		MENUACTION_BRIGHTNESS,	"FED_BRI", { nil, SAVESLOT_NONE, MENUPAGE_CONSOLE_DISPLAY }, 0, 0, MENUALIGN_LEFT,
++#ifdef EXTENDED_COLOURFILTER
++		MENUACTION_CFO_SELECT,	"FED_TRA", { new CCFOSelect((int8*)&CPostFX::MotionBlurOn, "Graphics", "MotionBlur", off_on, 2, false) }, 0, 0, MENUALIGN_LEFT,
++#endif
++		MENUACTION_SUBTITLES,	"FED_SUB", { nil, SAVESLOT_NONE, MENUPAGE_CONSOLE_DISPLAY }, 0, 0, MENUALIGN_LEFT,
++		MENUACTION_WIDESCREEN,	"FED_WIS", { nil, SAVESLOT_NONE, MENUPAGE_CONSOLE_DISPLAY }, 0, 0, MENUALIGN_LEFT,
++		MENUACTION_RADARMODE,	"FED_RDR", { nil, SAVESLOT_NONE, MENUPAGE_CONSOLE_DISPLAY }, 0, 0, MENUALIGN_LEFT,
++		MENUACTION_HUD,			"FED_HUD", { nil, SAVESLOT_NONE, MENUPAGE_CONSOLE_DISPLAY }, 0, 0, MENUALIGN_LEFT,
++	},
++
++	// MENUPAGE_CONSOLE_CONTROLS (revc, plan task 13): the PS2/Xbox Controls page: the controller
++	// layout (the consoles' configuration / select controls), the controller picture (display
++	// controls), invert, vibration. The PC controller setup stays under pause menu > Options.
++	// rows 20 px apart from y 72 as on the PS2 (the Xbox skin places its rows itself)
++	{ "RVC_XTC", MENUPAGE_PAUSE_MENU, new CCustomScreenLayout({40, 72, 20, true}), nil,
++		PAD_LAYOUT_SELECTOR
++		MENUACTION_CHANGEMENU,	"RVC_XTD", { nil, SAVESLOT_NONE, MENUPAGE_PAD_PICTURE }, 0, 0, MENUALIGN_LEFT,
++		INVERT_PAD_SELECTOR
++		MENUACTION_CFO_SELECT,	"FEC_VIB", { new CCFOSelect((int8*)&FrontEndMenuManager.m_PrefsUseVibration, "Controller", "Vibration", off_on, 2, false) }, 0, 0, MENUALIGN_LEFT,
++	},
++
+ 		
+ #ifdef MISSION_REPLAY
+ 	// MENUPAGE_MISSION_RETRY = 57 on mobile
+@@ -826,3 +1061,71 @@
+ 
+ #endif
+ #endif
++
++// revc (plan task 13): rows a console's page doesn't have are taken out while that UI style is
++// shown and put back for the PC style: on the Audio page the PC's MP3 volume boost, dynamic
++// acoustics, restore defaults and back (the consoles show music, sfx, radio station); on the
++// console Display page the wide screen row in the Xbox style (only the PS2 had it).
++static void
++FilterRows(int page, bool (*drop)(int action, int style), int style, int &applied, CMenuScreenCustom::CMenuEntry *saved)
++{
++	CMenuScreenCustom &pg = aScreens[page];
++	if (applied == style)
++		return;
++	if (applied < 0)
++		memcpy(saved, pg.m_aEntries, sizeof(pg.m_aEntries));
++	else
++		memcpy(pg.m_aEntries, saved, sizeof(pg.m_aEntries));
++	int n = 0;
++	for (int i = 0; i < NUM_MENUROWS; i++)
++		if (!drop(saved[i].m_Action, style))
++			pg.m_aEntries[n++] = saved[i];
++	for (; n < NUM_MENUROWS; n++)
++		memset(&pg.m_aEntries[n], 0, sizeof(pg.m_aEntries[n]));
++	applied = style;
++}
++
++static bool
++DropAudio(int a, int style)
++{
++	return style != 0 && (a == MENUACTION_MP3VOLUMEBOOST || a == MENUACTION_DYNAMICACOUSTIC || a == MENUACTION_RESTOREDEF || a == MENUACTION_GOBACK);
++}
++
++static bool
++DropDisplay(int a, int style)
++{
++	return style == 2 && a == MENUACTION_WIDESCREEN;
++}
++
++void
++ConsoleAudioRows(bool)
++{
++	extern int8 gUiStyle;
++	static int audioApplied = -1, displayApplied = -1;
++	static CMenuScreenCustom::CMenuEntry audioSaved[NUM_MENUROWS], displaySaved[NUM_MENUROWS];
++	FilterRows(MENUPAGE_SOUND_SETTINGS, DropAudio, gUiStyle, audioApplied, audioSaved);
++	FilterRows(MENUPAGE_CONSOLE_DISPLAY, DropDisplay, gUiStyle, displayApplied, displaySaved);
++
++	// Controls: the PS2's rows are configuration, controller display (switches the picture on the
++	// page), vibration, invert; the Xbox's select controls, display controls, invert, vibration.
++	static int controlsApplied = -1;
++	static CMenuScreenCustom::CMenuEntry controlsSaved[NUM_MENUROWS];
++	CMenuScreenCustom &pg = aScreens[MENUPAGE_CONSOLE_CONTROLS];
++	if (controlsApplied != gUiStyle) {
++		if (controlsApplied < 0)
++			memcpy(controlsSaved, pg.m_aEntries, sizeof(controlsSaved));
++		memcpy(pg.m_aEntries, controlsSaved, sizeof(controlsSaved));
++		if (gUiStyle == 1) {
++			CMenuScreenCustom::CMenuEntry layout = controlsSaved[0], invert = controlsSaved[2], vibration = controlsSaved[3];
++			CMenuScreenCustom::CMenuEntry context = aScreens[MENUPAGE_PAD_PICTURE].m_aEntries[0];	// on foot / in car
++			strncpy(context.m_EntryName, "FEC_CDP", 8);
++			context.m_X = context.m_Y = 0;
++			context.m_Align = MENUALIGN_LEFT;
++			pg.m_aEntries[0] = layout;
++			pg.m_aEntries[1] = context;
++			pg.m_aEntries[2] = vibration;
++			pg.m_aEntries[3] = invert;
++		}
++		controlsApplied = gUiStyle;
++	}
++}
+--- a/src/core/Radar.cpp
++++ b/src/core/Radar.cpp
+@@ -1117,7 +1117,7 @@
+ 					|| (x2 < 1 && y2 == 1)) // one pixel on each side of second to first/last line is transparent
+ 					pixels[x + y * 16] = 0;
+ 				else if((x2 == 2 && y2 >= 2)|| (y2 == 2 && x2 >= 2) )// colored square inside
+-#ifdef RW_GL3
++#if defined RW_WGPU
+ 					pixels[x + y * 16] = WAYPOINT_R | (WAYPOINT_G << 8) | (WAYPOINT_B << 16) | (255 << 24);
+ #else
+ 					pixels[x + y * 16] = WAYPOINT_B | (WAYPOINT_G << 8) | (WAYPOINT_R << 16) | (255 << 24);
+--- a/src/core/Radar.h
++++ b/src/core/Radar.h
+@@ -158,8 +158,12 @@
+ #pragma pack(pop)
+ 
+ // Values for screen space
+-#define RADAR_LEFT (40.0f)
+-#define RADAR_BOTTOM (40.0f)
++// revc (plan task 13): the console UI styles use the consoles' radar: PS2 = the PC constants
++// (94x76 at 40/40 in 640x448), Xbox 102x94 at left 55, bottom 42 in 640x480 (measured on Xbox
++// captures, docs/CONSOLE_STYLES.md).
++extern int8 gUiStyle;
++#define RADAR_LEFT (gUiStyle == 2 ? 55.0f : 40.0f)
++#define RADAR_BOTTOM (gUiStyle == 2 ? 42.0f : 40.0f)
+ 
+ #ifdef FIX_RADAR
+ /*
+@@ -167,8 +171,8 @@
+ 		#define RADAR_WIDTH (82.0f)
+ 		#define RADAR_HEIGHT (82.0f)
+ */
+-#define RADAR_WIDTH ((CDraw::ms_bFixRadar)  ? (82.0f) : (94.0f))	
+-#define RADAR_HEIGHT ((CDraw::ms_bFixRadar) ? (82.0f) : (76.0f))
++#define RADAR_WIDTH (gUiStyle == 2 ? 102.0f : gUiStyle == 1 ? 94.0f : (CDraw::ms_bFixRadar)  ? (82.0f) : (94.0f))
++#define RADAR_HEIGHT (gUiStyle == 2 ? 94.0f : gUiStyle == 1 ? 76.0f : (CDraw::ms_bFixRadar) ? (82.0f) : (76.0f))
+ #else
+ /*
+ 	broken since forever, someone tried to fix size for 640x512(PAL)
+--- a/src/core/re3.cpp
++++ b/src/core/re3.cpp
+@@ -588,6 +588,13 @@
+ 	CCarCtrl::MaxNumberOfCarsInUse = DEFAULT_MAX_NUMBER_OF_CARS * CIniFile::CarNumberMultiplier;
+ #endif
+ 
++	// revc: the frame limiter and the map memory (island loading) options only held the game back
++	// on old hardware; they are gone from the menu (user 2026-11-10): no limiter (VSync paces),
++	// everything loaded.
++	FrontEndMenuManager.m_PrefsFrameLimiter = false;
++#ifdef NO_ISLAND_LOADING
++	FrontEndMenuManager.m_PrefsIslandLoading = CMenuManager::ISLAND_LOADING_HIGH;
++#endif
+ 	return true;
+ }
+ 
+@@ -1055,8 +1062,8 @@
+ #endif
+ 
+ #ifdef EXTENDED_COLOURFILTER
+-		static const char *filternames[] = { "None", "Simple", "Normal", "Mobile" };
+-		e = DebugMenuAddVar("Render", "Colourfilter", &CPostFX::EffectSwitch, nil, 1, CPostFX::POSTFX_OFF, CPostFX::POSTFX_MOBILE, filternames);
++		static const char *filternames[] = { "None", "Simple", "PS2/Xbox", "Mobile", "PC" };
++		e = DebugMenuAddVar("Render", "Colourfilter", &CPostFX::EffectSwitch, nil, 1, CPostFX::POSTFX_OFF, CPostFX::POSTFX_PC, filternames);
+ 		DebugMenuEntrySetWrap(e, true);
+ 		DebugMenuAddVar("Render", "Intensity", &CPostFX::Intensity, nil, 0.05f, 0, 10.0f);
+ 		DebugMenuAddVarBool8("Render", "Blur", &CPostFX::BlurOn, nil);
+--- a/src/core/Stats.cpp
++++ b/src/core/Stats.cpp
+@@ -20,229 +20,236 @@
+ #define FEET_IN_METER 3.33f
+ #endif
+ 
+-int32 CStats::SeagullsKilled;
+-int32 CStats::BoatsExploded;
+-int32 CStats::WantedStarsAttained;
+-int32 CStats::WantedStarsEvaded;
+-int32 CStats::DaysPassed;
+-int32 CStats::HeadsPopped;
+-int32 CStats::CommercialPassed;
+-int32 CStats::IndustrialPassed;
+-int32 CStats::SuburbanPassed;
+-int32 CStats::NumberKillFrenziesPassed;
+-int32 CStats::PeopleKilledByOthers;
+-int32 CStats::HelisDestroyed;
+-int32 CStats::PedsKilledOfThisType[NUM_PEDTYPES];
+-int32 CStats::TimesDied;
+-int32 CStats::TimesArrested;
+-int32 CStats::KillsSinceLastCheckpoint;
+-float CStats::DistanceTravelledByCar;
+-float CStats::DistanceTravelledByHelicoptor;
+-float CStats::DistanceTravelledByBike;
+-float CStats::DistanceTravelledByBoat;
+-float CStats::DistanceTravelledByPlane;
+-float CStats::DistanceTravelledByGolfCart;
+-float CStats::DistanceTravelledOnFoot;
+-int32 CStats::FlightTime;
+-int32 CStats::TimesDrowned;
+-int32 CStats::PhotosTaken;
+-float CStats::LoanSharks;
+-float CStats::StoresKnockedOff;
+-float CStats::MovieStunts;
+-float CStats::Assassinations;
+-float CStats::PizzasDelivered;
+-float CStats::GarbagePickups;
+-float CStats::IceCreamSold;
+-float CStats::TopShootingRangeScore;
+-float CStats::ShootingRank;
+-float CStats::ProgressMade;
+-float CStats::TotalProgressInGame;
+-int32 CStats::CarsExploded;
+-int32 CStats::PeopleKilledByPlayer;
+-float CStats::MaximumJumpDistance;
+-float CStats::MaximumJumpHeight;
+-int32 CStats::MaximumJumpFlips;
+-int32 CStats::MaximumJumpSpins;
+-int32 CStats::BestStuntJump;
+-int32 CStats::NumberOfUniqueJumpsFound;
+-int32 CStats::TotalNumberOfUniqueJumps;
+-int32 CStats::PassengersDroppedOffWithTaxi;
+-int32 CStats::MoneyMadeWithTaxi;
+-int32 CStats::MissionsGiven;
+-int32 CStats::MissionsPassed;
+-char CStats::LastMissionPassedName[8];
+-int32 CStats::TotalLegitimateKills;
+-int32 CStats::LivesSavedWithAmbulance;
+-int32 CStats::CriminalsCaught;
+-int32 CStats::HighestLevelAmbulanceMission;
+-int32 CStats::HighestLevelVigilanteMission;
+-int32 CStats::HighestLevelFireMission;
+-int32 CStats::FiresExtinguished;
+-int32 CStats::TotalNumberKillFrenzies;
+-int32 CStats::TotalNumberMissions;
+-int32 CStats::RoundsFiredByPlayer;
+-int32 CStats::KgsOfExplosivesUsed;
+-int32 CStats::BulletsThatHit;
+-int32 CStats::BestTimeBombDefusal;
+-int32 CStats::FastestTimes[CStats::TOTAL_FASTEST_TIMES];
+-int32 CStats::HighestScores[CStats::TOTAL_HIGHEST_SCORES];
+-int32 CStats::BestPositions[CStats::TOTAL_BEST_POSITIONS];
+-bool CStats::PropertyOwned[CStats::TOTAL_PROPERTIES];
+-int32 CStats::NumPropertyOwned;
+-int32 CStats::PropertyDestroyed;
+-float CStats::HighestChaseValue;
+-int32 CStats::CheatedCount;
+-int32 CStats::ShowChaseStatOnScreen;
+-int32 CStats::PamphletMissionPassed;
+-bool CStats::abSonyCDs[1];
+-int32 CStats::BloodRingKills;
+-int32 CStats::BloodRingTime;
+-float CStats::FavoriteRadioStationList[NUM_RADIOS];
+-
+-int32 CStats::Sprayings;
+-float CStats::AutoPaintingBudget;
+-int32 CStats::NoMoreHurricanes;
+-float CStats::FashionBudget;
+-float CStats::PropertyBudget;
+-float CStats::WeaponBudget;
+-int32 CStats::SafeHouseVisits;
+-int32 CStats::TyresPopped;
+-
+-int32 CStats::LongestWheelie;
+-int32 CStats::LongestStoppie;
+-int32 CStats::Longest2Wheel;
+-float CStats::LongestWheelieDist;
+-float CStats::LongestStoppieDist;
+-float CStats::Longest2WheelDist;
++// Rust owns the stats (rust/revc/src/stats.rs, revc_stats); these are references into it.
++struct RevcStats {
++	int32 SeagullsKilled;
++	int32 BoatsExploded;
++	int32 WantedStarsAttained;
++	int32 WantedStarsEvaded;
++	int32 DaysPassed;
++	int32 HeadsPopped;
++	int32 CommercialPassed;
++	int32 IndustrialPassed;
++	int32 SuburbanPassed;
++	int32 NumberKillFrenziesPassed;
++	int32 PeopleKilledByOthers;
++	int32 HelisDestroyed;
++	int32 PedsKilledOfThisType[NUM_PEDTYPES];
++	int32 TimesDied;
++	int32 TimesArrested;
++	int32 KillsSinceLastCheckpoint;
++	float DistanceTravelledByCar;
++	float DistanceTravelledByHelicoptor;
++	float DistanceTravelledByBike;
++	float DistanceTravelledByBoat;
++	float DistanceTravelledByPlane;
++	float DistanceTravelledByGolfCart;
++	float DistanceTravelledOnFoot;
++	int32 FlightTime;
++	int32 TimesDrowned;
++	int32 PhotosTaken;
++	float LoanSharks;
++	float StoresKnockedOff;
++	float MovieStunts;
++	float Assassinations;
++	float PizzasDelivered;
++	float GarbagePickups;
++	float IceCreamSold;
++	float TopShootingRangeScore;
++	float ShootingRank;
++	float ProgressMade;
++	float TotalProgressInGame;
++	int32 CarsExploded;
++	int32 PeopleKilledByPlayer;
++	float MaximumJumpDistance;
++	float MaximumJumpHeight;
++	int32 MaximumJumpFlips;
++	int32 MaximumJumpSpins;
++	int32 BestStuntJump;
++	int32 NumberOfUniqueJumpsFound;
++	int32 TotalNumberOfUniqueJumps;
++	int32 PassengersDroppedOffWithTaxi;
++	int32 MoneyMadeWithTaxi;
++	int32 MissionsGiven;
++	int32 MissionsPassed;
++	char LastMissionPassedName[8];
++	int32 TotalLegitimateKills;
++	int32 LivesSavedWithAmbulance;
++	int32 CriminalsCaught;
++	int32 HighestLevelAmbulanceMission;
++	int32 HighestLevelVigilanteMission;
++	int32 HighestLevelFireMission;
++	int32 FiresExtinguished;
++	int32 TotalNumberKillFrenzies;
++	int32 TotalNumberMissions;
++	int32 RoundsFiredByPlayer;
++	int32 KgsOfExplosivesUsed;
++	int32 BulletsThatHit;
++	int32 BestTimeBombDefusal;
++	int32 FastestTimes[CStats::TOTAL_FASTEST_TIMES];
++	int32 HighestScores[CStats::TOTAL_HIGHEST_SCORES];
++	int32 BestPositions[CStats::TOTAL_BEST_POSITIONS];
++	bool PropertyOwned[CStats::TOTAL_PROPERTIES];
++	int32 NumPropertyOwned;
++	int32 PropertyDestroyed;
++	float HighestChaseValue;
++	int32 CheatedCount;
++	int32 ShowChaseStatOnScreen;
++	int32 PamphletMissionPassed;
++	bool abSonyCDs[1];
++	int32 BloodRingKills;
++	int32 BloodRingTime;
++	float FavoriteRadioStationList[NUM_RADIOS];
++	int32 Sprayings;
++	float AutoPaintingBudget;
++	int32 NoMoreHurricanes;
++	float FashionBudget;
++	float PropertyBudget;
++	float WeaponBudget;
++	int32 SafeHouseVisits;
++	int32 TyresPopped;
++	int32 LongestWheelie;
++	int32 LongestStoppie;
++	int32 Longest2Wheel;
++	float LongestWheelieDist;
++	float LongestStoppieDist;
++	float Longest2WheelDist;
++};
++extern "C" RevcStats revc_stats;
++
++int32 &CStats::SeagullsKilled = revc_stats.SeagullsKilled;
++int32 &CStats::BoatsExploded = revc_stats.BoatsExploded;
++int32 &CStats::WantedStarsAttained = revc_stats.WantedStarsAttained;
++int32 &CStats::WantedStarsEvaded = revc_stats.WantedStarsEvaded;
++int32 &CStats::DaysPassed = revc_stats.DaysPassed;
++int32 &CStats::HeadsPopped = revc_stats.HeadsPopped;
++int32 &CStats::CommercialPassed = revc_stats.CommercialPassed;
++int32 &CStats::IndustrialPassed = revc_stats.IndustrialPassed;
++int32 &CStats::SuburbanPassed = revc_stats.SuburbanPassed;
++int32 &CStats::NumberKillFrenziesPassed = revc_stats.NumberKillFrenziesPassed;
++int32 &CStats::PeopleKilledByOthers = revc_stats.PeopleKilledByOthers;
++int32 &CStats::HelisDestroyed = revc_stats.HelisDestroyed;
++int32 (&CStats::PedsKilledOfThisType)[NUM_PEDTYPES] = revc_stats.PedsKilledOfThisType;
++int32 &CStats::TimesDied = revc_stats.TimesDied;
++int32 &CStats::TimesArrested = revc_stats.TimesArrested;
++int32 &CStats::KillsSinceLastCheckpoint = revc_stats.KillsSinceLastCheckpoint;
++float &CStats::DistanceTravelledByCar = revc_stats.DistanceTravelledByCar;
++float &CStats::DistanceTravelledByHelicoptor = revc_stats.DistanceTravelledByHelicoptor;
++float &CStats::DistanceTravelledByBike = revc_stats.DistanceTravelledByBike;
++float &CStats::DistanceTravelledByBoat = revc_stats.DistanceTravelledByBoat;
++float &CStats::DistanceTravelledByPlane = revc_stats.DistanceTravelledByPlane;
++float &CStats::DistanceTravelledByGolfCart = revc_stats.DistanceTravelledByGolfCart;
++float &CStats::DistanceTravelledOnFoot = revc_stats.DistanceTravelledOnFoot;
++int32 &CStats::FlightTime = revc_stats.FlightTime;
++int32 &CStats::TimesDrowned = revc_stats.TimesDrowned;
++int32 &CStats::PhotosTaken = revc_stats.PhotosTaken;
++float &CStats::LoanSharks = revc_stats.LoanSharks;
++float &CStats::StoresKnockedOff = revc_stats.StoresKnockedOff;
++float &CStats::MovieStunts = revc_stats.MovieStunts;
++float &CStats::Assassinations = revc_stats.Assassinations;
++float &CStats::PizzasDelivered = revc_stats.PizzasDelivered;
++float &CStats::GarbagePickups = revc_stats.GarbagePickups;
++float &CStats::IceCreamSold = revc_stats.IceCreamSold;
++float &CStats::TopShootingRangeScore = revc_stats.TopShootingRangeScore;
++float &CStats::ShootingRank = revc_stats.ShootingRank;
++float &CStats::ProgressMade = revc_stats.ProgressMade;
++float &CStats::TotalProgressInGame = revc_stats.TotalProgressInGame;
++int32 &CStats::CarsExploded = revc_stats.CarsExploded;
++int32 &CStats::PeopleKilledByPlayer = revc_stats.PeopleKilledByPlayer;
++float &CStats::MaximumJumpDistance = revc_stats.MaximumJumpDistance;
++float &CStats::MaximumJumpHeight = revc_stats.MaximumJumpHeight;
++int32 &CStats::MaximumJumpFlips = revc_stats.MaximumJumpFlips;
++int32 &CStats::MaximumJumpSpins = revc_stats.MaximumJumpSpins;
++int32 &CStats::BestStuntJump = revc_stats.BestStuntJump;
++int32 &CStats::NumberOfUniqueJumpsFound = revc_stats.NumberOfUniqueJumpsFound;
++int32 &CStats::TotalNumberOfUniqueJumps = revc_stats.TotalNumberOfUniqueJumps;
++int32 &CStats::PassengersDroppedOffWithTaxi = revc_stats.PassengersDroppedOffWithTaxi;
++int32 &CStats::MoneyMadeWithTaxi = revc_stats.MoneyMadeWithTaxi;
++int32 &CStats::MissionsGiven = revc_stats.MissionsGiven;
++int32 &CStats::MissionsPassed = revc_stats.MissionsPassed;
++char (&CStats::LastMissionPassedName)[8] = revc_stats.LastMissionPassedName;
++int32 &CStats::TotalLegitimateKills = revc_stats.TotalLegitimateKills;
++int32 &CStats::LivesSavedWithAmbulance = revc_stats.LivesSavedWithAmbulance;
++int32 &CStats::CriminalsCaught = revc_stats.CriminalsCaught;
++int32 &CStats::HighestLevelAmbulanceMission = revc_stats.HighestLevelAmbulanceMission;
++int32 &CStats::HighestLevelVigilanteMission = revc_stats.HighestLevelVigilanteMission;
++int32 &CStats::HighestLevelFireMission = revc_stats.HighestLevelFireMission;
++int32 &CStats::FiresExtinguished = revc_stats.FiresExtinguished;
++int32 &CStats::TotalNumberKillFrenzies = revc_stats.TotalNumberKillFrenzies;
++int32 &CStats::TotalNumberMissions = revc_stats.TotalNumberMissions;
++int32 &CStats::RoundsFiredByPlayer = revc_stats.RoundsFiredByPlayer;
++int32 &CStats::KgsOfExplosivesUsed = revc_stats.KgsOfExplosivesUsed;
++int32 &CStats::BulletsThatHit = revc_stats.BulletsThatHit;
++int32 &CStats::BestTimeBombDefusal = revc_stats.BestTimeBombDefusal;
++int32 (&CStats::FastestTimes)[CStats::TOTAL_FASTEST_TIMES] = revc_stats.FastestTimes;
++int32 (&CStats::HighestScores)[CStats::TOTAL_HIGHEST_SCORES] = revc_stats.HighestScores;
++int32 (&CStats::BestPositions)[CStats::TOTAL_BEST_POSITIONS] = revc_stats.BestPositions;
++bool (&CStats::PropertyOwned)[CStats::TOTAL_PROPERTIES] = revc_stats.PropertyOwned;
++int32 &CStats::NumPropertyOwned = revc_stats.NumPropertyOwned;
++int32 &CStats::PropertyDestroyed = revc_stats.PropertyDestroyed;
++float &CStats::HighestChaseValue = revc_stats.HighestChaseValue;
++int32 &CStats::CheatedCount = revc_stats.CheatedCount;
++int32 &CStats::ShowChaseStatOnScreen = revc_stats.ShowChaseStatOnScreen;
++int32 &CStats::PamphletMissionPassed = revc_stats.PamphletMissionPassed;
++bool (&CStats::abSonyCDs)[1] = revc_stats.abSonyCDs;
++int32 &CStats::BloodRingKills = revc_stats.BloodRingKills;
++int32 &CStats::BloodRingTime = revc_stats.BloodRingTime;
++float (&CStats::FavoriteRadioStationList)[NUM_RADIOS] = revc_stats.FavoriteRadioStationList;
++int32 &CStats::Sprayings = revc_stats.Sprayings;
++float &CStats::AutoPaintingBudget = revc_stats.AutoPaintingBudget;
++int32 &CStats::NoMoreHurricanes = revc_stats.NoMoreHurricanes;
++float &CStats::FashionBudget = revc_stats.FashionBudget;
++float &CStats::PropertyBudget = revc_stats.PropertyBudget;
++float &CStats::WeaponBudget = revc_stats.WeaponBudget;
++int32 &CStats::SafeHouseVisits = revc_stats.SafeHouseVisits;
++int32 &CStats::TyresPopped = revc_stats.TyresPopped;
++int32 &CStats::LongestWheelie = revc_stats.LongestWheelie;
++int32 &CStats::LongestStoppie = revc_stats.LongestStoppie;
++int32 &CStats::Longest2Wheel = revc_stats.Longest2Wheel;
++float &CStats::LongestWheelieDist = revc_stats.LongestWheelieDist;
++float &CStats::LongestStoppieDist = revc_stats.LongestStoppieDist;
++float &CStats::Longest2WheelDist = revc_stats.Longest2WheelDist;
++
++extern "C" {
++void revc_stats_init(const float *radio);
++void revc_stats_register_fastest_time(int32 index, int32 time);
++void revc_stats_register_highest_score(int32 index, int32 score);
++void revc_stats_register_best_position(int32 index, int32 position);
++void revc_stats_register_level(int32 kind, int32 level);
++void revc_stats_add_float(int32 kind, int32 n);
++void revc_stats_longest_time_in_blood_ring(int32 time);
++void revc_stats_add_property_as_owned(int32 id);
++int32 revc_stats_rating_number(int32 money, bool cheated);
++const char *revc_stats_rating_key(int32 money, int32 visibleMoney, bool cheated);
++const char *revc_stats_chase_key(float mediaLevel);
++float revc_stats_percentage_progress(bool nastyGame);
++uint32 revc_stats_save(uint8 *buf, const float *radio);
++void revc_stats_load(const uint8 *buf, uint32 size);
++uint32 revc_stats_size(void);
++}
+ 
+ void CStats::Init()
+ {
+-	PeopleKilledByOthers = 0;
+-	PeopleKilledByPlayer = 0;
+-	CarsExploded = 0;
+-	BoatsExploded = 0;
+-	RoundsFiredByPlayer = 0;
+-	for (int i = 0; i < NUM_PEDTYPES; i++)
+-		PedsKilledOfThisType[i] = 0;
+-	HelisDestroyed = 0;
+-	ProgressMade = 0.0f;
+-	KgsOfExplosivesUsed = 0;
+-	BulletsThatHit = 0;
+-	TyresPopped = 0;
+-	HeadsPopped = 0;
+-	WantedStarsAttained = 0;
+-	WantedStarsEvaded = 0;
+-	TimesArrested = 0;
+-	TimesDied = 0;
+-	DaysPassed = 0;
+-	SafeHouseVisits = 0;
+-	Sprayings = 0;
+-	MaximumJumpDistance = 0;
+-	MaximumJumpHeight = 0;
+-	MaximumJumpFlips = 0;
+-	MaximumJumpSpins = 0;
+-	BestStuntJump = 0;
+-	NumberOfUniqueJumpsFound = 0;
+-	TotalNumberOfUniqueJumps = 0;
+-	MissionsGiven = 0;
+-	MissionsPassed = 0;
+-	PassengersDroppedOffWithTaxi = 0;
+-	MoneyMadeWithTaxi = 0;
+-	DistanceTravelledOnFoot = 0;
+-	DistanceTravelledByCar = 0;
+-	DistanceTravelledByBike = 0;
+-	DistanceTravelledByBoat = 0;
+-	DistanceTravelledByGolfCart = 0;
+-	DistanceTravelledByHelicoptor = 0;
+-#ifdef FIX_BUGS
+-	DistanceTravelledByPlane = 0;
+-#endif
+-	LivesSavedWithAmbulance = 0;
+-	CriminalsCaught = 0;
+-	HighestLevelVigilanteMission = 0;
+-	HighestLevelAmbulanceMission = 0;
+-	HighestLevelFireMission = 0;
+-	FiresExtinguished = 0;
+-	PhotosTaken = 0;
+-	NumberKillFrenziesPassed = 0;
+-	TotalNumberKillFrenzies = 0;
+-	TotalNumberMissions = 0;
+-	FlightTime = 0;
+-	TimesDrowned = 0;
+-	SeagullsKilled = 0;
+-	WeaponBudget = 0.0f;
+-	FashionBudget = 0.0f;
+-	LoanSharks = 0.0f;
+-	StoresKnockedOff = 0.0f;
+-	MovieStunts = 0.0f;
+-	Assassinations = 0.0f;
+-	PizzasDelivered = 0.0f;
+-	GarbagePickups = 0.0f;
+-	IceCreamSold = 0.0f;
+-	TopShootingRangeScore = 0.0f;
+-	ShootingRank = 0.0f;
+-	LongestWheelie = 0;
+-	LongestStoppie = 0;
+-	Longest2Wheel = 0;
+-	LongestWheelieDist = 0.0f;
+-	LongestStoppieDist = 0.0f;
+-	Longest2WheelDist = 0.0f;
+-	PropertyBudget = 0.0f;
+-	AutoPaintingBudget = 0.0f;
+-	PropertyDestroyed = 0;
+-	HighestChaseValue = 0.0f;
+-	CheatedCount = 0;
+-
+-	for (int i = 0; i < TOTAL_FASTEST_TIMES; i++)
+-		FastestTimes[i] = 0;
+-	for (int i = 0; i < TOTAL_HIGHEST_SCORES; i++)
+-		HighestScores[i] = 0;
+-	for (int i = 0; i < TOTAL_BEST_POSITIONS; i++)
+-		BestPositions[i] = INT_MAX;
+-
+-	KillsSinceLastCheckpoint = 0;
+-	TotalLegitimateKills = 0;
+-
+-	for (int i = 0; i < ARRAY_SIZE(LastMissionPassedName); i++)
+-		LastMissionPassedName[i] = 0;
+-
+-	IndustrialPassed = 0;
+-	CommercialPassed = 0;
+-	SuburbanPassed = 0;
+-	PamphletMissionPassed = 0;
+-	NoMoreHurricanes = 0;
+-	ShowChaseStatOnScreen = 0;
+-	for (int i = 0; i < ARRAY_SIZE(abSonyCDs); i++)
+-		abSonyCDs[i] = 0;
+-	PopulateFavoriteRadioStationList();
+-
+-	NumPropertyOwned = 0;
+-	for (int i = 0; i < TOTAL_PROPERTIES; i++)
+-		PropertyOwned[i] = false;
+-
+-	BloodRingKills = 0;
+-	BloodRingTime = 0;
++	assert(revc_stats_size() == sizeof(RevcStats));
++	revc_stats_init(DMAudio.GetListenTimeArray());
+ }
+ 
+ void CStats::RegisterFastestTime(int32 index, int32 time)
+ {
+ 	assert(index >= 0 && index < TOTAL_FASTEST_TIMES);
+-	if (FastestTimes[index] == 0)
+-		FastestTimes[index] = time;
+-	else
+-		FastestTimes[index] = Min(FastestTimes[index], time);
++	revc_stats_register_fastest_time(index, time);
+ }
+ 
+ void CStats::RegisterHighestScore(int32 index, int32 score)
+ {
+ 	assert(index >= 0 && index < TOTAL_HIGHEST_SCORES);
+-	HighestScores[index] = Max(HighestScores[index], score);
++	revc_stats_register_highest_score(index, score);
+ }
+ 
+ void CStats::RegisterBestPosition(int32 index, int32 position)
+ {
+ 	assert(index >= 0 && index < TOTAL_BEST_POSITIONS);
+-	BestPositions[index] = Min(BestPositions[index], position);
++	revc_stats_register_best_position(index, position);
+ }
+ 
+ void CStats::AnotherLifeSavedWithAmbulance()
+@@ -255,20 +262,9 @@
+ 	++CriminalsCaught;
+ }
+ 
+-void CStats::RegisterLevelAmbulanceMission(int32 level)
+-{
+-	HighestLevelAmbulanceMission = Max(HighestLevelAmbulanceMission, level);
+-}
+-
+-void CStats::RegisterLevelVigilanteMission(int32 level)
+-{
+-	HighestLevelVigilanteMission = Max(HighestLevelVigilanteMission, level);
+-}
+-
+-void CStats::RegisterLevelFireMission(int32 level)
+-{
+-	HighestLevelFireMission = Max(HighestLevelFireMission, level);
+-}
++void CStats::RegisterLevelAmbulanceMission(int32 level) { revc_stats_register_level(0, level); }
++void CStats::RegisterLevelVigilanteMission(int32 level) { revc_stats_register_level(1, level); }
++void CStats::RegisterLevelFireMission(int32 level) { revc_stats_register_level(2, level); }
+ 
+ void CStats::AnotherFireExtinguished()
+ {
+@@ -292,179 +288,36 @@
+ 
+ wchar *CStats::FindCriminalRatingString()
+ {
+-	int rating = FindCriminalRatingNumber();
+-
+-	if (rating < 0) {
+-		if (rating > -500) return TheText.Get("RATNG53");
+-		if (rating > -2000) return TheText.Get("RATNG54");
+-		if (rating > -4000) return TheText.Get("RATNG55");
+-		if (rating > -6000) return TheText.Get("RATNG56");
+-		return TheText.Get("RATNG57");
+-	}
+-	if (rating < 20) return TheText.Get("RATNG1");
+-	if (rating < 50) return TheText.Get("RATNG2");
+-	if (rating < 75) return TheText.Get("RATNG3");
+-	if (rating < 100) return TheText.Get("RATNG4");
+-	if (rating < 120) return TheText.Get("RATNG5");
+-	if (rating < 150) return TheText.Get("RATNG6");
+-	if (rating < 200) return TheText.Get("RATNG7");
+-	if (rating < 240) return TheText.Get("RATNG8");
+-	if (rating < 270) return TheText.Get("RATNG9");
+-	if (rating < 300) return TheText.Get("RATNG10");
+-	if (rating < 335) return TheText.Get("RATNG11");
+-	if (rating < 370) return TheText.Get("RATNG12");
+-	if (rating < 400) return TheText.Get("RATNG13");
+-	if (rating < 450) return TheText.Get("RATNG14");
+-	if (rating < 500) return TheText.Get("RATNG15");
+-	if (rating < 550) return TheText.Get("RATNG16");
+-	if (rating < 600) return TheText.Get("RATNG17");
+-	if (rating < 610) return TheText.Get("RATNG18");
+-	if (rating < 650) return TheText.Get("RATNG19");
+-	if (rating < 700) return TheText.Get("RATNG20");
+-	if (rating < 850) return TheText.Get("RATNG21");
+-	if (rating < 1000) return TheText.Get("RATNG22");
+-	if (rating < 1005) return TheText.Get("RATNG23");
+-	if (rating < 1150) return TheText.Get("RATNG24");
+-	if (rating < 1300) return TheText.Get(TimesArrested > 0 ? "RATNG25" : "RATNG24");
+-	if (rating < 1500) return TheText.Get("RATNG26");
+-	if (rating < 1700) return TheText.Get("RATNG27");
+-	if (rating < 2000) return TheText.Get("RATNG28");
+-	if (rating < 2100) return TheText.Get("RATNG29");
+-	if (rating < 2300) return TheText.Get("RATNG30");
+-	if (rating < 2500) return TheText.Get("RATNG31");
+-	if (rating < 2750) return TheText.Get("RATNG32");
+-	if (rating < 3000) return TheText.Get("RATNG33");
+-	if (rating < 3500) return TheText.Get("RATNG34");
+-	if (rating < 4000) return TheText.Get("RATNG35");
+-	if (rating < 5000) return TheText.Get("RATNG36");
+-	if (rating < 7500) return TheText.Get("RATNG37");
+-	if (rating < 10000) return TheText.Get("RATNG38");
+-	if (rating < 20000) return TheText.Get("RATNG39");
+-	if (rating < 30000) return TheText.Get("RATNG40");
+-	if (rating < 40000) return TheText.Get("RATNG41");
+-	if (rating < 50000) return TheText.Get("RATNG42");
+-	if (rating < 65000) return TheText.Get("RATNG43");
+-	if (rating < 80000) return TheText.Get("RATNG44");
+-	if (rating < 100000) return TheText.Get("RATNG45");
+-	if (rating < 150000) return TheText.Get("RATNG46");
+-	if (rating < 200000) return TheText.Get("RATNG47");
+-	if (rating < 300000) return TheText.Get("RATNG48");
+-	if (rating < 375000) return TheText.Get("RATNG49");
+-	if (rating < 500000) return TheText.Get(FlightTime / 60000 / 60 > 10 ? "RATNG50" : "RATNG49");
+-	if (rating < 1000000) return TheText.Get("RATNG51");
+-	return TheText.Get(CWorld::Players[CWorld::PlayerInFocus].m_nVisibleMoney > 10000000 ? "RATNG52" : "RATNG51");
+-}
+-
+-wchar *CStats::FindChaseString(float fMediaLevel) {
+-	if (fMediaLevel < 20.0f) return TheText.Get("CHASE1");
+-	if (fMediaLevel < 50.0f) return TheText.Get("CHASE2");
+-	if (fMediaLevel < 75.0f) return TheText.Get("CHASE3");
+-	if (fMediaLevel < 100.0f) return TheText.Get("CHASE4");
+-	if (fMediaLevel < 150.0f) return TheText.Get("CHASE5");
+-	if (fMediaLevel < 200.0f) return TheText.Get("CHASE6");
+-	if (fMediaLevel < 250.0f) return TheText.Get("CHASE7");
+-	if (fMediaLevel < 300.0f) return TheText.Get("CHASE8");
+-	if (fMediaLevel < 350.0f) return TheText.Get("CHASE9");
+-	if (fMediaLevel < 400.0f) return TheText.Get("CHASE10");
+-	if (fMediaLevel < 500.0f) return TheText.Get("CHASE11");
+-	if (fMediaLevel < 600.0f) return TheText.Get("CHASE12");
+-	if (fMediaLevel < 700.0f) return TheText.Get("CHASE13");
+-	if (fMediaLevel < 800.0f) return TheText.Get("CHASE14");
+-	if (fMediaLevel < 900.0f) return TheText.Get("CHASE15");
+-	if (fMediaLevel < 1000.0f) return TheText.Get("CHASE16");
+-	if (fMediaLevel < 1200.0f) return TheText.Get("CHASE17");
+-	if (fMediaLevel < 1400.0f) return TheText.Get("CHASE18");
+-	if (fMediaLevel < 1600.0f) return TheText.Get("CHASE19");
+-	if (fMediaLevel < 1800.0f) return TheText.Get("CHASE20");
+-	return TheText.Get("CHASE21");
+-}
+-
+-int32 CStats::FindCriminalRatingNumber()
+-{
+-	int32 rating;
+-
+-	rating = FiresExtinguished + 10 * HighestLevelFireMission + 10 * HighestLevelAmbulanceMission
+-		+ CriminalsCaught + LivesSavedWithAmbulance
+-		+ 30 * HelisDestroyed + TotalLegitimateKills - 3 * TimesArrested - 3 * TimesDied
+-		+ CWorld::Players[CWorld::PlayerInFocus].m_nMoney / 5000;
+-	if (CPad::bHasPlayerCheated || CheatedCount > 0) {
+-		rating -= CheatedCount;
+-		if (rating <= -10000)
+-			rating = -10000;
+-
+-	} else if (rating <= 0) {
+-		rating = 0;
+-	}
+-
+-	if (RoundsFiredByPlayer > 100)
+-		rating += (float)BulletsThatHit / (float)RoundsFiredByPlayer * 500.0f;
+-	if (TotalProgressInGame)
+-		rating += ProgressMade / TotalProgressInGame * 1000.0f;
+-	return rating;
++	CPlayerInfo &player = CWorld::Players[CWorld::PlayerInFocus];
++	return TheText.Get(revc_stats_rating_key(player.m_nMoney, player.m_nVisibleMoney, CPad::bHasPlayerCheated));
+ }
+ 
+-float CStats::GetPercentageProgress()
++wchar *CStats::FindChaseString(float fMediaLevel)
+ {
+-	float percentCompleted = (TotalProgressInGame == 0.f ? 0.f :
+-		100.0f * ProgressMade / (CGame::nastyGame ? TotalProgressInGame : TotalProgressInGame - 1.0f));
+-
+-	return Min(percentCompleted, 100.0f);
++	return TheText.Get(revc_stats_chase_key(fMediaLevel));
+ }
+ 
+-void CStats::MoneySpentOnWeapons(int32 money)
+-{
+-	WeaponBudget += money;
+-}
+-
+-void CStats::MoneySpentOnProperty(int32 money)
+-{
+-	PropertyBudget += money;
+-}
+-
+-void CStats::MoneySpentOnAutoPainting(int32 money)
+-{
+-	AutoPaintingBudget += money;
+-}
+-
+-void CStats::MoneySpentOnFashion(int32 money)
+-{
+-	FashionBudget += money;
+-}
+-
+-void CStats::NumOfVisitsFromLoanSharks(int32 num)
+-{
+-	LoanSharks += num;
+-}
+-
+-void CStats::NumOfStoresKnockedOff(int32 num)
+-{
+-	StoresKnockedOff += num;
+-}
+-
+-void CStats::NumOfMovieStunts(int32 num)
+-{
+-	MovieStunts += num;
+-}
+-
+-void CStats::NumOfAssassinations(int32 num)
+-{
+-	Assassinations += num;
+-}
+-
+-void CStats::NumOfPizzasDelivered(int32 num)
++int32 CStats::FindCriminalRatingNumber()
+ {
+-	PizzasDelivered += num;
++	return revc_stats_rating_number(CWorld::Players[CWorld::PlayerInFocus].m_nMoney, CPad::bHasPlayerCheated);
+ }
+ 
+-void CStats::NumOfGarbagePickups(int32 num)
++float CStats::GetPercentageProgress()
+ {
+-	GarbagePickups += num;
++	return revc_stats_percentage_progress(CGame::nastyGame);
+ }
+ 
+-void CStats::NumOfIceCreamSold(int32 num)
+-{
+-	IceCreamSold += num;
+-}
++void CStats::MoneySpentOnWeapons(int32 money) { revc_stats_add_float(0, money); }
++void CStats::MoneySpentOnProperty(int32 money) { revc_stats_add_float(1, money); }
++void CStats::MoneySpentOnAutoPainting(int32 money) { revc_stats_add_float(2, money); }
++void CStats::MoneySpentOnFashion(int32 money) { revc_stats_add_float(3, money); }
++void CStats::NumOfVisitsFromLoanSharks(int32 num) { revc_stats_add_float(4, num); }
++void CStats::NumOfStoresKnockedOff(int32 num) { revc_stats_add_float(5, num); }
++void CStats::NumOfMovieStunts(int32 num) { revc_stats_add_float(6, num); }
++void CStats::NumOfAssassinations(int32 num) { revc_stats_add_float(7, num); }
++void CStats::NumOfPizzasDelivered(int32 num) { revc_stats_add_float(8, num); }
++void CStats::NumOfGarbagePickups(int32 num) { revc_stats_add_float(9, num); }
++void CStats::NumOfIceCreamSold(int32 num) { revc_stats_add_float(10, num); }
+ 
+ void CStats::AddNumBloodRingKills(int32 num)
+ {
+@@ -473,16 +326,12 @@
+ 
+ void CStats::LongestTimeInBloodRing(int32 time)
+ {
+-	if (BloodRingTime < time)
+-		BloodRingTime = time;
++	revc_stats_longest_time_in_blood_ring(time);
+ }
+ 
+ void CStats::AddPropertyAsOwned(int32 id)
+ {
+-	if (!PropertyOwned[id]) {
+-		PropertyOwned[id] = true;
+-		++NumPropertyOwned;
+-	}
++	revc_stats_add_property_as_owned(id);
+ }
+ 
+ float CStats::GetFavoriteRadioStationList(int32 station)
+@@ -492,289 +341,12 @@
+ 
+ void CStats::SaveStats(uint8 *buf, uint32 *size)
+ {
+-	CheckPointReachedSuccessfully();
+-	uint8 *buf_start = buf;
+-	*size = sizeof(PeopleKilledByPlayer) +
+-		sizeof(PeopleKilledByOthers) +
+-		sizeof(CarsExploded) +
+-		sizeof(BoatsExploded) +
+-		sizeof(TyresPopped) +
+-		sizeof(RoundsFiredByPlayer) +
+-		sizeof(PedsKilledOfThisType) +
+-		sizeof(HelisDestroyed) +
+-		sizeof(ProgressMade) +
+-		sizeof(TotalProgressInGame) +
+-		sizeof(KgsOfExplosivesUsed) +
+-		sizeof(BulletsThatHit) +
+-		sizeof(HeadsPopped) +
+-		sizeof(WantedStarsAttained) +
+-		sizeof(WantedStarsEvaded) +
+-		sizeof(TimesArrested) +
+-		sizeof(TimesDied) +
+-		sizeof(DaysPassed) +
+-		sizeof(SafeHouseVisits) +
+-		sizeof(Sprayings) +
+-		sizeof(MaximumJumpDistance) +
+-		sizeof(MaximumJumpHeight) +
+-		sizeof(MaximumJumpFlips) +
+-		sizeof(MaximumJumpSpins) +
+-		sizeof(BestStuntJump) +
+-		sizeof(NumberOfUniqueJumpsFound) +
+-		sizeof(TotalNumberOfUniqueJumps) +
+-		sizeof(MissionsGiven) +
+-		sizeof(PassengersDroppedOffWithTaxi) +
+-		sizeof(MoneyMadeWithTaxi) +
+-		sizeof(IndustrialPassed) +
+-		sizeof(CommercialPassed) +
+-		sizeof(SuburbanPassed) +
+-		sizeof(PamphletMissionPassed) +
+-		sizeof(NoMoreHurricanes) +
+-		sizeof(DistanceTravelledOnFoot) +
+-		sizeof(DistanceTravelledByCar) +
+-		sizeof(DistanceTravelledByBike) +
+-		sizeof(DistanceTravelledByBoat) +
+-		sizeof(DistanceTravelledByGolfCart) +
+-		sizeof(DistanceTravelledByHelicoptor) +
+-		sizeof(DistanceTravelledByPlane) +
+-		sizeof(LivesSavedWithAmbulance) +
+-		sizeof(CriminalsCaught) +
+-		sizeof(FiresExtinguished) +
+-		sizeof(HighestLevelVigilanteMission) +
+-		sizeof(HighestLevelAmbulanceMission) +
+-		sizeof(HighestLevelFireMission) +
+-		sizeof(PhotosTaken) +
+-		sizeof(NumberKillFrenziesPassed) +
+-		sizeof(TotalNumberKillFrenzies) +
+-		sizeof(TotalNumberMissions) +
+-		sizeof(FlightTime) +
+-		sizeof(TimesDrowned) +
+-		sizeof(SeagullsKilled) +
+-		sizeof(WeaponBudget) +
+-		sizeof(FashionBudget) +
+-		sizeof(LoanSharks) +
+-		sizeof(StoresKnockedOff) +
+-		sizeof(MovieStunts) +
+-		sizeof(Assassinations) +
+-		sizeof(PizzasDelivered) +
+-		sizeof(GarbagePickups) +
+-		sizeof(IceCreamSold) +
+-		sizeof(TopShootingRangeScore) +
+-		sizeof(ShootingRank) +
+-		sizeof(LongestWheelie) +
+-		sizeof(LongestStoppie) +
+-		sizeof(Longest2Wheel) +
+-		sizeof(LongestWheelieDist) +
+-		sizeof(LongestStoppieDist) +
+-		sizeof(Longest2WheelDist) +
+-		sizeof(PropertyBudget) +
+-		sizeof(AutoPaintingBudget) +
+-		sizeof(PropertyDestroyed) +
+-		sizeof(NumPropertyOwned) +
+-		sizeof(BloodRingKills) +
+-		sizeof(BloodRingTime) +
+-		sizeof(PropertyOwned) +
+-		sizeof(HighestChaseValue) +
+-		sizeof(FastestTimes) +
+-		sizeof(HighestScores) +
+-		sizeof(BestPositions) +
+-		sizeof(KillsSinceLastCheckpoint) +
+-		sizeof(TotalLegitimateKills) +
+-		sizeof(LastMissionPassedName) +
+-		sizeof(CheatedCount) +
+-		sizeof(FavoriteRadioStationList);
+-
+-#define CopyToBuf(buf, data) memcpy(buf, &data, sizeof(data)); buf += sizeof(data);
+-	CopyToBuf(buf, PeopleKilledByPlayer);
+-	CopyToBuf(buf, PeopleKilledByOthers);
+-	CopyToBuf(buf, CarsExploded);
+-	CopyToBuf(buf, BoatsExploded);
+-	CopyToBuf(buf, TyresPopped);
+-	CopyToBuf(buf, RoundsFiredByPlayer);
+-	CopyToBuf(buf, PedsKilledOfThisType);
+-	CopyToBuf(buf, HelisDestroyed);
+-	CopyToBuf(buf, ProgressMade);
+-	CopyToBuf(buf, TotalProgressInGame);
+-	CopyToBuf(buf, KgsOfExplosivesUsed);
+-	CopyToBuf(buf, BulletsThatHit);
+-	CopyToBuf(buf, HeadsPopped);
+-	CopyToBuf(buf, WantedStarsAttained);
+-	CopyToBuf(buf, WantedStarsEvaded);
+-	CopyToBuf(buf, TimesArrested);
+-	CopyToBuf(buf, TimesDied);
+-	CopyToBuf(buf, DaysPassed);
+-	CopyToBuf(buf, SafeHouseVisits);
+-	CopyToBuf(buf, Sprayings);
+-	CopyToBuf(buf, MaximumJumpDistance);
+-	CopyToBuf(buf, MaximumJumpHeight);
+-	CopyToBuf(buf, MaximumJumpFlips);
+-	CopyToBuf(buf, MaximumJumpSpins);
+-	CopyToBuf(buf, BestStuntJump);
+-	CopyToBuf(buf, NumberOfUniqueJumpsFound);
+-	CopyToBuf(buf, TotalNumberOfUniqueJumps);
+-	CopyToBuf(buf, MissionsGiven);
+-	CopyToBuf(buf, PassengersDroppedOffWithTaxi);
+-	CopyToBuf(buf, MoneyMadeWithTaxi);
+-	CopyToBuf(buf, IndustrialPassed);
+-	CopyToBuf(buf, CommercialPassed);
+-	CopyToBuf(buf, SuburbanPassed);
+-	CopyToBuf(buf, PamphletMissionPassed);
+-	CopyToBuf(buf, NoMoreHurricanes);
+-	CopyToBuf(buf, DistanceTravelledOnFoot);
+-	CopyToBuf(buf, DistanceTravelledByCar);
+-	CopyToBuf(buf, DistanceTravelledByBike);
+-	CopyToBuf(buf, DistanceTravelledByBoat);
+-	CopyToBuf(buf, DistanceTravelledByGolfCart);
+-	CopyToBuf(buf, DistanceTravelledByHelicoptor);
+-	CopyToBuf(buf, DistanceTravelledByPlane);
+-	CopyToBuf(buf, LivesSavedWithAmbulance);
+-	CopyToBuf(buf, CriminalsCaught);
+-	CopyToBuf(buf, FiresExtinguished);
+-	CopyToBuf(buf, HighestLevelVigilanteMission);
+-	CopyToBuf(buf, HighestLevelAmbulanceMission);
+-	CopyToBuf(buf, HighestLevelFireMission);
+-	CopyToBuf(buf, PhotosTaken);
+-	CopyToBuf(buf, NumberKillFrenziesPassed);
+-	CopyToBuf(buf, TotalNumberKillFrenzies);
+-	CopyToBuf(buf, TotalNumberMissions);
+-	CopyToBuf(buf, FlightTime);
+-	CopyToBuf(buf, TimesDrowned);
+-	CopyToBuf(buf, SeagullsKilled);
+-	CopyToBuf(buf, WeaponBudget);
+-	CopyToBuf(buf, FashionBudget);
+-	CopyToBuf(buf, LoanSharks);
+-	CopyToBuf(buf, StoresKnockedOff);
+-	CopyToBuf(buf, MovieStunts);
+-	CopyToBuf(buf, Assassinations);
+-	CopyToBuf(buf, PizzasDelivered);
+-	CopyToBuf(buf, GarbagePickups);
+-	CopyToBuf(buf, IceCreamSold);
+-	CopyToBuf(buf, TopShootingRangeScore);
+-	CopyToBuf(buf, ShootingRank);
+-	CopyToBuf(buf, LongestWheelie);
+-	CopyToBuf(buf, LongestStoppie);
+-	CopyToBuf(buf, Longest2Wheel);
+-	CopyToBuf(buf, LongestWheelieDist);
+-	CopyToBuf(buf, LongestStoppieDist);
+-	CopyToBuf(buf, Longest2WheelDist);
+-	CopyToBuf(buf, PropertyBudget);
+-	CopyToBuf(buf, AutoPaintingBudget);
+-	CopyToBuf(buf, PropertyDestroyed);
+-	CopyToBuf(buf, NumPropertyOwned);
+-	CopyToBuf(buf, BloodRingKills);
+-	CopyToBuf(buf, BloodRingTime);
+-	CopyToBuf(buf, PropertyOwned);
+-	CopyToBuf(buf, HighestChaseValue);
+-	CopyToBuf(buf, FastestTimes);
+-	CopyToBuf(buf, HighestScores);
+-	CopyToBuf(buf, BestPositions);
+-	CopyToBuf(buf, KillsSinceLastCheckpoint);
+-	CopyToBuf(buf, TotalLegitimateKills);
+-	CopyToBuf(buf, LastMissionPassedName);
+-	CopyToBuf(buf, CheatedCount);
+-	PopulateFavoriteRadioStationList();
+-	CopyToBuf(buf, FavoriteRadioStationList);
+-
+-	assert(buf - buf_start == *size);
+-#undef CopyToBuf
++	*size = revc_stats_save(buf, DMAudio.GetListenTimeArray());
+ }
+ 
+ void CStats::LoadStats(uint8 *buf, uint32 size)
+ {
+-	uint8* buf_start = buf;
+-
+-#define CopyFromBuf(buf, data) memcpy(&data, buf, sizeof(data)); buf += sizeof(data);
+-
+-	CopyFromBuf(buf, PeopleKilledByPlayer);
+-	CopyFromBuf(buf, PeopleKilledByOthers);
+-	CopyFromBuf(buf, CarsExploded);
+-	CopyFromBuf(buf, BoatsExploded);
+-	CopyFromBuf(buf, TyresPopped);
+-	CopyFromBuf(buf, RoundsFiredByPlayer);
+-	CopyFromBuf(buf, PedsKilledOfThisType);
+-	CopyFromBuf(buf, HelisDestroyed);
+-	CopyFromBuf(buf, ProgressMade);
+-	CopyFromBuf(buf, TotalProgressInGame);
+-	CopyFromBuf(buf, KgsOfExplosivesUsed);
+-	CopyFromBuf(buf, BulletsThatHit);
+-	CopyFromBuf(buf, HeadsPopped);
+-	CopyFromBuf(buf, WantedStarsAttained);
+-	CopyFromBuf(buf, WantedStarsEvaded);
+-	CopyFromBuf(buf, TimesArrested);
+-	CopyFromBuf(buf, TimesDied);
+-	CopyFromBuf(buf, DaysPassed);
+-	CopyFromBuf(buf, SafeHouseVisits);
+-	CopyFromBuf(buf, Sprayings);
+-	CopyFromBuf(buf, MaximumJumpDistance);
+-	CopyFromBuf(buf, MaximumJumpHeight);
+-	CopyFromBuf(buf, MaximumJumpFlips);
+-	CopyFromBuf(buf, MaximumJumpSpins);
+-	CopyFromBuf(buf, BestStuntJump);
+-	CopyFromBuf(buf, NumberOfUniqueJumpsFound);
+-	CopyFromBuf(buf, TotalNumberOfUniqueJumps);
+-	CopyFromBuf(buf, MissionsGiven);
+-	CopyFromBuf(buf, PassengersDroppedOffWithTaxi);
+-	CopyFromBuf(buf, MoneyMadeWithTaxi);
+-	CopyFromBuf(buf, IndustrialPassed);
+-	CopyFromBuf(buf, CommercialPassed);
+-	CopyFromBuf(buf, SuburbanPassed);
+-	CopyFromBuf(buf, PamphletMissionPassed);
+-	CopyFromBuf(buf, NoMoreHurricanes);
+-	CopyFromBuf(buf, DistanceTravelledOnFoot);
+-	CopyFromBuf(buf, DistanceTravelledByCar);
+-	CopyFromBuf(buf, DistanceTravelledByBike);
+-	CopyFromBuf(buf, DistanceTravelledByBoat);
+-	CopyFromBuf(buf, DistanceTravelledByGolfCart);
+-	CopyFromBuf(buf, DistanceTravelledByHelicoptor);
+-	CopyFromBuf(buf, DistanceTravelledByPlane);
+-	CopyFromBuf(buf, LivesSavedWithAmbulance);
+-	CopyFromBuf(buf, CriminalsCaught);
+-	CopyFromBuf(buf, FiresExtinguished);
+-	CopyFromBuf(buf, HighestLevelVigilanteMission);
+-	CopyFromBuf(buf, HighestLevelAmbulanceMission);
+-	CopyFromBuf(buf, HighestLevelFireMission);
+-	CopyFromBuf(buf, PhotosTaken);
+-	CopyFromBuf(buf, NumberKillFrenziesPassed);
+-	CopyFromBuf(buf, TotalNumberKillFrenzies);
+-	CopyFromBuf(buf, TotalNumberMissions);
+-	CopyFromBuf(buf, FlightTime);
+-	CopyFromBuf(buf, TimesDrowned);
+-	CopyFromBuf(buf, SeagullsKilled);
+-	CopyFromBuf(buf, WeaponBudget);
+-	CopyFromBuf(buf, FashionBudget);
+-	CopyFromBuf(buf, LoanSharks);
+-	CopyFromBuf(buf, StoresKnockedOff);
+-	CopyFromBuf(buf, MovieStunts);
+-	CopyFromBuf(buf, Assassinations);
+-	CopyFromBuf(buf, PizzasDelivered);
+-	CopyFromBuf(buf, GarbagePickups);
+-	CopyFromBuf(buf, IceCreamSold);
+-	CopyFromBuf(buf, TopShootingRangeScore);
+-	CopyFromBuf(buf, ShootingRank);
+-	CopyFromBuf(buf, LongestWheelie);
+-	CopyFromBuf(buf, LongestStoppie);
+-	CopyFromBuf(buf, Longest2Wheel);
+-	CopyFromBuf(buf, LongestWheelieDist);
+-	CopyFromBuf(buf, LongestStoppieDist);
+-	CopyFromBuf(buf, Longest2WheelDist);
+-	CopyFromBuf(buf, PropertyBudget);
+-	CopyFromBuf(buf, AutoPaintingBudget);
+-	CopyFromBuf(buf, PropertyDestroyed);
+-	CopyFromBuf(buf, NumPropertyOwned);
+-	CopyFromBuf(buf, BloodRingKills);
+-	CopyFromBuf(buf, BloodRingTime);
+-	CopyFromBuf(buf, PropertyOwned);
+-	CopyFromBuf(buf, HighestChaseValue);
+-	CopyFromBuf(buf, FastestTimes);
+-	CopyFromBuf(buf, HighestScores);
+-	CopyFromBuf(buf, BestPositions);
+-	CopyFromBuf(buf, KillsSinceLastCheckpoint);
+-	CopyFromBuf(buf, TotalLegitimateKills);
+-	CopyFromBuf(buf, LastMissionPassedName);
+-	CopyFromBuf(buf, CheatedCount);
+-	CopyFromBuf(buf, FavoriteRadioStationList);
+-
+-	assert(buf - buf_start == size);
+-#undef CopyFromBuf
++	revc_stats_load(buf, size);
+ }
+ 
+ void
+--- a/src/core/Stats.h
++++ b/src/core/Stats.h
+@@ -12,99 +12,99 @@
+ 		TOTAL_BEST_POSITIONS = 1,
+ 		TOTAL_PROPERTIES = 15
+ 	};
+-	static int32 SeagullsKilled;
+-	static int32 DaysPassed;
+-	static int32 HeadsPopped;
+-	static int32 CommercialPassed;
+-	static int32 IndustrialPassed;
+-	static int32 SuburbanPassed;
+-	static int32 NumberKillFrenziesPassed;
+-	static int32 PeopleKilledByOthers;
+-	static int32 HelisDestroyed;
+-	static int32 PedsKilledOfThisType[NUM_PEDTYPES];
+-	static int32 TimesDied;
+-	static int32 TimesArrested;
+-	static int32 KillsSinceLastCheckpoint;
+-	static float DistanceTravelledByCar;
+-	static float DistanceTravelledByHelicoptor;
+-	static float DistanceTravelledByBike;
+-	static float DistanceTravelledByBoat;
+-	static float DistanceTravelledByPlane;
+-	static float DistanceTravelledByGolfCart;
+-	static float DistanceTravelledOnFoot;
+-	static int32 FlightTime;
+-	static int32 TimesDrowned;
+-	static int32 PhotosTaken;
+-	static float LoanSharks;
+-	static float StoresKnockedOff;
+-	static float MovieStunts;
+-	static float Assassinations;
+-	static float PizzasDelivered;
+-	static float GarbagePickups;
+-	static float IceCreamSold;
+-	static float TopShootingRangeScore;
+-	static float ShootingRank;
+-	static int32 CarsExploded;
+-	static int32 BoatsExploded;
+-	static int32 WantedStarsAttained;
+-	static int32 WantedStarsEvaded;
+-	static int32 PeopleKilledByPlayer;
+-	static float ProgressMade;
+-	static float TotalProgressInGame;
+-	static float MaximumJumpDistance;
+-	static float MaximumJumpHeight;
+-	static int32 MaximumJumpFlips;
+-	static int32 MaximumJumpSpins;
+-	static int32 BestStuntJump;
+-	static int32 NumberOfUniqueJumpsFound;
+-	static int32 TotalNumberOfUniqueJumps;
+-	static int32 PassengersDroppedOffWithTaxi;
+-	static int32 MoneyMadeWithTaxi;
+-	static int32 MissionsGiven;
+-	static int32 MissionsPassed;
+-	static char  LastMissionPassedName[8];
+-	static int32 TotalLegitimateKills;
+-	static int32 LivesSavedWithAmbulance;
+-	static int32 CriminalsCaught;
+-	static int32 HighestLevelAmbulanceMission;
+-	static int32 HighestLevelVigilanteMission;
+-	static int32 HighestLevelFireMission;
+-	static int32 FiresExtinguished;
+-	static int32 TotalNumberKillFrenzies;
+-	static int32 TotalNumberMissions;
+-	static int32 RoundsFiredByPlayer;
+-	static int32 KgsOfExplosivesUsed;
+-	static int32 BulletsThatHit;
+-	static int32 BestTimeBombDefusal;
+-	static int32 FastestTimes[TOTAL_FASTEST_TIMES];
+-	static int32 HighestScores[TOTAL_HIGHEST_SCORES];
+-	static int32 BestPositions[TOTAL_BEST_POSITIONS];
+-	static bool PropertyOwned[TOTAL_PROPERTIES];
+-	static int32 NumPropertyOwned;
+-	static int32 PropertyDestroyed;
+-	static float HighestChaseValue;
+-	static int32 CheatedCount;
+-	static int32 ShowChaseStatOnScreen;
+-	static int32 PamphletMissionPassed;
+-	static bool abSonyCDs[1];
+-	static int32 BloodRingKills;
+-	static int32 BloodRingTime;
+-	static float FavoriteRadioStationList[NUM_RADIOS];
+-	static int32 Sprayings;
+-	static float AutoPaintingBudget;
+-	static int32 NoMoreHurricanes;
+-	static float FashionBudget;
+-	static float PropertyBudget;
+-	static float WeaponBudget;
+-	static int32 SafeHouseVisits;
+-	static int32 TyresPopped;
++	static int32 &SeagullsKilled;
++	static int32 &DaysPassed;
++	static int32 &HeadsPopped;
++	static int32 &CommercialPassed;
++	static int32 &IndustrialPassed;
++	static int32 &SuburbanPassed;
++	static int32 &NumberKillFrenziesPassed;
++	static int32 &PeopleKilledByOthers;
++	static int32 &HelisDestroyed;
++	static int32 (&PedsKilledOfThisType)[NUM_PEDTYPES];
++	static int32 &TimesDied;
++	static int32 &TimesArrested;
++	static int32 &KillsSinceLastCheckpoint;
++	static float &DistanceTravelledByCar;
++	static float &DistanceTravelledByHelicoptor;
++	static float &DistanceTravelledByBike;
++	static float &DistanceTravelledByBoat;
++	static float &DistanceTravelledByPlane;
++	static float &DistanceTravelledByGolfCart;
++	static float &DistanceTravelledOnFoot;
++	static int32 &FlightTime;
++	static int32 &TimesDrowned;
++	static int32 &PhotosTaken;
++	static float &LoanSharks;
++	static float &StoresKnockedOff;
++	static float &MovieStunts;
++	static float &Assassinations;
++	static float &PizzasDelivered;
++	static float &GarbagePickups;
++	static float &IceCreamSold;
++	static float &TopShootingRangeScore;
++	static float &ShootingRank;
++	static int32 &CarsExploded;
++	static int32 &BoatsExploded;
++	static int32 &WantedStarsAttained;
++	static int32 &WantedStarsEvaded;
++	static int32 &PeopleKilledByPlayer;
++	static float &ProgressMade;
++	static float &TotalProgressInGame;
++	static float &MaximumJumpDistance;
++	static float &MaximumJumpHeight;
++	static int32 &MaximumJumpFlips;
++	static int32 &MaximumJumpSpins;
++	static int32 &BestStuntJump;
++	static int32 &NumberOfUniqueJumpsFound;
++	static int32 &TotalNumberOfUniqueJumps;
++	static int32 &PassengersDroppedOffWithTaxi;
++	static int32 &MoneyMadeWithTaxi;
++	static int32 &MissionsGiven;
++	static int32 &MissionsPassed;
++	static char (&LastMissionPassedName)[8];
++	static int32 &TotalLegitimateKills;
++	static int32 &LivesSavedWithAmbulance;
++	static int32 &CriminalsCaught;
++	static int32 &HighestLevelAmbulanceMission;
++	static int32 &HighestLevelVigilanteMission;
++	static int32 &HighestLevelFireMission;
++	static int32 &FiresExtinguished;
++	static int32 &TotalNumberKillFrenzies;
++	static int32 &TotalNumberMissions;
++	static int32 &RoundsFiredByPlayer;
++	static int32 &KgsOfExplosivesUsed;
++	static int32 &BulletsThatHit;
++	static int32 &BestTimeBombDefusal;
++	static int32 (&FastestTimes)[TOTAL_FASTEST_TIMES];
++	static int32 (&HighestScores)[TOTAL_HIGHEST_SCORES];
++	static int32 (&BestPositions)[TOTAL_BEST_POSITIONS];
++	static bool (&PropertyOwned)[TOTAL_PROPERTIES];
++	static int32 &NumPropertyOwned;
++	static int32 &PropertyDestroyed;
++	static float &HighestChaseValue;
++	static int32 &CheatedCount;
++	static int32 &ShowChaseStatOnScreen;
++	static int32 &PamphletMissionPassed;
++	static bool (&abSonyCDs)[1];
++	static int32 &BloodRingKills;
++	static int32 &BloodRingTime;
++	static float (&FavoriteRadioStationList)[NUM_RADIOS];
++	static int32 &Sprayings;
++	static float &AutoPaintingBudget;
++	static int32 &NoMoreHurricanes;
++	static float &FashionBudget;
++	static float &PropertyBudget;
++	static float &WeaponBudget;
++	static int32 &SafeHouseVisits;
++	static int32 &TyresPopped;
+ 
+-	static int32 LongestWheelie;
+-	static int32 LongestStoppie;
+-	static int32 Longest2Wheel;
+-	static float LongestWheelieDist;
+-	static float LongestStoppieDist;
+-	static float Longest2WheelDist;
++	static int32 &LongestWheelie;
++	static int32 &LongestStoppie;
++	static int32 &Longest2Wheel;
++	static float &LongestWheelieDist;
++	static float &LongestStoppieDist;
++	static float &Longest2WheelDist;
+ 
+ public:
+ 	static void Init(void);
+--- a/src/core/SurfaceTable.cpp
++++ b/src/core/SurfaceTable.cpp
+@@ -6,151 +6,43 @@
+ #include "Collision.h"
+ #include "SurfaceTable.h"
+ 
+-float CSurfaceTable::ms_aAdhesiveLimitTable[NUMADHESIVEGROUPS][NUMADHESIVEGROUPS];
++// CSurfaceTable is in Rust (rust/revc/src/surface.rs), which also holds the adhesive limit table.
++extern "C" {
++void revc_surface_init(const uint8 *data, size_t len);
++int32 revc_surface_adhesion_group(uint8 surface);
++float revc_surface_wet_multiplier(uint8 surface, float wetRoads);
++float revc_surface_adhesive_limit(uint8 surfaceA, uint8 surfaceB);
++bool revc_surface_is_soft_landing(uint8 surface);
++}
+ 
+ void
+ CSurfaceTable::Initialise(Const char *filename)
+ {
+-	int lineno, fieldno;
+-	char *line;
+-	char surfname[256];
+-	float adhesiveLimit;
+-
+ 	CFileMgr::SetDir("");
+-	CFileMgr::LoadFile(filename, work_buff, sizeof(work_buff), "r");
+-
+-	line = (char*)work_buff;
+-	for(lineno = 0; lineno < NUMADHESIVEGROUPS; lineno++){
+-		// skip white space and comments
+-		while(*line == ' ' || *line == '\t' || *line == '\n' || *line == '\r' || *line == ';'){
+-			if(*line == ';'){
+-				while(*line != '\n' && *line != '\r')
+-					line++;
+-			}else
+-				line++;
+-		}
+-
+-		sscanf(line, "%s", surfname);
+-		// skip what we just read
+-		while(!(*line == ' ' || *line == '\t' || *line == ','))
+-			line++;
+-
+-		for(fieldno = 0; fieldno <= lineno; fieldno++){
+-			// skip white space
+-			while(*line == ' ' || *line == '\t' || *line == ',')
+-				line++;
+-			adhesiveLimit = 0.0f;
+-			if(*line != '-')
+-				sscanf(line, "%f", &adhesiveLimit);
+-			// skip what we just read
+-			while(!(*line == ' ' || *line == '\t' || *line == ',' || *line == '\n'))
+-				line++;
+-
+-			ms_aAdhesiveLimitTable[lineno][fieldno] = adhesiveLimit;
+-			ms_aAdhesiveLimitTable[fieldno][lineno] = adhesiveLimit;
+-		}
+-	}
++	ssize_t len = CFileMgr::LoadFile(filename, work_buff, sizeof(work_buff), "r");
++	revc_surface_init(work_buff, len < 0 ? 0 : len);
+ }
+ 
+ int
+ CSurfaceTable::GetAdhesionGroup(uint8 surfaceType)
+ {
+-	switch(surfaceType){
+-	case SURFACE_DEFAULT:		return ADHESIVE_ROAD;
+-	case SURFACE_TARMAC:		return ADHESIVE_ROAD;
+-	case SURFACE_GRASS:		return ADHESIVE_LOOSE;
+-	case SURFACE_GRAVEL:		return ADHESIVE_LOOSE;
+-	case SURFACE_MUD_DRY:		return ADHESIVE_HARD;
+-	case SURFACE_PAVEMENT:		return ADHESIVE_ROAD;
+-	case SURFACE_CAR:		return ADHESIVE_HARD;
+-	case SURFACE_GLASS:		return ADHESIVE_HARD;
+-	case SURFACE_TRANSPARENT_CLOTH:	return ADHESIVE_HARD;
+-	case SURFACE_GARAGE_DOOR:	return ADHESIVE_HARD;
+-	case SURFACE_CAR_PANEL:		return ADHESIVE_HARD;
+-	case SURFACE_THICK_METAL_PLATE:	return ADHESIVE_HARD;
+-	case SURFACE_SCAFFOLD_POLE:	return ADHESIVE_HARD;
+-	case SURFACE_LAMP_POST:		return ADHESIVE_HARD;
+-	case SURFACE_FIRE_HYDRANT:	return ADHESIVE_HARD;
+-	case SURFACE_GIRDER:		return ADHESIVE_HARD;
+-	case SURFACE_METAL_CHAIN_FENCE:	return ADHESIVE_HARD;
+-	case SURFACE_PED:		return ADHESIVE_RUBBER;
+-	case SURFACE_SAND:		return ADHESIVE_SAND;
+-	case SURFACE_WATER:		return ADHESIVE_WET;
+-	case SURFACE_WOOD_CRATES:	return ADHESIVE_ROAD;
+-	case SURFACE_WOOD_BENCH:	return ADHESIVE_ROAD;
+-	case SURFACE_WOOD_SOLID:	return ADHESIVE_ROAD;
+-	case SURFACE_RUBBER:		return ADHESIVE_RUBBER;
+-	case SURFACE_PLASTIC:		return ADHESIVE_HARD;
+-	case SURFACE_HEDGE:		return ADHESIVE_LOOSE;
+-	case SURFACE_STEEP_CLIFF:	return ADHESIVE_LOOSE;
+-	case SURFACE_CONTAINER:		return ADHESIVE_HARD;
+-	case SURFACE_NEWS_VENDOR:	return ADHESIVE_HARD;
+-	case SURFACE_WHEELBASE:		return ADHESIVE_RUBBER;
+-	case SURFACE_CARDBOARDBOX:	return ADHESIVE_LOOSE;
+-	case SURFACE_TRANSPARENT_STONE:	return ADHESIVE_HARD;
+-	case SURFACE_METAL_GATE:	return ADHESIVE_HARD;
+-	case SURFACE_SAND_BEACH:	return ADHESIVE_SAND;
+-	case SURFACE_CONCRETE_BEACH:	return ADHESIVE_ROAD;
+-	default:			return ADHESIVE_ROAD;
+-	}
++	return revc_surface_adhesion_group(surfaceType);
+ }
+ 
+ float
+ CSurfaceTable::GetWetMultiplier(uint8 surfaceType)
+ {
+-	switch(surfaceType){
+-	case SURFACE_DEFAULT:
+-	case SURFACE_TARMAC:
+-	case SURFACE_MUD_DRY:
+-	case SURFACE_PAVEMENT:
+-	case SURFACE_TRANSPARENT_CLOTH:
+-	case SURFACE_WOOD_CRATES:
+-	case SURFACE_WOOD_BENCH:
+-	case SURFACE_WOOD_SOLID:
+-	case SURFACE_HEDGE:
+-	case SURFACE_CARDBOARDBOX:
+-	case SURFACE_TRANSPARENT_STONE:
+-	case SURFACE_CONCRETE_BEACH:
+-		return 1.0f - CWeather::WetRoads*0.25f;
+-
+-	case SURFACE_GRASS:
+-	case SURFACE_CAR:
+-	case SURFACE_GLASS:
+-	case SURFACE_GARAGE_DOOR:
+-	case SURFACE_CAR_PANEL:
+-	case SURFACE_THICK_METAL_PLATE:
+-	case SURFACE_SCAFFOLD_POLE:
+-	case SURFACE_LAMP_POST:
+-	case SURFACE_FIRE_HYDRANT:
+-	case SURFACE_GIRDER:
+-	case SURFACE_METAL_CHAIN_FENCE:
+-	case SURFACE_PED:
+-	case SURFACE_RUBBER:
+-	case SURFACE_PLASTIC:
+-	case SURFACE_STEEP_CLIFF:
+-	case SURFACE_CONTAINER:
+-	case SURFACE_NEWS_VENDOR:
+-	case SURFACE_WHEELBASE:
+-	case SURFACE_METAL_GATE:
+-		return 1.0f - CWeather::WetRoads*0.4f;
+-
+-	case SURFACE_SAND:
+-	case SURFACE_SAND_BEACH:
+-		return 1.0f + CWeather::WetRoads*0.5f;
+-
+-	default:
+-		return 1.0f;
+-	}
++	return revc_surface_wet_multiplier(surfaceType, CWeather::WetRoads);
+ }
+ 
+ float
+ CSurfaceTable::GetAdhesiveLimit(CColPoint &colpoint)
+ {
+-	return ms_aAdhesiveLimitTable[GetAdhesionGroup(colpoint.surfaceB)][GetAdhesionGroup(colpoint.surfaceA)];
++	return revc_surface_adhesive_limit(colpoint.surfaceA, colpoint.surfaceB);
+ }
+ 
+ bool
+ CSurfaceTable::IsSoftLanding(uint8 surf)
+ {
+-	return surf == SURFACE_GRASS || surf == SURFACE_SAND || surf == SURFACE_SAND_BEACH;
++	return revc_surface_is_soft_landing(surf);
+ }
+--- a/src/core/SurfaceTable.h
++++ b/src/core/SurfaceTable.h
+@@ -91,7 +91,6 @@
+ 
+ class CSurfaceTable
+ {
+-	static float ms_aAdhesiveLimitTable[NUMADHESIVEGROUPS][NUMADHESIVEGROUPS];
+ public:
+ 	static void Initialise(Const char *filename);
+ 	static int GetAdhesionGroup(uint8 surfaceType);
+--- a/src/core/Timer.cpp
++++ b/src/core/Timer.cpp
+@@ -21,6 +21,7 @@
+ #ifdef FIX_BUGS
+ uint32 CTimer::m_LogicalFrameCounter;
+ uint32 CTimer::m_LogicalFramesPassed;
++double CTimer::ms_dFixedFrameMs = 0.0;
+ #endif
+ 
+ uint32 _nCyclesPerMS = 1;
+@@ -119,6 +120,8 @@
+ 		RsTimerType timer = RsTimer();
+ 		
+ 		RsTimerType updInMs = timer - oldPcTimer;
++		if ( ms_dFixedFrameMs > 0.0 )
++			updInMs = (RsTimerType)ms_dFixedFrameMs;
+ 		
+ 		frameTime = (double)updInMs * ms_fTimeScale;
+ 		
+@@ -209,6 +212,8 @@
+ 		RsTimerType timer = RsTimer();
+ 		
+ 		RsTimerType updInMs = timer - oldPcTimer;
++		if ( ms_dFixedFrameMs > 0.0 )
++			updInMs = (RsTimerType)ms_dFixedFrameMs;
+ 		
+ 		double frameTime = (double)updInMs * ms_fTimeScale;
+ 		
+--- a/src/core/Timer.h
++++ b/src/core/Timer.h
+@@ -1,5 +1,10 @@
+ #pragma once
+ 
++// The save header reads and writes the timer (src/save/GenericGameStorage.cpp).
++struct RevcSimpleVars;
++extern "C" void revc_save_gather_vars(RevcSimpleVars *v);
++extern "C" void revc_save_apply_vars(const RevcSimpleVars *v);
++
+ class CTimer
+ {
+ 
+@@ -14,8 +19,13 @@
+ #ifdef FIX_BUGS
+ 	static uint32 m_LogicalFrameCounter;
+ 	static uint32 m_LogicalFramesPassed;
++	// When > 0, Update() advances by exactly this many ms instead of the real elapsed time
++	// (fixed-timestep simulation driven by the Rust host, task 8). The real clock is still
++	// tracked so switching back to real time doesn't jump.
++	static double ms_dFixedFrameMs;
+ #endif
+ public:
++	static void SetFixedFrameMs(double ms) { ms_dFixedFrameMs = ms; }
+ 	static bool  m_UserPause;
+ 	static bool  m_CodePause;
+ 
+@@ -58,8 +68,8 @@
+ 	static void StartUserPause(void);
+ 	static void EndUserPause(void);
+ 
+-	friend bool GenericLoad(void);
+-	friend bool GenericSave(int file);
++	friend void revc_save_gather_vars(RevcSimpleVars *v);
++	friend void revc_save_apply_vars(const RevcSimpleVars *v);
+ 	friend class CMemoryCard;
+ 
+ #ifdef FIX_BUGS
+--- a/src/core/Wanted.cpp
++++ b/src/core/Wanted.cpp
+@@ -15,354 +15,67 @@
+ int32 CWanted::MaximumWantedLevel = 6;
+ int32 CWanted::nMaximumWantedLevel = 9600;
+ 
+-void
+-CWanted::Initialise()
+-{
+-	m_nChaos = 0;
+-	m_nMinChaos = 0;
+-	m_nLastUpdateTime = 0;
+-	m_nLastWantedLevelChange = 0;
+-	m_nLastTimeSuspended = 0;
+-	m_CurrentCops = 0;
+-	m_MaxCops = 0;
+-	m_MaximumLawEnforcerVehicles = 0;
+-	m_RoadblockDensity = 0;
+-	m_bIgnoredByCops = false;
+-	m_bIgnoredByEveryone = false;
+-	m_bSwatRequired = false;
+-	m_bFbiRequired = false;
+-	m_bArmyRequired = false;
+-	m_fCrimeSensitivity = 1.0f;
+-	m_nWantedLevel = 0;
+-	m_nMinWantedLevel = 0;
+-	m_CopsBeatingSuspect = 0;
+-
+-	for (int i = 0; i < ARRAY_SIZE(m_pCops); i++)
+-		m_pCops[i] = nil;
+-
+-	ClearQdCrimes();
+-}
+-
+-bool
+-CWanted::AreMiamiViceRequired()
+-{
+-	return m_nWantedLevel >= 3;
+-}
+-
+-bool
+-CWanted::AreSwatRequired()
+-{
+-	return m_nWantedLevel == 4 || m_bSwatRequired;
+-}
+-
+-bool
+-CWanted::AreFbiRequired()
+-{
+-	return m_nWantedLevel == 5 || m_bFbiRequired;
+-}
+-
+-bool
+-CWanted::AreArmyRequired()
+-{
+-	return m_nWantedLevel == 6 || m_bArmyRequired;
+-}
+-
+-int32
+-CWanted::NumOfHelisRequired()
+-{
+-	if (m_bIgnoredByCops || m_bIgnoredByEveryone)
+-		return 0;
+-
+-	switch (m_nWantedLevel) {
+-	case 3:
+-	case 4:
+-		return 1;
+-	case 5:
+-	case 6:
+-		return 1;
+-	default:
+-		return 0;
+-	}
+-}
+-
+-void
+-CWanted::SetWantedLevel(int32 level)
+-{
+-	if (level > MaximumWantedLevel)
+-		level = MaximumWantedLevel;
+-
+-	ClearQdCrimes();
+-	switch (level) {
+-	case 0:
+-		m_nChaos = 0;
+-		break;
+-	case 1:
+-		m_nChaos = 70;
+-		break;
+-	case 2:
+-		m_nChaos = 200;
+-		break;
+-	case 3:
+-		m_nChaos = 570;
+-		break;
+-	case 4:
+-		m_nChaos = 1220;
+-		break;
+-	case 5:
+-		m_nChaos = 2420;
+-		break;
+-	case 6:
+-		m_nChaos = 4820;
+-		break;
+-	default:
+-		break;
+-	}
+-	UpdateWantedLevel();
+-}
+-
+-void
+-CWanted::SetWantedLevelNoDrop(int32 level)
+-{
+-	if (m_nWantedLevel < m_nMinWantedLevel)
+-		SetWantedLevel(m_nMinWantedLevel);
+-
+-	if (level > m_nWantedLevel)
+-		SetWantedLevel(level);
+-}
+-
+-void
+-CWanted::CheatWantedLevel(int32 level)
+-{
+-	SetWantedLevel(level);
+-	UpdateWantedLevel();
+-}
+-
+-void
+-CWanted::SetMaximumWantedLevel(int32 level)
+-{
+-	switch(level){
+-	case 0:
+-		nMaximumWantedLevel = 0;
+-		MaximumWantedLevel = 0;
+-		break;
+-	case 1:
+-		nMaximumWantedLevel = 115;
+-		MaximumWantedLevel = 1;
+-		break;
+-	case 2:
+-		nMaximumWantedLevel = 365;
+-		MaximumWantedLevel = 2;
+-		break;
+-	case 3:
+-		nMaximumWantedLevel = 875;
+-		MaximumWantedLevel = 3;
+-		break;
+-	case 4:
+-		nMaximumWantedLevel = 1800;
+-		MaximumWantedLevel = 4;
+-		break;
+-	case 5:
+-		nMaximumWantedLevel = 3600;
+-		MaximumWantedLevel = 5;
+-		break;
+-	case 6:
+-		nMaximumWantedLevel = 7200;
+-		MaximumWantedLevel = 6;
+-		break;
+-	}
+-}
+-
+-void
+-CWanted::RegisterCrime(eCrimeType type, const CVector &coors, uint32 id, bool policeDoesntCare)
+-{
+-	AddCrimeToQ(type, id, coors, false, policeDoesntCare);
+-}
+-
+-void
+-CWanted::RegisterCrime_Immediately(eCrimeType type, const CVector &coors, uint32 id, bool policeDoesntCare)
+-{
+-#ifdef FIX_SIGNIFICANT_BUGS
+-	if(!AddCrimeToQ(type, id, coors, true, policeDoesntCare))
+-#else
+-	if(!AddCrimeToQ(type, id, coors, false, policeDoesntCare))
+-#endif
+-		ReportCrimeNow(type, coors, policeDoesntCare);
+-}
+-
+-void
+-CWanted::ClearQdCrimes()
+-{
+-	for (int i = 0; i < 16; i++)
+-		m_aCrimes[i].m_nType = CRIME_NONE;
+-}
+-
+-// returns whether the crime had been reported already
+-bool
+-CWanted::AddCrimeToQ(eCrimeType type, int32 id, const CVector &coors, bool reported, bool policeDoesntCare)
+-{
+-	int i;
+-
+-	for(i = 0; i < 16; i++)
+-		if(m_aCrimes[i].m_nType == type && m_aCrimes[i].m_nId == id){
+-			if(m_aCrimes[i].m_bReported)
+-				return true;
+-			if(reported)
+-				m_aCrimes[i].m_bReported = reported;
+-			return false;
+-		}
+-
+-	for(i = 0; i < 16; i++)
+-		if(m_aCrimes[i].m_nType == CRIME_NONE)
+-			break;
+-	if(i < 16){
+-		m_aCrimes[i].m_nType = type;
+-		m_aCrimes[i].m_nId = id;
+-		m_aCrimes[i].m_vecPosn = coors;
+-		m_aCrimes[i].m_nTime = CTimer::GetTimeInMilliseconds();
+-		m_aCrimes[i].m_bReported = reported;
+-		m_aCrimes[i].m_bPoliceDoesntCare = policeDoesntCare;
+-	}
+-	return false;
+-}
+-
+-void
+-CWanted::ReportCrimeNow(eCrimeType type, const CVector &coors, bool policeDoesntCare)
+-{
+-	float sensitivity, chaos;
+-	int wantedLevelDrop;
+-
+-	if(CDarkel::FrenzyOnGoing())
+-		sensitivity = m_fCrimeSensitivity*0.3f;
+-	else
+-		sensitivity = m_fCrimeSensitivity;
+-
+-	wantedLevelDrop = Min(CCullZones::GetWantedLevelDrop(), 100);
+-
+-	chaos = (1.0f - wantedLevelDrop/100.0f) * sensitivity;
+-	if (policeDoesntCare)
+-		chaos *= 0.333f;
+-	switch(type){
+-	case CRIME_POSSESSION_GUN:
+-		break;
+-	case CRIME_HIT_PED:
+-		m_nChaos += 5.0f*chaos;
+-		break;
+-	case CRIME_HIT_COP:
+-		m_nChaos += 45.0f*chaos;
+-		break;
+-	case CRIME_SHOOT_PED:
+-		m_nChaos += 30.0f*chaos;
+-		break;
+-	case CRIME_SHOOT_COP:
+-		m_nChaos += 80.0f*chaos;
+-		break;
+-	case CRIME_STEAL_CAR:
+-		m_nChaos += 15.0f*chaos;
+-		break;
+-	case CRIME_RUN_REDLIGHT:
+-		m_nChaos += 10.0f*chaos;
+-		break;
+-	case CRIME_RECKLESS_DRIVING:
+-		m_nChaos += 5.0f*chaos;
+-		break;
+-	case CRIME_SPEEDING:
+-		m_nChaos += 5.0f*chaos;
+-		break;
+-	case CRIME_RUNOVER_PED:
+-		m_nChaos += 18.0f*chaos;
+-		break;
+-	case CRIME_RUNOVER_COP:
+-		m_nChaos += 80.0f*chaos;
+-		break;
+-	case CRIME_SHOOT_HELI:
+-		m_nChaos += 400.0f*chaos;
+-		break;
+-	case CRIME_PED_BURNED:
+-		m_nChaos += 20.0f*chaos;
+-		break;
+-	case CRIME_COP_BURNED:
+-		m_nChaos += 80.0f*chaos;
+-		break;
+-	case CRIME_VEHICLE_BURNED:
+-		m_nChaos += 20.0f*chaos;
+-		break;
+-	case CRIME_DESTROYED_CESSNA:
+-		m_nChaos += 500.0f*chaos;
+-		break;
+-	case CRIME_EXPLOSION:
+-		m_nChaos += 25.0f * chaos;
+-		break;
+-	case CRIME_HIT_PED_NASTYWEAPON:
+-		m_nChaos += 35.0f * chaos;
+-		break;
+-	case CRIME_HIT_COP_NASTYWEAPON:
+-		m_nChaos += 100.0f * chaos;
+-		break;
+-	default:
+-	//	Error("Undefined crime type, RegisterCrime, Crime.cpp");	// different file for some reason
+-		Error("Undefined crime type, RegisterCrime, Wanted.cpp");
+-	}
+-	m_nChaos = Max(m_nChaos, m_nMinChaos);
+-	DMAudio.ReportCrime(type, coors);
+-	UpdateWantedLevel();
+-}
+-
+-void
+-CWanted::UpdateWantedLevel()
+-{
+-	int32 CurrWantedLevel = m_nWantedLevel;
+-
+-	if (m_nChaos > nMaximumWantedLevel)
+-		m_nChaos = nMaximumWantedLevel;
+-
+-	if (m_nChaos >= 0 && m_nChaos < 50) {
+-		if (m_nWantedLevel == 1)
+-			++CStats::WantedStarsEvaded;
+-		m_nWantedLevel = 0;
+-		m_MaximumLawEnforcerVehicles = 0;
+-		m_MaxCops = 0;
+-		m_RoadblockDensity = 0;
+-	} else if (m_nChaos >= 50 && m_nChaos < 180) {
+-		CStats::WantedStarsAttained += 1 - m_nWantedLevel;
+-		m_nWantedLevel = 1;
+-		m_MaximumLawEnforcerVehicles = 1;
+-		m_MaxCops = 1;
+-		m_RoadblockDensity = 0;
+-	} else if (m_nChaos >= 180 && m_nChaos < 550) {
+-		CStats::WantedStarsAttained += 2 - m_nWantedLevel;
+-		m_nWantedLevel = 2;
+-		m_MaximumLawEnforcerVehicles = 2;
+-		m_MaxCops = 3;
+-		m_RoadblockDensity = 0;
+-	} else if (m_nChaos >= 550 && m_nChaos < 1200) {
+-		CStats::WantedStarsAttained += 3 - m_nWantedLevel;
+-		m_nWantedLevel = 3;
+-		m_MaximumLawEnforcerVehicles = 2;
+-		m_MaxCops = 4;
+-		m_RoadblockDensity = 12;
+-	} else if (m_nChaos >= 1200 && m_nChaos < 2400) {
+-		CStats::WantedStarsAttained += 4 - m_nWantedLevel;
+-		m_nWantedLevel = 4;
+-		m_MaximumLawEnforcerVehicles = 2;
+-		m_MaxCops = 6;
+-		m_RoadblockDensity = 18;
+-	} else if (m_nChaos >= 2400 && m_nChaos < 4800) {
+-		CStats::WantedStarsAttained += 5 - m_nWantedLevel;
+-		m_nWantedLevel = 5;
+-		m_MaximumLawEnforcerVehicles = 3;
+-		m_MaxCops = 8;
+-		m_RoadblockDensity = 24;
+-	} else if (m_nChaos >= 4800) {
+-		CStats::WantedStarsAttained += 6 - m_nWantedLevel;
+-		m_nWantedLevel = 6;
+-		m_MaximumLawEnforcerVehicles = 3;
+-		m_MaxCops = 10;
+-		m_RoadblockDensity = 30;
+-	}
+-
+-	if (CurrWantedLevel != m_nWantedLevel)
+-		m_nLastWantedLevelChange = CTimer::GetTimeInMilliseconds();
+-}
++// The wanted level logic is in Rust (rust/revc/src/wanted.rs), on this object; the world it reads
++// comes back through the revc_cpp_wanted_* hooks below.
++static_assert(sizeof(CWanted) == 568 && offsetof(CWanted, m_RoadblockDensity) == 28 && offsetof(CWanted, m_nWantedLevel) == 32 &&
++              offsetof(CWanted, m_aCrimes) == 40 && offsetof(CWanted, m_pCops) == 488 && sizeof(CCrimeBeingQd) == 28, "CWanted layout (wanted.rs)");
++struct RevcWantedStatics { int32 *maximumWantedLevel, *nMaximumWantedLevel, *wantedStarsAttained, *wantedStarsEvaded; };
++extern "C" {
++void revc_wanted_bind(const RevcWantedStatics *s);
++void revc_wanted_initialise(CWanted *w);
++int32 revc_wanted_query(const CWanted *w, int32 what);
++void revc_wanted_set_level(CWanted *w, int32 level, int32 how);
++void revc_wanted_set_maximum(int32 level);
++void revc_wanted_clear_qd(CWanted *w);
++bool revc_wanted_add_crime(CWanted *w, int32 type, int32 id, const CVector *coors, bool reported, bool policeDoesntCare);
++void revc_wanted_register_immediately(CWanted *w, int32 type, const CVector *coors, uint32 id, bool policeDoesntCare);
++void revc_wanted_report_now(CWanted *w, int32 type, const CVector *coors, bool policeDoesntCare);
++void revc_wanted_update_level(CWanted *w);
++void revc_wanted_update(CWanted *w);
++void revc_wanted_update_crimes_q(CWanted *w);
++void revc_wanted_reset(CWanted *w);
++void revc_wanted_suspend(CWanted *w);
++
++uint32 revc_cpp_wanted_now(void) { return CTimer::GetTimeInMilliseconds(); }
++bool revc_cpp_wanted_frenzy(void) { return CDarkel::FrenzyOnGoing(); }
++int32 revc_cpp_wanted_level_drop(void) { return CCullZones::GetWantedLevelDrop(); }
++void revc_cpp_wanted_report_audio(int32 type, const CVector *coors) { DMAudio.ReportCrime((eCrimeType)type, *coors); }
++int32 revc_cpp_wanted_police_presence(float radius) { return CWanted::WorkOutPolicePresence(FindPlayerCoors(), radius); }
++void revc_cpp_wanted_reset_pursuit(CWanted *w) { w->ResetPolicePursuit(); }
++}
++
++static void
++BindWanted(void)
++{
++	static bool bound;
++	if(bound)
++		return;
++	static const RevcWantedStatics statics = { &CWanted::MaximumWantedLevel, &CWanted::nMaximumWantedLevel,
++	                                           &CStats::WantedStarsAttained, &CStats::WantedStarsEvaded };
++	revc_wanted_bind(&statics);
++	bound = true;
++}
++
++void CWanted::Initialise() { BindWanted(); revc_wanted_initialise(this); }
++bool CWanted::AreMiamiViceRequired() { return revc_wanted_query(this, 0); }
++bool CWanted::AreSwatRequired() { return revc_wanted_query(this, 1); }
++bool CWanted::AreFbiRequired() { return revc_wanted_query(this, 2); }
++bool CWanted::AreArmyRequired() { return revc_wanted_query(this, 3); }
++int32 CWanted::NumOfHelisRequired() { return revc_wanted_query(this, 4); }
++void CWanted::SetWantedLevel(int32 level) { BindWanted(); revc_wanted_set_level(this, level, 0); }
++void CWanted::SetWantedLevelNoDrop(int32 level) { BindWanted(); revc_wanted_set_level(this, level, 1); }
++void CWanted::CheatWantedLevel(int32 level) { BindWanted(); revc_wanted_set_level(this, level, 2); }
++void CWanted::SetMaximumWantedLevel(int32 level) { BindWanted(); revc_wanted_set_maximum(level); }
++void CWanted::RegisterCrime(eCrimeType type, const CVector &coors, uint32 id, bool policeDoesntCare) { revc_wanted_add_crime(this, type, id, &coors, false, policeDoesntCare); }
++void CWanted::RegisterCrime_Immediately(eCrimeType type, const CVector &coors, uint32 id, bool policeDoesntCare) { BindWanted(); revc_wanted_register_immediately(this, type, &coors, id, policeDoesntCare); }
++void CWanted::ClearQdCrimes() { revc_wanted_clear_qd(this); }
++bool CWanted::AddCrimeToQ(eCrimeType type, int32 id, const CVector &coors, bool reported, bool policeDoesntCare) { return revc_wanted_add_crime(this, type, id, &coors, reported, policeDoesntCare); }
++void CWanted::ReportCrimeNow(eCrimeType type, const CVector &coors, bool policeDoesntCare) { BindWanted(); revc_wanted_report_now(this, type, &coors, policeDoesntCare); }
++void CWanted::UpdateWantedLevel() { BindWanted(); revc_wanted_update_level(this); }
++void CWanted::Update(void) { BindWanted(); revc_wanted_update(this); }
++void CWanted::UpdateCrimesQ(void) { BindWanted(); revc_wanted_update_crimes_q(this); }
++void CWanted::Reset(void) { revc_wanted_reset(this); }
++void CWanted::Suspend(void) { BindWanted(); revc_wanted_suspend(this); }
+ 
+ int32
+ CWanted::WorkOutPolicePresence(CVector posn, float radius)
+@@ -397,63 +110,6 @@
+ }
+ 
+ void
+-CWanted::Update(void)
+-{
+-	if (CTimer::GetTimeInMilliseconds() > m_nLastTimeSuspended + 20000) {
+-		m_nMinChaos = 0;
+-		m_nMinWantedLevel = 0;
+-	}
+-	if (CTimer::GetTimeInMilliseconds() - m_nLastUpdateTime > 1000) {
+-		if (m_nWantedLevel > 1) {
+-			m_nLastUpdateTime = CTimer::GetTimeInMilliseconds();
+-		} else {
+-			float radius = 18.0f;
+-			CVector playerPos = FindPlayerCoors();
+-			if (WorkOutPolicePresence(playerPos, radius) == 0) {
+-				m_nLastUpdateTime = CTimer::GetTimeInMilliseconds();
+-				m_nChaos = Max(0, m_nChaos - 1);
+-				UpdateWantedLevel();
+-			}
+-		}
+-		UpdateCrimesQ();
+-		bool orderMessedUp = false;
+-		int currCopNum = 0;
+-		bool foundEmptySlot = false;
+-		for (int i = 0; i < ARRAY_SIZE(m_pCops); i++) {
+-			if (m_pCops[i]) {
+-				++currCopNum;
+-				if (foundEmptySlot)
+-					orderMessedUp = true;
+-			} else {
+-				foundEmptySlot = true;
+-			}
+-		}
+-		if (currCopNum != m_CurrentCops) {
+-			printf("CopPursuit total messed up: re-setting\n");
+-			m_CurrentCops = currCopNum;
+-		}
+-		if (orderMessedUp) {
+-			printf("CopPursuit pointer list messed up: re-sorting\n");
+-			bool fixed = true;
+-			for (int i = 0; i < ARRAY_SIZE(m_pCops); i++) {
+-				if (!m_pCops[i]) {
+-					for (int j = i; j < ARRAY_SIZE(m_pCops); j++) {
+-						if (m_pCops[j]) {
+-							m_pCops[i] = m_pCops[j];
+-							m_pCops[j] = nil;
+-							fixed = false;
+-							break;
+-						}
+-					}
+-					if (fixed)
+-						break;
+-				}
+-			}
+-		}
+-	}
+-}
+-
+-void
+ CWanted::ResetPolicePursuit(void)
+ {
+ 	for(int i = 0; i < ARRAY_SIZE(m_pCops); i++) {
+@@ -472,39 +128,3 @@
+ 	}
+ 	m_CurrentCops = 0;
+ }
+-
+-void
+-CWanted::Reset(void)
+-{
+-	ResetPolicePursuit();
+-	Initialise();
+-}
+-
+-void
+-CWanted::UpdateCrimesQ(void)
+-{
+-	for(int i = 0; i < ARRAY_SIZE(m_aCrimes); i++) {
+-
+-		CCrimeBeingQd &crime = m_aCrimes[i];
+-		if (crime.m_nType != CRIME_NONE) {
+-			if (CTimer::GetTimeInMilliseconds() > crime.m_nTime + 500 && !crime.m_bReported) {
+-				ReportCrimeNow(crime.m_nType, crime.m_vecPosn, crime.m_bPoliceDoesntCare);
+-				crime.m_bReported = true;
+-			}
+-			if (CTimer::GetTimeInMilliseconds() > crime.m_nTime + 10000)
+-				crime.m_nType = CRIME_NONE;
+-		}
+-	}
+-}
+-
+-void
+-CWanted::Suspend(void)
+-{
+-	CStats::WantedStarsEvaded += m_nWantedLevel;
+-	m_nMinChaos = m_nChaos;
+-	m_nMinWantedLevel = m_nWantedLevel;
+-	m_nLastTimeSuspended = CTimer::GetTimeInMilliseconds();
+-	m_nChaos = 0;
+-	m_nWantedLevel = 0;
+-	ResetPolicePursuit();
+-}
+--- a/src/core/Zones.cpp
++++ b/src/core/Zones.cpp
+@@ -33,94 +33,49 @@
+ 	return TheText.Get(name);
+ }
+ 
++// The zone logic is in Rust (rust/revc/src/zones.rs); the arrays stay here and are bound once.
++struct RevcZonesView {
++	CZone *nav, *info, *map;
++	CZoneInfo *zoneInfos;
++	int16 *audio;
++	uint16 *numAudio, *numMap, *numInfo, *numNav, *numZoneInfos;
++	int16 *findIndex;
++	eLevelName *currLevel;
++};
++static_assert(sizeof(CZone) == 72 && sizeof(CZoneInfo) == 68 && offsetof(CZone, child) == 48, "zone layouts (zones.rs)");
++extern "C" {
++void revc_zones_bind(const RevcZonesView *v);
++void revc_zones_init(void);
++void revc_zones_create(char *name, int32 type, float minx, float miny, float minz, float maxx, float maxy, float maxz, int32 level);
++void revc_zones_post_creation(void);
++bool revc_zones_contained(const CZone *inner, const CZone *outer);
++bool revc_zones_point_within(const CVector *v, const CZone *zone);
++int32 revc_zones_level(const CVector *v);
++CZone *revc_zones_info_zone(const CVector *v);
++CZone *revc_zones_nav_zone(const CVector *v, bool findDefault, bool findNavig);
++int16 revc_zones_find_label(const char *name, int32 type);
++int16 revc_zones_find_next_label(const char *name, int32 type);
++CZoneInfo *revc_zones_zone_info(const CVector *v, uint8 day);
++void revc_zones_zone_info_tod(const CVector *v, uint8 hours, CZoneInfo *info);
++void revc_zones_set_car_info(uint16 zoneid, uint8 day, int16 density, int16 cop, const int16 *gangs);
++void revc_zones_set_civ_car_info(uint16 zoneid, uint8 day, const int16 *cars, const int16 *boats);
++void revc_zones_set_ped_info(uint16 zoneid, uint8 day, int16 density, const int16 *gangs, int16 cop);
++void revc_zones_set_value(uint16 zoneid, uint8 day, int32 what, uint16 v);
++int16 revc_zones_audio_zone(const CVector *pos);
++void revc_zones_save(uint8 *buf, uint32 *size);
++void revc_zones_load(const uint8 *buf, uint32 size);
++}
++
+ void
+ CTheZones::Init(void)
+ {
+-	int i, j;
+-	for(i = 0; i < NUMAUDIOZONES; i++)
+-		AudioZoneArray[i] = -1;
+-	NumberOfAudioZones = 0;
+-
+-	for(i = 0; i < NUMNAVIGZONES; i++)
+-		memset(&NavigationZoneArray[i], 0, sizeof(CZone));
+-
+-	for(i = 0; i < NUMINFOZONES; i++)
+-		memset(&InfoZoneArray[i], 0, sizeof(CZone));
+-
+-	int x = 1000/9;
+-	for(i = 0; i < 2*NUMINFOZONES; i++){
+-		// Cars
+-
+-		ZoneInfoArray[i].carDensity = 10;
+-		ZoneInfoArray[i].carThreshold[0] = x;
+-		ZoneInfoArray[i].carThreshold[1] = ZoneInfoArray[i].carThreshold[0] + x;
+-		ZoneInfoArray[i].carThreshold[2] = ZoneInfoArray[i].carThreshold[1] + x;
+-		ZoneInfoArray[i].carThreshold[3] = ZoneInfoArray[i].carThreshold[2] + x;
+-		ZoneInfoArray[i].carThreshold[4] = ZoneInfoArray[i].carThreshold[3] + x;
+-		ZoneInfoArray[i].carThreshold[5] = ZoneInfoArray[i].carThreshold[4] + x;
+-		ZoneInfoArray[i].carThreshold[6] = ZoneInfoArray[i].carThreshold[5] + x;
+-		ZoneInfoArray[i].carThreshold[7] = ZoneInfoArray[i].carThreshold[6] + x;
+-		ZoneInfoArray[i].carThreshold[8] = 1000;
+-
+-		ZoneInfoArray[i].boatThreshold[0] = 500;
+-		ZoneInfoArray[i].boatThreshold[1] = 1000;
+-
+-		// What's going on here? this looks more like density
+-		ZoneInfoArray[i].copThreshold = 50;
+-		for(j = 0; j < NUM_GANGS; j++)
+-			ZoneInfoArray[i].gangThreshold[j] = ZoneInfoArray[i].copThreshold;
+-
+-		// Peds
+-
+-		ZoneInfoArray[i].pedDensity = 12;
+-
+-		// What's going on here? this looks more like density
+-		ZoneInfoArray[i].copPedThreshold = 50;
+-		for(j = 0; j < NUM_GANGS; j++)
+-			ZoneInfoArray[i].gangPedThreshold[j] = ZoneInfoArray[i].copPedThreshold;
+-
+-		ZoneInfoArray[i].pedGroup = 0;
+-	}
+-
+-	TotalNumberOfZoneInfos = 1;	// why 1?
+-	TotalNumberOfNavigationZones = 1;
+-	TotalNumberOfInfoZones = 1;
+-
+-	strcpy(InfoZoneArray[0].name, "CITYINF");
+-	InfoZoneArray[0].minx = -2400.0f;
+-	InfoZoneArray[0].miny = -2000.0f;
+-	InfoZoneArray[0].minz = -500.0f;
+-	InfoZoneArray[0].maxx =  1600.0f;
+-	InfoZoneArray[0].maxy =  2000.0f;
+-	InfoZoneArray[0].maxz =  500.0f;
+-	InfoZoneArray[0].level = LEVEL_GENERIC;
+-	InfoZoneArray[0].type = ZONE_INFO;
+-
+-	strcpy(NavigationZoneArray[0].name, "VICE_C");
+-	NavigationZoneArray[0].minx = -2400.0f;
+-	NavigationZoneArray[0].miny = -2000.0f;
+-	NavigationZoneArray[0].minz = -500.0f;
+-	NavigationZoneArray[0].maxx =  1600.0f;
+-	NavigationZoneArray[0].maxy =  2000.0f;
+-	NavigationZoneArray[0].maxz =  500.0f;
+-	NavigationZoneArray[0].level = LEVEL_GENERIC;
+-	NavigationZoneArray[0].type = ZONE_DEFAULT;
+-
+-	m_CurrLevel = LEVEL_GENERIC;
+-
+-	for(i = 0; i < NUMMAPZONES; i++){
+-		memset(&MapZoneArray[i], 0, sizeof(CZone));
+-		MapZoneArray[i].type = ZONE_MAPZONE;
+-	}
+-	TotalNumberOfMapZones = 1;
+-	strcpy(MapZoneArray[0].name, "THEMAP");
+-	MapZoneArray[0].minx = -2400.0f;
+-	MapZoneArray[0].miny = -2000.0f;
+-	MapZoneArray[0].minz = -500.0f;
+-	MapZoneArray[0].maxx =  1600.0f;
+-	MapZoneArray[0].maxy =  2000.0f;
+-	MapZoneArray[0].maxz =  500.0f;
+-	MapZoneArray[0].level = LEVEL_GENERIC;
++	static const RevcZonesView view = {
++		NavigationZoneArray, InfoZoneArray, MapZoneArray, ZoneInfoArray, AudioZoneArray,
++		&NumberOfAudioZones, &TotalNumberOfMapZones, &TotalNumberOfInfoZones, &TotalNumberOfNavigationZones,
++		&TotalNumberOfZoneInfos, &FindIndex, &m_CurrLevel,
++	};
++	revc_zones_bind(&view);
++	revc_zones_init();
+ }
+ 
+ void
+@@ -141,73 +96,13 @@
+ 	              float maxx, float maxy, float maxz,
+ 	              eLevelName level)
+ {
+-	char tmpname[24];
+-	char *p;
+-
+-	if(minx > maxx) SWAPF(minx, maxx);
+-	if(miny > maxy) SWAPF(miny, maxy);
+-	if(minz > maxz) SWAPF(minz, maxz);
+-
+-	// make upper case
+-	for(p = name; *p; p++) if(islower(*p)) *p = toupper(*p);
+-
+-	strncpy(tmpname, name, 7);
+-	tmpname[7] = '\0';
+-
+-	// add zone
+-	switch(type){
+-	case ZONE_DEFAULT:
+-	case ZONE_NAVIG:
+-		assert(TotalNumberOfNavigationZones < NUMNAVIGZONES);
+-		strcpy(NavigationZoneArray[TotalNumberOfNavigationZones].name, tmpname);
+-		NavigationZoneArray[TotalNumberOfNavigationZones].type = type;
+-		NavigationZoneArray[TotalNumberOfNavigationZones].minx = minx;
+-		NavigationZoneArray[TotalNumberOfNavigationZones].miny = miny;
+-		NavigationZoneArray[TotalNumberOfNavigationZones].minz = minz;
+-		NavigationZoneArray[TotalNumberOfNavigationZones].maxx = maxx;
+-		NavigationZoneArray[TotalNumberOfNavigationZones].maxy = maxy;
+-		NavigationZoneArray[TotalNumberOfNavigationZones].maxz = maxz;
+-		NavigationZoneArray[TotalNumberOfNavigationZones].level = level;
+-		TotalNumberOfNavigationZones++;
+-		break;
+-	case ZONE_INFO:
+-		assert(TotalNumberOfInfoZones < NUMINFOZONES);
+-		strcpy(InfoZoneArray[TotalNumberOfInfoZones].name, tmpname);
+-		InfoZoneArray[TotalNumberOfInfoZones].type = type;
+-		InfoZoneArray[TotalNumberOfInfoZones].minx = minx;
+-		InfoZoneArray[TotalNumberOfInfoZones].miny = miny;
+-		InfoZoneArray[TotalNumberOfInfoZones].minz = minz;
+-		InfoZoneArray[TotalNumberOfInfoZones].maxx = maxx;
+-		InfoZoneArray[TotalNumberOfInfoZones].maxy = maxy;
+-		InfoZoneArray[TotalNumberOfInfoZones].maxz = maxz;
+-		InfoZoneArray[TotalNumberOfInfoZones].level = level;
+-		InfoZoneArray[TotalNumberOfInfoZones].zoneinfoDay = TotalNumberOfZoneInfos++;
+-		InfoZoneArray[TotalNumberOfInfoZones].zoneinfoNight = TotalNumberOfZoneInfos++;
+-		TotalNumberOfInfoZones++;
+-		break;
+-	case ZONE_MAPZONE:
+-		assert(TotalNumberOfMapZones < NUMMAPZONES);
+-		strcpy(MapZoneArray[TotalNumberOfMapZones].name, tmpname);
+-		MapZoneArray[TotalNumberOfMapZones].type = type;
+-		MapZoneArray[TotalNumberOfMapZones].minx = minx;
+-		MapZoneArray[TotalNumberOfMapZones].miny = miny;
+-		MapZoneArray[TotalNumberOfMapZones].minz = minz;
+-		MapZoneArray[TotalNumberOfMapZones].maxx = maxx;
+-		MapZoneArray[TotalNumberOfMapZones].maxy = maxy;
+-		MapZoneArray[TotalNumberOfMapZones].maxz = maxz;
+-		MapZoneArray[TotalNumberOfMapZones].level = level;
+-		TotalNumberOfMapZones++;
+-		break;
+-	}
++	revc_zones_create(name, type, minx, miny, minz, maxx, maxy, maxz, level);
+ }
+ 
+ void
+ CTheZones::PostZoneCreation(void)
+ {
+-	int i;
+-	for(i = 1; i < TotalNumberOfNavigationZones; i++)
+-		InsertZoneIntoZoneHierarchy(&NavigationZoneArray[i]);
+-	InitialiseAudioZoneArray();
++	revc_zones_post_creation();
+ #ifndef MASTER
+ 	CheckZonesForOverlap();
+ #endif
+@@ -221,310 +116,78 @@
+ 
+ 	for(i = 1; i < TotalNumberOfInfoZones; i++){
+ 		ZoneIsEntirelyContainedWithinOtherZone(&InfoZoneArray[i], &InfoZoneArray[0]);
+-		
++
+ 		for(j = 1; j < TotalNumberOfInfoZones; j++)
+ 			if(i != j && ZoneIsEntirelyContainedWithinOtherZone(&InfoZoneArray[i], &InfoZoneArray[j]))
+ 				sprintf(str, "Info zone %s contains %s\n", InfoZoneArray[j].name, InfoZoneArray[i].name);
+ 	}
+ }
+ 
+-void
+-CTheZones::InsertZoneIntoZoneHierarchy(CZone *zone)
+-{
+-	zone->child = nil;
+-	zone->parent = nil;
+-	zone->next = nil;
+-	InsertZoneIntoZoneHierRecursive(zone, &NavigationZoneArray[0]);
+-}
+-
+-bool
+-CTheZones::InsertZoneIntoZoneHierRecursive(CZone *inner, CZone *outer)
+-{
+-	int n;
+-	CZone *child, *next, *insert;
+-
+-	// return false if inner was not inserted into outer
+-	if(outer == nil ||
+-	   !ZoneIsEntirelyContainedWithinOtherZone(inner, outer))
+-		return false;
+-
+-	// try to insert inner into children of outer
+-	for(child = outer->child; child; child = child->next)
+-		if(InsertZoneIntoZoneHierRecursive(inner, child))
+-			return true;
+-
+-	// insert inner as child of outer
+-	// count number of outer's children contained within inner
+-	n = 0;
+-	for(child = outer->child; child; child = child->next)
+-		if(ZoneIsEntirelyContainedWithinOtherZone(child, inner))
+-			n++;
+-	inner->next = outer->child;
+-	inner->parent = outer;
+-	outer->child = inner;
+-	// move children from outer to inner
+-	if(n){
+-		insert = inner;
+-		for(child = inner->next; child; child = next){
+-			next = child->next;
+-			if(ZoneIsEntirelyContainedWithinOtherZone(child,inner)){
+-				insert->next = child->next;
+-				child->parent = inner;
+-				child->next = inner->child;
+-				inner->child = child;
+-			}else
+-				insert = child;
+-		}
+-	}
+-
+-	return true;
+-}
+-
+ bool
+ CTheZones::ZoneIsEntirelyContainedWithinOtherZone(CZone *inner, CZone *outer)
+ {
+-	char tmp[100];
+-
+-	if(inner->minx < outer->minx ||
+-	   inner->maxx > outer->maxx ||
+-	   inner->miny < outer->miny ||
+-	   inner->maxy > outer->maxy ||
+-	   inner->minz < outer->minz ||
+-	   inner->maxz > outer->maxz){
+-		CVector vmin(inner->minx, inner->miny, inner->minz);
+-		if(PointLiesWithinZone(&vmin, outer))
+-			sprintf(tmp, "Overlapping zones %s and %s\n",
+-			      inner->name, outer->name);
+-		CVector vmax(inner->maxx, inner->maxy, inner->maxz);
+-		if(PointLiesWithinZone(&vmax, outer))
+-			sprintf(tmp, "Overlapping zones %s and %s\n",
+-			      inner->name, outer->name);
+-		return false;
+-	}
+-	return true;
++	return revc_zones_contained(inner, outer);
+ }
+ 
+ bool
+ CTheZones::PointLiesWithinZone(const CVector *v, CZone *zone)
+ {
+-	return zone->minx <= v->x && v->x <= zone->maxx &&
+-	       zone->miny <= v->y && v->y <= zone->maxy &&
+-	       zone->minz <= v->z && v->z <= zone->maxz;
++	return revc_zones_point_within(v, zone);
+ }
+ 
+ eLevelName
+ CTheZones::GetLevelFromPosition(CVector const *v)
+ {
+-	int i;
+-//	char tmp[116];
+-//	if(!PointLiesWithinZone(v, &MapZoneArray[0]))
+-//		sprintf(tmp, "x = %.3f y= %.3f z = %.3f\n", v.x, v.y, v.z);
+-	for(i = 1; i < TotalNumberOfMapZones; i++)
+-		if(PointLiesWithinZone(v, &MapZoneArray[i]))
+-			return MapZoneArray[i].level;
+-	return MapZoneArray[0].level;
++	return (eLevelName)revc_zones_level(v);
+ }
+ 
+ CZone*
+ CTheZones::FindInformationZoneForPosition(const CVector *v)
+ {
+-	int i;
+-//	char tmp[116];
+-//	if(!PointLiesWithinZone(v, &InfoZoneArray[0]))
+-//		sprintf(tmp, "x = %.3f y= %.3f z = %.3f\n", v.x, v.y, v.z);
+-	for(i = 1; i < TotalNumberOfInfoZones; i++)
+-		if(PointLiesWithinZone(v, &InfoZoneArray[i]))
+-			return &InfoZoneArray[i];
+-	return &InfoZoneArray[0];
++	return revc_zones_info_zone(v);
+ }
+ 
+ CZone*
+ CTheZones::FindSmallestNavigationZoneForPosition(const CVector *v, bool findDefault, bool findNavig)
+ {
+-	CZone *best = nil;
+-	if(findDefault && NavigationZoneArray[0].type == ZONE_DEFAULT ||
+-	   findNavig && NavigationZoneArray[0].type == ZONE_NAVIG)
+-		best = &NavigationZoneArray[0];
+-	// zone to test next
+-	CZone *zone = NavigationZoneArray[0].child;
+-	while(zone)
+-		// if in zone, descent into children
+-		if(PointLiesWithinZone(v, zone)){
+-			if(findDefault && zone->type == ZONE_DEFAULT ||
+-			   findNavig && zone->type == ZONE_NAVIG)
+-				best = zone;
+-			zone = zone->child;
+-		// otherwise try next zone
+-		}else
+-			zone = zone->next;
+-	return best;
++	return revc_zones_nav_zone(v, findDefault, findNavig);
+ }
+ 
+ int16
+ CTheZones::FindZoneByLabelAndReturnIndex(char *name, eZoneType type)
+ {
+-	char str[8];
+-	memset(str, 0, 8);
+-	strncpy(str, name, 8);
+-	switch(type){
+-	case ZONE_DEFAULT:
+-	case ZONE_NAVIG:
+-		for(FindIndex = 0; FindIndex < TotalNumberOfNavigationZones; FindIndex++)
+-			if(strcmp(GetNavigationZone(FindIndex)->name, name) == 0)
+-				return FindIndex;
+-		break;
+-
+-	case ZONE_INFO:
+-		for(FindIndex = 0; FindIndex < TotalNumberOfInfoZones; FindIndex++)
+-			if(strcmp(GetInfoZone(FindIndex)->name, name) == 0)
+-				return FindIndex;
+-		break;
+-
+-	case ZONE_MAPZONE:
+-		for(FindIndex = 0; FindIndex < TotalNumberOfMapZones; FindIndex++)
+-			if(strcmp(GetMapZone(FindIndex)->name, name) == 0)
+-				return FindIndex;
+-		break;
+-	}
+-	return -1;
++	return revc_zones_find_label(name, type);
+ }
+ 
+ int16
+ CTheZones::FindNextZoneByLabelAndReturnIndex(char *name, eZoneType type)
+ {
+-	char str[8];
+-	++FindIndex;
+-	memset(str, 0, 8);
+-	strncpy(str, name, 8);
+-	switch(type){
+-	case ZONE_DEFAULT:
+-	case ZONE_NAVIG:
+-		for(; FindIndex < TotalNumberOfNavigationZones; FindIndex++)
+-			if(strcmp(GetNavigationZone(FindIndex)->name, name) == 0)
+-				return FindIndex;
+-		break;
+-
+-	case ZONE_INFO:
+-		for(; FindIndex < TotalNumberOfInfoZones; FindIndex++)
+-			if(strcmp(GetInfoZone(FindIndex)->name, name) == 0)
+-				return FindIndex;
+-		break;
+-
+-	case ZONE_MAPZONE:
+-		for(; FindIndex < TotalNumberOfMapZones; FindIndex++)
+-			if(strcmp(GetMapZone(FindIndex)->name, name) == 0)
+-				return FindIndex;
+-		break;
+-	}
+-	return -1;
++	return revc_zones_find_next_label(name, type);
+ }
+ 
+ CZoneInfo*
+ CTheZones::GetZoneInfo(const CVector *v, uint8 day)
+ {
+-	CZone *zone;
+-	zone = FindInformationZoneForPosition(v);
+-	if(zone == nil)
+-		return &ZoneInfoArray[0];
+-	return &ZoneInfoArray[day ? zone->zoneinfoDay : zone->zoneinfoNight];
++	return revc_zones_zone_info(v, day);
+ }
+ 
+ void
+ CTheZones::GetZoneInfoForTimeOfDay(const CVector *pos, CZoneInfo *info)
+ {
+-	CZoneInfo *day, *night;
+-	float d, n;
+-	int i;
+-
+-	day = GetZoneInfo(pos, 1);
+-	night = GetZoneInfo(pos, 0);
+-
+-	if(CClock::GetIsTimeInRange(8, 19))
+-		*info = *day;
+-	else if(CClock::GetIsTimeInRange(22, 5))
+-		*info = *night;
+-	else{
+-		if(CClock::GetIsTimeInRange(19, 22)){
+-			n = (CClock::GetHours() - 19) / 3.0f;
+-			assert(n >= 0.0f && n <= 1.0f);
+-			d = 1.0f - n;
+-		}else{
+-			d = (CClock::GetHours() - 5) / 3.0f;
+-			assert(d >= 0.0f && d <= 1.0f);
+-			n = 1.0f - d;
+-		}
+-#ifdef FIX_BUGS
+-		info->carDensity = day->carDensity * d + night->carDensity * n;
+-		for(i = 0; i < ARRAY_SIZE(info->carThreshold); i++)
+-			info->carThreshold[i] = day->carThreshold[i] * d + night->carThreshold[i] * n;
+-		for(i = 0; i < ARRAY_SIZE(info->boatThreshold); i++)
+-			info->boatThreshold[i] = day->boatThreshold[i] * d + night->boatThreshold[i] * n;
+-		for(i = 0; i < ARRAY_SIZE(info->gangThreshold); i++)
+-			info->gangThreshold[i] = day->gangThreshold[i] * d + night->gangThreshold[i] * n;
+-
+-		info->copThreshold = day->copThreshold * d + night->copThreshold * n;
+-		info->pedDensity = day->pedDensity * d + night->pedDensity * n;
+-		info->copPedThreshold = day->copPedThreshold * d + night->copPedThreshold * n;
+-		for(i = 0; i < ARRAY_SIZE(info->gangPedThreshold); i++)
+-			info->gangPedThreshold[i] = day->gangPedThreshold[i] * d + night->gangPedThreshold[i] * n;
+-#else
+-		// This is a complete mess.
+-		info->carDensity = day->carDensity * n + night->carDensity * d;
+-		for(i = 0; i < ARRAY_SIZE(info->carThreshold); i++)
+-			info->carThreshold[i] = night->carThreshold[i] * d + night->carThreshold[i] * n;
+-		for(i = 0; i < ARRAY_SIZE(info->boatThreshold); i++)
+-			info->boatThreshold[i] = night->boatThreshold[i] * d + night->boatThreshold[i] * n;
+-		for(i = 0; i < ARRAY_SIZE(info->gangThreshold); i++)
+-			info->gangThreshold[i] = night->gangThreshold[i] * d + night->gangThreshold[i] * n;
+-
+-		info->copThreshold = night->copThreshold * d + night->copThreshold * n;
+-		info->pedDensity = night->pedDensity * d + night->pedDensity * n;
+-		info->copPedThreshold = night->copPedThreshold * d + night->copPedThreshold * n;
+-		for(i = 0; i < ARRAY_SIZE(info->gangPedThreshold); i++)
+-			info->gangPedThreshold[i] = night->gangPedThreshold[i] * d + night->gangPedThreshold[i] * n;
+-#endif
+-	}
+-	if(CClock::GetIsTimeInRange(5, 19))
+-		info->pedGroup = day->pedGroup;
+-	else
+-		info->pedGroup = night->pedGroup;
++	revc_zones_zone_info_tod(pos, CClock::GetHours(), info);
+ }
+ 
+ void
+ CTheZones::SetZoneCarInfo(uint16 zoneid, uint8 day, int16 carDensity,
+ 	int16 copCarDensity, const int16 *gangCarDensities)
+ {
+-	CZone *zone;
+-	CZoneInfo *info;
+-	zone = GetInfoZone(zoneid);
+-	info = &ZoneInfoArray[day ? zone->zoneinfoDay : zone->zoneinfoNight];
+-
+-	info->carDensity = carDensity;
+-	info->copThreshold = copCarDensity;
+-	info->gangThreshold[0] = gangCarDensities[0] + copCarDensity;
+-	info->gangThreshold[1] = gangCarDensities[1] + info->gangThreshold[0];
+-	info->gangThreshold[2] = gangCarDensities[2] + info->gangThreshold[1];
+-	info->gangThreshold[3] = gangCarDensities[3] + info->gangThreshold[2];
+-	info->gangThreshold[4] = gangCarDensities[4] + info->gangThreshold[3];
+-	info->gangThreshold[5] = gangCarDensities[5] + info->gangThreshold[4];
+-	info->gangThreshold[6] = gangCarDensities[6] + info->gangThreshold[5];
+-	info->gangThreshold[7] = gangCarDensities[7] + info->gangThreshold[6];
+-	info->gangThreshold[8] = gangCarDensities[8] + info->gangThreshold[7];
++	revc_zones_set_car_info(zoneid, day, carDensity, copCarDensity, gangCarDensities);
+ }
+ 
+ void CTheZones::SetZoneCivilianCarInfo(uint16 zoneid, uint8 day,
+ 	const int16* carDensities, const int16* boatDensities)
+ {
+-	CZone* zone;
+-	CZoneInfo* info;
+-	zone = GetInfoZone(zoneid);
+-	info = &ZoneInfoArray[day ? zone->zoneinfoDay : zone->zoneinfoNight];
+-	info->carThreshold[0] = carDensities[0];
+-	for (int i = 1; i < CCarCtrl::NUM_CAR_CLASSES; i++)
+-		info->carThreshold[i] = carDensities[i] + info->carThreshold[i-1];
+-	info->boatThreshold[0] = boatDensities[0];
+-	for (int i = 1; i < CCarCtrl::NUM_BOAT_CLASSES; i++)
+-		info->boatThreshold[i] = boatDensities[i] + info->boatThreshold[i - 1];
++	revc_zones_set_civ_car_info(zoneid, day, carDensities, boatDensities);
+ }
+ 
+ void
+@@ -533,268 +196,45 @@
+ 	int16 gang4Density, int16 gang5Density, int16 gang6Density, int16 gang7Density,
+ 	int16 gang8Density, int16 copDensity)
+ {
+-	CZone *zone;
+-	CZoneInfo *info;
+-	zone = GetInfoZone(zoneid);
+-	info = &ZoneInfoArray[day ? zone->zoneinfoDay : zone->zoneinfoNight];
+-	info->pedDensity = pedDensity;
+-	info->copPedThreshold = copDensity;
+-	info->gangPedThreshold[0] = gang0Density;
+-	info->gangPedThreshold[1] = gang1Density;
+-	info->gangPedThreshold[2] = gang2Density;
+-	info->gangPedThreshold[3] = gang3Density;
+-	info->gangPedThreshold[4] = gang4Density;
+-	info->gangPedThreshold[5] = gang5Density;
+-	info->gangPedThreshold[6] = gang6Density;
+-	info->gangPedThreshold[7] = gang7Density;
+-	info->gangPedThreshold[8] = gang8Density;
+-
+-	info->gangPedThreshold[0] += info->copPedThreshold;
+-	info->gangPedThreshold[1] += info->gangPedThreshold[0];
+-	info->gangPedThreshold[2] += info->gangPedThreshold[1];
+-	info->gangPedThreshold[3] += info->gangPedThreshold[2];
+-	info->gangPedThreshold[4] += info->gangPedThreshold[3];
+-	info->gangPedThreshold[5] += info->gangPedThreshold[4];
+-	info->gangPedThreshold[6] += info->gangPedThreshold[5];
+-	info->gangPedThreshold[7] += info->gangPedThreshold[6];
+-	info->gangPedThreshold[8] += info->gangPedThreshold[7];
++	int16 gangs[9] = { gang0Density, gang1Density, gang2Density, gang3Density, gang4Density,
++	                   gang5Density, gang6Density, gang7Density, gang8Density };
++	revc_zones_set_ped_info(zoneid, day, pedDensity, gangs, copDensity);
+ }
+ 
+ // unused
+ void
+ CTheZones::SetCarDensity(uint16 zoneid, uint8 day, uint16 cardensity)
+ {
+-	CZone *zone;
+-	zone = GetInfoZone(zoneid);
+-	ZoneInfoArray[day ? zone->zoneinfoDay : zone->zoneinfoNight].carDensity = cardensity;
++	revc_zones_set_value(zoneid, day, 0, cardensity);
+ }
+ 
+ // unused
+ void
+ CTheZones::SetPedDensity(uint16 zoneid, uint8 day, uint16 peddensity)
+ {
+-	CZone *zone;
+-	zone = GetInfoZone(zoneid);
+-	ZoneInfoArray[day ? zone->zoneinfoDay : zone->zoneinfoNight].pedDensity = peddensity;
++	revc_zones_set_value(zoneid, day, 1, peddensity);
+ }
+ 
+ void
+ CTheZones::SetPedGroup(uint16 zoneid, uint8 day, uint16 pedgroup)
+ {
+-	CZone *zone;
+-	zone = GetInfoZone(zoneid);
+-	ZoneInfoArray[day ? zone->zoneinfoDay : zone->zoneinfoNight].pedGroup = pedgroup;
++	revc_zones_set_value(zoneid, day, 2, pedgroup);
+ }
+ 
+ int16
+ CTheZones::FindAudioZone(CVector *pos)
+ {
+-	int i;
+-
+-	for(i = 0; i < NumberOfAudioZones; i++)
+-		if(PointLiesWithinZone(pos, GetAudioZone(i)))
+-			return i;
+-	return -1;
+-}
+-
+-void
+-CTheZones::AddZoneToAudioZoneArray(CZone *zone)
+-{
+-	int i, z;
+-
+-	if(zone->type != ZONE_DEFAULT)
+-		return;
+-
+-	/* This is a bit stupid */
+-	z = -1;
+-	for(i = 0; i < NUMNAVIGZONES; i++)
+-		if(&NavigationZoneArray[i] == zone)
+-			z = i;
+-	assert(NumberOfAudioZones < NUMAUDIOZONES);
+-	AudioZoneArray[NumberOfAudioZones++] = z;
+-}
+-
+-void
+-CTheZones::InitialiseAudioZoneArray(void)
+-{
+-	bool gonext;
+-	CZone *zone;
+-
+-	gonext = false;
+-	zone = &NavigationZoneArray[0];
+-	// Go deep first,
+-	// set gonext when backing up a level to visit the next child
+-	while(zone)
+-		if(gonext){
+-			AddZoneToAudioZoneArray(zone);
+-			if(zone->next){
+-				gonext = false;
+-				zone = zone->next;
+-			}else
+-				zone = zone->parent;
+-		}else if(zone->child)
+-			zone = zone->child;
+-		else{
+-			AddZoneToAudioZoneArray(zone);
+-			if(zone->next)
+-				zone = zone->next;
+-			else{
+-				gonext = true;
+-				zone = zone->parent;
+-			}
+-		}
++	return revc_zones_audio_zone(pos);
+ }
+ 
+ void
+ CTheZones::SaveAllZones(uint8 *buffer, uint32 *size)
+ {
+-	INITSAVEBUF
+-	int i;
+-
+-#define CZONE_SAVE_SIZE (sizeof(char)*8+sizeof(float)+sizeof(float)+sizeof(float)+sizeof(float)+sizeof(float)+sizeof(float)+sizeof(eZoneType)+sizeof(eLevelName)+sizeof(int16)+sizeof(int16)+sizeof(int32)+sizeof(int32)+sizeof(int32))
+-
+-	*size = SAVE_HEADER_SIZE
+-		+ sizeof(m_CurrLevel) + sizeof(FindIndex)
+-		+ sizeof(int16) // padding
+-		+ CZONE_SAVE_SIZE * ARRAY_SIZE(NavigationZoneArray) + CZONE_SAVE_SIZE * ARRAY_SIZE(InfoZoneArray) + sizeof(ZoneInfoArray)
+-		+ sizeof(TotalNumberOfNavigationZones) + sizeof(TotalNumberOfInfoZones) + sizeof(TotalNumberOfZoneInfos)
+-		+ sizeof(int16) // padding
+-		+ CZONE_SAVE_SIZE * ARRAY_SIZE(MapZoneArray) + sizeof(AudioZoneArray)
+-		+ sizeof(TotalNumberOfMapZones) + sizeof(NumberOfAudioZones);
+-#undef CZONE_SAVE_SIZE
+-
+-	uint32 length = 0;
+-	WriteSaveHeaderWithLength(buffer, length, 'Z', 'N', 'S', '\0', *size - SAVE_HEADER_SIZE);
+-
+-	WriteSaveBuf(buffer, length, m_CurrLevel);
+-	WriteSaveBuf(buffer, length, FindIndex);
+-	WriteSaveBuf(buffer, length, (int16)0); // padding
+-
+-	for(i = 0; i < ARRAY_SIZE(NavigationZoneArray); i++)
+-		SaveOneZone(&NavigationZoneArray[i], &buffer, &length, ZONE_NAVIG);
+-
+-	for(i = 0; i < ARRAY_SIZE(InfoZoneArray); i++)
+-		SaveOneZone(&InfoZoneArray[i], &buffer, &length, ZONE_INFO);
+-
+-	for(i = 0; i < ARRAY_SIZE(ZoneInfoArray); i++)
+-		WriteSaveBuf(buffer, length, ZoneInfoArray[i]);
+-
+-	WriteSaveBuf(buffer, length, TotalNumberOfNavigationZones);
+-	WriteSaveBuf(buffer, length, TotalNumberOfInfoZones);
+-	WriteSaveBuf(buffer, length, TotalNumberOfZoneInfos);
+-	WriteSaveBuf(buffer, length, (int16)0); // padding
+-
+-	for(i = 0; i < ARRAY_SIZE(MapZoneArray); i++)
+-		SaveOneZone(&MapZoneArray[i], &buffer, &length, ZONE_MAPZONE);
+-
+-	for(i = 0; i < ARRAY_SIZE(AudioZoneArray); i++)
+-		WriteSaveBuf(buffer, length, AudioZoneArray[i]);
+-
+-	WriteSaveBuf(buffer, length, TotalNumberOfMapZones);
+-	WriteSaveBuf(buffer, length, NumberOfAudioZones);
+-
+-	VALIDATESAVEBUF(*size)
+-}
+-
+-void
+-CTheZones::SaveOneZone(CZone *zone, uint8 **buffer, uint32 *length, eZoneType zoneType)
+-{
+-	WriteSaveBuf(*buffer, *length, *(uint32*)&zone->name[0]);
+-	WriteSaveBuf(*buffer, *length, *(uint32*)&zone->name[4]);
+-
+-	WriteSaveBuf(*buffer, *length, zone->minx);
+-	WriteSaveBuf(*buffer, *length, zone->miny);
+-	WriteSaveBuf(*buffer, *length, zone->minz);
+-	WriteSaveBuf(*buffer, *length, zone->maxx);
+-	WriteSaveBuf(*buffer, *length, zone->maxy);
+-	WriteSaveBuf(*buffer, *length, zone->maxz);
+-
+-	WriteSaveBuf(*buffer, *length, zone->type);
+-	WriteSaveBuf(*buffer, *length, zone->level);
+-	WriteSaveBuf(*buffer, *length, zone->zoneinfoDay);
+-	WriteSaveBuf(*buffer, *length, zone->zoneinfoNight);
+-
+-	int32 zoneId;
+-	zoneId = GetIndexForNavigationZonePointer(zone->child);
+-	WriteSaveBuf(*buffer, *length, zoneId);
+-	zoneId = GetIndexForNavigationZonePointer(zone->parent);
+-	WriteSaveBuf(*buffer, *length, zoneId);
+-	zoneId = GetIndexForNavigationZonePointer(zone->next);
+-	WriteSaveBuf(*buffer, *length, zoneId);
++	revc_zones_save(buffer, size);
+ }
+ 
+ void
+ CTheZones::LoadAllZones(uint8 *buffer, uint32 size)
+ {
+-	INITSAVEBUF
+-	int i;
+-
+-	uint32 length = 0;
+-	CheckSaveHeaderWithLength(buffer, length, 'Z', 'N', 'S', '\0', size - SAVE_HEADER_SIZE);
+-
+-	ReadSaveBuf(&m_CurrLevel, buffer);
+-	ReadSaveBuf(&FindIndex, buffer);
+-	SkipSaveBuf(buffer, 2);
+-
+-	for(i = 0; i < ARRAY_SIZE(NavigationZoneArray); i++)
+-		LoadOneZone(&NavigationZoneArray[i], &buffer, &length, ZONE_NAVIG);
+-
+-	for (i = 0; i < ARRAY_SIZE(InfoZoneArray); i++)
+-		LoadOneZone(&InfoZoneArray[i], &buffer, &length, ZONE_INFO);
+-
+-	for(i = 0; i < ARRAY_SIZE(ZoneInfoArray); i++)
+-		ReadSaveBuf(&ZoneInfoArray[i], buffer);
+-
+-	ReadSaveBuf(&TotalNumberOfNavigationZones, buffer);
+-	ReadSaveBuf(&TotalNumberOfInfoZones, buffer);
+-	ReadSaveBuf(&TotalNumberOfZoneInfos, buffer);
+-	SkipSaveBuf(buffer, 2);
+-
+-	for(i = 0; i < ARRAY_SIZE(MapZoneArray); i++)
+-		LoadOneZone(&MapZoneArray[i], &buffer, &length, ZONE_MAPZONE);
+-
+-	for(i = 0; i < ARRAY_SIZE(AudioZoneArray); i++)
+-		ReadSaveBuf(&AudioZoneArray[i], buffer);
+-
+-	ReadSaveBuf(&TotalNumberOfMapZones, buffer);
+-	ReadSaveBuf(&NumberOfAudioZones, buffer);
+-
+-	VALIDATESAVEBUF(size)
++	revc_zones_load(buffer, size);
+ }
+-
+-void
+-CTheZones::LoadOneZone(CZone *zone, uint8 **buffer, uint32 *length, eZoneType zoneType)
+-{
+-#ifdef THIS_IS_STUPID
+-	uint32 part1, part2;
+-	ReadSaveBuf(&part1, *buffer, *length);
+-	ReadSaveBuf(&part2, *buffer, *length);
+-
+-	*(uint64 *)&zone->name[0] = (uint64)part2;
+-	*(uint64 *)&zone->name[0] <<= 32;
+-	*(uint64 *)&zone->name[0] |= (uint64)part1;
+-#else
+-	for(int i = 0; i < sizeof(zone->name); i++)
+-		ReadSaveBuf(&zone->name[i], *buffer, *length);
+-#endif
+-
+-	ReadSaveBuf(&zone->minx, *buffer, *length);
+-	ReadSaveBuf(&zone->miny, *buffer, *length);
+-	ReadSaveBuf(&zone->minz, *buffer, *length);
+-	ReadSaveBuf(&zone->maxx, *buffer, *length);
+-	ReadSaveBuf(&zone->maxy, *buffer, *length);
+-	ReadSaveBuf(&zone->maxz, *buffer, *length);
+-
+-	ReadSaveBuf(&zone->type, *buffer, *length);
+-	ReadSaveBuf(&zone->level, *buffer, *length);
+-	ReadSaveBuf(&zone->zoneinfoDay, *buffer, *length);
+-	ReadSaveBuf(&zone->zoneinfoNight, *buffer, *length);
+-
+-	int32 zoneId;
+-	ReadSaveBuf(&zoneId, *buffer, *length);
+-	zone->child = GetPointerForNavigationZoneIndex(zoneId);
+-	ReadSaveBuf(&zoneId, *buffer, *length);
+-	zone->parent = GetPointerForNavigationZoneIndex(zoneId);
+-	ReadSaveBuf(&zoneId, *buffer, *length);
+-	zone->next = GetPointerForNavigationZoneIndex(zoneId);
+-}
+\ No newline at end of file
+--- a/src/core/Zones.h
++++ b/src/core/Zones.h
+@@ -80,8 +80,6 @@
+ 	static CZone *GetAudioZone(uint16 i) { return &NavigationZoneArray[AudioZoneArray[i]]; }
+ 	static void PostZoneCreation(void);
+ 	static void CheckZonesForOverlap(void);
+-	static void InsertZoneIntoZoneHierarchy(CZone *zone);
+-	static bool InsertZoneIntoZoneHierRecursive(CZone *z1, CZone *z2);
+ 	static bool ZoneIsEntirelyContainedWithinOtherZone(CZone *z1, CZone *z2);
+ 	static bool PointLiesWithinZone(const CVector *v, CZone *zone);
+ 	static eLevelName GetLevelFromPosition(const CVector *v);
+@@ -105,10 +103,6 @@
+ 	static int16 FindAudioZone(CVector *pos);
+ 	static CZone *GetPointerForNavigationZoneIndex(ssize_t i) { return i == -1 ? nil : &NavigationZoneArray[i]; }
+ 	static ssize_t GetIndexForNavigationZonePointer(CZone *zone) { return zone == nil ? -1 : zone - NavigationZoneArray; }
+-	static void AddZoneToAudioZoneArray(CZone *zone);
+-	static void InitialiseAudioZoneArray(void);
+ 	static void SaveAllZones(uint8 *buffer, uint32 *length);
+-	static void SaveOneZone(CZone *zone, uint8 **buffer, uint32 *length, eZoneType zoneType);
+ 	static void LoadAllZones(uint8 *buffer, uint32 length);
+-	static void LoadOneZone(CZone *zone, uint8 **buffer, uint32 *length, eZoneType zoneType);
+ };

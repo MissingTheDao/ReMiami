@@ -1,0 +1,105 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -54,12 +54,8 @@
+         set(platform "-null")
+     elseif(LIBRW_PLATFORM_PS2)
+         set(platform "-ps2")
+-    elseif(LIBRW_PLATFORM_GL3)
+-        if(LIBRW_GL3_GFXLIB STREQUAL "GLFW")
+-            set(platform "-gl3-glfw")
+-        else()
+-            set(platform "-gl3-sdl2")
+-        endif()
++    elseif(LIBRW_PLATFORM_WGPU)
++        set(platform "-wgpu")
+     elseif(LIBRW_PLATFORM_D3D9)
+         set(platform "-d3d9")
+     endif()
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -20,20 +20,15 @@
+ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/extras/GitSHA1.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/extras/GitSHA1.cpp" @ONLY)
+ list(APPEND ${PROJECT}_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/extras/GitSHA1.cpp")
+ 
+-option(${PROJECT}_AS_STATIC_LIB "Build the game as a static library for the Rust host (rust/revc), entry point revc_cpp_main" OFF)
+-if(${PROJECT}_AS_STATIC_LIB)
+-    if(NOT (LIBRW_PLATFORM STREQUAL "GL3" AND LIBRW_GL3_GFXLIB STREQUAL "HOST"))
+-        message(FATAL_ERROR "${PROJECT}_AS_STATIC_LIB requires -DLIBRW_PLATFORM=GL3 -DLIBRW_GL3_GFXLIB=HOST")
+-    endif()
+-    # Window, input and the process entry point come from Rust (skel/host/host.cpp).
+-    add_library(${EXECUTABLE} STATIC
+-        ${${PROJECT}_SOURCES}
+-    )
+-else()
+-    add_executable(${EXECUTABLE} WIN32
+-        ${${PROJECT}_SOURCES}
+-    )
++# The game is a static library linked by the Rust host (rust/revc), which owns main(), the window,
++# input and audio output. Window/GL come through librw's HOST backend (skel/host/host.cpp).
++# LIBRW_PLATFORM=WGPU: same host, drawing on wgpu in Rust (plan task 12, docs/RENDERER_PORT.md).
++if(NOT LIBRW_PLATFORM STREQUAL "WGPU")
++    message(FATAL_ERROR "reVC needs -DLIBRW_PLATFORM=WGPU (build through rust/revc)")
+ endif()
++add_library(${EXECUTABLE} STATIC
++    ${${PROJECT}_SOURCES}
++)
+ 
+ target_link_libraries(${EXECUTABLE} PRIVATE
+     librw::librw
+@@ -64,14 +59,9 @@
+ target_compile_definitions(${EXECUTABLE} PRIVATE USE_OUR_VERSIONING)
+ 
+ if(${PROJECT}_AUDIO STREQUAL "OAL")
+-    find_package(OpenAL REQUIRED)
+-    if(TARGET OpenAL::OpenAL)
+-        target_link_libraries(${EXECUTABLE} PRIVATE OpenAL::OpenAL)
+-    else()
+-        target_include_directories(${EXECUTABLE} PRIVATE ${OPENAL_INCLUDE_DIR})
+-        target_link_libraries(${EXECUTABLE} PRIVATE ${OPENAL_LIBRARY})
+-        target_compile_definitions(${EXECUTABLE} PRIVATE ${OPENAL_DEFINITIONS})
+-    endif()
++    # "OAL" is the game's OpenAL-style audio path (sampman_oal.cpp). OpenAL itself is not used:
++    # sound effects, streams and reverb are mixed by the Rust host and played through SDL3
++    # (oal/channel_rust.cpp, oal/rust_al.h).
+     target_compile_definitions(${EXECUTABLE} PRIVATE AUDIO_OAL)
+ elseif(${PROJECT}_AUDIO STREQUAL "MSS")
+     find_package(MilesSDK REQUIRED)
+@@ -141,22 +131,6 @@
+     set(${PROJECT}_C_CXX_EXTENSIONS OFF)
+ endif()
+ 
+-if(LIBRW_PLATFORM_GL3 AND LIBRW_GL3_GFXLIB STREQUAL "GLFW")
+-	include(CheckSymbolExists)
+-
+-	set(CMAKE_REQUIRED_LIBRARIES glfw)
+-	set(CMAKE_REQUIRED_DEFINITIONS -DGLFW_EXPOSE_NATIVE_X11)
+-	check_symbol_exists(glfwGetX11Display "GLFW/glfw3.h;GLFW/glfw3native.h" GLFW_HAS_X11)
+-	unset(CMAKE_REQUIRED_DEFINITIONS)
+-	unset(CMAKE_REQUIRED_LIBRARIES)
+-
+-	if (GLFW_HAS_X11)
+-		find_package(X11 REQUIRED)
+-		target_link_libraries(${EXECUTABLE} PRIVATE X11::X11)
+-		target_compile_definitions(${EXECUTABLE} PRIVATE GET_KEYBOARD_INPUT_FROM_X11)
+-	endif (GLFW_HAS_X11)
+-endif()
+-
+ set_target_properties(${EXECUTABLE}
+     PROPERTIES
+         C_STANDARD 11
+@@ -167,15 +141,4 @@
+         CXX_STANDARD_REQUIRED ON
+ )
+ 
+-if(${PROJECT}_INSTALL)
+-    install(
+-        TARGETS ${EXECUTABLE}
+-        EXPORT ${EXECUTABLE}-targets
+-        RUNTIME DESTINATION "."
+-    )
+-    if(MSVC)
+-        install(FILES $<TARGET_PDB_FILE:${EXECUTABLE}> DESTINATION "." OPTIONAL)
+-    endif()
+-endif()
+-
+ reVC_platform_target(${EXECUTABLE} INSTALL)

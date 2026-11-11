@@ -1,0 +1,46 @@
+--- a/src/entities/Entity.cpp
++++ b/src/entities/Entity.cpp
+@@ -645,6 +645,14 @@
+ 	0.2f, 0.1f, 0.7f, 0.6f, 0.3f, 1.0f, 0.5f, 0.2f,
+ };
+ 
++// Per-entity sway phase from where it stands (see ModifyMatrixForTreeInWind).
++uint16
++CEntity::PositionPhase(void)
++{
++	const CVector &pos = GetPosition();
++	return (uint16)((int32)(pos.x * 16.0f) * 31 + (int32)(pos.y * 16.0f) * 17 + (int32)(pos.z * 16.0f));
++}
++
+ void
+ CEntity::ModifyMatrixForTreeInWind(void)
+ {
+@@ -665,12 +673,16 @@
+ 			1.0f;
+ 		strength = -0.015f*CWeather::Wind;
+ 	}else if(CWeather::Wind >= 0.2){
+-		t = (uintptr)this + CTimer::GetTimeInMilliseconds();
++		// The original used the entity's address as the per-tree phase, which changes from run to
++		// run (ASLR, 64-bit). The tree's position gives each tree its own phase too, and the same
++		// one in every run (m_randomSeed doesn't: streamed-in trees draw it from rand() at a
++		// frame-rate-dependent point). Repeatable screenshots need this.
++		t = PositionPhase() + CTimer::GetTimeInMilliseconds();
+ 		f = (t & 0xFFF)/(float)0x1000;
+ 		flutter = Sin(f * 6.28f);
+ 		strength = -0.008f;
+ 	}else{
+-		t = (uintptr)this + CTimer::GetTimeInMilliseconds();
++		t = PositionPhase() + CTimer::GetTimeInMilliseconds();
+ 		f = (t & 0xFFF)/(float)0x1000;
+ 		flutter = Sin(f * 6.28f);
+ 		strength = -0.005f;
+--- a/src/entities/Entity.h
++++ b/src/entities/Entity.h
+@@ -176,6 +176,7 @@
+ 	void PreRenderForGlassWindow(void);
+ 	void AddSteamsFromGround(CVector *unused);
+ 	void ModifyMatrixForTreeInWind(void);
++	uint16 PositionPhase(void);
+ 	void ModifyMatrixForBannerInWind(void);
+ 	void ProcessLightsForEntity(void);
+ 	void SetRwObjectAlpha(int32 alpha);

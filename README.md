@@ -32,7 +32,7 @@ either.
 | Path | What |
 |---|---|
 | `rust/` | Cargo workspace: the `revc` launcher and host, `revc-rw` (renderer), `revc-formats`, `revc-audio`, `revc-timing` |
-| `cpp/re3-miami/` | The C++ game, with vendored librw |
+| `cpp/revc/` | revc's changes to the reVC C++ code (patches), its own C++ files and librw. The reVC source itself is not here: you build from your own copy (see [docs/BUILDING.md](docs/BUILDING.md)) |
 | `scripts/` | Build, test and tool scripts |
 | `tests/` | Test scenarios, golden data (synthetic inputs, hashes) and test saves |
 | `docs/` | Building, renderer port, modding, playtest checklists |

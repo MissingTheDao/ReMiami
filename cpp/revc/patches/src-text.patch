@@ -1,0 +1,1788 @@
+--- a/src/text/Messages.cpp
++++ b/src/text/Messages.cpp
+@@ -11,109 +11,76 @@
+ 
+ #include "Font.h"
+ 
+-tMessage CMessages::BriefMessages[NUMBRIEFMESSAGES];
+-tPreviousBrief CMessages::PreviousBriefs[NUMPREVIOUSBRIEFS];
+-tBigMessage CMessages::BIGMessages[NUMBIGMESSAGES];
++// String helpers implemented in Rust (rust/revc/src/textutil.rs, checked against the original
++// C++ with tests/golden/textutil.txt).
++extern "C" {
++uint16 revc_text_len(const wchar *s);
++void revc_text_copy(wchar *dst, const wchar *src, uint16 size);
++int revc_text_compare(const wchar *a, const wchar *b, uint16 size, int japanese);
++void revc_text_insert_number(const wchar *s, const int32 *nums, int japanese, wchar *out);
++void revc_text_insert_string(wchar *a, const wchar *b, int japanese);
++}
++
++// Queue state and logic in Rust (rust/revc/src/messages.rs), same layout as the structs here;
++// behaviour checked against the original C++ with tests/golden/messages.txt.
++struct RevcMessages
++{
++	tMessage brief[NUMBRIEFMESSAGES];
++	tBigMessage big[NUMBIGMESSAGES];
++	tPreviousBrief previous[NUMPREVIOUSBRIEFS];
++};
++static_assert(sizeof(tMessage) == 56 && offsetof(tMessage, m_nNumber) == 20 && offsetof(tMessage, m_pString) == 48, "tMessage layout");
++static_assert(sizeof(tPreviousBrief) == 40, "tPreviousBrief layout");
++static_assert(sizeof(RevcMessages) == 56 * 8 + 56 * 4 * 6 + 40 * 5, "RevcMessages layout");
++
++extern "C" {
++extern RevcMessages revc_messages;
++void revc_messages_init(void);
++void revc_messages_clear(int small_only);
++void revc_messages_process(uint32 now);
++void revc_messages_add(int mode, const wchar *text, uint32 time, uint16 flag, const int32 *numbers, const wchar *string, uint32 now);
++void revc_messages_add_big(uint16 style, const wchar *text, uint32 time, const int32 *numbers, int queued, uint32 now);
++void revc_messages_add_previous(const wchar *text, const int32 *numbers, const wchar *string);
++void revc_messages_clear_this(const wchar *text, int big, uint32 now);
++}
++
++tMessage (&CMessages::BriefMessages)[NUMBRIEFMESSAGES] = revc_messages.brief;
++tBigMessage (&CMessages::BIGMessages)[NUMBIGMESSAGES] = revc_messages.big;
++tPreviousBrief (&CMessages::PreviousBriefs)[NUMPREVIOUSBRIEFS] = revc_messages.previous;
++
++enum { MSG_QUEUE, MSG_JUMPQ, MSG_SOON };
++#define NOW CTimer::GetTimeInMilliseconds()
++#define NUMBERS int32 numbers[6] = { n1, n2, n3, n4, n5, n6 }
+ char CMessages::PreviousMissionTitle[16]; // unused
+ 
+ void
+ CMessages::Init()
+ {
+-	ClearMessages();
+-
+-	for (int32 i = 0; i < NUMPREVIOUSBRIEFS; i++) {
+-		PreviousBriefs[i].m_pText = nil;
+-		PreviousBriefs[i].m_pString = nil;
+-	}
++	revc_messages_init();
+ }
+ 
+ uint16
+ CMessages::GetWideStringLength(wchar *src)
+ {
+-	uint16 length = 0;
+-	while (*(src++)) length++;
+-	return length;
++	return revc_text_len(src);
+ }
+ 
+ void
+ CMessages::WideStringCopy(wchar *dst, wchar *src, uint16 size)
+ {
+-	int32 i = 0;
+-	if (src) {
+-		while (i < size - 1) {
+-			if (!src[i]) break;
+-			dst[i] = src[i];
+-			i++;
+-		}
+-	} else {
+-		while (i < size - 1)
+-			dst[i++] = '\0';
+-	}
+-	dst[i] = '\0';
+-}
+-
+-wchar FixupChar(wchar c)
+-{
+-#ifdef MORE_LANGUAGES
+-	if (CFont::IsJapanese())
+-		return c & 0x7fff;
+-#endif
+-	return c;
++	revc_text_copy(dst, src, size);
+ }
+ 
+ bool
+ CMessages::WideStringCompare(wchar *str1, wchar *str2, uint16 size)
+ {
+-	uint16 len1 = GetWideStringLength(str1);
+-	uint16 len2 = GetWideStringLength(str2);
+-	if (len1 != len2 && (len1 < size || len2 < size))
+-		return false;
+-
+-	for (int32 i = 0; i < size && FixupChar(str1[i]) != '\0'; i++) {
+-		if (FixupChar(str1[i]) != FixupChar(str2[i]))
+-			return false;
+-	}
+-	return true;
++	return revc_text_compare(str1, str2, size, CFont::IsJapanese());
+ }
+ 
+ void
+ CMessages::Process()
+ {
+-	for (int32 style = 0; style < 6; style++) {
+-		if (BIGMessages[style].m_Stack[0].m_pText != nil && CTimer::GetTimeInMilliseconds() > BIGMessages[style].m_Stack[0].m_nTime + BIGMessages[style].m_Stack[0].m_nStartTime) {
+-			BIGMessages[style].m_Stack[0].m_pText = nil;
+-
+-			int32 i = 0;
+-			while (i < 3) {
+-				if (BIGMessages[style].m_Stack[i + 1].m_pText == nil) break;
+-				BIGMessages[style].m_Stack[i] = BIGMessages[style].m_Stack[i + 1];
+-				i++;
+-			}
+-
+-			BIGMessages[style].m_Stack[i].m_pText = nil;
+-			BIGMessages[style].m_Stack[0].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-		}
+-	}
+-
+-	if (BriefMessages[0].m_pText != nil && CTimer::GetTimeInMilliseconds() > BriefMessages[0].m_nTime + BriefMessages[0].m_nStartTime) {
+-		BriefMessages[0].m_pText = nil;
+-		int32 i;
+-		for (i = 0; i < NUMBRIEFMESSAGES-1 && BriefMessages[i + 1].m_pText != nil; i++) {
+-			BriefMessages[i] = BriefMessages[i + 1];
+-		}
+-		CMessages::BriefMessages[i].m_pText = nil;
+-		CMessages::BriefMessages[0].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-		if (BriefMessages[0].m_pText != nil)
+-			AddToPreviousBriefArray(
+-				BriefMessages[0].m_pText,
+-				BriefMessages[0].m_nNumber[0],
+-				BriefMessages[0].m_nNumber[1],
+-				BriefMessages[0].m_nNumber[2],
+-				BriefMessages[0].m_nNumber[3],
+-				BriefMessages[0].m_nNumber[4],
+-				BriefMessages[0].m_nNumber[5],
+-				BriefMessages[0].m_pString);
+-	}
++	revc_messages_process(NOW);
+ }
+ 
+ void
+@@ -155,290 +122,65 @@
+ void
+ CMessages::AddMessage(wchar *msg, uint32 time, uint16 flag)
+ {
+-	wchar outstr[512]; // unused
+-	WideStringCopy(outstr, msg, 256);
+-	InsertPlayerControlKeysInString(outstr);
+-	GetWideStringLength(outstr);
+-
+-	int32 i = 0;
+-	while (i < NUMBRIEFMESSAGES && BriefMessages[i].m_pText != nil)
+-		i++;
+-	if (i >= NUMBRIEFMESSAGES) return;
+-
+-	BriefMessages[i].m_pText = msg;
+-	BriefMessages[i].m_nFlag = flag;
+-	BriefMessages[i].m_nTime = time;
+-	BriefMessages[i].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-	BriefMessages[i].m_nNumber[0] = -1;
+-	BriefMessages[i].m_nNumber[1] = -1;
+-	BriefMessages[i].m_nNumber[2] = -1;
+-	BriefMessages[i].m_nNumber[3] = -1;
+-	BriefMessages[i].m_nNumber[4] = -1;
+-	BriefMessages[i].m_nNumber[5] = -1;
+-	BriefMessages[i].m_pString = nil;
+-	if (i == 0)
+-		AddToPreviousBriefArray(
+-			BriefMessages[0].m_pText,
+-			BriefMessages[0].m_nNumber[0],
+-			BriefMessages[0].m_nNumber[1],
+-			BriefMessages[0].m_nNumber[2],
+-			BriefMessages[0].m_nNumber[3],
+-			BriefMessages[0].m_nNumber[4],
+-			BriefMessages[0].m_nNumber[5],
+-			BriefMessages[0].m_pString);
++	revc_messages_add(MSG_QUEUE, msg, time, flag, nil, nil, NOW);
+ }
+ 
+ void
+ CMessages::AddMessageJumpQ(wchar *msg, uint32 time, uint16 flag)
+ {
+-	wchar outstr[512]; // unused
+-	WideStringCopy(outstr, msg, 256);
+-	InsertPlayerControlKeysInString(outstr);
+-	GetWideStringLength(outstr);
+-
+-	BriefMessages[0].m_pText = msg;
+-	BriefMessages[0].m_nFlag = flag;
+-	BriefMessages[0].m_nTime = time;
+-	BriefMessages[0].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-	BriefMessages[0].m_nNumber[0] = -1;
+-	BriefMessages[0].m_nNumber[1] = -1;
+-	BriefMessages[0].m_nNumber[2] = -1;
+-	BriefMessages[0].m_nNumber[3] = -1;
+-	BriefMessages[0].m_nNumber[4] = -1;
+-	BriefMessages[0].m_nNumber[5] = -1;
+-	BriefMessages[0].m_pString = nil;
+-	AddToPreviousBriefArray(msg, -1, -1, -1, -1, -1, -1, 0);
++	revc_messages_add(MSG_JUMPQ, msg, time, flag, nil, nil, NOW);
+ }
+ 
+ void
+ CMessages::AddMessageSoon(wchar *msg, uint32 time, uint16 flag)
+ {
+-	wchar outstr[512]; // unused
+-	WideStringCopy(outstr, msg, 256);
+-	InsertPlayerControlKeysInString(outstr);
+-	GetWideStringLength(outstr);
+-
+-	if (BriefMessages[0].m_pText != nil) {
+-		for (int i = NUMBRIEFMESSAGES-1; i > 1; i--)
+-			BriefMessages[i] = BriefMessages[i-1];
+-
+-		BriefMessages[1].m_pText = msg;
+-		BriefMessages[1].m_nFlag = flag;
+-		BriefMessages[1].m_nTime = time;
+-		BriefMessages[1].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-		BriefMessages[1].m_nNumber[0] = -1;
+-		BriefMessages[1].m_nNumber[1] = -1;
+-		BriefMessages[1].m_nNumber[2] = -1;
+-		BriefMessages[1].m_nNumber[3] = -1;
+-		BriefMessages[1].m_nNumber[4] = -1;
+-		BriefMessages[1].m_nNumber[5] = -1;
+-		BriefMessages[1].m_pString = nil;
+-	}else{
+-		BriefMessages[0].m_pText = msg;
+-		BriefMessages[0].m_nFlag = flag;
+-		BriefMessages[0].m_nTime = time;
+-		BriefMessages[0].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-		BriefMessages[0].m_nNumber[0] = -1;
+-		BriefMessages[0].m_nNumber[1] = -1;
+-		BriefMessages[0].m_nNumber[2] = -1;
+-		BriefMessages[0].m_nNumber[3] = -1;
+-		BriefMessages[0].m_nNumber[4] = -1;
+-		BriefMessages[0].m_nNumber[5] = -1;
+-		BriefMessages[0].m_pString = nil;
+-		AddToPreviousBriefArray(msg, -1, -1, -1, -1, -1, -1, nil);
+-	}
++	revc_messages_add(MSG_SOON, msg, time, flag, nil, nil, NOW);
+ }
+ 
+ void
+ CMessages::ClearMessages()
+ {
+-	for (int32 i = 0; i < NUMBIGMESSAGES; i++) {
+-		for (int32 j = 0; j < 4; j++) {
+-			BIGMessages[i].m_Stack[j].m_pText = nil;
+-			BIGMessages[i].m_Stack[j].m_pString = nil;
+-		}
+-	}
+-	ClearSmallMessagesOnly();
++	revc_messages_clear(0);
+ }
+ 
+ void
+ CMessages::ClearSmallMessagesOnly()
+ {
+-	for (int32 i = 0; i < NUMBRIEFMESSAGES; i++) {
+-		BriefMessages[i].m_pText = nil;
+-		BriefMessages[i].m_pString = nil;
+-	}
++	revc_messages_clear(1);
+ }
+ 
+ void
+ CMessages::AddBigMessage(wchar *msg, uint32 time, uint16 style)
+ {
+-	wchar outstr[512]; // unused
+-	WideStringCopy(outstr, msg, 256);
+-	InsertPlayerControlKeysInString(outstr);
+-	GetWideStringLength(outstr);
+-
+-	BIGMessages[style].m_Stack[0].m_pText = msg;
+-	BIGMessages[style].m_Stack[0].m_nFlag = 0;
+-	BIGMessages[style].m_Stack[0].m_nTime = time;
+-	BIGMessages[style].m_Stack[0].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-	BIGMessages[style].m_Stack[0].m_nNumber[0] = -1;
+-	BIGMessages[style].m_Stack[0].m_nNumber[1] = -1;
+-	BIGMessages[style].m_Stack[0].m_nNumber[2] = -1;
+-	BIGMessages[style].m_Stack[0].m_nNumber[3] = -1;
+-	BIGMessages[style].m_Stack[0].m_nNumber[4] = -1;
+-	BIGMessages[style].m_Stack[0].m_nNumber[5] = -1;
+-	BIGMessages[style].m_Stack[0].m_pString = nil;
++	revc_messages_add_big(style, msg, time, nil, 0, NOW);
+ }
+ 
+ void
+ CMessages::AddBigMessageQ(wchar *msg, uint32 time, uint16 style)
+ {
+-	wchar outstr[512]; // unused
+-	WideStringCopy(outstr, msg, 256);
+-	InsertPlayerControlKeysInString(outstr);
+-	GetWideStringLength(outstr);
+-
+-	int32 i = 0;
+-	while (i < 4 && BIGMessages[style].m_Stack[i].m_pText != nil)
+-		i++;
+-
+-	if (i >= 4) return;
+-
+-	BIGMessages[style].m_Stack[i].m_pText = msg;
+-	BIGMessages[style].m_Stack[i].m_nFlag = 0;
+-	BIGMessages[style].m_Stack[i].m_nTime = time;
+-	BIGMessages[style].m_Stack[i].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-	BIGMessages[style].m_Stack[i].m_nNumber[0] = -1;
+-	BIGMessages[style].m_Stack[i].m_nNumber[1] = -1;
+-	BIGMessages[style].m_Stack[i].m_nNumber[2] = -1;
+-	BIGMessages[style].m_Stack[i].m_nNumber[3] = -1;
+-	BIGMessages[style].m_Stack[i].m_nNumber[4] = -1;
+-	BIGMessages[style].m_Stack[i].m_nNumber[5] = -1;
+-	BIGMessages[style].m_Stack[i].m_pString = nil;
++	revc_messages_add_big(style, msg, time, nil, 1, NOW);
+ }
+ 
+ void
+ CMessages::AddToPreviousBriefArray(wchar *text, int32 n1, int32 n2, int32 n3, int32 n4, int32 n5, int32 n6, wchar *string)
+ {
+-	int32 i;
+-	for (i = 0; i < NUMPREVIOUSBRIEFS && PreviousBriefs[i].m_pText != nil; i++) {
+-		if (PreviousBriefs[i].m_nNumber[0] == n1
+-			&& PreviousBriefs[i].m_nNumber[1] == n2
+-			&& PreviousBriefs[i].m_nNumber[2] == n3
+-			&& PreviousBriefs[i].m_nNumber[3] == n4
+-			&& PreviousBriefs[i].m_nNumber[4] == n5
+-			&& PreviousBriefs[i].m_nNumber[5] == n6
+-			&& PreviousBriefs[i].m_pText == text
+-			&& PreviousBriefs[i].m_pString == string)
+-			return;
+-	}
+-
+-	if (i != 0) {
+-		if (i == NUMPREVIOUSBRIEFS) i -= 2;
+-		else i--;
+-
+-		while (i >= 0) {
+-			PreviousBriefs[i + 1] = PreviousBriefs[i];
+-			i--;
+-		}
+-	}
+-	PreviousBriefs[0].m_pText = text;
+-	PreviousBriefs[0].m_nNumber[0] = n1;
+-	PreviousBriefs[0].m_nNumber[1] = n2;
+-	PreviousBriefs[0].m_nNumber[2] = n3;
+-	PreviousBriefs[0].m_nNumber[3] = n4;
+-	PreviousBriefs[0].m_nNumber[4] = n5;
+-	PreviousBriefs[0].m_nNumber[5] = n6;
+-	PreviousBriefs[0].m_pString = string;
++	NUMBERS;
++	revc_messages_add_previous(text, numbers, string);
+ }
+ 
+ void
+ CMessages::InsertNumberInString(wchar *str, int32 n1, int32 n2, int32 n3, int32 n4, int32 n5, int32 n6, wchar *outstr)
+ {
+-	char numStr[10];
+-	wchar wNumStr[10];
+-
+-	if (str == nil) {
+-		*outstr = '\0';
+-		return;
+-	}
+-
+-	sprintf(numStr, "%d", n1);
+-	size_t outLen = strlen(numStr);
+-	AsciiToUnicode(numStr, wNumStr);
+-	if (str[0] == 0) {
+-		*outstr = '\0';
+-		return;
+-	}
+-
+-	int32 size = GetWideStringLength(str);
+-
+-	int32 i = 0;
+-
+-	for (int32 c = 0; c < size;) {
+-#ifdef MORE_LANGUAGES
+-		if ((CFont::IsJapanese() && str[c] == (0x8000 | '~') && str[c + 1] == (0x8000 | '1') && str[c + 2] == (0x8000 | '~')) ||
+-			(!CFont::IsJapanese() && str[c] == '~' && str[c + 1] == '1' && str[c + 2] == '~')) {
+-#else
+-		if (str[c] == '~' && str[c + 1] == '1' && str[c + 2] == '~') {
+-#endif
+-			c += 3;
+-			for (int j = 0; j < outLen; )
+-				*(outstr++) = wNumStr[j++];
+-
+-			i++;
+-			switch (i) {
+-			case 1: sprintf(numStr, "%d", n2); break;
+-			case 2: sprintf(numStr, "%d", n3); break;
+-			case 3: sprintf(numStr, "%d", n4); break;
+-			case 4: sprintf(numStr, "%d", n5); break;
+-			case 5: sprintf(numStr, "%d", n6); break;
+-			}
+-			outLen = strlen(numStr);
+-			AsciiToUnicode(numStr, wNumStr);
+-		} else {
+-			*(outstr++) = str[c++];
+-		}
+-	}
+-	*outstr = '\0';
++	int32 nums[6] = { n1, n2, n3, n4, n5, n6 };
++	revc_text_insert_number(str, nums, CFont::IsJapanese(), outstr);
+ }
+ 
++// str1 is a 256-unit buffer: every ~a~ becomes str2, the rest of the buffer is zeroed.
+ void
+ CMessages::InsertStringInString(wchar *str1, wchar *str2)
+ {
+-	wchar tempstr[256];
+-
+ 	if (!str1 || !str2) return;
+-
+-	int32 str1_size = GetWideStringLength(str1);
+-	int32 str2_size = GetWideStringLength(str2);
+-	int32 total_size = str1_size + str2_size;
+-	
+-	wchar *_str1 = str1;
+-	uint16 i;
+-	for (i = 0; i < total_size; ) {
+-#ifdef MORE_LANGUAGES
+-		if ((CFont::IsJapanese() && *_str1 == (0x8000 | '~') && *(_str1 + 1) == (0x8000 | 'a') && *(_str1 + 2) == (0x8000 | '~'))
+-			|| (*_str1 == '~' && *(_str1 + 1) == 'a' && *(_str1 + 2) == '~')) {
+-#else
+-		if (*_str1 == '~' && *(_str1 + 1) == 'a' && *(_str1 + 2) == '~') {
+-#endif
+-			_str1 += 3;
+-			for (int j = 0; j < str2_size; j++) {
+-				tempstr[i++] = str2[j];
+-			}
+-		} else {
+-			tempstr[i++] = *(_str1++);
+-		}
+-	}
+-	tempstr[i] = '\0';
+-
+-	for (i = 0; i < total_size; i++)
+-		str1[i] = tempstr[i];
+-
+-	while (i < 256)
+-		str1[i++] = '\0';
++	revc_text_insert_string(str1, str2, CFont::IsJapanese());
+ }
+ 
+ void
+@@ -493,323 +235,67 @@
+ void
+ CMessages::AddMessageWithNumber(wchar *str, uint32 time, uint16 flag, int32 n1, int32 n2, int32 n3, int32 n4, int32 n5, int32 n6)
+ {
+-	wchar outstr[512]; // unused
+-	InsertNumberInString(str, n1, n2, n3, n4, n5, n6, outstr);
+-	InsertPlayerControlKeysInString(outstr);
+-	GetWideStringLength(outstr);
+-
+-	uint16 i = 0;
+-	while (i < NUMBRIEFMESSAGES && BriefMessages[i].m_pText != nil)
+-		i++;
+-
+-	if (i >= NUMBRIEFMESSAGES) return;
+-
+-	BriefMessages[i].m_pText = str;
+-	BriefMessages[i].m_nFlag = flag;
+-	BriefMessages[i].m_nTime = time;
+-	BriefMessages[i].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-	BriefMessages[i].m_nNumber[0] = n1;
+-	BriefMessages[i].m_nNumber[1] = n2;
+-	BriefMessages[i].m_nNumber[2] = n3;
+-	BriefMessages[i].m_nNumber[3] = n4;
+-	BriefMessages[i].m_nNumber[4] = n5;
+-	BriefMessages[i].m_nNumber[5] = n6;
+-	BriefMessages[i].m_pString = nil;
+-	if (i == 0)
+-		AddToPreviousBriefArray(
+-			BriefMessages[0].m_pText,
+-			BriefMessages[0].m_nNumber[0],
+-			BriefMessages[0].m_nNumber[1],
+-			BriefMessages[0].m_nNumber[2],
+-			BriefMessages[0].m_nNumber[3],
+-			BriefMessages[0].m_nNumber[4],
+-			BriefMessages[0].m_nNumber[5],
+-			BriefMessages[0].m_pString);
++	NUMBERS;
++	revc_messages_add(MSG_QUEUE, str, time, flag, numbers, nil, NOW);
+ }
+ 
+-void 
++void
+ CMessages::AddMessageJumpQWithNumber(wchar *str, uint32 time, uint16 flag, int32 n1, int32 n2, int32 n3, int32 n4, int32 n5, int32 n6)
+ {
+-	wchar outstr[512]; // unused
+-	InsertNumberInString(str, n1, n2, n3, n4, n5, n6, outstr);
+-	InsertPlayerControlKeysInString(outstr);
+-	GetWideStringLength(outstr);
+-
+-	BriefMessages[0].m_pText = str;
+-	BriefMessages[0].m_nFlag = flag;
+-	BriefMessages[0].m_nTime = time;
+-	BriefMessages[0].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-	BriefMessages[0].m_nNumber[0] = n1;
+-	BriefMessages[0].m_nNumber[1] = n2;
+-	BriefMessages[0].m_nNumber[2] = n3;
+-	BriefMessages[0].m_nNumber[3] = n4;
+-	BriefMessages[0].m_nNumber[4] = n5;
+-	BriefMessages[0].m_nNumber[5] = n6;
+-	BriefMessages[0].m_pString = nil;
+-	AddToPreviousBriefArray(str, n1, n2, n3, n4, n5, n6, nil);
++	NUMBERS;
++	revc_messages_add(MSG_JUMPQ, str, time, flag, numbers, nil, NOW);
+ }
+ 
+ void
+ CMessages::AddMessageSoonWithNumber(wchar *str, uint32 time, uint16 flag, int32 n1, int32 n2, int32 n3, int32 n4, int32 n5, int32 n6)
+ {
+-	wchar outstr[512]; // unused
+-	InsertNumberInString(str, n1, n2, n3, n4, n5, n6, outstr);
+-	InsertPlayerControlKeysInString(outstr);
+-	GetWideStringLength(outstr);
+-
+-	if (BriefMessages[0].m_pText != nil) {
+-		for (int32 i = NUMBRIEFMESSAGES-1; i > 1; i--)
+-			BriefMessages[i] = BriefMessages[i-1];
+-
+-		BriefMessages[1].m_pText = str;
+-		BriefMessages[1].m_nFlag = flag;
+-		BriefMessages[1].m_nTime = time;
+-		BriefMessages[1].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-		BriefMessages[1].m_nNumber[0] = n1;
+-		BriefMessages[1].m_nNumber[1] = n2;
+-		BriefMessages[1].m_nNumber[2] = n3;
+-		BriefMessages[1].m_nNumber[3] = n4;
+-		BriefMessages[1].m_nNumber[4] = n5;
+-		BriefMessages[1].m_nNumber[5] = n6;
+-		BriefMessages[1].m_pString = nil;
+-	} else {
+-		BriefMessages[0].m_pText = str;
+-		BriefMessages[0].m_nFlag = flag;
+-		BriefMessages[0].m_nTime = time;
+-		BriefMessages[0].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-		BriefMessages[0].m_nNumber[0] = n1;
+-		BriefMessages[0].m_nNumber[1] = n2;
+-		BriefMessages[0].m_nNumber[2] = n3;
+-		BriefMessages[0].m_nNumber[3] = n4;
+-		BriefMessages[0].m_nNumber[4] = n5;
+-		BriefMessages[0].m_nNumber[5] = n6;
+-		BriefMessages[0].m_pString = nil;
+-		AddToPreviousBriefArray(str, n1, n2, n3, n4, n5, n6, nil);
+-	}
++	NUMBERS;
++	revc_messages_add(MSG_SOON, str, time, flag, numbers, nil, NOW);
+ }
+ 
+ void
+ CMessages::AddBigMessageWithNumber(wchar *str, uint32 time, uint16 style, int32 n1, int32 n2, int32 n3, int32 n4, int32 n5, int32 n6)
+ {
+-	wchar outstr[512]; // unused
+-	InsertNumberInString(str, n1, n2, n3, n4, n5, n6, outstr);
+-	InsertPlayerControlKeysInString(outstr);
+-	GetWideStringLength(outstr);
+-
+-	BIGMessages[style].m_Stack[0].m_pText = str;
+-	BIGMessages[style].m_Stack[0].m_nFlag = 0;
+-	BIGMessages[style].m_Stack[0].m_nTime = time;
+-	BIGMessages[style].m_Stack[0].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-	BIGMessages[style].m_Stack[0].m_nNumber[0] = n1;
+-	BIGMessages[style].m_Stack[0].m_nNumber[1] = n2;
+-	BIGMessages[style].m_Stack[0].m_nNumber[2] = n3;
+-	BIGMessages[style].m_Stack[0].m_nNumber[3] = n4;
+-	BIGMessages[style].m_Stack[0].m_nNumber[4] = n5;
+-	BIGMessages[style].m_Stack[0].m_nNumber[5] = n6;
+-	BIGMessages[style].m_Stack[0].m_pString = nil;
++	NUMBERS;
++	revc_messages_add_big(style, str, time, numbers, 0, NOW);
+ }
+ 
+ void
+ CMessages::AddBigMessageWithNumberQ(wchar *str, uint32 time, uint16 style, int32 n1, int32 n2, int32 n3, int32 n4, int32 n5, int32 n6)
+ {
+-	wchar outstr[512]; // unused
+-	InsertNumberInString(str, n1, n2, n3, n4, n5, n6, outstr);
+-	InsertPlayerControlKeysInString(outstr);
+-	GetWideStringLength(outstr);
+-
+-	int32 i = 0;
+-
+-	while (i < 4 && BIGMessages[style].m_Stack[i].m_pText != nil)
+-		i++;
+-
+-	if (i >= 4) return;
+-
+-	BIGMessages[style].m_Stack[i].m_pText = str;
+-	BIGMessages[style].m_Stack[i].m_nFlag = 0;
+-	BIGMessages[style].m_Stack[i].m_nTime = time;
+-	BIGMessages[style].m_Stack[i].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-	BIGMessages[style].m_Stack[i].m_nNumber[0] = n1;
+-	BIGMessages[style].m_Stack[i].m_nNumber[1] = n2;
+-	BIGMessages[style].m_Stack[i].m_nNumber[2] = n3;
+-	BIGMessages[style].m_Stack[i].m_nNumber[3] = n4;
+-	BIGMessages[style].m_Stack[i].m_nNumber[4] = n5;
+-	BIGMessages[style].m_Stack[i].m_nNumber[5] = n6;
+-	BIGMessages[style].m_Stack[i].m_pString = nil;
++	NUMBERS;
++	revc_messages_add_big(style, str, time, numbers, 1, NOW);
+ }
+ 
+ void
+ CMessages::AddMessageWithString(wchar *text, uint32 time, uint16 flag, wchar *str)
+ {
+-	wchar outstr[512]; // unused
+-	WideStringCopy(outstr, text, 256);
+-	InsertStringInString(outstr, str);
+-	InsertPlayerControlKeysInString(outstr);
+-	GetWideStringLength(outstr);
+-
+-	int32 i = 0;
+-	while (i < NUMBRIEFMESSAGES && BriefMessages[i].m_pText != nil)
+-		i++;
+-
+-	if (i >= NUMBRIEFMESSAGES) return;
+-
+-	BriefMessages[i].m_pText = text;
+-	BriefMessages[i].m_nFlag = flag;
+-	BriefMessages[i].m_nTime = time;
+-	BriefMessages[i].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-	BriefMessages[i].m_nNumber[0] = -1;
+-	BriefMessages[i].m_nNumber[1] = -1;
+-	BriefMessages[i].m_nNumber[2] = -1;
+-	BriefMessages[i].m_nNumber[3] = -1;
+-	BriefMessages[i].m_nNumber[4] = -1;
+-	BriefMessages[i].m_nNumber[5] = -1;
+-	BriefMessages[i].m_pString = str;
+-	if (i == 0)
+-		AddToPreviousBriefArray(
+-			BriefMessages[0].m_pText,
+-			BriefMessages[0].m_nNumber[0],
+-			BriefMessages[0].m_nNumber[1],
+-			BriefMessages[0].m_nNumber[2],
+-			BriefMessages[0].m_nNumber[3],
+-			BriefMessages[0].m_nNumber[4],
+-			BriefMessages[0].m_nNumber[5],
+-			BriefMessages[0].m_pString);
++	revc_messages_add(MSG_QUEUE, text, time, flag, nil, str, NOW);
+ }
+ 
+ void
+ CMessages::AddMessageJumpQWithString(wchar *text, uint32 time, uint16 flag, wchar *str)
+ {
+-	wchar outstr[512]; // unused
+-	WideStringCopy(outstr, text, 256);
+-	InsertStringInString(outstr, str);
+-	InsertPlayerControlKeysInString(outstr);
+-	GetWideStringLength(outstr);
+-
+-	BriefMessages[0].m_pText = text;
+-	BriefMessages[0].m_nFlag = flag;
+-	BriefMessages[0].m_nTime = time;
+-	BriefMessages[0].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-	BriefMessages[0].m_nNumber[0] = -1;
+-	BriefMessages[0].m_nNumber[1] = -1;
+-	BriefMessages[0].m_nNumber[2] = -1;
+-	BriefMessages[0].m_nNumber[3] = -1;
+-	BriefMessages[0].m_nNumber[4] = -1;
+-	BriefMessages[0].m_nNumber[5] = -1;
+-	BriefMessages[0].m_pString = str;
+-	AddToPreviousBriefArray(text, -1, -1, -1, -1, -1, -1, str);
+-}
+-
+-inline bool
+-FastWideStringComparison(wchar *str1, wchar *str2)
+-{
+-	while (*str1 == *str2) {
+-		++str1;
+-		++str2;
+-		if (!*str1 && !*str2) return true;
+-	}
+-	return false;
++	revc_messages_add(MSG_JUMPQ, text, time, flag, nil, str, NOW);
+ }
+ 
++
+ void
+ CMessages::ClearThisPrint(wchar *str)
+ {
+-	bool equal;
+-
+-	do {
+-		equal = false;
+-		uint16 i;
+-		for (i = 0; i < NUMBRIEFMESSAGES && BriefMessages[i].m_pText != nil; i++) {
+-			equal = FastWideStringComparison(str, BriefMessages[i].m_pText);
+-
+-			if (equal) break;
+-		}
+-
+-		if (equal) {
+-			if (i != 0) {
+-				BriefMessages[i].m_pText = nil;
+-				for (; i < NUMBRIEFMESSAGES-1 && BriefMessages[i+1].m_pText != nil; i++) {
+-					BriefMessages[i] = BriefMessages[i + 1];
+-				}
+-				BriefMessages[i].m_pText = nil;
+-			} else {
+-				BriefMessages[0].m_pText = nil;
+-				for (; i < NUMBRIEFMESSAGES-1 && BriefMessages[i+1].m_pText != nil; i++) {
+-					BriefMessages[i] = BriefMessages[i + 1];
+-				}
+-				BriefMessages[i].m_pText = nil;
+-				BriefMessages[0].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-				if (BriefMessages[0].m_pText != nil)
+-					AddToPreviousBriefArray(
+-						BriefMessages[0].m_pText,
+-						BriefMessages[0].m_nNumber[0],
+-						BriefMessages[0].m_nNumber[1],
+-						BriefMessages[0].m_nNumber[2],
+-						BriefMessages[0].m_nNumber[3],
+-						BriefMessages[0].m_nNumber[4],
+-						BriefMessages[0].m_nNumber[5],
+-						BriefMessages[0].m_pString);
+-			}
+-		}
+-	} while (equal);
++	revc_messages_clear_this(str, 0, NOW);
+ }
+ 
+ void
+ CMessages::ClearThisBigPrint(wchar *str)
+ {
+-	bool equal;
+-
+-	do {
+-		uint16 i = 0;
+-		equal = false;
+-		uint16 style = 0;
+-		while (style < NUMBIGMESSAGES)
+-		{
+-			if (i >= 4)
+-				break;
+-
+-			if (CMessages::BIGMessages[style].m_Stack[i].m_pText == nil || equal)
+-				break;
+-
+-			equal = FastWideStringComparison(str, BIGMessages[style].m_Stack[i].m_pText);
+-
+-			if (!equal && ++i == 4) {
+-				i = 0;
+-				style++;
+-			}
+-		}
+-		if (equal) {
+-			if (i != 0) {
+-				BIGMessages[style].m_Stack[i].m_pText = nil;
+-				while (i < 3) {
+-					if (BIGMessages[style].m_Stack[i + 1].m_pText == nil)
+-						break;
+-					BIGMessages[style].m_Stack[i] = BIGMessages[style].m_Stack[i + 1];
+-					i++;
+-				}
+-				BIGMessages[style].m_Stack[i].m_pText = nil;
+-			} else {
+-				BIGMessages[style].m_Stack[0].m_pText = nil;
+-				i = 0;
+-				while (i < 3) {
+-					if (BIGMessages[style].m_Stack[i + 1].m_pText == nil)
+-						break;
+-					BIGMessages[style].m_Stack[i] = BIGMessages[style].m_Stack[i + 1];
+-					i++;
+-				}
+-				BIGMessages[style].m_Stack[i].m_pText = nil;
+-				BIGMessages[style].m_Stack[0].m_nStartTime = CTimer::GetTimeInMilliseconds();
+-			}
+-		}
+-	} while (equal);
++	revc_messages_clear_this(str, 1, NOW);
+ }
+ 
+ void
+ CMessages::ClearAllMessagesDisplayedByGame()
+ {
+-	ClearMessages();
+-	for (int32 i = 0; i < NUMPREVIOUSBRIEFS; i++) {
+-		PreviousBriefs[i].m_pText = nil;
+-		PreviousBriefs[i].m_pString = nil;
+-	}
++	revc_messages_init();	// queues and the previous-briefs list
+ 	CHud::GetRidOfAllHudMessages();
+ 	CUserDisplay::Pager.ClearMessages();
+ }
+--- a/src/text/Messages.h
++++ b/src/text/Messages.h
+@@ -29,9 +29,10 @@
+ class CMessages 
+ {
+ public:
+-	static tMessage BriefMessages[NUMBRIEFMESSAGES];
+-	static tBigMessage BIGMessages[NUMBIGMESSAGES];
+-	static tPreviousBrief PreviousBriefs[NUMPREVIOUSBRIEFS];
++	// The queues live in Rust (rust/revc/src/messages.rs, `revc_messages`); these refer to them.
++	static tMessage (&BriefMessages)[NUMBRIEFMESSAGES];
++	static tBigMessage (&BIGMessages)[NUMBIGMESSAGES];
++	static tPreviousBrief (&PreviousBriefs)[NUMPREVIOUSBRIEFS];
+ 	static char PreviousMissionTitle[16]; // unused
+ public:
+ 	static void Init(void);
+--- a/src/text/Pager.cpp
++++ b/src/text/Pager.cpp
+@@ -6,47 +6,35 @@
+ #include "Hud.h"
+ #include "Camera.h"
+ 
++// The queue logic is in Rust (rust/revc/src/pager.rs), working on this object's memory; checked
++// against the original C++ with tests/golden/pager.txt. Drawing stays here.
++static_assert(sizeof(PagerMessage) == 48 && offsetof(PagerMessage, m_nTimeToChangePosition) == 16 &&
++              offsetof(PagerMessage, m_nNumber) == 24, "PagerMessage layout");
++static_assert(sizeof(CPager) == 392, "CPager layout");
++
++extern "C" {
++void revc_pager_init(CPager *p);
++void revc_pager_clear(CPager *p);
++void revc_pager_add(CPager *p, const wchar *text, uint16 length, const int32 *numbers, uint16 speed, uint16 priority, uint16 unused, uint32 now);
++void revc_pager_expire(CPager *p);
++void revc_pager_advance(CPager *p, int blocked, uint32 now);
++void revc_pager_restart(CPager *p, uint32 now);
++}
++
+ void
+ CPager::Init()
+ {
+-	ClearMessages();
+-	m_nNumDisplayLetters = 8;
++	revc_pager_init(this);
+ }
+ 
+ void
+ CPager::Process()
+ {
+-	if (m_messages[0].m_pText != nil && m_messages[0].m_nCurrentPosition >= (int32)m_messages[0].m_nStringLength) {
+-		m_messages[0].m_pText = nil;
+-		uint16 i = 0;
+-		while (i < NUMPAGERMESSAGES-1) {
+-			if (m_messages[i + 1].m_pText == nil) break;
+-			m_messages[i] = m_messages[i + 1];
+-			i++;
+-		}
+-		m_messages[i].m_pText = nil;
+-		if (m_messages[0].m_pText != nil)
+-			CMessages::AddToPreviousBriefArray(
+-				m_messages[0].m_pText,
+-				m_messages[0].m_nNumber[0],
+-				m_messages[0].m_nNumber[1],
+-				m_messages[0].m_nNumber[2],
+-				m_messages[0].m_nNumber[3],
+-				m_messages[0].m_nNumber[4],
+-				m_messages[0].m_nNumber[5],
+-				0);
+-	}
++	revc_pager_expire(this);
+ 	Display();
+-	if (m_messages[0].m_pText != nil) {
+-		if (TheCamera.m_WideScreenOn || !CHud::m_Wants_To_Draw_Hud || CHud::m_BigMessage[0][0] || CHud::m_BigMessage[2][0]) {
+-			RestartCurrentMessage();
+-		} else {
+-			if (CTimer::GetTimeInMilliseconds() > m_messages[0].m_nTimeToChangePosition) {
+-				m_messages[0].m_nCurrentPosition++;
+-				m_messages[0].m_nTimeToChangePosition = CTimer::GetTimeInMilliseconds() + m_messages[0].m_nSpeedMs;
+-			}
+-		}
+-	}
++	// The pager can't be seen: start the message over instead of scrolling it.
++	bool blocked = TheCamera.m_WideScreenOn || !CHud::m_Wants_To_Draw_Hud || CHud::m_BigMessage[0][0] || CHud::m_BigMessage[2][0];
++	revc_pager_advance(this, blocked, CTimer::GetTimeInMilliseconds());
+ }
+ 
+ void
+@@ -85,100 +73,26 @@
+ void
+ CPager::AddMessage(wchar *str, uint16 speed, uint16 priority, uint16 a5)
+ {
+-	uint16 size = CMessages::GetWideStringLength(str);
+-	for (int32 i = 0; i < NUMPAGERMESSAGES; i++) {
+-		if (m_messages[i].m_pText) {
+-			if (m_messages[i].m_nPriority >= priority)
+-				continue;
+-
+-			for (int j = NUMPAGERMESSAGES-1; j > i; j--)
+-				m_messages[j] = m_messages[j-1];
+-
+-		}
+-		m_messages[i].m_pText = str;
+-		m_messages[i].m_nSpeedMs = speed;
+-		m_messages[i].m_nPriority = priority;
+-		m_messages[i].unused = a5;
+-		m_messages[i].m_nCurrentPosition = -(m_nNumDisplayLetters + 10);
+-		m_messages[i].m_nTimeToChangePosition = CTimer::GetTimeInMilliseconds() + speed;
+-		m_messages[i].m_nStringLength = size;
+-		m_messages[i].m_nNumber[0] = -1;
+-		m_messages[i].m_nNumber[1] = -1;
+-		m_messages[i].m_nNumber[2] = -1;
+-		m_messages[i].m_nNumber[3] = -1;
+-		m_messages[i].m_nNumber[4] = -1;
+-		m_messages[i].m_nNumber[5] = -1;
+-
+-		if (i == 0)
+-			CMessages::AddToPreviousBriefArray(
+-				m_messages[0].m_pText,
+-				m_messages[0].m_nNumber[0],
+-				m_messages[0].m_nNumber[1],
+-				m_messages[0].m_nNumber[2],
+-				m_messages[0].m_nNumber[3],
+-				m_messages[0].m_nNumber[4],
+-				m_messages[0].m_nNumber[5],
+-				nil);
+-			return;
+-	}
++	revc_pager_add(this, str, CMessages::GetWideStringLength(str), nil, speed, priority, a5, CTimer::GetTimeInMilliseconds());
+ }
+ 
+ void
+ CPager::AddMessageWithNumber(wchar *str, int32 n1, int32 n2, int32 n3, int32 n4, int32 n5, int32 n6, uint16 speed, uint16 priority, uint16 a11)
+ {
+ 	wchar nstr[520];
+-
++	int32 numbers[6] = { n1, n2, n3, n4, n5, n6 };
+ 	CMessages::InsertNumberInString(str, n1, n2, n3, n4, n5, n6, nstr);
+-	uint16 size = CMessages::GetWideStringLength(nstr);
+-	for (int32 i = 0; i < NUMPAGERMESSAGES; i++) {
+-		if (m_messages[i].m_pText) {
+-			if (m_messages[i].m_nPriority >= priority)
+-				continue;
+-
+-			for (int j = NUMPAGERMESSAGES-1; j > i; j--)
+-				m_messages[j] = m_messages[j - 1];
+-
+-		}
+-		m_messages[i].m_pText = str;
+-		m_messages[i].m_nSpeedMs = speed;
+-		m_messages[i].m_nPriority = priority;
+-		m_messages[i].unused = a11;
+-		m_messages[i].m_nCurrentPosition = -(m_nNumDisplayLetters + 10);
+-		m_messages[i].m_nTimeToChangePosition = CTimer::GetTimeInMilliseconds() + speed;
+-		m_messages[i].m_nStringLength = size;
+-		m_messages[i].m_nNumber[0] = n1;
+-		m_messages[i].m_nNumber[1] = n2;
+-		m_messages[i].m_nNumber[2] = n3;
+-		m_messages[i].m_nNumber[3] = n4;
+-		m_messages[i].m_nNumber[4] = n5;
+-		m_messages[i].m_nNumber[5] = n6;
+-
+-		if (i == 0)
+-			CMessages::AddToPreviousBriefArray(
+-				m_messages[0].m_pText,
+-				m_messages[0].m_nNumber[0],
+-				m_messages[0].m_nNumber[1],
+-				m_messages[0].m_nNumber[2],
+-				m_messages[0].m_nNumber[3],
+-				m_messages[0].m_nNumber[4],
+-				m_messages[0].m_nNumber[5],
+-				nil);
+-		return;
+-	}
++	revc_pager_add(this, str, CMessages::GetWideStringLength(nstr), numbers, speed, priority, a11, CTimer::GetTimeInMilliseconds());
+ }
+ 
+ void
+ CPager::ClearMessages()
+ {
+-	for (int32 i = 0; i < NUMPAGERMESSAGES; i++)
+-		m_messages[i].m_pText = nil;
++	revc_pager_clear(this);
+ }
+ 
+ void
+ CPager::RestartCurrentMessage()
+ {
+-	if (m_messages[0].m_pText != nil) {
+-		m_messages[0].m_nCurrentPosition = -(m_nNumDisplayLetters + 10);
+-		m_messages[0].m_nTimeToChangePosition = CTimer::GetTimeInMilliseconds() + m_messages[0].m_nSpeedMs;
+-	}
+-}
+\ No newline at end of file
++	revc_pager_restart(this, CTimer::GetTimeInMilliseconds());
++}
+--- a/src/text/Text.cpp
++++ b/src/text/Text.cpp
+@@ -1,12 +1,11 @@
+ #include "common.h"
+ 
+ #include "FileMgr.h"
+-#ifdef MORE_LANGUAGES
+ #include "Game.h"
+-#endif
+ #include "Frontend.h"
+ #include "Messages.h"
+ #include "Text.h"
++#include "Font.h"
+ #include "Timer.h"
+ 
+ wchar WideErrorString[25];
+@@ -16,173 +15,207 @@
+ CText::CText(void)
+ {
+ 	encoding = 'e';
+-	bHasMissionTextOffsets = false;
+ 	bIsMissionTextLoaded = false;
+ 	memset(szMissionTableName, 0, sizeof(szMissionTableName));
+ 	memset(WideErrorString, 0, sizeof(WideErrorString));
+ }
+ 
+-void
+-CText::Load(void)
+-{
+-	char filename[32];
+-	size_t offset;
+-	int file;
+-	bool tkey_loaded = false, tdat_loaded = false;
+-	ChunkHeader m_ChunkHeader;
+-
+-	bIsMissionTextLoaded = false;
+-	bHasMissionTextOffsets = false;
+-
+-	Unload();
++extern "C" {
++uint16 revc_text_upper(wchar c, char encoding);
++void revc_text_to_ascii(const wchar *s, int mode, char *out);
++int revc_text_load(const uint8 *data, size_t len);
++void revc_text_unload(void);
++const wchar *revc_text_get(const char *key);
++int revc_text_load_mission(const char *name);
++int revc_text_num_keys(void);
++const char *revc_text_key(int i);
++}
+ 
+-	CFileMgr::SetDir("TEXT");
++// GXT file of the menu language (in TEXT/).
++char*
++CText::GetFilename(void)
++{
++	static char filename[32];
+ 	switch(FrontEndMenuManager.m_PrefsLanguage){
+-	case CMenuManager::LANGUAGE_AMERICAN:
+-		sprintf(filename, "AMERICAN.GXT");
+-		break;
+-	case CMenuManager::LANGUAGE_FRENCH:
+-		sprintf(filename, "FRENCH.GXT");
+-		break;
+-	case CMenuManager::LANGUAGE_GERMAN:
+-		sprintf(filename, "GERMAN.GXT");
+-		break;
+-	case CMenuManager::LANGUAGE_ITALIAN:
+-		sprintf(filename, "ITALIAN.GXT");
+-		break;
+-	case CMenuManager::LANGUAGE_SPANISH:
+-		sprintf(filename, "SPANISH.GXT");
+-		break;
++	case CMenuManager::LANGUAGE_FRENCH: strcpy(filename, "FRENCH.GXT"); break;
++	case CMenuManager::LANGUAGE_GERMAN: strcpy(filename, "GERMAN.GXT"); break;
++	case CMenuManager::LANGUAGE_ITALIAN: strcpy(filename, "ITALIAN.GXT"); break;
++	case CMenuManager::LANGUAGE_SPANISH: strcpy(filename, "SPANISH.GXT"); break;
+ #ifdef MORE_LANGUAGES
+-	case CMenuManager::LANGUAGE_POLISH:
+-		sprintf(filename, "POLISH.GXT");
+-		break;
+-	case CMenuManager::LANGUAGE_RUSSIAN:
+-		sprintf(filename, "RUSSIAN.GXT");
+-		break;
+-	case CMenuManager::LANGUAGE_JAPANESE:
+-		sprintf(filename, "JAPANESE.GXT");
+-		break;
++	case CMenuManager::LANGUAGE_POLISH: strcpy(filename, "POLISH.GXT"); break;
++	case CMenuManager::LANGUAGE_RUSSIAN: strcpy(filename, "RUSSIAN.GXT"); break;
++	case CMenuManager::LANGUAGE_JAPANESE: strcpy(filename, "JAPANESE.GXT"); break;
+ #endif
++	case CMenuManager::LANGUAGE_AMERICAN:
++	default: strcpy(filename, "AMERICAN.GXT"); break;
+ 	}
++	return filename;
++}
+ 
+-	file = CFileMgr::OpenFile(filename, "rb");
+-
+-	offset = 0;
+-	while (!tkey_loaded || !tdat_loaded) {
+-		ReadChunkHeader(&m_ChunkHeader, file, &offset);
+-		if (m_ChunkHeader.size != 0) {
+-			if (strncmp(m_ChunkHeader.magic, "TABL", 4) == 0) {
+-				MissionTextOffsets.Load(m_ChunkHeader.size, file, &offset, 0x58000);
+-				bHasMissionTextOffsets = true;
+-			} else if (strncmp(m_ChunkHeader.magic, "TKEY", 4) == 0) {
+-				this->keyArray.Load(m_ChunkHeader.size, file, &offset);
+-				tkey_loaded = true;
+-			} else if (strncmp(m_ChunkHeader.magic, "TDAT", 4) == 0) {
+-				this->data.Load(m_ChunkHeader.size, file, &offset);
+-				tdat_loaded = true;
+-			} else {
+-				CFileMgr::Seek(file, m_ChunkHeader.size, SEEK_CUR);
+-				offset += m_ChunkHeader.size;
+-			}
+-		}
+-	}
++void
++CText::Load(void)
++{
++	bIsMissionTextLoaded = false;
++	Unload();
+ 
+-	keyArray.Update(data.chars);
+-	CFileMgr::CloseFile(file);
++	// Whole file in one read (the largest GXT is about 0.5 MB), parsed in Rust.
++	enum { MAX_GXT_SIZE = 4 * 1024 * 1024 };
++	uint8 *buf = new uint8[MAX_GXT_SIZE];
++	CFileMgr::SetDir("TEXT");
++	ssize_t len = CFileMgr::LoadFile(GetFilename(), buf, MAX_GXT_SIZE, "rb");
+ 	CFileMgr::SetDir("");
++	if (len <= 0 || len >= MAX_GXT_SIZE || !revc_text_load(buf, len))
++		printf("CText::Load - can't load %s\n", GetFilename());
++	delete[] buf;
+ }
+ 
+ void
+ CText::Unload(void)
+ {
+ 	CMessages::ClearAllMessagesDisplayedByGame();
+-	keyArray.Unload();
+-	data.Unload();
+-	mission_keyArray.Unload();
+-	mission_data.Unload();
++	revc_text_unload();
+ 	bIsMissionTextLoaded = false;
+ 	memset(szMissionTableName, 0, sizeof(szMissionTableName));
+ }
+ 
++int
++CText::GetNumKeys(void)
++{
++	return revc_text_num_keys();
++}
++
++const char*
++CText::GetKeyName(int i)
++{
++	return revc_text_key(i);
++}
++
+ wchar*
+ CText::Get(const char *key)
+ {
+-	uint8 result = false;
+-#if defined (FIX_BUGS) || defined(FIX_BUGS_64)
+-	wchar *outstr = keyArray.Search(key, data.chars, &result);
+-#else
+-	wchar *outstr = keyArray.Search(key, &result);
+-#endif
++	if (const wchar *s = revc_text_get(key))
++		return (wchar*)s;
++	if (wchar *extra = GetRevcText(key))
++		return extra;
+ 
+-	if (!result && bHasMissionTextOffsets && bIsMissionTextLoaded)
+-#if defined (FIX_BUGS) || defined(FIX_BUGS_64)
+-		outstr = mission_keyArray.Search(key, mission_data.chars, &result);
++	char errstr[25];
++#ifdef MASTER
++	sprintf(errstr, "");
+ #else
+-		outstr = mission_keyArray.Search(key, &result);
+-#endif
+-	return outstr;
++	sprintf(errstr, "%.8s missing", key);
++#endif // MASTER
++	for(int i = 0; i < 25; i++)
++		WideErrorString[i] = errstr[i];
++	return WideErrorString;
+ }
+ 
+-wchar UpperCaseTable[128] = {
+-	128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138,
+-	139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149,
+-	150, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137,
+-	138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148,
+-	149, 173, 173, 175, 176, 177, 178, 179, 180, 181, 182,
+-	183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193,
+-	194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204,
+-	205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215,
+-	216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226,
+-	227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237,
+-	238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248,
+-	249, 250, 251, 252, 253, 254, 255
+-};
++// CText::Get for the Rust side (savegame.rs: month names, messages).
++extern "C" const wchar *revc_cpp_text_get(const char *key) { return TheText.Get(key); }
+ 
+-wchar FrenchUpperCaseTable[128] = {
+-	128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138,
+-	139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149,
+-	150, 65, 65, 65, 65, 132, 133, 69, 69, 69, 69, 73, 73,
+-	73, 73, 79, 79, 79, 79, 85, 85, 85, 85, 173, 173, 175,
+-	176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186,
+-	187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197,
+-	198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208,
+-	209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219,
+-	220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230,
+-	231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241,
+-	242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252,
+-	253, 254, 255
++// Text for menu entries added by revc (keys starting with RVC_), English only for now; the game's
++// own GXT files are not modified.
++static const struct { const char *key; const char *text; } RevcTexts[] = {
++	{ "RVC_GLY", "BUTTON PROMPTS" },
++	{ "RVC_VSY", "VSYNC" },
++	{ "RVC_PLY", "CONTROLLER LAYOUT" },
++	{ "RVC_PLS", "XBOX STANDARD" },
++	{ "RVC_PLC", "XBOX CLASSIC" },
++	{ "RVC_PLO", "ORIGINAL PC" },
++	{ "RVC_PLX", "CUSTOM" },
++	{ "RVC_DSC", "CONSOLE DISCS" },
++	{ "RVC_PPT", "CONTROLLER LAYOUT" },
++	{ "RVC_PPV", "SHOW" },
++	{ "RVC_PPF", "ON FOOT" },
++	{ "RVC_PPC", "IN CAR" },
++	{ "RVC_PPI", "IMPORT YOUR XBOX DISC (OPTIONS > CONSOLE DISCS) TO SEE THE CONTROLLER" },
++	{ "RVC_MOV", "Move" },
++	{ "RVC_CAM", "Camera" },
++	{ "RVC_STR", "Steer" },
++	{ "RVC_ACC", "Accelerate" },
++	{ "RVC_BRK", "Brake" },
++	{ "RVC_DSN", "NONE" },
++	{ "RVC_DSX", "XBOX" },
++	{ "RVC_DSP", "PS2" },
++	{ "RVC_DSA", "XBOX + PS2" },
++	{ "RVC_DSB", "IMPORTING..." },
++	{ "RVC_DSF", "IMPORT FAILED" },
++	{ "RVC_GXB", "XBOX" },
++	{ "RVC_GPS", "PLAYSTATION" },
++	{ "RVC_GNS", "NINTENDO" },
++	{ "RVC_GSD", "STEAM DECK" },
++	{ "RVC_GSC", "STEAM CONTROLLER" },
++	{ "RVC_FPS", "PS2/XBOX" },
++	{ "RVC_FPC", "PC" },
++	{ "RVC_AA", "ANTIALIASING" },
++	{ "RVC_AA1", "FXAA" },
++	{ "RVC_AA2", "SMAA" },
++	{ "RVC_AA3", "MSAA 2X" },
++	{ "RVC_AA4", "MSAA 4X" },
++	{ "RVC_AA5", "MSAA 4X + SMAA" },
++	{ "RVC_AA6", "MSAA 8X" },
++	{ "RVC_AA7", "SSAA 2X" },
++	{ "RVC_AA8", "SSAA 2X + MSAA 4X" },
++	{ "RVC_VST", "VISUAL STYLE" },
++	{ "RVC_VS0", "PC" },
++	{ "RVC_VS1", "PS2" },
++	{ "RVC_VS2", "XBOX" },
++	{ "RVC_VS3", "MOBILE" },
++	{ "RVC_VSC", "CUSTOM" },
++	{ "RVC_UIS", "UI STYLE" },
++	{ "RVC_HUA", "HUD AREA" },
++	{ "RVC_PPH", "FLYING" },
++	{ "RVC_DEC", "Decelerate" },
++	{ "RVC_HU0", "CORNERS" },
++	{ "RVC_HU1", "4:3" },
++	// PS2 menu skin help box (core/MenuSkinPS2.cpp)
++	{ "RVC_HST", "START" },
++	{ "RVC_HBT", "button" },
++	{ "RVC_HDA", "-" },
++	{ "RVC_HSE", "Select" },
++	{ "RVC_HBA", "Back" },
++	{ "RVC_HRE", "Resume" },
++	{ "RVC_HNA", "Navigate" },
++	// Xbox menu skin help line (core/MenuSkinXbox.cpp)
++	{ "RVC_XHR", "resume game" },
++	{ "RVC_XHS", "select" },
++	{ "RVC_XHB", "back" },
++	{ "RVC_XHC", "change" },
++	{ "RVC_XHM", "move/zoom" },
++	{ "RVC_XTL", "LOAD" },
++	{ "RVC_XTC", "CONTROLS" },
++	{ "RVC_XTD", "DISPLAY CONTROLS" },
++	{ "RVC_XMU", "MUSIC" },
++	{ "RVC_P2C", "CONFIGURATION" },
++	{ "RVC_XSF", "SFX" },
++	{ "RVC_XSC", "SELECT CONTROLS" },
++	{ "RVC_XIV", "INVERT UP/DOWN" },
++	{ "RVC_PT0", "MAP" },
++	{ "RVC_PT1", "BRIEF" },
++	{ "RVC_PT2", "LOAD" },
++	{ "RVC_PT3", "STATS" },
++	{ "RVC_PT4", "CONTROLS" },
++	{ "RVC_PT5", "AUDIO" },
++	{ "RVC_PT6", "DISPLAY" },
++	{ "RVC_PT7", "LANGUAGE" },
+ };
+ 
++wchar*
++CText::GetRevcText(const char *key)
++{
++	static wchar texts[ARRAY_SIZE(RevcTexts)][32];
++	for (int i = 0; i < (int)ARRAY_SIZE(RevcTexts); i++)
++		if (strncmp(key, RevcTexts[i].key, 8) == 0) {
++			if (texts[i][0] == 0)
++				AsciiToUnicode(RevcTexts[i].text, texts[i]);
++			return texts[i];
++		}
++	return nil;
++}
++
+ wchar
+ CText::GetUpperCase(wchar c)
+ {
+-	switch (encoding)
+-	{
+-	case 'e':
+-		if (c >= 'a' && c <= 'z')
+-			return c - 32;
+-		break;
+-	case 'f':
+-		if (c >= 'a' && c <= 'z')
+-			return c - 32;
+-
+-		if (c >= 128 && c <= 255)
+-			return FrenchUpperCaseTable[c-128];
+-		break;
+-	case 'g':
+-	case 'i':
+-	case 's':
+-		if (c >= 'a' && c <= 'z')
+-			return c - 32;
+-
+-		if (c >= 128 && c <= 255)
+-			return UpperCaseTable[c-128];
+-		break;
+-	default:
+-		break;
+-	}
+-	return c;
++	return revc_text_upper(c, encoding);
+ }
+ 
+ void
+@@ -201,297 +234,24 @@
+ }
+ 
+ void
+-CText::ReadChunkHeader(ChunkHeader *buf, int32 file, size_t *offset)
+-{
+-#ifdef THIS_IS_STUPID
+-	char *_buf = (char*)buf;
+-	for (int i = 0; i < sizeof(ChunkHeader); i++) {
+-		CFileMgr::Read(file, &_buf[i], 1);
+-		(*offset)++;
+-	}
+-#else
+-	// original code loops 8 times to read 1 byte with CFileMgr::Read, that's retarded
+-	CFileMgr::Read(file, (char*)buf, sizeof(ChunkHeader));
+-	*offset += sizeof(ChunkHeader);
+-#endif
+-}
+-
+-void
+ CText::LoadMissionText(char *MissionTableName)
+ {
+-	char filename[32];
+ 	CMessages::ClearAllMessagesDisplayedByGame();
+-
+-	mission_keyArray.Unload();
+-	mission_data.Unload();
+-
+-	bool search_result = false;
+-	int missionTableId = 0;
+-
+-	for (missionTableId = 0; missionTableId < MissionTextOffsets.size; missionTableId++) {
+-		if (strncmp(MissionTextOffsets.data[missionTableId].szMissionName, MissionTableName, strlen(MissionTextOffsets.data[missionTableId].szMissionName)) == 0) {
+-			search_result = true;
+-			break;
+-		}
+-	}
+-
+-	if (!search_result) {
++	if (!revc_text_load_mission(MissionTableName)) {
+ 		printf("CText::LoadMissionText - couldn't find %s", MissionTableName);
+ 		return;
+ 	}
+-
+-	CFileMgr::SetDir("TEXT");
+-	switch (FrontEndMenuManager.m_PrefsLanguage) {
+-	case CMenuManager::LANGUAGE_AMERICAN:
+-		sprintf(filename, "AMERICAN.GXT");
+-		break;
+-	case CMenuManager::LANGUAGE_FRENCH:
+-		sprintf(filename, "FRENCH.GXT");
+-		break;
+-	case CMenuManager::LANGUAGE_GERMAN:
+-		sprintf(filename, "GERMAN.GXT");
+-		break;
+-	case CMenuManager::LANGUAGE_ITALIAN:
+-		sprintf(filename, "ITALIAN.GXT");
+-		break;
+-	case CMenuManager::LANGUAGE_SPANISH:
+-		sprintf(filename, "SPANISH.GXT");
+-		break;
+-#ifdef MORE_LANGUAGES
+-	case CMenuManager::LANGUAGE_POLISH:
+-		sprintf(filename, "POLISH.GXT");
+-		break;
+-	case CMenuManager::LANGUAGE_RUSSIAN:
+-		sprintf(filename, "RUSSIAN.GXT");
+-		break;
+-	case CMenuManager::LANGUAGE_JAPANESE:
+-		sprintf(filename, "JAPANESE.GXT");
+-		break;
+-#endif
+-	}
+-	CTimer::Suspend();
+-	int file = CFileMgr::OpenFile(filename, "rb");
+-	CFileMgr::Seek(file, MissionTextOffsets.data[missionTableId].offset, SEEK_SET);
+-
+-	char TableCheck[8];
+-	CFileMgr::Read(file, TableCheck, 8);
+-	if (strncmp(TableCheck, MissionTableName, 8) != 0)
+-		printf("CText::LoadMissionText - expected to find %s in the text file", MissionTableName);
+-
+-	bool tkey_loaded = false, tdat_loaded = false;
+-	ChunkHeader m_ChunkHeader;
+-	while (!tkey_loaded || !tdat_loaded) {
+-		size_t bytes_read = 0;
+-		ReadChunkHeader(&m_ChunkHeader, file, &bytes_read);
+-		if (m_ChunkHeader.size != 0) {
+-			if (strncmp(m_ChunkHeader.magic, "TKEY", 4) == 0) {
+-				size_t bytes_read = 0;
+-				mission_keyArray.Load(m_ChunkHeader.size, file, &bytes_read);
+-				tkey_loaded = true;
+-			} else if (strncmp(m_ChunkHeader.magic, "TDAT", 4) == 0) {
+-				size_t bytes_read = 0;
+-				mission_data.Load(m_ChunkHeader.size, file, &bytes_read);
+-				tdat_loaded = true;
+-			} else
+-				CFileMgr::Seek(file, m_ChunkHeader.size, SEEK_CUR);
+-		}
+-	}
+-
+-	mission_keyArray.Update(mission_data.chars);
+-	CFileMgr::CloseFile(file);
+-	CTimer::Resume();
+-	CFileMgr::SetDir("");
+-	strcpy(szMissionTableName, MissionTableName);
++	strncpy(szMissionTableName, MissionTableName, sizeof(szMissionTableName));
+ 	bIsMissionTextLoaded = true;
+ }
+ 
+-
+-void
+-CKeyArray::Load(size_t length, int file, size_t* offset)
+-{
+-	char *rawbytes;
+-
+-	// You can make numEntries size_t if you want to exceed 32-bit boundaries, everything else should be ready.
+-	numEntries = (int)(length / sizeof(CKeyEntry));
+-	entries = new CKeyEntry[numEntries];
+-	rawbytes = (char*)entries;
+-
+-#ifdef THIS_IS_STUPID
+-	for (uint32 i = 0; i < length; i++) {
+-		CFileMgr::Read(file, &rawbytes[i], 1);
+-		(*offset)++;
+-	}
+-#else
+-	CFileMgr::Read(file, rawbytes, length);
+-	*offset += length;
+-#endif
+-}
+-
+-void
+-CKeyArray::Unload(void)
+-{
+-	delete[] entries;
+-	entries = nil;
+-	numEntries = 0;
+-}
+-
+-void
+-CKeyArray::Update(wchar *chars)
+-{
+-#if !defined(FIX_BUGS) && !defined(FIX_BUGS_64)
+-	int i;
+-	for(i = 0; i < numEntries; i++)
+-		entries[i].value = (wchar*)((uint8*)chars + (uintptr)entries[i].value);
+-#endif
+-}
+-
+-CKeyEntry*
+-CKeyArray::BinarySearch(const char *key, CKeyEntry *entries, int16 low, int16 high)
+-{
+-	int mid;
+-	int diff;
+-
+-	if(low > high)
+-		return nil;
+-
+-	mid = (low + high)/2;
+-	diff = strcmp(key, entries[mid].key);
+-	if(diff == 0)
+-		return &entries[mid];
+-	if(diff < 0)
+-		return BinarySearch(key, entries, low, mid-1);
+-	if(diff > 0)
+-		return BinarySearch(key, entries, mid+1, high);
+-	return nil;
+-}
+-
+-wchar*
+-#if defined (FIX_BUGS) || defined(FIX_BUGS_64)
+-CKeyArray::Search(const char *key, wchar *data, uint8 *result)
+-#else
+-CKeyArray::Search(const char *key, uint8 *result)
+-#endif
+-{
+-	CKeyEntry *found;
+-	char errstr[25];
+-	int i;
+-
+-#if defined (FIX_BUGS) || defined(FIX_BUGS_64)
+-	found = BinarySearch(key, entries, 0, numEntries-1);
+-	if (found) {
+-		*result = true;
+-		return (wchar*)((uint8*)data + found->valueOffset);
+-	}
+-#else
+-	found = BinarySearch(key, entries, 0, numEntries-1);
+-	if (found) {
+-		*result = true;
+-		return found->value;
+-	}
+-#endif
+-	*result = false;
+-#ifdef MASTER
+-	sprintf(errstr, "");
+-#else
+-	sprintf(errstr, "%s missing", key);
+-#endif // MASTER
+-	for(i = 0; i < 25; i++)
+-		WideErrorString[i] = errstr[i];
+-	return WideErrorString;
+-}
+-
+-void
+-CData::Load(size_t length, int file, size_t * offset)
+-{
+-	char *rawbytes;
+-
+-	// You can make numChars size_t if you want to exceed 32-bit boundaries, everything else should be ready.
+-	numChars = (int)(length / sizeof(wchar));
+-	chars = new wchar[numChars];
+-	rawbytes = (char*)chars;
+-
+-#ifdef THIS_IS_STUPID
+-	for(uint32 i = 0; i < length; i++){
+-		CFileMgr::Read(file, &rawbytes[i], 1);
+-		(*offset)++;
+-	}
+-#else
+-	CFileMgr::Read(file, rawbytes, length);
+-	*offset += length;
+-#endif
+-}
+-
+-void
+-CData::Unload(void)
+-{
+-	delete[] chars;
+-	chars = nil;
+-	numChars = 0;
+-}
+-
+-void
+-CMissionTextOffsets::Load(size_t table_size, int file, size_t *offset, int)
+-{
+-#ifdef THIS_IS_STUPID
+-	size_t num_of_entries = table_size / sizeof(CMissionTextOffsets::Entry);
+-	for (size_t mi = 0; mi < num_of_entries; mi++) {
+-		for (uint32 i = 0; i < sizeof(data[mi].szMissionName); i++) {
+-			CFileMgr::Read(file, &data[i].szMissionName[i], 1);
+-			(*offset)++;
+-		}
+-		char* _buf = (char*)&data[mi].offset;
+-		for (uint32 i = 0; i < sizeof(data[mi].offset); i++) {
+-			CFileMgr::Read(file, &_buf[i], 1);
+-			(*offset)++;
+-		}
+-	}
+-	size = (uint16)num_of_entries;
+-#else
+-	// not exact VC code but smaller and better :P
+-
+-	// You can make this size_t if you want to exceed 32-bit boundaries, everything else should be ready.
+-	size = (uint16) (table_size / sizeof(CMissionTextOffsets::Entry));
+-	CFileMgr::Read(file, (char*)data, sizeof(CMissionTextOffsets::Entry) * size);
+-	*offset += sizeof(CMissionTextOffsets::Entry) * size;
+-#endif
+-}
+-
++// Game charset to CP1252 (mode 0, 1 in a Russian/Japanese game) and to Latin-1 for save names
++// (mode 2): rust/revc/src/textutil.rs. Each returns its own static buffer, as before.
+ char*
+ UnicodeToAscii(wchar *src)
+ {
+ 	static char aStr[256];
+-	int len;
+-	for(len = 0; *src != '\0' && len < 256-1; len++, src++)
+-#ifdef MORE_LANGUAGES
+-		if(*src < 128 || ((CGame::russianGame || CGame::japaneseGame) && *src < 256))
+-#else
+-		if(*src < 128)
+-#endif
+-			aStr[len] = *src;
+-		// convert to CP1252
+-		else if(*src <= 131)
+-			aStr[len] = *src + 64;
+-		else if (*src <= 141)
+-			aStr[len] = *src + 66;
+-		else if (*src <= 145)
+-			aStr[len] = *src + 68;
+-		else if (*src <= 149)
+-			aStr[len] = *src + 71;
+-		else if (*src <= 154)
+-			aStr[len] = *src + 73;
+-		else if (*src <= 164)
+-			aStr[len] = *src + 75;
+-		else if (*src <= 168)
+-			aStr[len] = *src + 77;
+-		else if (*src <= 204)
+-			aStr[len] = *src + 80;
+-		else switch (*src) {
+-		case 205: aStr[len] = 209; break;
+-		case 206: aStr[len] = 241; break;
+-		case 207: aStr[len] = 191; break;
+-		default: aStr[len] = '#'; break;
+-		}
+-	aStr[len] = '\0';
++	revc_text_to_ascii(src, (CGame::russianGame || CGame::japaneseGame) ? 1 : 0, aStr);
+ 	return aStr;
+ }
+ 
+@@ -499,13 +259,7 @@
+ UnicodeToAsciiForSaveLoad(wchar *src)
+ {
+ 	static char aStr[256];
+-	int len;
+-	for(len = 0; *src != '\0' && len < 256; len++, src++)
+-		if(*src < 256)
+-			aStr[len] = *src;
+-		else
+-			aStr[len] = '#';
+-	aStr[len] = '\0';
++	revc_text_to_ascii(src, 2, aStr);
+ 	return aStr;
+ }
+ 
+@@ -513,13 +267,7 @@
+ UnicodeToAsciiForMemoryCard(wchar *src)
+ {
+ 	static char aStr[256];
+-	int len;
+-	for(len = 0; *src != '\0' && len < 256; len++, src++)
+-		if(*src < 256)
+-			aStr[len] = *src;
+-		else
+-			aStr[len] = '#';
+-	aStr[len] = '\0';
++	revc_text_to_ascii(src, 2, aStr);
+ 	return aStr;
+ }
+ 
+--- a/src/text/Text.h
++++ b/src/text/Text.h
+@@ -5,94 +5,26 @@
+ char *UnicodeToAsciiForMemoryCard(wchar *src);
+ void TextCopy(wchar *dst, const wchar *src);
+ 
+-struct CKeyEntry
+-{
+-#if defined(FIX_BUGS) || defined(FIX_BUGS_64)
+-	uint32 valueOffset;
+-#else
+-	wchar *value;
+-#endif
+-	char key[8];
+-};
+-
+-// If this fails, CKeyArray::Load will have to be fixed
+-VALIDATE_SIZE(CKeyEntry, 12);
+-
+-class CKeyArray
+-{
+-public:
+-	CKeyEntry *entries;
+-	int numEntries;	// You can make this size_t if you want to exceed 32-bit boundaries, everything else should be ready.
+-
+-	CKeyArray(void) : entries(nil), numEntries(0) {}
+-	~CKeyArray(void) { Unload(); }
+-	void Load(size_t length, int file, size_t *offset);
+-	void Unload(void);
+-	void Update(wchar *chars);
+-	CKeyEntry *BinarySearch(const char *key, CKeyEntry *entries, int16 low, int16 high);
+-#if defined (FIX_BUGS) || defined(FIX_BUGS_64)
+-	wchar *Search(const char *key, wchar *data, uint8 *result);
+-#else
+-	wchar *Search(const char *key, uint8* result);
+-#endif
+-};
+-
+-class CData
+-{
+-public:
+-	wchar *chars;
+-	int numChars; // You can make this size_t if you want to exceed 32-bit boundaries, everything else should be ready.
+-
+-	CData(void) : chars(nil), numChars(0) {}
+-	~CData(void) { Unload(); }
+-	void Load(size_t length, int file, size_t* offset);
+-	void Unload(void);
+-};
+-
+-class CMissionTextOffsets
+-{
+-public:
+-	struct Entry
+-	{
+-		char szMissionName[8];
+-		uint32 offset;
+-	};
+-
+-	enum {MAX_MISSION_TEXTS = 90}; // beware that LCS has more
+-
+-	Entry data[MAX_MISSION_TEXTS];
+-	uint16 size; // You can make this size_t if you want to exceed 32-bit boundaries, everything else should be ready.
+-
+-	CMissionTextOffsets(void) : size(0) {}
+-	void Load(size_t table_size, int file, size_t* bytes_read, int);
+-};
+-
+-struct ChunkHeader
+-{
+-	char magic[4];
+-	int size;
+-};
+-
++// The text tables (GXT) are held and searched by the Rust host (rust/revc/src/text.rs, parsed
++// by revc-formats); CText keeps the game's interface: language file, Get, mission text, upper case.
+ class CText
+ {
+-	CKeyArray keyArray;
+-	CData data;
+-	CKeyArray mission_keyArray;
+-	CData mission_data;
+ 	char encoding;
+-	bool bHasMissionTextOffsets;
+ 	bool bIsMissionTextLoaded;
+ 	char szMissionTableName[8];
+-	CMissionTextOffsets MissionTextOffsets;
++	char *GetFilename(void);
+ public:
+ 	CText(void);
++	// Key table access for the regression harness (skel/host/testhooks.cpp).
++	int GetNumKeys(void);
++	const char *GetKeyName(int i);
+ 	void Load(void);
+ 	void Unload(void);
+ 	wchar *Get(const char *key);
++	static wchar *GetRevcText(const char *key);
+ 	wchar GetUpperCase(wchar c);
+ 	void UpperCase(wchar *s);
+ 	void GetNameOfLoadedMissionText(char *outName);
+-	void ReadChunkHeader(ChunkHeader *buf, int32 file, size_t *bytes_read);
+ 	void LoadMissionText(char *MissionTableName);
+ };
+ 

@@ -1,0 +1,46 @@
+--- a/src/fakerw/rphanim.h
++++ b/src/fakerw/rphanim.h
+@@ -69,4 +69,3 @@
+ 
+ RpHAnimAnimation *RpHAnimAnimationCreate(RwInt32 typeID, RwInt32 numFrames, RwInt32 flags, RwReal duration);
+ RpHAnimAnimation  *RpHAnimAnimationDestroy(RpHAnimAnimation *animation);
+-RpHAnimAnimation  *RpHAnimAnimationStreamRead(RwStream *stream);
+--- a/src/fakerw/rpworld.h
++++ b/src/fakerw/rpworld.h
+@@ -177,7 +177,6 @@
+ RwBool RpGeometryValidatePlugins(const RpGeometry *geometry);
+ RwUInt32 RpGeometryStreamGetSize(const RpGeometry *geometry);
+ const RpGeometry  *RpGeometryStreamWrite(const RpGeometry *geometry, RwStream *stream);
+-RpGeometry  *RpGeometryStreamRead(RwStream *stream);
+ //RpGeometryChunkInfo *_rpGeometryChunkInfoRead(RwStream *stream, RpGeometryChunkInfo *geometryChunkInfo, RwInt32 *bytesRead);
+ RwUInt32 RpGeometryGetFlags(const RpGeometry *geometry);
+ RpGeometry  *RpGeometrySetFlags(RpGeometry *geometry, RwUInt32 flags);
+--- a/src/fakerw/rwcore.h
++++ b/src/fakerw/rwcore.h
+@@ -255,7 +255,6 @@
+ void _rwD3D8TexDictionaryEnableRasterFormatConversion(bool enable);
+ 
+ // hack for reading native textures
+-RwBool rwNativeTextureHackRead(RwStream *stream, RwTexture **tex, RwInt32 size);
+ 
+ 
+ RwTexDictionary *RwTexDictionaryCreate(void);
+@@ -333,13 +332,6 @@
+ RwInt32 RwFrameRegisterPluginStream(RwUInt32 pluginID, RwPluginDataChunkReadCallBack readCB, RwPluginDataChunkWriteCallBack writeCB, RwPluginDataChunkGetSizeCallBack getSizeCB);
+ RwInt32 RwFrameSetStreamAlwaysCallBack(RwUInt32 pluginID, RwPluginDataChunkAlwaysCallBack alwaysCB);
+ 
+-typedef rw::FrameList_ rwFrameList;
+-rwFrameList *rwFrameListInitialize(rwFrameList *frameList, RwFrame *frame);
+-RwBool  rwFrameListFindFrame(const rwFrameList *frameList, const RwFrame *frame, RwInt32 *npIndex);
+-rwFrameList *rwFrameListDeinitialize(rwFrameList *frameList);
+-RwUInt32 rwFrameListStreamGetSize(const rwFrameList *frameList);
+-rwFrameList *rwFrameListStreamRead(RwStream *stream, rwFrameList *fl);
+-const rwFrameList *rwFrameListStreamWrite(const rwFrameList *frameList, RwStream *stream);
+ 
+ 
+ typedef rw::BBox RwBBox;
+@@ -421,3 +413,4 @@
+ RwBool RwD3D8DeviceSupportsDXTTexture(void);
+ void RwD3D8EngineSetMultiSamplingLevels(RwUInt32 level);
+ RwUInt32 RwD3D8EngineGetMaxMultiSamplingLevels(void);
++#include <fakeimpl.h>

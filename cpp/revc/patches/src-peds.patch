@@ -1,0 +1,166 @@
+--- a/src/peds/PedType.cpp
++++ b/src/peds/PedType.cpp
+@@ -40,86 +40,19 @@
+ 	debug("CPedType shut down\n");
+ }
+ 
++// The parsers are in Rust (rust/revc/src/pedtype.rs); the objects stay here.
++extern "C" void revc_ped_types_load(const uint8 *data, size_t len, CPedType *const *types);
++extern "C" void revc_ped_stats_load(const uint8 *data, size_t len, CPedStats *const *stats);
++static_assert(sizeof(CPedType) == 32 && sizeof(CPedStats) == 52, "ped layouts (pedtype.rs)");
++
+ void
+ CPedType::LoadPedData(void)
+ {
+-	char *buf;
+-	char line[256];
+-	char word[32];
+-	ssize_t bp, buflen;
+-	int lp, linelen;
+-	int type;
+-	uint32 flags;
+-	float f1, f2, f3, f4, f5;
+-
+-	type = NUM_PEDTYPES;
+-	buf = new char[16 * 1024];
+-
++	char *buf = new char[16 * 1024];
+ 	CFileMgr::SetDir("DATA");
+-	buflen = CFileMgr::LoadFile("PED.DAT", (uint8*)buf, 16 * 1024, "r");
++	ssize_t buflen = CFileMgr::LoadFile("PED.DAT", (uint8*)buf, 16 * 1024, "r");
+ 	CFileMgr::SetDir("");
+-
+-	for(bp = 0; bp < buflen; ){
+-		// read file line by line
+-		for(linelen = 0; buf[bp] != '\n' && bp < buflen; bp++){
+-			if(buf[bp] == '\r' || buf[bp] == ',' || buf[bp] == '\t')
+-				line[linelen++] = ' ';
+-			else
+-				line[linelen++] = buf[bp];
+-		}
+-		bp++;
+-		line[linelen] = '\0';
+-
+-		// skip white space
+-		for(lp = 0; line[lp] <= ' '; lp++);
+-
+-		if(lp >= linelen ||		// FIX: game uses == here, but this is safer if we have empty lines
+-		   line[lp] == '#')
+-			continue;
+-
+-		// Game uses just "line" here since sscanf already trims whitespace, but this is safer
+-		sscanf(&line[lp], "%s", word);
+-
+-		if(strcmp(word, "Threat") == 0){
+-			flags = 0;
+-			lp += 7;
+-			while(sscanf(&line[lp], "%s", word) == 1 && lp <= linelen){
+-				flags |= FindPedFlag(word);
+-				// skip word
+-				while(line[lp] != ' ' && line[lp] != '\n' && line[lp] != '\0')
+-					lp++;
+-				// skip white space
+-				while(line[lp] == ' ')
+-					lp++;
+-			}
+-			ms_apPedType[type]->m_threats = flags;
+-		}else if(strcmp(word, "Avoid") == 0){
+-			flags = 0;
+-			lp += 6;
+-			while(sscanf(&line[lp], "%s", word) == 1 && lp <= linelen){
+-				flags |= FindPedFlag(word);
+-				// skip word
+-				while(line[lp] != ' ' && line[lp] != '\n' && line[lp] != '\0')
+-					lp++;
+-				// skip white space
+-				while(line[lp] == ' ')
+-					lp++;
+-			}
+-			ms_apPedType[type]->m_avoid = flags;
+-		}else{
+-			sscanf(line, "%s %f %f %f %f %f", word, &f1, &f2, &f3, &f4, &f5);
+-			type = FindPedType(word);
+-			ms_apPedType[type]->m_flag = FindPedFlag(word);
+-			// unknown values
+-			ms_apPedType[type]->unknown1 = f1 / 50.0f;
+-			ms_apPedType[type]->unknown2 = f2 / 50.0f;
+-			ms_apPedType[type]->unknown3 = f3 / 50.0f;
+-			ms_apPedType[type]->unknown4 = f4;
+-			ms_apPedType[type]->unknown5 = f5;
+-
+-		}
+-	}
+-
++	revc_ped_types_load((uint8*)buf, buflen < 0 ? 0 : buflen, ms_apPedType);
+ 	delete[] buf;
+ }
+ 
+@@ -244,65 +177,11 @@
+ void
+ CPedStats::LoadPedStats(void)
+ {
+-	char *buf;
+-	char line[256];
+-	char name[32];
+-	ssize_t bp, buflen;
+-	int lp, linelen;
+-	int type;
+-	float fleeDist, headingChangeRate, attackStrength, defendWeakness;
+-	int fear, temper, lawfullness, sexiness, flags;
+-
+-	type = 0;
+-	buf = new char[16 * 1024];
+-
++	char *buf = new char[16 * 1024];
+ 	CFileMgr::SetDir("DATA");
+-	buflen = CFileMgr::LoadFile("PEDSTATS.DAT", (uint8*)buf, 16 * 1024, "r");
++	ssize_t buflen = CFileMgr::LoadFile("PEDSTATS.DAT", (uint8*)buf, 16 * 1024, "r");
+ 	CFileMgr::SetDir("");
+-
+-	for(bp = 0; bp < buflen; ){
+-		// read file line by line
+-		for(linelen = 0; buf[bp] != '\n' && bp < buflen; bp++){
+-			if(buf[bp] == '\r' || buf[bp] == ',' || buf[bp] == '\t')
+-				line[linelen++] = ' ';
+-			else
+-				line[linelen++] = buf[bp];
+-		}
+-		bp++;
+-		line[linelen] = '\0';
+-
+-		// skip white space
+-		for(lp = 0; line[lp] <= ' '; lp++);
+-
+-		if(lp >= linelen ||		// FIX: game uses == here, but this is safer if we have empty lines
+-		   line[lp] == '#')
+-			continue;
+-
+-		sscanf(&line[lp], "%s %f %f %d %d %d %d %f %f %d",
+-			name,
+-			&fleeDist,
+-			&headingChangeRate,
+-			&fear,
+-			&temper,
+-			&lawfullness,
+-			&sexiness,
+-			&attackStrength,
+-			&defendWeakness,
+-			&flags);
+-		ms_apPedStats[type]->m_type = (ePedStats)type;
+-		strncpy(ms_apPedStats[type]->m_name, name, 24);	// FIX: game uses strcpy
+-		ms_apPedStats[type]->m_fleeDistance = fleeDist;
+-		ms_apPedStats[type]->m_headingChangeRate = headingChangeRate;
+-		ms_apPedStats[type]->m_fear = fear;
+-		ms_apPedStats[type]->m_temper = temper;
+-		ms_apPedStats[type]->m_lawfulness = lawfullness;
+-		ms_apPedStats[type]->m_sexiness = sexiness;
+-		ms_apPedStats[type]->m_attackStrength = attackStrength;
+-		ms_apPedStats[type]->m_defendWeakness = defendWeakness;
+-		ms_apPedStats[type]->m_flags = flags;
+-		type++;
+-	}
+-
++	revc_ped_stats_load((uint8*)buf, buflen < 0 ? 0 : buflen, ms_apPedStats);
+ 	delete[] buf;
+ }
+ 

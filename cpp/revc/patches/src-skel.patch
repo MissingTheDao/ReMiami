@@ -1,0 +1,972 @@
+--- a/src/skel/crossplatform.h
++++ b/src/skel/crossplatform.h
+@@ -1,8 +1,8 @@
+ #include <time.h>
+ #include <limits.h>
+ 
+-// This is the common include for platform/renderer specific skeletons(glfw.cpp, win.cpp etc.) and using cross platform things (like Windows directories wrapper, platform specific global arrays etc.) 
+-// Functions that's different on glfw and win but have same signature, should be located on platform.h.
++// Common include for the platform skeleton (skel/host/host.cpp, driven by the Rust host) and cross platform
++// helpers (Windows directories wrapper, platform specific global arrays etc.). Platform functions: platform.h.
+ 
+ enum eWinVersion
+ {
+@@ -60,19 +60,15 @@
+ #define caserename _caserename
+ #endif
+ 
+-#ifdef RW_GL3
++#if defined RW_WGPU
+ #include "hostapi.h"
+ 
+ typedef struct
+ {
+-#ifdef LIBRW_HOST
+     void*       window; // opaque, owned by the Rust host
+-#else
+-    GLFWwindow* window;
+-#endif
+     RwBool		fullScreen;
+     RwV2d		lastMousePos;
+-    double      mouseWheel; // glfw doesn't cache it
++    double      mouseWheel; // wheel delta since the last read
+     bool        cursorIsInWindow;
+     RwInt8        joy1id;
+     RwInt8        joy2id;
+@@ -168,27 +164,3 @@
+ void GetDateFormat(int, int, SYSTEMTIME*, int, char*, int);
+ #endif
+ 
+-#ifdef __SWITCH__
+-
+-// tweak glfw values for switch to match expected pc bindings
+-#ifdef GLFW_GAMEPAD_BUTTON_A
+-    #undef GLFW_GAMEPAD_BUTTON_A
+-#endif
+-#define GLFW_GAMEPAD_BUTTON_A 1
+-
+-#ifdef GLFW_GAMEPAD_BUTTON_B
+-    #undef GLFW_GAMEPAD_BUTTON_B
+-#endif
+-#define GLFW_GAMEPAD_BUTTON_B 0
+-
+-#ifdef GLFW_GAMEPAD_BUTTON_X
+-    #undef GLFW_GAMEPAD_BUTTON_X
+-#endif
+-#define GLFW_GAMEPAD_BUTTON_X 3
+-
+-#ifdef GLFW_GAMEPAD_BUTTON_Y
+-    #undef GLFW_GAMEPAD_BUTTON_Y
+-#endif
+-#define GLFW_GAMEPAD_BUTTON_Y 2
+-
+-#endif
+--- a/src/skel/hostapi.h
++++ b/src/skel/hostapi.h
+@@ -2,9 +2,7 @@
+ 
+ // Platform API used by game code for mouse, window and joystick queries.
+ //
+-// Two implementations:
+-//   - Rust host (rust/revc, SDL3), selected with LIBRW_HOST. The skeleton is skel/host/host.cpp.
+-//   - skel/glfw/glfw.cpp, thin GLFW wrappers, kept for side-by-side comparison until it is deleted.
++// Implemented by the Rust host (rust/revc, SDL3); the skeleton is skel/host/host.cpp.
+ //
+ // Joystick ids are slots 0..HOST_JOYSTICK_LAST. Gamepad state uses GLFW's button/axis layout
+ // (ControllerConfig.cpp maps those indices to PS2 buttons), with triggers in [-1, 1], -1 = released.
+@@ -69,7 +67,6 @@
+ 
+ #ifdef LIBRW_HOST
+ // Only used by skel/host/host.cpp
+-void hostPollEvents(void);
+ int hostWindowShouldClose(void);
+ void hostSetCursorMode(int mode);
+ void hostGetWindowSize(int *w, int *h);
+@@ -79,11 +76,23 @@
+ // borderless desktop if no such mode) and windowed (width x height), keeping the GL context.
+ int hostSetFullscreen(int fullscreen, int width, int height);
+ int hostJoystickIsGamepad(int jid);
++// Controller kind for button glyphs (values of PadKind in rust/revc/src/host/pads.rs:
++// 0 keyboard+mouse, 1 generic, 2 Xbox 360, 3 Xbox One/Series, 4 PS3, 5 PS4, 6 PS5, 7 Switch,
++// 8 GameCube, 9 Steam Deck, 10 Steam Controller). Active = the device the player used last.
++int hostActiveInputKind(void);
++int hostJoystickKind(int jid);
++// Vibration for ms milliseconds, motor strengths 0..65535 (0, 0 stops). 0 if unsupported.
++int hostGamepadRumble(int jid, unsigned short low, unsigned short high, unsigned int ms);
+ const float *hostGetJoystickAxes(int jid, int *count);
+ int hostGetGamepadState(int jid, HostGamepadState *state);
+ int hostUpdateGamepadMappings(const char *mappings);
++// Fixed-timestep clock (task 8): number of 30 Hz simulation steps due since the last call
++// (0..HOST_MAX_SIM_STEPS); *alpha receives how far (0..1) the display is between the last
++// simulation step and the next one, for render interpolation.
++int hostSimStepsDue(float *alpha);
+ 
+-// Implemented in host.cpp, called by the host from inside hostPollEvents().
++// Implemented in host.cpp, called by the host while it processes window events
++// (between revc_game_frame() calls).
+ // key is an RsKeyCodes value (skeleton.h).
+ void revc_on_key(int key, int down);
+ void revc_on_resize(int width, int height);
+--- a/src/skel/host/host.cpp
++++ b/src/skel/host/host.cpp
+@@ -1,7 +1,7 @@
+ // Skeleton for the Rust host (rust/revc): SDL3 window, GL context, input and the process
+ // entry point live in Rust; this file keeps the game-side skeleton logic. Derived from
+ // skel/glfw/glfw.cpp with the Win32/Switch/Apple/X11 branches removed.
+-#if defined RW_GL3 && defined LIBRW_HOST
++#if defined LIBRW_HOST
+ 
+ 
+ long _dwOperatingSystemVersion;
+@@ -12,6 +12,8 @@
+ #include <stddef.h>
+ 
+ #include "common.h"
++#include "screendroplets.h"
++#include "Weather.h"
+ #include <stdio.h>
+ #include "rwcore.h"
+ #include "skeleton.h"
+@@ -22,6 +24,7 @@
+ #include "FileMgr.h"
+ #include "Text.h"
+ #include "Pad.h"
++#include "General.h"
+ #include "Timer.h"
+ #include "DMAudio.h"
+ #include "ControllerConfig.h"
+@@ -33,6 +36,8 @@
+ #include "AnimViewer.h"
+ #include "Font.h"
+ #include "MemoryMgr.h"
++#include "Interpolation.h"
++#include "Camera.h"
+ 
+ // This is defined on project-level, via premake5 or cmake
+ 
+@@ -41,8 +46,12 @@
+ 
+ rw::EngineOpenParams openParams;
+ 
+-// Provided by the Rust host: window/GL services for librw's HOST backend.
+-extern "C" const rw::gl3::HostWindowApi *revc_host_window_api(void);
++// Provided by the Rust host: window services for librw's WGPU platform.
++typedef rw::wgpu::HostWindowApi RwHostWindowApi;
++extern "C" const RwHostWindowApi *revc_host_window_api(void);
++// The VSync setting (loaded in psInitialize, before the window exists): the wgpu renderer needs it
++// when it starts (its GL backend can only switch vertical blank off before the driver loads).
++extern "C" int revc_cpp_prefs_vsync(void) { return FrontEndMenuManager.m_PrefsVsync; }
+ 
+ static RwBool		  ForegroundApp = TRUE;
+ static RwBool		  WindowIconified = FALSE;
+@@ -241,8 +250,39 @@
+  *****************************************************************************
+  */
+ 
++void HostUpdateButtonGlyphs(void);
++extern "C" int hostCaptureRequested(void);
++
+ static void _psInitializeVibration() {}
+-static void _psHandleVibration() {}
++
++// Pad vibration through SDL (the original only had XInput on Windows; CPad::AffectFromXinput). Same
++// behaviour: both motors at ShakeFreq/255 while ShakeDur (ms) runs down by the game's time step.
++// Called once per pad capture; each request lasts a little longer than a 30 Hz step and is
++// renewed until the shake ends, so a stalled game never leaves a pad buzzing.
++static void _psHandleVibration(RwInt32 padID, int hostPad)
++{
++	static uint8 lastFreq[2];
++	if (padID < 0 || padID > 1)
++		return;
++	CPad *pad = CPad::GetPad(padID);
++	uint8 freq = pad->ShakeFreq;
++	int32 step = CTimer::GetTimeStepInMilliseconds();
++	if (pad->ShakeDur < step)
++		pad->ShakeDur = 0;
++	else
++		pad->ShakeDur -= step;
++	if (pad->ShakeDur == 0)
++		pad->ShakeFreq = 0;
++
++	if (freq != 0) {
++		// revc: the Xbox version's motor mapping: heavy (low-frequency) motor freq * 64 (at most
++		// ~25 %), light motor freq * 256 (up to full strength).
++		hostGamepadRumble(hostPad, (uint16)(freq * 64), (uint16)(freq * 256), 200);
++	} else if (lastFreq[padID] != 0) {
++		hostGamepadRumble(hostPad, 0, 0, 0);
++	}
++	lastFreq[padID] = freq;
++}
+ 
+ /*
+  *****************************************************************************
+@@ -1249,40 +1289,19 @@
+ /*
+  *****************************************************************************
+  */
+-#ifdef _WIN32
+-int PASCAL
+-WinMain(HINSTANCE instance,
+-	HINSTANCE prevInstance	__RWUNUSED__,
+-	CMDSTR cmdLine,
+-	int cmdShow)
+-{
+-
+-	RwInt32 argc;
+-	RwChar** argv;
+-	SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, nil, SPIF_SENDCHANGE);
+-
+-#ifndef MASTER
+-	if (strstr(cmdLine, "-console"))
+-	{
+-		AllocConsole();
+-		freopen("CONIN$", "r", stdin);
+-		freopen("CONOUT$", "w", stdout);
+-		freopen("CONOUT$", "w", stderr);
+-	}
+-#endif
++// The main loop lives in Rust (rust/revc/src/main.rs):
++//   revc_game_init(argc, argv);
++//   loop { r = revc_game_frame_begin(); if r == 0 break; if r == 1 { poll events; revc_game_frame_run(); } }
++//   revc_game_shutdown();
++// One begin/run pair is one iteration of the original loop. A "session" is one run of the
++// original inner loop; it restarts (without leaving the process) when a game is loaded or
++// started from the menu.
++static bool SessionStarted = false;
+ 
+-#elif defined(REVC_RUST_MAIN)
+-// Rust owns main() (rust/revc); it calls this with the process argv.
++// Process start: platform and RenderWare initialisation, settings. Returns 0 on failure.
+ extern "C" int
+-revc_cpp_main(int argc, char *argv[])
++revc_game_init(int argc, char *argv[])
+ {
+-#else
+-// Called from Rust main() with the process argv.
+-extern "C" int
+-revc_cpp_main(int argc, char *argv[])
+-{
+-#endif
+-	RwV2d pos;
+ 	RwInt32 i;
+ 
+ #ifdef USE_CUSTOM_ALLOCATOR
+@@ -1416,8 +1435,21 @@
+ #endif
+ 	
+ 
+-	while ( TRUE )
++	return 1;
++}
++
++// Start of a main-loop iteration, before events are processed (same order as the original
++// loop: check, then poll events, then run the frame). Starts a session when needed.
++// Returns 1 to run a frame (poll events, then revc_game_frame_run()), 2 if a session just
++// ended and another starts (call again), 0 when the game wants to exit.
++extern "C" int
++revc_game_frame_begin(void)
++{
++	if ( !SessionStarted )
+ 	{
++		RwV2d pos;
++		SessionStarted = true;
++		Interpolation::Reset();
+ 		RwInitialised = TRUE;
+ 		
+ 		/* 
+@@ -1451,49 +1483,146 @@
+ 		TheMemoryCard.m_bWantToLoad = false;
+ 		
+ 		CTimer::Update();
++#endif
++	}
++
++#ifdef PS2_MENU
++	if( !RsGlobal.quit && !(FrontEndMenuManager.m_bWantToRestart || TheMemoryCard.b_FoundRecentSavedGameWantToLoad) && !hostWindowShouldClose() )
++#else
++	if( !RsGlobal.quit && !FrontEndMenuManager.m_bWantToRestart && !hostWindowShouldClose())
++#endif
++		return 1;
++
++	
++	/* 
++	* About to shut down - block resize events again...
++	*/
++	RwInitialised = FALSE;
++	
++	FrontEndMenuManager.UnloadTextures();
++#ifdef PS2_MENU	
++	if ( !(FrontEndMenuManager.m_bWantToRestart || TheMemoryCard.b_FoundRecentSavedGameWantToLoad))
++		return 0;
++#else
++	if ( !FrontEndMenuManager.m_bWantToRestart )
++		return 0;
++#endif
++	
++	CPad::ResetCheats();
++	CPad::StopPadsShaking();
++	
++	DMAudio.ChangeMusicMode(MUSICMODE_DISABLE);
++	
++#ifdef PS2_MENU
++	CGame::ShutDownForRestart();
++#endif
++	
++	CTimer::Stop();
++	
++#ifdef PS2_MENU
++	if (FrontEndMenuManager.m_bWantToRestart || TheMemoryCard.b_FoundRecentSavedGameWantToLoad)
++	{
++		if (TheMemoryCard.b_FoundRecentSavedGameWantToLoad)
++		{
++			FrontEndMenuManager.m_bWantToRestart = true;
++			TheMemoryCard.m_bWantToLoad = true;
++		}
++
++		CGame::InitialiseWhenRestarting();
++		DMAudio.ChangeMusicMode(MUSICMODE_GAME);
++		FrontEndMenuManager.m_bWantToRestart = false;
+ 		
+-		while( !RsGlobal.quit && !(FrontEndMenuManager.m_bWantToRestart || TheMemoryCard.b_FoundRecentSavedGameWantToLoad) && !hostWindowShouldClose() )
++		continue;
++	}
++	
++	CGame::ShutDown();	
++	CTimer::Stop();
++	
++	return 0;
+ #else
+-		while( !RsGlobal.quit && !FrontEndMenuManager.m_bWantToRestart && !hostWindowShouldClose())
++	if ( FrontEndMenuManager.m_bWantToLoad )
++	{
++		CGame::ShutDownForRestart();
++		CGame::InitialiseWhenRestarting();
++		DMAudio.ChangeMusicMode(MUSICMODE_GAME);
++		LoadSplash(GetLevelSplashScreen(CGame::currLevel));
++		FrontEndMenuManager.m_bWantToLoad = false;
++	}
++	else
++	{
++#ifndef MASTER
++		if ( gbModelViewer )
++			CAnimViewer::Shutdown();
++		else
+ #endif
++		if ( gGameState == GS_PLAYING_GAME )
++			CGame::ShutDown();
++		
++		CTimer::Stop();
++		
++		if ( FrontEndMenuManager.m_bFirstTime == true )
++		{
++			gGameState = GS_INIT_FRONTEND;
++			TRACE("gGameState = GS_INIT_FRONTEND;");
++		}
++		else
+ 		{
+-			hostPollEvents();
++			gGameState = GS_INIT_PLAYING_GAME;
++			TRACE("gGameState = GS_INIT_PLAYING_GAME;");
++		}
++	}
++	
++	FrontEndMenuManager.m_bFirstTime = false;
++	FrontEndMenuManager.m_bWantToRestart = false;
++#endif
++	SessionStarted = false;
++	return 2;
++}
++
++
++// Runs one frame of the game state machine. Call after revc_game_frame_begin() returned 1
++// and events were processed.
++extern "C" void
++revc_game_frame_run(void)
++{
+ #ifndef MASTER
+-			if (gbModelViewer) {
+-				// This is TheModelViewerCore in LCS
+-				TheModelViewer();
+-			} else
++	if (gbModelViewer) {
++		// This is TheModelViewerCore in LCS
++		TheModelViewer();
++	} else
+ #endif
+-			if ( ForegroundApp )
++	if ( ForegroundApp )
++	{
++		if (gGameState == GS_FRONTEND || gGameState == GS_PLAYING_GAME)
++			HostUpdateButtonGlyphs();	// prompts follow the pad in use (skel/host/glyphs.cpp)
++		switch ( gGameState )
++		{
++			case GS_START_UP:
+ 			{
+-				switch ( gGameState )
+-				{
+-					case GS_START_UP:
+-					{
+ #ifdef NO_MOVIES
+-						gGameState = GS_INIT_ONCE;
++				gGameState = GS_INIT_ONCE;
+ #else
+-						gGameState = GS_INIT_LOGO_MPEG;
++				gGameState = GS_INIT_LOGO_MPEG;
+ #endif
+-						TRACE("gGameState = GS_INIT_ONCE");
+-						break;
+-					}
++				TRACE("gGameState = GS_INIT_ONCE");
++				break;
++			}
+ 
+-				    case GS_INIT_LOGO_MPEG:
+-					{
+-					    //if (!startupDeactivate)
+-						//    PlayMovieInWindow(cmdShow, "movies\\Logo.mpg");
+-					    gGameState = GS_LOGO_MPEG;
+-					    TRACE("gGameState = GS_LOGO_MPEG;");
+-					    break;
+-				    }
++		    case GS_INIT_LOGO_MPEG:
++			{
++			    //if (!startupDeactivate)
++				//    PlayMovieInWindow(cmdShow, "movies\\Logo.mpg");
++			    gGameState = GS_LOGO_MPEG;
++			    TRACE("gGameState = GS_LOGO_MPEG;");
++			    break;
++		    }
+ 
+-				    case GS_LOGO_MPEG:
+-					{
++		    case GS_LOGO_MPEG:
++			{
+ //					    CPad::UpdatePads();
+ 
+ //					    if (startupDeactivate || ControlsManager.GetJoyButtonJustDown() != 0)
+-						    ++gGameState;
++				    ++gGameState;
+ //					    else if (CPad::GetPad(0)->GetLeftMouseJustDown())
+ //						    ++gGameState;
+ //					    else if (CPad::GetPad(0)->GetEnterJustDown())
+@@ -1505,11 +1634,11 @@
+ //					    else if (CPad::GetPad(0)->GetTabJustDown())
+ //						    ++gGameState;
+ 
+-					    break;
+-				    }
++			    break;
++		    }
+ 
+-				    case GS_INIT_INTRO_MPEG:
+-					{
++		    case GS_INIT_INTRO_MPEG:
++			{
+ //#ifndef NO_MOVIES
+ //					    CloseClip();
+ //					    CoUninitialize();
+@@ -1520,17 +1649,17 @@
+ //					    else
+ //						    PlayMovieInWindow(cmdShow, "movies\\GTAtitles.mpg");
+ 
+-					    gGameState = GS_INTRO_MPEG;
+-					    TRACE("gGameState = GS_INTRO_MPEG;");
+-					    break;
+-				    }
++			    gGameState = GS_INTRO_MPEG;
++			    TRACE("gGameState = GS_INTRO_MPEG;");
++			    break;
++		    }
+ 
+-				    case GS_INTRO_MPEG:
+-					{
++		    case GS_INTRO_MPEG:
++			{
+ //					    CPad::UpdatePads();
+ //
+ //					    if (startupDeactivate || ControlsManager.GetJoyButtonJustDown() != 0)
+-						    ++gGameState;
++				    ++gGameState;
+ //					    else if (CPad::GetPad(0)->GetLeftMouseJustDown())
+ //						    ++gGameState;
+ //					    else if (CPad::GetPad(0)->GetEnterJustDown())
+@@ -1542,229 +1671,189 @@
+ //					    else if (CPad::GetPad(0)->GetTabJustDown())
+ //						    ++gGameState;
+ 
+-					    break;
+-				    }
++			    break;
++		    }
+ 
+-					case GS_INIT_ONCE:
+-					{
+-						//CoUninitialize();
+-						
++			case GS_INIT_ONCE:
++			{
++				//CoUninitialize();
++				
+ #ifdef PS2_MENU
+-						extern char version_name[64];
+-						if ( CGame::frenchGame || CGame::germanGame )
+-							LoadingScreen(NULL, version_name, "loadsc24");
+-						else
+-							LoadingScreen(NULL, version_name, "loadsc0");
+-						
+-						printf("Into TheGame!!!\n");
++				extern char version_name[64];
++				if ( CGame::frenchGame || CGame::germanGame )
++					LoadingScreen(NULL, version_name, "loadsc24");
++				else
++					LoadingScreen(NULL, version_name, "loadsc0");
++				
++				printf("Into TheGame!!!\n");
+ #else				
+-						LoadingScreen(nil, nil, "loadsc0");
+-						// LoadingScreen(nil, nil, "loadsc0"); // duplicate
++				LoadingScreen(nil, nil, "loadsc0");
++				// LoadingScreen(nil, nil, "loadsc0"); // duplicate
+ #endif
+-						if ( !CGame::InitialiseOnceAfterRW() )
+-							RsGlobal.quit = TRUE;
+-						
++				if ( !CGame::InitialiseOnceAfterRW() )
++					RsGlobal.quit = TRUE;
++				
+ #ifdef PS2_MENU
+-						gGameState = GS_INIT_PLAYING_GAME;
++				gGameState = GS_INIT_PLAYING_GAME;
+ #else
+-						gGameState = GS_INIT_FRONTEND;
+-						TRACE("gGameState = GS_INIT_FRONTEND;");
++				gGameState = GS_INIT_FRONTEND;
++				TRACE("gGameState = GS_INIT_FRONTEND;");
+ #endif
+-						break;
+-					}
++				break;
++			}
+ #ifndef PS2_MENU
+-					case GS_INIT_FRONTEND:
+-					{
+-						LoadingScreen(nil, nil, "loadsc0");
+-						// LoadingScreen(nil, nil, "loadsc0"); // duplicate
+-						
+-						FrontEndMenuManager.m_bGameNotLoaded = true;
+-						
+-						FrontEndMenuManager.m_bStartUpFrontEndRequested = true;
+-						
+-						if ( defaultFullscreenRes )
+-						{
+-							defaultFullscreenRes = FALSE;
+-							FrontEndMenuManager.m_nPrefsVideoMode = GcurSelVM;
+-							FrontEndMenuManager.m_nDisplayVideoMode = GcurSelVM;
+-						}
+-						
+-						gGameState = GS_FRONTEND;
+-						TRACE("gGameState = GS_FRONTEND;");
+-						break;
+-					}
+-					
+-					case GS_FRONTEND:
+-					{
+-						if(!WindowIconified)
+-							RsEventHandler(rsFRONTENDIDLE, nil);
++			case GS_INIT_FRONTEND:
++			{
++				LoadingScreen(nil, nil, "loadsc0");
++				// LoadingScreen(nil, nil, "loadsc0"); // duplicate
++				
++				FrontEndMenuManager.m_bGameNotLoaded = true;
++				
++				FrontEndMenuManager.m_bStartUpFrontEndRequested = true;
++				
++				if ( defaultFullscreenRes )
++				{
++					defaultFullscreenRes = FALSE;
++					FrontEndMenuManager.m_nPrefsVideoMode = GcurSelVM;
++					FrontEndMenuManager.m_nDisplayVideoMode = GcurSelVM;
++				}
++				
++				gGameState = GS_FRONTEND;
++				TRACE("gGameState = GS_FRONTEND;");
++				break;
++			}
++			
++			case GS_FRONTEND:
++			{
++				if(!WindowIconified)
++					RsEventHandler(rsFRONTENDIDLE, nil);
+ 
+ #ifdef PS2_MENU
+-						if ( !FrontEndMenuManager.m_bMenuActive || TheMemoryCard.m_bWantToLoad )
++				if ( !FrontEndMenuManager.m_bMenuActive || TheMemoryCard.m_bWantToLoad )
+ #else
+-						if ( !FrontEndMenuManager.m_bMenuActive || FrontEndMenuManager.m_bWantToLoad )
++				if ( !FrontEndMenuManager.m_bMenuActive || FrontEndMenuManager.m_bWantToLoad )
+ #endif
+-						{
+-							gGameState = GS_INIT_PLAYING_GAME;
+-							TRACE("gGameState = GS_INIT_PLAYING_GAME;");
+-						}
++				{
++					gGameState = GS_INIT_PLAYING_GAME;
++					TRACE("gGameState = GS_INIT_PLAYING_GAME;");
++				}
+ 
+ #ifdef PS2_MENU
+-						if (TheMemoryCard.m_bWantToLoad )
++				if (TheMemoryCard.m_bWantToLoad )
+ #else
+-						if ( FrontEndMenuManager.m_bWantToLoad )
++				if ( FrontEndMenuManager.m_bWantToLoad )
+ #endif
+-						{
+-							InitialiseGame();
+-							FrontEndMenuManager.m_bGameNotLoaded = false;
+-							gGameState = GS_PLAYING_GAME;
+-							TRACE("gGameState = GS_PLAYING_GAME;");
+-						}
+-						break;
+-					}
++				{
++					InitialiseGame();
++					FrontEndMenuManager.m_bGameNotLoaded = false;
++					gGameState = GS_PLAYING_GAME;
++					TRACE("gGameState = GS_PLAYING_GAME;");
++				}
++				break;
++			}
+ #endif
+-					
+-					case GS_INIT_PLAYING_GAME:
+-					{
++			
++			case GS_INIT_PLAYING_GAME:
++			{
+ #ifdef PS2_MENU
+-						CGame::Initialise("DATA\\GTA3.DAT");
+-						
+-						//LoadingScreen("Starting Game", NULL, GetRandomSplashScreen());
+-					
+-						if (   TheMemoryCard.CheckCardInserted(CARD_ONE) == CMemoryCard::NO_ERR_SUCCESS
+-							&& TheMemoryCard.ChangeDirectory(CARD_ONE, TheMemoryCard.Cards[CARD_ONE].dir)
+-							&& TheMemoryCard.FindMostRecentFileName(CARD_ONE, TheMemoryCard.MostRecentFile) == true
+-							&& TheMemoryCard.CheckDataNotCorrupt(TheMemoryCard.MostRecentFile))
+-						{
+-							strcpy(TheMemoryCard.LoadFileName, TheMemoryCard.MostRecentFile);
+-							TheMemoryCard.b_FoundRecentSavedGameWantToLoad = true;
+-					
+-							if (CMenuManager::m_PrefsLanguage != TheMemoryCard.GetLanguageToLoad())
+-							{
+-								CMenuManager::m_PrefsLanguage = TheMemoryCard.GetLanguageToLoad();
+-								TheText.Unload();
+-								TheText.Load();
+-							}
+-					
+-							CGame::currLevel = (eLevelName)TheMemoryCard.GetLevelToLoad();
+-						}
++				CGame::Initialise("DATA\\GTA3.DAT");
++				
++				//LoadingScreen("Starting Game", NULL, GetRandomSplashScreen());
++			
++				if (   TheMemoryCard.CheckCardInserted(CARD_ONE) == CMemoryCard::NO_ERR_SUCCESS
++					&& TheMemoryCard.ChangeDirectory(CARD_ONE, TheMemoryCard.Cards[CARD_ONE].dir)
++					&& TheMemoryCard.FindMostRecentFileName(CARD_ONE, TheMemoryCard.MostRecentFile) == true
++					&& TheMemoryCard.CheckDataNotCorrupt(TheMemoryCard.MostRecentFile))
++				{
++					strcpy(TheMemoryCard.LoadFileName, TheMemoryCard.MostRecentFile);
++					TheMemoryCard.b_FoundRecentSavedGameWantToLoad = true;
++			
++					if (CMenuManager::m_PrefsLanguage != TheMemoryCard.GetLanguageToLoad())
++					{
++						CMenuManager::m_PrefsLanguage = TheMemoryCard.GetLanguageToLoad();
++						TheText.Unload();
++						TheText.Load();
++					}
++			
++					CGame::currLevel = (eLevelName)TheMemoryCard.GetLevelToLoad();
++				}
+ #else
+-						InitialiseGame();
++				InitialiseGame();
+ 
+-						FrontEndMenuManager.m_bGameNotLoaded = false;
++				FrontEndMenuManager.m_bGameNotLoaded = false;
+ #endif
+-						gGameState = GS_PLAYING_GAME;
+-						TRACE("gGameState = GS_PLAYING_GAME;");
+-						break;
+-					}
+-					
+-					case GS_PLAYING_GAME:
++				gGameState = GS_PLAYING_GAME;
++				TRACE("gGameState = GS_PLAYING_GAME;");
++				break;
++			}
++			
++			case GS_PLAYING_GAME:
++			{
++				// Fixed-timestep loop (task 8): the game simulates at exactly 30 Hz, as with the original
++				// 30 fps frame limiter, so handling and timings don't change; frames are drawn at the
++				// display rate (vsync when the frame limiter option is on, uncapped otherwise).
++				if ( RwInitialised )
++				{
++					float alpha;
++					int steps = hostSimStepsDue(&alpha);
++					bool simulated = false;
++					CTimer::SetFixedFrameMs(1000.0 / 30.0);
++					for ( int i = 0; i < steps; i++ )
+ 					{
+-						float ms = (float)CTimer::GetCurrentTimeInCycles() / (float)CTimer::GetCyclesPerMillisecond();
+-						if ( RwInitialised )
++						Interpolation::BeginStep();
++						if ( !IdleSimulate() )
+ 						{
+-							if (!FrontEndMenuManager.m_PrefsFrameLimiter || (1000.0f / (float)RsGlobal.maxFPS) < ms)
+-								RsEventHandler(rsIDLE, (void *)TRUE);
++							CTimer::SetFixedFrameMs(0.0);
++							return; // restart/load requested: the session ends on the next begin()
+ 						}
+-						break;
++						simulated = true;
+ 					}
+-				}
+-			}
+-			else
+-			{
+-				if ( RwCameraBeginUpdate(Scene.camera) )
+-				{
+-					RwCameraEndUpdate(Scene.camera);
+-					ForegroundApp = TRUE;
+-					RsEventHandler(rsACTIVATE, (void *)TRUE);
+-				}
+-				
+-			}
+-		}
+-
+-		
+-		/* 
+-		* About to shut down - block resize events again...
+-		*/
+-		RwInitialised = FALSE;
+-		
+-		FrontEndMenuManager.UnloadTextures();
+-#ifdef PS2_MENU	
+-		if ( !(FrontEndMenuManager.m_bWantToRestart || TheMemoryCard.b_FoundRecentSavedGameWantToLoad))
+-			break;
+-#else
+-		if ( !FrontEndMenuManager.m_bWantToRestart )
+-			break;
+-#endif
+-		
+-		CPad::ResetCheats();
+-		CPad::StopPadsShaking();
+-		
+-		DMAudio.ChangeMusicMode(MUSICMODE_DISABLE);
+-		
+-#ifdef PS2_MENU
+-		CGame::ShutDownForRestart();
++					CTimer::SetFixedFrameMs(0.0);
++					gRenderAlpha = alpha;
++					// A frame captured by the regression harness renders with a fixed random
++					// sequence (the water mesh, for one, is jittered per rendered frame), so
++					// screenshots repeat whatever the frame rate. Never true in normal play.
++					// Same for the water texture scroll, which advances once per rendered frame.
++					if (hostCaptureRequested()) {
++						extern float TEXTURE_ADDU, TEXTURE_ADDV, _TEXTURE_MASK_ADDU, _TEXTURE_MASK_ADDV,
++							_TEXTURE_WAKE_ADDU, _TEXTURE_WAKE_ADDV;
++						CGeneral::SetRandomSeed(12345);
++						TEXTURE_ADDU = TEXTURE_ADDV = 0.0f;
++						_TEXTURE_MASK_ADDU = _TEXTURE_MASK_ADDV = 0.0f;
++						_TEXTURE_WAKE_ADDU = _TEXTURE_WAKE_ADDV = 0.0f;
++#ifdef SCREEN_DROPLETS
++						// REVC_TEST_DROPLETS=n: n rain drops on the captured frame (renderer
++						// check; not used by the regression set).
++						if(const char *drops = getenv("REVC_TEST_DROPLETS"))
++							ScreenDroplets::FillScreen(atoi(drops));
++						// REVC_TEST_RAIN: how many drops are on screen when the frame is captured
++						// (must not depend on the display rate).
++						if(getenv("REVC_TEST_RAIN"))
++							printf("[revc-test] droplets on screen: %d (rain %.2f)\n", ScreenDroplets::ms_numDrops, CWeather::Rain);
+ #endif
+-		
+-		CTimer::Stop();
+-		
+-#ifdef PS2_MENU
+-		if (FrontEndMenuManager.m_bWantToRestart || TheMemoryCard.b_FoundRecentSavedGameWantToLoad)
+-		{
+-			if (TheMemoryCard.b_FoundRecentSavedGameWantToLoad)
+-			{
+-				FrontEndMenuManager.m_bWantToRestart = true;
+-				TheMemoryCard.m_bWantToLoad = true;
++					}
++					IdleRender(simulated);
++				}
++				break;
+ 			}
+-
+-			CGame::InitialiseWhenRestarting();
+-			DMAudio.ChangeMusicMode(MUSICMODE_GAME);
+-			FrontEndMenuManager.m_bWantToRestart = false;
+-			
+-			continue;
+-		}
+-		
+-		CGame::ShutDown();	
+-		CTimer::Stop();
+-		
+-		break;
+-#else
+-		if ( FrontEndMenuManager.m_bWantToLoad )
+-		{
+-			CGame::ShutDownForRestart();
+-			CGame::InitialiseWhenRestarting();
+-			DMAudio.ChangeMusicMode(MUSICMODE_GAME);
+-			LoadSplash(GetLevelSplashScreen(CGame::currLevel));
+-			FrontEndMenuManager.m_bWantToLoad = false;
+ 		}
+-		else
++	}
++	else
++	{
++		if ( RwCameraBeginUpdate(Scene.camera) )
+ 		{
+-#ifndef MASTER
+-			if ( gbModelViewer )
+-				CAnimViewer::Shutdown();
+-			else
+-#endif
+-			if ( gGameState == GS_PLAYING_GAME )
+-				CGame::ShutDown();
+-			
+-			CTimer::Stop();
+-			
+-			if ( FrontEndMenuManager.m_bFirstTime == true )
+-			{
+-				gGameState = GS_INIT_FRONTEND;
+-				TRACE("gGameState = GS_INIT_FRONTEND;");
+-			}
+-			else
+-			{
+-				gGameState = GS_INIT_PLAYING_GAME;
+-				TRACE("gGameState = GS_INIT_PLAYING_GAME;");
+-			}
++			RwCameraEndUpdate(Scene.camera);
++			ForegroundApp = TRUE;
++			RsEventHandler(rsACTIVATE, (void *)TRUE);
+ 		}
+ 		
+-		FrontEndMenuManager.m_bFirstTime = false;
+-		FrontEndMenuManager.m_bWantToRestart = false;
+-#endif
+ 	}
++}
++
++// Process end: game, audio and RenderWare teardown.
++extern "C" void
++revc_game_shutdown(void)
++{
+ 	
+ #ifndef MASTER
+ 	if ( gbModelViewer )
+@@ -1790,7 +1879,6 @@
+ 	RsEventHandler(rsTERMINATE, nil);
+ 
+ 
+-	return 0;
+ }
+ 
+ /*
+@@ -1841,6 +1929,13 @@
+ 
+ 		if (rt != 0.0f)
+ 			ControlsManager.m_NewState.mappedButtons[16] = rt > -0.8f;
++
++		// revc: analog trigger values (0..255) for accelerate/brake bound to a trigger.
++		extern uint8 gPadTriggerAnalog[2];
++		if (lt != 0.0f)
++			gPadTriggerAnalog[0] = (uint8)Clamp((lt + 1.0f) * 127.5f, 0.0f, 255.0f);
++		if (rt != 0.0f)
++			gPadTriggerAnalog[1] = (uint8)Clamp((rt + 1.0f) * 127.5f, 0.0f, 255.0f);
+ 	}
+ 	// TODO? L2-R2 axes(not buttons-that's fine) on joysticks that don't have SDL gamepad mapping AREN'T handled, and I think it's impossible to do without mapping.
+ 
+@@ -1879,20 +1974,49 @@
+ 		
+ 		CPad *pad = CPad::GetPad(bs.padID);
+ 
+-		if ( Abs(leftStickPos.x)  > 0.3f )
+-			pad->PCTempJoyState.LeftStickX	= (int32)(leftStickPos.x  * 128.0f);
+-		
+-		if ( Abs(leftStickPos.y)  > 0.3f )
+-			pad->PCTempJoyState.LeftStickY	= (int32)(leftStickPos.y  * 128.0f);
++		// revc: the Xbox version's stick handling (was a hard 0.3 cut, not rescaled): a per-axis
++		// dead zone d, rescaled so the stick still reaches full deflection; d = 0.25, 0.10 while
++		// aiming in first person, and 0.60 until that stick has once gone past 60 % on both
++		// axes since the pad was plugged in (keeps a drifting stick from moving anything).
++		static int calibratedPad = -2;
++		static bool seenX[2], seenY[2];
++		if (calibratedPad != hostPad) {
++			calibratedPad = hostPad;
++			seenX[0] = seenX[1] = seenY[0] = seenY[1] = false;
++		}
++		RwV2d *sticks[2] = { &leftStickPos, &rightStickPos };
++		for (int i = 0; i < 2; i++) {
++			seenX[i] |= Abs(sticks[i]->x) > 0.6f;
++			seenY[i] |= Abs(sticks[i]->y) > 0.6f;
++		}
++		int16 camMode = TheCamera.Cams[TheCamera.ActiveCam].Mode;
++		bool aiming = camMode == CCam::MODE_SNIPER || camMode == CCam::MODE_ROCKETLAUNCHER ||
++			camMode == CCam::MODE_M16_1STPERSON || camMode == CCam::MODE_HELICANNON_1STPERSON;
++		float deadZone[2];
++		for (int i = 0; i < 2; i++)
++			deadZone[i] = !(seenX[i] && seenY[i]) ? 0.60f : aiming ? 0.10f : 0.25f;
++		auto axis = [](float v, float d) -> float {
++			if (v >= d) return (v - d) / (1.0f - d);
++			if (v <= -d) return (v + d) / (1.0f - d);
++			return 0.0f;
++		};
++		float lx = axis(leftStickPos.x, deadZone[0]), ly = axis(leftStickPos.y, deadZone[0]);
++		float rx = axis(rightStickPos.x, deadZone[1]), ry = axis(rightStickPos.y, deadZone[1]);
++
++		if ( lx != 0.0f )
++			pad->PCTempJoyState.LeftStickX	= (int32)(lx * 128.0f);
++		
++		if ( ly != 0.0f )
++			pad->PCTempJoyState.LeftStickY	= (int32)(ly * 128.0f);
+ 		
+-		if ( Abs(rightStickPos.x) > 0.3f )
+-			pad->PCTempJoyState.RightStickX = (int32)(rightStickPos.x * 128.0f);
++		if ( rx != 0.0f )
++			pad->PCTempJoyState.RightStickX = (int32)(rx * 128.0f);
+ 
+-		if ( Abs(rightStickPos.y) > 0.3f )
+-			pad->PCTempJoyState.RightStickY = (int32)(rightStickPos.y * 128.0f);
++		if ( ry != 0.0f )
++			pad->PCTempJoyState.RightStickY = (int32)(ry * 128.0f);
+ 	}
+ 
+-	_psHandleVibration();
++	_psHandleVibration(padID, hostPad);
+ 
+ 	return;
+ }
+@@ -1924,4 +2048,4 @@
+ 	}
+ }
+ 
+-#endif // RW_GL3 && LIBRW_HOST
++#endif // LIBRW_HOST
+--- a/src/skel/platform.h
++++ b/src/skel/platform.h
+@@ -1,7 +1,7 @@
+ #ifndef PLATFORM_H
+ #define PLATFORM_H
+ 
+-// Functions that's different on glfw/win etc. but have same signature (but if a function only used in win.cpp you can keep in win.h)
++// Platform functions implemented by the skeleton (skel/host/host.cpp).
+ 
+ #include "rwcore.h"
+ #include "skeleton.h"
