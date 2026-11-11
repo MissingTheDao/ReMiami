@@ -340,7 +340,9 @@ revc_test_show_controls_menu(void)
 		for (int n = atoi(getenv("REVC_TEST_PAD_CONTEXT")); n > 0; n--)
 			PadPictureContextPress(FEOPTION_ACTION_SELECT);
 	}
-	int target = !page ? MENUPAGE_CONTROLLER_PC : strcmp(page, "pad") == 0 ? MENUPAGE_PAD_PICTURE : strcmp(page, "graphics") == 0 ? MENUPAGE_GRAPHICS_SETTINGS : atoi(page);
+	int revc_test_menu_page_id(const char *name);
+	int named = page ? revc_test_menu_page_id(page) : -1;
+	int target = !page ? MENUPAGE_CONTROLLER_PC : named >= 0 ? named : atoi(page);
 	// In a game with the menu open: switch as the menu does (its page transition sets the panel)
 	if (FrontEndMenuManager.m_bMenuActive && !FrontEndMenuManager.m_bGameNotLoaded && FrontEndMenuManager.m_nCurrScreen != target)
 		FrontEndMenuManager.SwitchToNewScreen(target);

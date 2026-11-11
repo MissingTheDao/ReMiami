@@ -6,6 +6,8 @@
 #   --clips: instead, one 60 fps walk-through per style (<set>_walkthrough.mp4, needs ffmpeg): each
 #   state held 1.5 s, the highlight moving on row pages, the radio picker stepping.
 #   REVC_IMPORT_DIR=<import cache> for the Xbox style's sprites (an import made from your disc).
+#   The game folder's mods (game/mods: texture packs such as ps2-ui-remake.zip with the PS2
+#   controller picture) are installed for the shots; REVC_TEST_MODS=<dir> picks another folder.
 set -euo pipefail
 CLIPS=0; [[ "${1:-}" == --clips ]] && { CLIPS=1; shift; }
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -14,6 +16,7 @@ shift || true
 SETS=("$@"); (( ${#SETS[@]} )) || SETS=(ps2 xbox)
 mkdir -p "$OUT"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+[[ -z "${REVC_TEST_MODS:-}" && -d "$ROOT/game/mods" ]] && export REVC_TEST_MODS="$ROOT/game/mods"
 shoot() {	# set, ui style, width, height, suffix[, final height]
   local cfg=$TMP/menus.ini
   sed -e "s/^\[Graphics\]/[Graphics]\nUiStyle=$2/" -e "s/^Width=.*/Width=$3/" -e "s/^Height=.*/Height=$4/" \

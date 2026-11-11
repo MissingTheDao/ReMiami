@@ -256,3 +256,109 @@ DrawPadPicture(void)
 	CFont::SetRightJustifyOff();
 	CFont::DrawFonts();
 }
+
+// revc (plan task 13): the PS2 Controls page's DualShock 2 picture (fe_controller from the PS2's
+// frontend2 TXD, here from a texture pack: the game can't read PS2 TXDs yet) with the PS2's
+// callouts: black lines with a dot at the label end, plain white labels in two columns. The labels
+// follow the current bindings (revc's layouts aren't the PS2's setups 1-4), like the Xbox page.
+// Positions measured on the PS2 captures at 640x448; spots in the 1024 px texture.
+extern "C" int revc_texmod_find(const char *txd, const char *texture, int *width, int *height, unsigned char **rgba);
+static CSprite2d *ds2Sprite;
+static const PadSpot ds2Spots[] = {
+	{ 4, 796, 366, "" }, { 1, 860, 430, "" }, { 3, 730, 430, "" }, { 2, 796, 496, "" },
+	{ 5, 224, 156, "" }, { 6, 794, 156, "" }, { 7, 224, 210, "" }, { 8, 794, 210, "" },
+	{ 9, 420, 430, "" }, { 12, 594, 430, "" }, { 10, 370, 600, "" }, { 11, 640, 600, "" },
+	{ 13, 224, 370, "" }, { 14, 276, 430, "" }, { 15, 224, 480, "" }, { 16, 170, 430, "" },
+	{ 20, 370, 560, "" }, { 21, 640, 560, "" },
+};
+
+void
+DrawPadPicturePS2(void)
+{
+	if (ds2Sprite == nil)
+		ds2Sprite = new CSprite2d;
+	if (ds2Sprite->m_pTexture == nil) {
+		int w, h;
+		unsigned char *px;
+		if (!revc_texmod_find("frontend2", "fe_controller", &w, &h, &px))
+			return;
+		rw::Image *img = rw::Image::create(w, h, 32);
+		img->pixels = px;
+		img->stride = w * 4;
+		rw::Raster *ras = rw::Raster::create(w, h, 32, rw::Raster::C8888 | rw::Raster::TEXTURE | rw::Raster::MIPMAP | rw::Raster::AUTOMIPMAP);
+		if (ras && ras->setFromImage(img)) {
+			rw::Texture *tex = rw::Texture::create(ras);
+			tex->setFilter(rw::Texture::LINEARMIPLINEAR);
+			ds2Sprite->m_pTexture = tex;
+		} else if (ras)
+			ras->destroy();
+		img->pixels = nil;
+		img->destroy();
+		revc_texmod_free(px, w, h);
+		if (ds2Sprite->m_pTexture == nil)
+			return;
+	}
+	const float px = 160.0f, py = 168.0f, pw = 239.0f, ph = 195.0f;
+	uint8 alpha = FrontEndMenuManager.FadeIn(255);
+	ds2Sprite->Draw(CRect(MENU_X_LEFT_ALIGNED(px), MENU_Y(py), MENU_X_LEFT_ALIGNED(px + pw), MENU_Y(py + ph)), CRGBA(255, 255, 255, alpha));
+
+	Callout callouts[ARRAY_SIZE(ds2Spots)];
+	int n = 0;
+	for (int s = 0; s < ARRAY_SIZE(ds2Spots); s++) {
+		Callout &c = callouts[n];
+		c.spot = &ds2Spots[s];
+		c.text[0] = 0;
+		if (c.spot->joy == 20)
+			AppendText(c.text, padContext == 0 ? "RVC_MOV" : "RVC_STR", ARRAY_SIZE(c.text));
+		else if (c.spot->joy == 21)
+			AppendText(c.text, "RVC_CAM", ARRAY_SIZE(c.text));
+		else
+			for (int a = 0; a < ARRAY_SIZE(padActions); a++) {
+				const PadAction &pa = padActions[a];
+				if ((pa.contexts & (1 << padContext)) &&
+				    ControlsManager.GetControllerKeyAssociatedWithAction(pa.action, JOYSTICK) == c.spot->joy)
+					AppendText(c.text, pa.text, ARRAY_SIZE(c.text));
+			}
+		if (c.text[0])
+			n++;
+	}
+	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
+	CFont::SetScale(MENU_X(0.32f), MENU_Y(0.62f));
+	CFont::SetCentreOff();
+	CFont::SetPropOn();
+	CFont::SetDropShadowPosition(0);
+	CFont::SetColor(CRGBA(255, 255, 255, alpha));
+	CRGBA black(0, 0, 0, alpha);
+	for (int side = 0; side < 2; side++) {
+		const Callout *list[ARRAY_SIZE(ds2Spots)];
+		int m = 0;
+		for (int i = 0; i < n; i++)
+			if ((callouts[i].spot->x >= 512.0f) == (side == 1))
+				list[m++] = &callouts[i];
+		for (int i = 1; i < m; i++)
+			for (int j = i; j > 0 && list[j]->spot->y < list[j - 1]->spot->y; j--) {
+				const Callout *t = list[j]; list[j] = list[j - 1]; list[j - 1] = t;
+			}
+		// the right column ends above the help box (console)
+		const float top = 172.0f, bottom = side == 0 ? 340.0f : 290.0f;
+		for (int i = 0; i < m; i++) {
+			float ly = m == 1 ? (top + bottom) / 2 : top + (bottom - top) * i / (m - 1);
+			float ax = px + list[i]->spot->x * pw / 1024.0f, ay = py + list[i]->spot->y * ph / 1024.0f;
+			float lx = side == 0 ? 152.0f : 404.0f;
+			if (side == 0) {
+				CFont::SetRightJustifyOn();
+				CFont::SetRightJustifyWrap(0.0f);
+			} else {
+				CFont::SetRightJustifyOff();
+				CFont::SetWrapx(SCREEN_WIDTH);
+			}
+			CFont::PrintString(MENU_X_LEFT_ALIGNED(lx), MENU_Y(ly - 6.0f), (wchar *)list[i]->text);
+			float sx = lx + (side == 0 ? 4.0f : -4.0f);
+			DrawLine(MENU_X_LEFT_ALIGNED(sx), MENU_Y(ly), MENU_X_LEFT_ALIGNED(ax), MENU_Y(ay), black);
+			float d = SCREEN_SCALE_Y(2.5f);
+			CSprite2d::DrawRect(CRect(MENU_X_LEFT_ALIGNED(sx) - d, MENU_Y(ly) - d, MENU_X_LEFT_ALIGNED(sx) + d, MENU_Y(ly) + d), black);
+		}
+	}
+	CFont::SetRightJustifyOff();
+	CFont::DrawFonts();
+}

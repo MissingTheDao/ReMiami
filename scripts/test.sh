@@ -73,6 +73,8 @@ for s in "${SCENARIOS[@]}"; do
   cp "$ini" "$T/reVC.ini"
   envs=(REVC_GAME_DIR="$T" REVC_TEST="$s")
   [[ "$s" == texmods ]] && cp -r "$ROOT/tests/mods" "$T/mods"
+  # REVC_TEST_MODS=<dir>: install that mods folder for this run (menu shots with texture packs)
+  [[ -n "${REVC_TEST_MODS:-}" && "$s" != texmods ]] && cp -r "$REVC_TEST_MODS" "$T/mods"
   # formats also loads every game texture and checks it against librw's recorded result.
   [[ "$s" == formats ]] && envs+=(REVC_TXD_GOLDEN="$ROOT/tests/golden/textures.txt")
   # ... and every model, checked against librw's recorded result (stage 2 step 2).

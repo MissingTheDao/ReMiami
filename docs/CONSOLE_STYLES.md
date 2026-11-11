@@ -331,8 +331,16 @@ Part 2 (round 4): the Xbox wedge slider (x 325-485, faint wedge with bright bars
 for brightness and volumes; Xbox labels "music", "sfx", "select controls", "invert up/down"; Xbox
 value columns 331 / 378 (radio) / 435 (controls); PS2 Display rows 30 px apart from y 92.
 
-Next: the PS2 controls page with the DualShock 2 picture, the PS2 audio two-column layout, the
-Xbox full logo strip, "screen position", the console-style option lists; Xbox confirm dialog (dimmed page, OK/Cancel); stats/brief
+Part 3 (round 5): PS2 Display rows from y 77; Xbox "select controls" without a value, the radio
+row's bar across the whole row. PS2 Controls page as on the PS2: configuration, controller display
+(on foot / in car switches the picture), vibration, invert as "label : value" from x 160, 20 px
+apart; under them the DualShock 2 picture (`fe_controller`, from a PS2 texture pack such as
+ps2-ui-remake.zip: the game can't read PS2 TXDs yet) with black callout lines and white labels
+following the current bindings (`DrawPadPicturePS2`, core/PadPicture.cpp). `menu-shots.sh`
+installs game/mods for the shots (REVC_TEST_MODS).
+
+Next: the PS2 audio two-column layout, the Xbox full logo strip, "screen position", the
+console-style option lists; Xbox confirm dialog (dimmed page, OK/Cancel); stats/brief
 sub-tabs; load page layouts; map legend item; save page; the round-3 details (help-line items per
 page, the highlight's lighter tail and length). Plan for the extras (research, from the user's "add options without
 breaking cohesion", `menu-compare/OPTIONS_PLACEMENT.md`): console pages stay as on the console;
