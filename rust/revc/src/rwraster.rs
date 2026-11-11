@@ -15,6 +15,7 @@
 
 
 use crate::rwimage::{self, Image};
+use std::ffi::c_void;
 
 // Raster types, flags, formats, lock modes (rwobjects.h)
 pub const NORMAL: i32 = 0x00;
@@ -121,6 +122,123 @@ pub struct Hooks {
 }
 
 static mut HOOKS: Option<Hooks> = None;
+
+// ---------------------------------------------------------------- the driver's raster plugin and the module (7d2)
+
+/// wgpu::nativeRasterOffset (the WgpuRaster in every raster)
+#[unsafe(no_mangle)]
+pub static mut revc_native_raster_offset: i32 = 0;
+
+mod defaults {
+    use super::*;
+    use crate::rwplugin::{self as pl, CLASS_RASTER, class_list};
+    pub(super) unsafe extern "C" fn size() -> usize {
+        unsafe { (*class_list(CLASS_RASTER)).size as usize }
+    }
+    pub(super) unsafe extern "C" fn construct(r: *mut Raster) {
+        unsafe { pl::pl_construct(class_list(CLASS_RASTER), r as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn destruct(r: *mut Raster) {
+        unsafe { pl::pl_destruct(class_list(CLASS_RASTER), r as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn allocated(d: i32) {
+        unsafe { *pl::alloc_count(CLASS_RASTER) += d }
+    }
+    pub(super) unsafe extern "C" fn alloc(size: usize) -> *mut u8 {
+        unsafe { crate::rwengine::rw_malloc(size, 0x30000 | 0xB00) as *mut u8 } // MEMDUR_EVENT | ID_DRIVER
+    }
+    pub(super) unsafe extern "C" fn free(p: *mut u8) {
+        unsafe { crate::rwengine::rw_free(p as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn evict(r: *mut Raster) {
+        unsafe { crate::rwdevice::evict_raster(r) }
+    }
+    pub(super) unsafe extern "C" fn native_create(o: *mut c_void, _: i32, _: i32) -> *mut c_void {
+        unsafe { native_clear(o as *mut Raster) };
+        o
+    }
+    pub(super) unsafe extern "C" fn native_destroy_cb(o: *mut c_void, _: i32, _: i32) -> *mut c_void {
+        unsafe { native_destroy(o as *mut Raster) };
+        o
+    }
+    /// a copied raster object starts without its own pixel storage
+    pub(super) unsafe extern "C" fn native_copy(dst: *mut c_void, _: *mut c_void, _: i32, _: i32) -> *mut c_void {
+        unsafe { native_clear(dst as *mut Raster) };
+        dst
+    }
+}
+const ID_RASTERWGPU: u32 = 0xA0D;
+
+/// wgpu::registerNativeRaster: the WgpuRaster plugin, then the hooks with its offset.
+///
+/// # Safety
+/// During Engine::init (driver plugin attach).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_wgpu_register_native_raster() {
+    unsafe {
+        let off = crate::rwplugin::pl_register(
+            crate::rwplugin::class_list(crate::rwplugin::CLASS_RASTER),
+            size_of::<WgpuRaster>() as i32,
+            ID_RASTERWGPU,
+            Some(defaults::native_create),
+            Some(defaults::native_destroy_cb),
+            Some(defaults::native_copy),
+        );
+        *std::ptr::addr_of_mut!(revc_native_raster_offset) = off;
+        *std::ptr::addr_of_mut!(HOOKS) = Some(Hooks {
+            size: defaults::size,
+            construct: defaults::construct,
+            destruct: defaults::destruct,
+            allocated: defaults::allocated,
+            alloc: defaults::alloc,
+            free: defaults::free,
+            evict: defaults::evict,
+            upload: crate::host::wgpu::revc_rw_texture_upload,
+            texture_destroy: crate::host::wgpu::revc_rw_texture_destroy,
+            native_offset: off,
+        });
+    }
+}
+
+/// The raster module's offset in the engine (its RasterGlobals: the context stack).
+static mut RASTER_MODULE_OFFSET: i32 = 0;
+unsafe extern "C" fn raster_module_open(o: *mut c_void, off: i32, _: i32) -> *mut c_void {
+    unsafe {
+        *std::ptr::addr_of_mut!(RASTER_MODULE_OFFSET) = off;
+        let g = (o as *mut u8).add(off as usize) as *mut RasterGlobals;
+        (*g).sp = -1;
+        (*g).stack = [std::ptr::null_mut(); 32];
+    }
+    o
+}
+unsafe extern "C" fn raster_module_close(o: *mut c_void, _: i32, _: i32) -> *mut c_void {
+    o
+}
+const ID_RASTERMODULE: u32 = 0x407;
+
+/// Raster::registerModule
+///
+/// # Safety
+/// During Engine::init.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_raster_register_module() {
+    unsafe {
+        crate::rwplugin::pl_register(
+            crate::rwplugin::class_list(crate::rwplugin::CLASS_ENGINE),
+            size_of::<RasterGlobals>() as i32,
+            ID_RASTERMODULE,
+            Some(raster_module_open),
+            Some(raster_module_close),
+            None,
+        );
+    }
+}
+
+/// The context stack (RASTERGLOBALS) of the running engine.
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_raster_globals() -> *mut RasterGlobals {
+    unsafe { (*std::ptr::addr_of!(crate::rwengine::revc_engine) as *mut u8).add(*std::ptr::addr_of!(RASTER_MODULE_OFFSET) as usize) as *mut RasterGlobals }
+}
 
 fn hooks() -> &'static Hooks {
     // SAFETY: set once at startup (driver registration), read-only afterwards.

@@ -1284,3 +1284,264 @@ inline void Image::registerModule(void) { revc_image_register_module(); }
 
 
 }
+
+// ---------------------------------------------------------------- Raster and the wgpu driver's rasters (rwraster.rs)
+namespace rw {
+
+
+struct RasterGlobals
+{
+	int32 sp;
+	Raster *stack[32];
+};
+
+
+// revc (docs/RENDERER_PORT.md, stage 2 step 5c): rasters are made and kept in Rust
+// (rust/revc/src/rwraster.rs), with the wgpu driver's raster code; checked against
+// tests/golden/rwraster.txt. The driver dispatch is inline here; the module is Rust too (step 7d2). The pixel converters, the 4-bit
+// palette packers and convertTexToCurrentPlatform had no callers left and are gone.
+extern "C" {
+Raster *revc_raster_create(int32 w, int32 h, int32 depth, int32 format, int32 platform);
+void revc_raster_destroy(Raster *r);
+void revc_raster_sub(Raster *r, Raster *parent, const Rect *rect);
+Raster *revc_raster_push_context(RasterGlobals *g, Raster *r);
+Raster *revc_raster_pop_context(RasterGlobals *g);
+Raster *revc_raster_current_context(const RasterGlobals *g);
+int32 revc_raster_calculate_num_levels(int32 w, int32 h);
+int32 revc_raster_format_has_alpha(int32 format);
+RasterGlobals *revc_raster_globals(void);
+void revc_raster_register_module(void);
+}
+static_assert(sizeof(Raster) == 96 && sizeof(RasterGlobals) == 264, "raster layouts (rwraster.rs)");
+
+inline void Raster::registerModule(void) { revc_raster_register_module(); }
+
+inline Raster*
+Raster::create(int32 width, int32 height, int32 depth, int32 format, int32 platform)
+{
+	Raster *raster = revc_raster_create(width, height, depth, format, platform ? platform : rw::platform);
+	return engine->driver[raster->platform]->rasterCreate(raster);
+}
+
+inline void
+Raster::subRaster(Raster *parent, Rect *r)
+{
+	revc_raster_sub(this, parent, r);
+}
+
+inline void
+Raster::destroy(void)
+{
+	revc_raster_destroy(this);
+}
+
+inline uint8*
+Raster::lock(int32 level, int32 lockMode)
+{
+	return engine->driver[this->platform]->rasterLock(this, level, lockMode);
+}
+
+inline void
+Raster::unlock(int32 level)
+{
+	engine->driver[this->platform]->rasterUnlock(this, level);
+}
+
+inline uint8*
+Raster::lockPalette(int32 lockMode)
+{
+	return engine->driver[this->platform]->rasterLockPalette(this, lockMode);
+}
+
+inline void
+Raster::unlockPalette(void)
+{
+	engine->driver[this->platform]->rasterUnlockPalette(this);
+}
+
+inline int32
+Raster::getNumLevels(void)
+{
+	return engine->driver[this->platform]->rasterNumLevels(this);
+}
+
+inline int32
+Raster::calculateNumLevels(int32 width, int32 height)
+{
+	return revc_raster_calculate_num_levels(width, height);
+}
+
+inline bool
+Raster::formatHasAlpha(int32 format)
+{
+	return revc_raster_format_has_alpha(format);
+}
+
+inline bool32
+Raster::imageFindRasterFormat(Image *image, int32 type,
+	int32 *pWidth, int32 *pHeight, int32 *pDepth, int32 *pFormat,
+	int32 platform)
+{
+	return engine->driver[platform ? platform : rw::platform]->imageFindRasterFormat(
+		image, type, pWidth, pHeight, pDepth, pFormat);
+}
+
+inline Raster*
+Raster::setFromImage(Image *image, int32 platform)
+{
+	if(engine->driver[platform ? platform : rw::platform]->rasterFromImage(this, image))
+		return this;
+	return nil;
+}
+
+inline Raster*
+Raster::createFromImage(Image *image, int32 platform)
+{
+	Raster *raster;
+	int32 width, height, depth, format;
+	if(!imageFindRasterFormat(image, TEXTURE, &width, &height, &depth, &format, platform))
+		return nil;
+	raster = Raster::create(width, height, depth, format, platform);
+	if(raster == nil)
+		return nil;
+	return raster->setFromImage(image, platform);
+}
+
+inline Image*
+Raster::toImage(void)
+{
+	return engine->driver[this->platform]->rasterToImage(this);
+}
+
+inline void
+Raster::show(uint32 flags)
+{
+	engine->device.showRaster(this, flags);
+}
+
+inline Raster*
+Raster::pushContext(Raster *raster)
+{
+	return revc_raster_push_context(revc_raster_globals(), raster);
+}
+
+inline Raster*
+Raster::popContext(void)
+{
+	return revc_raster_pop_context(revc_raster_globals());
+}
+
+inline Raster*
+Raster::getCurrentContext(void)
+{
+	return revc_raster_current_context(revc_raster_globals());
+}
+
+inline bool32
+Raster::renderFast(int32 x, int32 y)
+{
+	return engine->device.rasterRenderFast(this,x, y);
+}
+
+
+}
+// WGPU platform rasters: RGBA8 in memory for every mip level (see rwwgpu.h).
+
+
+
+
+// revc (docs/RENDERER_PORT.md, stage 2 step 5c): the raster code is in Rust
+// (rust/revc/src/rwraster.rs), checked against tests/golden/rwraster.txt.
+namespace rw { namespace wgpu { struct WgpuRaster; } }
+extern "C" {
+void revc_wgpu_register_native_raster(void);
+rw::Raster *revc_wgpu_raster_create(rw::Raster *r);
+uint8_t *revc_wgpu_raster_lock(rw::Raster *r, int32_t level, int32_t mode);
+void revc_wgpu_raster_unlock(rw::Raster *r);
+int32_t revc_wgpu_raster_from_image(rw::Raster *r, rw::Image *img);
+rw::Image *revc_wgpu_raster_to_image(rw::Raster *r);
+void revc_wgpu_allocate_dxt(rw::Raster *r, int32_t dxt, int32_t n, int32_t hasAlpha);
+uint32_t revc_wgpu_upload_raster(rw::Raster *r);
+void revc_wgpu_native_clear(rw::Raster *r);
+void revc_wgpu_native_destroy(rw::Raster *r);
+int32_t revc_wgpu_dxt_level_size(int32_t dxt, int32_t w, int32_t h);
+int32_t revc_wgpu_image_find_raster_format(rw::Image *img, int32_t type, int32_t *w, int32_t *h, int32_t *depth, int32_t *format);
+}
+
+namespace rw {
+namespace wgpu {
+
+
+static_assert(sizeof(WgpuRaster) == 184, "WgpuRaster layout (rwraster.rs)");
+
+inline Raster*
+rasterCreate(Raster *raster)
+{
+	Raster *r = revc_wgpu_raster_create(raster);
+	if(r == nil)
+		RWERROR_HDR((ERR_INVRASTER));
+	return r;
+}
+
+inline uint8*
+rasterLock(Raster *raster, int32 level, int32 lockMode)
+{
+	return revc_wgpu_raster_lock(raster, level, lockMode);
+}
+
+inline void
+rasterUnlock(Raster *raster, int32)
+{
+	revc_wgpu_raster_unlock(raster);
+}
+
+inline int32
+rasterNumLevels(Raster *raster)
+{
+	return GETWGPURASTEREXT(raster)->numLevels;
+}
+
+inline bool32
+imageFindRasterFormat(Image *img, int32 type, int32 *pWidth, int32 *pHeight, int32 *pDepth, int32 *pFormat)
+{
+	return revc_wgpu_image_find_raster_format(img, type, pWidth, pHeight, pDepth, pFormat);
+}
+
+// Image (any depth) into the raster's current level as RGBA8.
+inline bool32
+rasterFromImage(Raster *raster, Image *image)
+{
+	int32 r = revc_wgpu_raster_from_image(raster, image);
+	if(r < 0)
+		RWERROR_HDR((ERR_INVRASTER));
+	return r > 0;
+}
+
+inline Image*
+rasterToImage(Raster *raster)
+{
+	return revc_wgpu_raster_to_image(raster);
+}
+
+inline int32
+dxtLevelSize(int32 dxt, int32 width, int32 height)
+{
+	return revc_wgpu_dxt_level_size(dxt, width, height);
+}
+
+inline void
+allocateDXT(Raster *raster, int32 dxt, int32 numLevels, bool32 hasAlpha)
+{
+	revc_wgpu_allocate_dxt(raster, dxt, numLevels, hasAlpha);
+}
+
+inline uint32
+uploadRaster(Raster *raster)
+{
+	return revc_wgpu_upload_raster(raster);
+}
+
+inline void registerNativeRaster(void) { revc_wgpu_register_native_raster(); }
+
+}
+}

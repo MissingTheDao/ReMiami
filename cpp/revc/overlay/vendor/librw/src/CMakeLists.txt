@@ -7,7 +7,6 @@ add_library(librw
     engine.cpp
     hanim.cpp
     matfx.cpp
-    raster.cpp
     rwanim.h
     rwengine.h
     rwerror.h
@@ -24,7 +23,6 @@ add_library(librw
     wgpu/rwwgpu.h
     wgpu/wgpudevice.cpp
     wgpu/wgpupipe.cpp
-    wgpu/wgpuraster.cpp
 
 
 )

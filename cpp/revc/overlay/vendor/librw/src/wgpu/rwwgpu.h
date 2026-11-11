@@ -250,7 +250,12 @@ void initMatFX(void);
 void initSkin(void);
 void *destroyNativeData(void *object, int32, int32);
 
-extern int32 nativeRasterOffset;
+}
+}
+extern "C" rw::int32 revc_native_raster_offset;
+namespace rw {
+namespace wgpu {
+inline int32 &nativeRasterOffset = revc_native_raster_offset;
 #define GETWGPURASTEREXT(raster) PLUGINOFFSET(rw::wgpu::WgpuRaster, raster, rw::wgpu::nativeRasterOffset)
 
 }
