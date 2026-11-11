@@ -5,8 +5,6 @@ add_library(librw
     base.cpp
     charset.cpp
     engine.cpp
-    geometry.cpp
-    geoplg.cpp
     hanim.cpp
     image.cpp
     matfx.cpp

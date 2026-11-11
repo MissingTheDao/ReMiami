@@ -883,3 +883,266 @@ AnimInterpolator::addTime(float32 t)
 }
 
 }
+
+// ---------------------------------------------------------------- Geometry, Material, meshes (rwgeomobj.rs)
+namespace rw {
+
+
+
+// revc (docs/RENDERER_PORT.md, stage 2 step 6a): geometries, mesh headers, material lists and
+// materials are made and kept in Rust (rust/revc/src/rwgeomobj.rs), checked against
+// tests/golden/rwgeomobj.txt; librw's allocator and the plugin lists through Rust's default hooks.
+extern "C" {
+Geometry *revc_geo_create(int32 nv, int32 nt, uint32 flags);
+void revc_geo_destroy(Geometry *g);
+void revc_geo_lock(Geometry *g, int32 flags);
+void revc_geo_unlock(Geometry *g);
+void revc_geo_add_morph_targets(Geometry *g, int32 n);
+void revc_geo_calculate_bounding_sphere(Geometry *g);
+int32 revc_geo_has_colored_material(const Geometry *g);
+void revc_geo_allocate_data(Geometry *g);
+void revc_geo_build_meshes_obj(Geometry *g);
+void revc_geo_build_tristrips(Geometry *g);
+void revc_matlist_init(MaterialList *ml);
+void revc_matlist_deinit(MaterialList *ml);
+int32 revc_matlist_append(MaterialList *ml, Material *m);
+int32 revc_matlist_find(const MaterialList *ml, Material *m);
+Material *revc_mat_create(void);
+Material *revc_mat_clone(Material *m);
+void revc_mat_destroy(Material *m);
+void revc_mat_set_texture(Material *m, Texture *t);
+void revc_geo_bounding_sphere(const V3d *verts, int32 n, Sphere *out);
+}
+static_assert(sizeof(Geometry) == 168 && sizeof(Material) == 40 && sizeof(MorphTarget) == 40 &&
+              sizeof(MeshHeader) == 16 && sizeof(Mesh) == 24 && sizeof(Triangle) == 8, "geometry layouts (rwgeomobj.rs)");
+
+// the hooks are Rust defaults (rwgeomobj.rs, stage 2 step 7d2)
+
+// We allocate twice because we have to allocate the data separately for uninstancing
+inline Geometry*
+Geometry::create(int32 numVerts, int32 numTris, uint32 flags)
+{
+	Geometry *geo = revc_geo_create(numVerts, numTris, flags);
+	if(geo == nil)
+		RWERROR_HDR((ERR_ALLOC, s_plglist.size));
+	return geo;
+}
+
+inline void
+Geometry::destroy(void)
+{
+	revc_geo_destroy(this);
+}
+
+
+inline void
+Geometry::lock(int32 lockFlags)
+{
+	revc_geo_lock(this, lockFlags);
+}
+
+inline void
+Geometry::unlock(void)
+{
+	revc_geo_unlock(this);
+}
+
+
+inline void
+Geometry::addMorphTargets(int32 n)
+{
+	revc_geo_add_morph_targets(this, n);
+}
+
+inline void
+Geometry::calculateBoundingSphere(void)
+{
+	revc_geo_calculate_bounding_sphere(this);
+}
+
+inline bool32
+Geometry::hasColoredMaterial(void)
+{
+	return revc_geo_has_colored_material(this);
+}
+
+// Force allocate data, even when native flag is set
+inline void
+Geometry::allocateData(void)
+{
+	revc_geo_allocate_data(this);
+}
+
+// This functions assumes there is enough space allocated
+// for triangles. Use MeshHeader::guessNumTriangles() and
+// Geometry::allocateData()
+inline void
+Geometry::buildMeshes(void)
+{
+	revc_geo_build_meshes_obj(this);
+}
+
+inline void
+Geometry::buildTristrips(void)
+{
+	revc_geo_build_tristrips(this);
+}
+
+/* The idea is that even in meshes where winding is not preserved
+ * every tristrip starts at an even vertex. So find the start of
+ * strips and insert duplicate vertices if necessary. */
+inline Sphere
+MorphTarget::calculateBoundingSphere(void) const
+{
+	Sphere sphere;
+	revc_geo_bounding_sphere(this->vertices, this->parent->numVertices, &sphere);
+	return sphere;
+}
+
+
+//
+// MaterialList
+//
+#undef PLUGIN_ID
+
+inline void
+MaterialList::init(void)
+{
+	revc_matlist_init(this);
+}
+
+inline void
+MaterialList::deinit(void)
+{
+	revc_matlist_deinit(this);
+}
+
+inline int32
+MaterialList::appendMaterial(Material *mat)
+{
+	return revc_matlist_append(this, mat);
+}
+
+inline int32
+MaterialList::findIndex(Material *mat)
+{
+	return revc_matlist_find(this, mat);
+}
+
+//
+// Material
+//
+
+inline Material*
+Material::create(void)
+{
+	Material *mat = revc_mat_create();
+	if(mat == nil)
+		RWERROR_HDR((ERR_ALLOC, s_plglist.size));
+	return mat;
+}
+
+inline Material*
+Material::clone(void)
+{
+	Material *mat = revc_mat_clone(this);
+	if(mat == nil)
+		RWERROR_HDR((ERR_ALLOC, s_plglist.size));
+	return mat;
+}
+
+inline void
+Material::destroy(void)
+{
+	revc_mat_destroy(this);
+}
+
+inline void
+Material::setTexture(Texture *tex)
+{
+	revc_mat_set_texture(this, tex);
+}
+
+
+inline uint32 materialRights[2];	// revc: also set by rw/DffRead.cpp (not static)
+
+// Material Rights plugin
+
+
+inline void
+registerMaterialRightsPlugin(void)
+{
+	Material::registerPlugin(0, ID_RIGHTTORENDER, nil, nil, nil);
+	// revc: read in Rust (rw/DffRead.cpp); models aren't written
+}
+
+
+}
+namespace rw {
+
+// revc (stage 2 step 6a): the mesh header functions are in Rust (rust/revc/src/rwgeomobj.rs)
+extern "C" {
+MeshHeader *revc_geo_allocate_meshes(Geometry *g, int32 n, uint32 numIndices, int32 noIndices);
+void revc_mesh_setup_indices(MeshHeader *mh);
+uint32 revc_mesh_guess_num_triangles(const MeshHeader *mh);
+}
+
+// Mesh
+
+// Allocate a mesh header, meshes and optionally indices.
+// If existing meshes already exist, retain their information.
+inline MeshHeader*
+Geometry::allocateMeshes(int32 numMeshes, uint32 numIndices, bool32 noIndices)
+{
+	return revc_geo_allocate_meshes(this, numMeshes, numIndices, noIndices);
+}
+
+inline void
+MeshHeader::setupIndices(void)
+{
+	revc_mesh_setup_indices(this);
+}
+
+
+inline void
+registerMeshPlugin(void)
+{
+	Geometry::registerPlugin(0, ID_MESH, nil, nil, nil);
+	// revc: read in Rust (rw/DffRead.cpp); models aren't written
+}
+
+// Returns the maximum number of triangles. Just so
+// we can allocate enough before instancing. This does not
+// take into account degerate triangles or ADC bits as
+// we don't look at the data.
+inline uint32
+MeshHeader::guessNumTriangles(void)
+{
+	return revc_mesh_guess_num_triangles(this);
+}
+
+// Native Data
+
+// revc: only WGPU instance data exists at run time. Native geometry of other platforms (the
+// console releases' DFFs) isn't read here: PC DFFs have none, and the console data is to be
+// converted by revc's importer (Rust), not loaded through librw.
+inline void*
+revcDestroyNativeData(void *object, int32 offset, int32 size)
+{
+	Geometry *geometry = (Geometry*)object;
+	if(geometry->instData == nil)
+		return object;
+	if(geometry->instData->platform == PLATFORM_WGPU)
+		return wgpu::destroyNativeData(object, offset, size);
+	return object;
+}
+
+
+inline void
+registerNativeDataPlugin(void)
+{
+	Geometry::registerPlugin(0, ID_NATIVEDATA,
+	                         nil, revcDestroyNativeData, nil);
+}
+
+}

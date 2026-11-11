@@ -225,6 +225,13 @@ pub static mut revc_debug_file: *mut c_char = null_mut();
 pub(crate) unsafe fn rw_malloc(sz: usize, hint: u32) -> *mut c_void {
     unsafe { (memfuncs().rwmalloc)(sz, hint) }
 }
+/// rwRealloc
+///
+/// # Safety
+/// A pointer from rw_malloc, or null.
+pub(crate) unsafe fn rw_realloc(p: *mut c_void, sz: usize, hint: u32) -> *mut c_void {
+    unsafe { (memfuncs().rwrealloc)(p, sz, hint) }
+}
 /// rwFree
 ///
 /// # Safety

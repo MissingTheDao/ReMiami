@@ -138,9 +138,72 @@ pub struct Hooks {
 static mut HOOKS: Option<Hooks> = None;
 
 fn hooks() -> &'static Hooks {
-    // SAFETY: set once at startup (before any geometry exists), read-only afterwards.
-    unsafe { (*std::ptr::addr_of!(HOOKS)).as_ref().expect("revc_geometry_set_hooks not called") }
+    // SAFETY: set before use (tests), read-only afterwards; the game uses the defaults.
+    unsafe { (*std::ptr::addr_of!(HOOKS)).as_ref().unwrap_or(&DEFAULT_HOOKS) }
 }
+
+// The game's hooks (stage 2 step 7d2, from geometry.cpp): librw's allocator and Geometry's and
+// Material's plugin lists and counters (rwplugin.rs).
+mod defaults {
+    use super::*;
+    use crate::rwplugin::{self as pl, CLASS_GEOMETRY, CLASS_MATERIAL, class_list};
+    const HINT: u32 = 0x30000 | 0x08; // MEMDUR_EVENT | ID_GEOMETRY
+    pub(super) unsafe extern "C" fn alloc(size: usize) -> *mut u8 {
+        unsafe { crate::rwengine::rw_malloc(size, HINT) as *mut u8 }
+    }
+    pub(super) unsafe extern "C" fn realloc(p: *mut u8, size: usize) -> *mut u8 {
+        unsafe { crate::rwengine::rw_realloc(p as *mut c_void, size, HINT) as *mut u8 }
+    }
+    pub(super) unsafe extern "C" fn free(p: *mut u8) {
+        unsafe { crate::rwengine::rw_free(p as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn geo_size() -> usize {
+        unsafe { (*class_list(CLASS_GEOMETRY)).size as usize }
+    }
+    pub(super) unsafe extern "C" fn geo_construct(g: *mut Geometry) {
+        unsafe { pl::pl_construct(class_list(CLASS_GEOMETRY), g as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn geo_destruct(g: *mut Geometry) {
+        unsafe { pl::pl_destruct(class_list(CLASS_GEOMETRY), g as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn mat_size() -> usize {
+        unsafe { (*class_list(CLASS_MATERIAL)).size as usize }
+    }
+    pub(super) unsafe extern "C" fn mat_construct(m: *mut Material) {
+        unsafe { pl::pl_construct(class_list(CLASS_MATERIAL), m as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn mat_destruct(m: *mut Material) {
+        unsafe { pl::pl_destruct(class_list(CLASS_MATERIAL), m as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn mat_copy(d: *mut Material, s: *mut Material) {
+        unsafe { pl::pl_copy(class_list(CLASS_MATERIAL), d as *mut c_void, s as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn allocated(kind: i32, delta: i32) {
+        unsafe { *pl::alloc_count(if kind == 0 { CLASS_GEOMETRY } else { CLASS_MATERIAL }) += delta }
+    }
+    pub(super) unsafe extern "C" fn native_warning() {
+        eprintln!("WARNING: trying Geometry::buildMeshes() on pre-instanced geometry");
+    }
+    pub(super) unsafe extern "C" fn verify_failed() {
+        eprintln!("TRISTRIP verify failed");
+        std::process::exit(1);
+    }
+}
+static DEFAULT_HOOKS: Hooks = Hooks {
+    alloc: defaults::alloc,
+    realloc: defaults::realloc,
+    free: defaults::free,
+    geo_size: defaults::geo_size,
+    geo_construct: defaults::geo_construct,
+    geo_destruct: defaults::geo_destruct,
+    mat_size: defaults::mat_size,
+    mat_construct: defaults::mat_construct,
+    mat_destruct: defaults::mat_destruct,
+    mat_copy: defaults::mat_copy,
+    allocated: defaults::allocated,
+    native_warning: defaults::native_warning,
+    verify_failed: defaults::verify_failed,
+};
 
 /// geoplg.cpp's nextSerialNum
 static mut NEXT_SERIAL: u16 = 1;
