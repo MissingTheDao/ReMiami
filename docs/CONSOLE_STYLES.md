@@ -74,9 +74,10 @@ Measured on the console stills (research notes, `CONSOLE_LOOK_SPEC.md` 4b, local
 | Vertical layout | the user's ProperScaling | PC constants in 448 lines (`CDraw::ScaleY`) | the same pixel constants in 480 lines |
 | Money, weapon, health, armour, wanted, clock | PC positions | PC positions | moved 22 px left and 22 px down (`HUD_FROM_RIGHT`/`HUD_Y` in Hud.cpp) |
 | Radar | 82x82 (FixRadar) or 94x76 | 94x76 at left 40, bottom 40 | 102x94 at left 55, bottom 42 |
-| Wide screens | stretched to the edges | 4:3 area scaled by the screen height, centred (pillarboxed) | same |
+| Wide screens | stretched to the edges | Graphics menu HUD AREA: CORNERS (default: the console layout anchored to the screen's edges) or 4:3 (the console's 4:3 area scaled by the screen height, centred) | same |
 
-The 4:3 area: `ConsoleHudBegin`/`ConsoleHudEnd` in `core/main.cpp` give the HUD code a 4:3 screen
+The user (2026-11-11): the HUD doesn't need the 4:3 area in this port; corners by default, 4:3 kept
+as an option. The 4:3 area: `ConsoleHudBegin`/`ConsoleHudEnd` in `core/main.cpp` give the HUD code a 4:3 screen
 (width = height x 4/3, aspect 4:3) and the device moves every 2D draw to the centre
 (`revc_device_set_im2d_offset`). Text queued before (pickup texts placed in the 3D view) is drawn
 first. Not measured yet, so left at the PC positions: zone and vehicle names, subtitles, help and
@@ -230,6 +231,9 @@ native 640x480 xemu captures:
   blue dialog (steel-blue layer, dark edge, light-blue panel as measured), the question centred
   in pink capitals, the two choices side by side with the mint box; the Load page's title stays.
   The PC menu's own choice texts (NO/YES) are kept.
+
+- Load list: the slot rows keep the PC layout; the selected slot gets the mint bar across the list.
+  (The Xbox's list box is a lighter, tilted blue with black text: not done.)
 
 Still to do: the Xbox per-page panel shapes,
 the Xbox fonts (RWFont/RWSFArborcrestHeavy), dialogs (blue layered panels), the controls page's
