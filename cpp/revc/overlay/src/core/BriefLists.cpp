@@ -112,10 +112,17 @@ BriefListsOffer(const char *label)
 			if (!have && l.num < MAX_ENTRIES) {
 				strcpy(l.key[l.num], k);
 				strcpy(l.shown[l.num], l.defShown[d]);
+				// the text as printed, without its colour tokens (~h~ etc.): the Xbox draws the
+				// lists in one dark colour
 				wchar *t = TheText.Get(l.defShown[d]);
 				int n = 0;
-				for (; t[n] && n < TEXT_LEN - 1; n++)
-					l.text[l.num][n] = t[n];
+				for (int i = 0; t[i] && n < TEXT_LEN - 1; i++) {
+					if (t[i] == '~' && t[i + 1] && t[i + 2] == '~' && strchr("hwrgbyplosqx", (char)t[i + 1])) {
+						i += 2;
+						continue;
+					}
+					l.text[l.num][n++] = t[i];
+				}
 				l.text[l.num][n] = 0;
 				l.seen[l.num] = false;
 				l.drawn[l.num] = false;
@@ -222,7 +229,7 @@ BriefListsDraw(int which, float x0, float x1, float cy, uint8 alpha)
 	// 17 px apart, the font's own line spacing for wrapped lines (measured in the shots)
 	const float pitch = 17.0f, window = 156.0f;
 	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
-	CFont::SetScale(MENU_X(MEDIUMTEXT_X_SCALE), MENU_Y(MEDIUMTEXT_Y_SCALE));
+	CFont::SetScale(MENU_X(MEDIUMTEXT_X_SCALE * 0.89f), MENU_Y(MEDIUMTEXT_Y_SCALE * 0.9f));	// 10 % smaller than the menu's lists
 	CFont::SetPropOn();
 	CFont::SetDropShadowPosition(0);
 	CFont::SetRightJustifyOff();
@@ -248,7 +255,7 @@ BriefListsDraw(int which, float x0, float x1, float cy, uint8 alpha)
 		start = cy - height / 2.0f;	// fits: centred
 	else {
 		loop = height + 7.0f * pitch;	// scrolls in a loop, a 7-line gap before it repeats
-		start = top + window - fmodf(CTimer::GetTimeInMillisecondsPauseMode() * 0.02f, loop);
+		start = top + window - fmodf(CTimer::GetTimeInMillisecondsPauseMode() * 0.024f, loop);	// 24 px/s (measured)
 	}
 	for (int pass = 0; pass < (loop > 0.0f ? 2 : 1); pass++) {
 		float y = start + pass * loop;
@@ -272,7 +279,7 @@ BriefListsDraw(int which, float x0, float x1, float cy, uint8 alpha)
 				CFont::SetColor(CRGBA(255, 150, 225, alpha * a));
 				CFont::PrintString(MENU_X_LEFT_ALIGNED(x0 - 45.0f), MENU_Y(y - 5.0f), TheText.Get("RVC_NEW"));
 				CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
-				CFont::SetScale(MENU_X(MEDIUMTEXT_X_SCALE), MENU_Y(MEDIUMTEXT_Y_SCALE));
+				CFont::SetScale(MENU_X(MEDIUMTEXT_X_SCALE * 0.89f), MENU_Y(MEDIUMTEXT_Y_SCALE * 0.9f));
 			}
 		}
 	}

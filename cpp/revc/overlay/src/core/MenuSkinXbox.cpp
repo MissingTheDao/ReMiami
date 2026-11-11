@@ -440,7 +440,7 @@ MenuSkinXboxWedge(float y, float progress, uint8 alpha)
 
 // Sub-tabs on the Stats ("stats | unlocked items") and Brief ("briefs | tutorial briefings")
 // pages, at the bottom left: the active one on a mint bar with a dark block at its outer end
-// (measured at 640x480: labels at x 68 and 248 / 308, y 330; bars 60-240 with the block at
+// (measured at 640x480: labels at x 68 and 248 / 308, y 350; bars 60-240 with the block at
 // 45-60, and 300-590 with the block at 590-605). <-/-> switches.
 static int subTab = 0, subTabPage = -1;
 
@@ -469,7 +469,7 @@ DrawSubTabs(int page, uint8 alpha)
 	const bool stats = page == MENUPAGE_STATS;
 	const char *names[2] = { stats ? "RVC_XS1" : "RVC_XB1", stats ? "RVC_XS2" : "RVC_XB2" };
 	const float lx[2] = { 68.0f, stats ? 248.0f : 308.0f };
-	const float ty = 330.0f * 448.0f / 480.0f, y0 = Y(320.0f * 448.0f / 480.0f), y1 = Y(355.0f * 448.0f / 480.0f);
+	const float ty = 350.0f * 448.0f / 480.0f, y0 = Y(340.0f * 448.0f / 480.0f), y1 = Y(375.0f * 448.0f / 480.0f);
 	int cur = MenuSkinXboxSubTab(page);
 	CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
 	CFont::SetScale(W(BIGTEXT_X_SCALE * 1.2f), H(BIGTEXT_Y_SCALE * 1.2f));
