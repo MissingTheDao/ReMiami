@@ -2032,7 +2032,7 @@
 +	if (elapsed > (ps2Scroll || xboxScroll ? 32u : 40u)) {
  
  		if (m_StatsScrollSpeed > 0.f) {
-+			float rate = ps2Scroll ? 18.5f : 11.5f;	// (calibrated against the motion tests)
++			float rate = ps2Scroll ? 18.5f : 7.5f;	// (calibrated against the motion tests)
 +			float step = ps2Scroll || xboxScroll ? MENU_Y(rate * Min(elapsed, 100u) / 1000.0f) * 150.0f / m_StatsScrollSpeed : MENU_Y(100.f) / m_StatsScrollSpeed;
  			if (m_StatsScrollDirection == 0)
 -				scrollY -= MENU_Y(100.f) / m_StatsScrollSpeed;
