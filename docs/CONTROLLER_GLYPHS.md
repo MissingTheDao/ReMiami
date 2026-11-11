@@ -18,6 +18,8 @@ checksum and which sets are included).
   follows the pad; XBOX, PLAYSTATION, NINTENDO, STEAM DECK or STEAM CONTROLLER force a style, also
   with no pad connected. The menu texts for revc's own entries are built in (`CText::GetRevcText`,
   English); the game's GXT files are not modified.
+- Graphics menu **UI STYLE** picks the set's variant: coloured buttons and round D-pad for Xbox,
+  outlines for PS2, plain for PC (docs/CONSOLE_STYLES.md, 13f).
 - Without the assets folder (`REVC_ASSETS_DIR`, next to the executable, or the repository
   checkout) the game's own `x360btns` / `ps3btns` / `nswbtns` TXDs are used per pad family.
 - Tested by `scripts/test.sh gamepad` (virtual DualSense and Steam Deck, the override, screenshots

@@ -807,6 +807,18 @@ pub extern "C" fn revc_glyph_set_override(style: c_int) {
     GLYPH_OVERRIDE.store(style, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// UI style (0 PC, 1 PS2, 2 Xbox; Graphics menu UI STYLE): picks the glyph variant.
+static UI_STYLE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_ui_style_set(style: c_int) {
+    UI_STYLE.store(style, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn ui_style() -> glyphs::UiStyle {
+    glyphs::UiStyle::from_index(UI_STYLE.load(std::sync::atomic::Ordering::Relaxed))
+}
+
 /// The glyph set prompts should show: the menu override if set, else the pad used last, or
 /// failing that the first connected pad. (kind, face labels); None without pads and override.
 fn glyph_pad() -> Option<(PadKind, glyphs::FaceLabels)> {
@@ -820,15 +832,16 @@ fn glyph_pad() -> Option<(PadKind, glyphs::FaceLabels)> {
     })
 }
 
-/// Identifies the glyph set prompts need now (pad kind and face-button layout); 0 without pads.
-/// The font code reloads its button sprites when this changes.
+/// Identifies the glyph set prompts need now (pad kind, face-button layout and UI style); 0
+/// without pads. The font code reloads its button sprites when this changes; it takes the pad
+/// kind from bits 16-23.
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_glyph_set_id() -> c_int {
     match glyph_pad() {
         None => 0,
         Some((kind, labels)) => {
             let layout = labels.iter().fold(0, |acc, l| acc * 16 + (l.0 as c_int & 15));
-            1 + kind as c_int * 65536 + layout
+            1 + (ui_style() as c_int) * (1 << 24) + kind as c_int * 65536 + layout
         }
     }
 }
@@ -846,7 +859,7 @@ pub fn glyph_set_name() -> String {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn revc_glyph_rgba(index: c_int, width: *mut c_int, height: *mut c_int, rgba: *mut *mut u8) -> c_int {
     let Some((kind, labels)) = glyph_pad() else { return 0 };
-    let Some(path) = glyphs::button(index as usize).and_then(|b| glyphs::glyph_path(kind, labels, b)) else { return 0 };
+    let Some(path) = glyphs::button(index as usize).and_then(|b| glyphs::glyph_path(kind, labels, b, ui_style())) else { return 0 };
     match crate::texmods::decode(&path) {
         Ok((w, h, px)) => {
             unsafe {

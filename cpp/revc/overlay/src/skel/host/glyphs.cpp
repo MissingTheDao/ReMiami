@@ -14,6 +14,7 @@
 
 extern "C" {
 void revc_glyph_set_override(int style);
+void revc_ui_style_set(int style);
 int revc_glyph_set_id(void);
 int revc_glyph_rgba(int index, int *width, int *height, unsigned char **rgba);
 void revc_texmod_free(unsigned char *rgba, int width, int height);
@@ -108,6 +109,8 @@ FallbackTxd(int kind)
 // Controls menu "BUTTON PROMPTS" ([Controller] ButtonPrompts in reVC.ini): 0 auto, 1 Xbox,
 // 2 PlayStation, 3 Nintendo, 4 Steam Deck, 5 Steam Controller.
 int8 gButtonPromptsOverride = 0;
+// Graphics menu "UI STYLE" ([Graphics] UiStyle): 0 PC, 1 PS2, 2 Xbox (plan task 13).
+int8 gUiStyle = 0;
 
 static int LoadedGlyphSet = 0;
 static int GlyphSetsLoaded = 0;
@@ -118,13 +121,14 @@ void
 HostUpdateButtonGlyphs(void)
 {
 	revc_glyph_set_override(gButtonPromptsOverride);
+	revc_ui_style_set(gUiStyle);
 	int set = revc_glyph_set_id();
 	if (set == 0 || set == LoadedGlyphSet)
 		return;	// no pad, or already loaded (keyboard use keeps the last pad's set)
 	LoadedGlyphSet = set;
 	GlyphSetsLoaded++;
 	if (!LoadGlyphSet())
-		CFont::LoadButtons(FallbackTxd((set - 1) / 65536));
+		CFont::LoadButtons(FallbackTxd(((set - 1) >> 16) & 0xFF));
 }
 
 extern "C" int
@@ -134,6 +138,7 @@ revc_test_glyph_sets_loaded(void)
 }
 #else
 int8 gButtonPromptsOverride = 0;
+int8 gUiStyle = 0;
 void HostUpdateButtonGlyphs(void) {}
 extern "C" int revc_test_glyph_sets_loaded(void) { return 0; }
 #endif // BUTTON_ICONS

@@ -100,6 +100,42 @@ pub fn override_style(style: i32) -> Option<(PadKind, FaceLabels)> {
     })
 }
 
+/// UI style (Graphics menu UI STYLE, plan task 13): PC keeps the plain glyphs; the console styles
+/// pick the variant of the pad's set that fits that console's menus: filled coloured face buttons
+/// and the round D-pad for Xbox, white outlines for PS2 (whose font prints button symbols as
+/// glyphs). The pad in use still decides the family.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UiStyle {
+    Pc,
+    Ps2,
+    Xbox,
+}
+
+impl UiStyle {
+    pub fn from_index(i: i32) -> Self {
+        match i {
+            1 => UiStyle::Ps2,
+            2 => UiStyle::Xbox,
+            _ => UiStyle::Pc,
+        }
+    }
+}
+
+/// The UI style's variant of a plain glyph file name (`xbox_button_a.png`), if it has one.
+pub fn styled_file(file: &str, b: Button, ui: UiStyle) -> Option<String> {
+    use Button::*;
+    let stem = file.strip_suffix(".png")?;
+    let face = matches!(b, South | East | West | North);
+    let dpad = matches!(b, DpadUp | DpadRight | DpadDown | DpadLeft);
+    match ui {
+        UiStyle::Pc => None,
+        UiStyle::Xbox if face => Some(format!("{}.png", stem.replacen("_button_", "_button_color_", 1))),
+        UiStyle::Xbox if dpad => Some(format!("{}.png", stem.replacen("_dpad_", "_dpad_round_", 1))),
+        UiStyle::Ps2 if face || dpad => Some(format!("{stem}_outline.png")),
+        _ => None,
+    }
+}
+
 /// Glyph file (folder inside the pack, file name in its Double/ folder) for one button.
 pub fn glyph_file(kind: PadKind, labels: FaceLabels, b: Button) -> Option<(&'static str, String)> {
     use Button::*;
@@ -226,11 +262,13 @@ pub fn assets_dir() -> Option<&'static Path> {
     .as_deref()
 }
 
-/// Path of the glyph for `b` on a pad of this kind and layout, if the pack has it.
-pub fn glyph_path(kind: PadKind, labels: FaceLabels, b: Button) -> Option<PathBuf> {
+/// Path of the glyph for `b` on a pad of this kind and layout, if the pack has it: the UI style's
+/// variant where the set has one, else the plain glyph.
+pub fn glyph_path(kind: PadKind, labels: FaceLabels, b: Button, ui: UiStyle) -> Option<PathBuf> {
     let (folder, file) = glyph_file(kind, labels, b)?;
-    let p = assets_dir()?.join("glyphs/kenney-input-prompts").join(folder).join("Double").join(file);
-    p.is_file().then_some(p)
+    let dir = assets_dir()?.join("glyphs/kenney-input-prompts").join(folder).join("Double");
+    let styled = styled_file(&file, b, ui).map(|f| dir.join(f)).filter(|p| p.is_file());
+    styled.or_else(|| Some(dir.join(file)).filter(|p| p.is_file()))
 }
 
 pub fn button(index: usize) -> Option<Button> {
@@ -253,6 +291,17 @@ mod tests {
         assert_eq!(override_style(2).unwrap().0, PadKind::PlayStation5);
         assert_eq!(file(PadKind::Switch, override_style(3).unwrap().1, Button::East), "switch_button_a.png");
         assert!(override_style(9).is_none());
+    }
+
+    #[test]
+    fn ui_style_variants() {
+        use super::UiStyle::*;
+        assert_eq!(styled_file("xbox_button_a.png", Button::South, Xbox).as_deref(), Some("xbox_button_color_a.png"));
+        assert_eq!(styled_file("xbox_dpad_up.png", Button::DpadUp, Xbox).as_deref(), Some("xbox_dpad_round_up.png"));
+        assert_eq!(styled_file("playstation_button_cross.png", Button::South, Ps2).as_deref(), Some("playstation_button_cross_outline.png"));
+        assert_eq!(styled_file("playstation_dpad_left.png", Button::DpadLeft, Ps2).as_deref(), Some("playstation_dpad_left_outline.png"));
+        assert_eq!(styled_file("xbox_lt.png", Button::L2, Xbox), None);
+        assert_eq!(styled_file("xbox_button_a.png", Button::South, Pc), None);
     }
 
     #[test]
