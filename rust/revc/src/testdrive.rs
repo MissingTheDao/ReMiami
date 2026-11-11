@@ -79,6 +79,7 @@ unsafe extern "C" {
     fn revc_test_menu_state(page: i32, option: i32, context: i32, layout: i32, legend: i32) -> i32;
     fn revc_test_menu_page_id(name: *const std::ffi::c_char) -> i32;
     fn revc_test_menu_input(down: i32, change: i32);
+    fn revc_test_menu_key(down: i32, up: i32, select: i32, back: i32, change: i32);
     fn revc_test_map_zoom(dir: i32);
     fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
     fn revc_test_hud_text(kind: i32);
@@ -264,6 +265,78 @@ const MENU_SHOTS_XBOX_PULSE: &[MenuShot] = &[("pulse_still", "console_display", 
 /// A clip of the PS2 map zoom (set ps2_mapzoom, with --clips): the map page, R1 held 1.5 s, let go
 /// 1 s, R2 held 1.5 s, let go 1 s.
 const MENU_SHOTS_PS2_MAPZOOM: &[MenuShot] = &[("mapzoom_still", "map", 0, -1, -1, 1, 1000)];
+
+/// Motion tests (REVC_TEST_MOTION=<id>, scripts/motion-tests.sh; research menu-compare/MOTION_TESTS.md,
+/// local): one menu animation per run. (id, page, row, context, layout, input, frames.) The start
+/// state is set like a menu shot (context/layout as there, -1 leaves them), held 0.5 s
+/// (MOTION_INPUT_FRAME), then one input; every frame is written to REVC_TEST_VIDEO_DIR (run at
+/// REVC_FIXED_FPS=60) until `frames`. Inputs: down, up, left, right, select, back, none,
+/// page:<name> (switch tab as the menu does), context:<n> (Xbox sub-tab / pad context),
+/// layout:<n> (PS2 setup / map zoom level), zoom_in:<held frames>, zoom_out:<held frames>.
+/// The UI style comes from the config (the id's ps2_/xbox_ prefix in the script).
+type Motion = (&'static str, &'static str, i32, i32, i32, &'static str, u32);
+const MOTION_INPUT_FRAME: u32 = 30;
+const MOTIONS: &[Motion] = &[
+    // PS2
+    ("ps2_page_change_right", "audio", 0, -1, -1, "page:console_display", 90),
+    ("ps2_page_change_left", "console_display", 0, -1, -1, "page:audio", 90),
+    ("ps2_page_change_to_map", "brief", 0, -1, -1, "page:map", 90),
+    ("ps2_page_change_from_map", "map", 0, -1, -1, "page:brief", 90),
+    ("ps2_highlight_down", "audio", 0, -1, -1, "down", 75),
+    ("ps2_highlight_up", "audio", 1, -1, -1, "up", 75),
+    ("ps2_highlight_wrap", "audio", 0, -1, -1, "up", 75),
+    ("ps2_radio_right", "audio", 2, -1, -1, "right", 90),
+    ("ps2_radio_left", "audio", 2, -1, -1, "left", 90),
+    ("ps2_slider_step", "audio", 0, -1, -1, "right", 75),
+    ("ps2_stats_scroll", "stats", 0, -1, -1, "none", 630),
+    ("ps2_map_zoom_in", "map", 0, -1, 0, "zoom_in:90", 210),
+    ("ps2_map_zoom_out", "map", 0, -1, 2, "zoom_out:90", 210),
+    ("ps2_confirm_open", "load", 1, -1, -1, "select", 90),
+    ("ps2_setup_switch", "console_controls", 0, 0, 0, "layout:1", 75),
+    // Xbox
+    ("xbox_bar_pulse", "console_display", 0, -1, -1, "none", 150),
+    ("xbox_highlight_down", "console_display", 0, -1, -1, "down", 75),
+    ("xbox_highlight_up", "console_display", 1, -1, -1, "up", 75),
+    ("xbox_page_change_right", "audio", 0, -1, -1, "page:console_display", 90),
+    ("xbox_page_change_left", "console_display", 0, -1, -1, "page:audio", 90),
+    ("xbox_subtab_change", "stats", 0, 0, -1, "context:1", 90),
+    ("xbox_radio_right", "audio", 2, -1, -1, "right", 90),
+    ("xbox_radio_left", "audio", 2, -1, -1, "left", 90),
+    ("xbox_list_scroll", "brief", 0, 1, -1, "none", 630),
+    ("xbox_confirm_open", "load", 1, -1, -1, "select", 90),
+];
+
+fn motion() -> Option<&'static Motion> {
+    let id = std::env::var("REVC_TEST_MOTION").ok()?;
+    MOTIONS.iter().find(|m| m.0 == id)
+}
+
+/// One motion-test input (see MOTIONS), applied on `frame` frames after the input frame.
+fn motion_input(input: &str, page: i32, frame: u32) {
+    let (kind, arg) = input.split_once(':').unwrap_or((input, ""));
+    let n: i32 = arg.parse().unwrap_or(0);
+    match kind {
+        "zoom_in" | "zoom_out" => {
+            let dir = if (frame as i32) < n { if kind == "zoom_in" { 1 } else { -1 } } else { 0 };
+            unsafe { revc_test_map_zoom(dir) };
+        }
+        _ if frame != 0 => {}
+        "down" => unsafe { revc_test_menu_key(1, 0, 0, 0, 0) },
+        "up" => unsafe { revc_test_menu_key(0, 1, 0, 0, 0) },
+        "left" => unsafe { revc_test_menu_key(0, 0, 0, 0, -1) },
+        "right" => unsafe { revc_test_menu_key(0, 0, 0, 0, 1) },
+        "select" => unsafe { revc_test_menu_key(0, 0, 1, 0, 0) },
+        "back" => unsafe { revc_test_menu_key(0, 0, 0, 1, 0) },
+        "page" => {
+            let name = std::ffi::CString::new(arg).unwrap();
+            let p = unsafe { revc_test_menu_page_id(name.as_ptr()) };
+            unsafe { revc_test_menu_state(p, -1, -1, -1, -1) };
+        }
+        "context" => unsafe { revc_test_menu_state(page, -1, n, -1, -1); },
+        "layout" => unsafe { revc_test_menu_state(page, -1, -1, n, -1); },
+        _ => {}
+    }
+}
 
 static MENU_SHOT_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
 static MENU_VIDEO_FRAME: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -740,6 +813,43 @@ impl Driver {
                     }
                     _ => {}
                 }
+            }
+            Phase::Menus { frames, .. } if self.video_dir.is_some() && std::env::var_os("REVC_TEST_MOTION").is_some() => {
+                // Motion test (MOTIONS): the start state, 0.5 s, one input, every frame written.
+                let Some(&(id, page, row, context, layout, input, total)) = motion() else {
+                    self.fail(format!("unknown REVC_TEST_MOTION {:?}", std::env::var("REVC_TEST_MOTION")));
+                    return self.finish();
+                };
+                if let Some((w, h, rgba)) = crate::host::take_capture() {
+                    let n = MENU_VIDEO_FRAME.fetch_add(1, Ordering::Relaxed);
+                    let path = self.video_dir.as_ref().unwrap().join(format!("frame_{n:05}.png"));
+                    if let Err(e) = write_png(&path, w, h, &rgba) {
+                        self.fail(format!("writing {}: {e}", path.display()));
+                        return self.finish();
+                    }
+                }
+                let name = std::ffi::CString::new(page).unwrap();
+                let p = unsafe { revc_test_menu_page_id(name.as_ptr()) };
+                if frames == 0 {
+                    // nothing recorded until the start state is set
+                    if unsafe { revc_test_menu_state(p, row, context, layout, -1) } != 0 {
+                        MENU_VIDEO_FRAME.store(0, Ordering::Relaxed);
+                        self.phase = Phase::Menus { idx: 0, frames: 1 };
+                        crate::host::request_capture();
+                    }
+                    return false;
+                }
+                if frames < MOTION_INPUT_FRAME {
+                    unsafe { revc_test_menu_state(p, row, -1, -1, -1) };	// pages reset the row on entry
+                } else {
+                    motion_input(input, p, frames - MOTION_INPUT_FRAME);
+                }
+                if frames >= total {
+                    log(format!("motion {id}: {total} frames, input at frame {MOTION_INPUT_FRAME}"));
+                    return self.finish();
+                }
+                self.phase = Phase::Menus { idx: 0, frames: frames + 1 };
+                crate::host::request_capture();
             }
             Phase::Menus { idx, frames } if self.video_dir.is_some() => {
                 // Walk-through clip (REVC_TEST_VIDEO_DIR, run at REVC_FIXED_FPS=60): every frame

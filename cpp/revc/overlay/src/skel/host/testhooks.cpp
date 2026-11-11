@@ -282,6 +282,14 @@ revc_test_menu_input(int down, int change)
 		FrontEndMenuManager.ProcessUserInput(down, 0, 0, 0, change);
 }
 
+// Motion tests: one menu input of any kind (down, up, select, back, left/right change).
+void
+revc_test_menu_key(int down, int up, int select, int back, int change)
+{
+	if (FrontEndMenuManager.m_bMenuActive)
+		FrontEndMenuManager.ProcessUserInput(down, up, select, back, change);
+}
+
 int
 revc_test_menu_page_id(const char *name)
 {
