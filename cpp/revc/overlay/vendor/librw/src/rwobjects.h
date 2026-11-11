@@ -274,6 +274,12 @@ struct Raster
 
 struct TexDictionary;
 
+struct Texture;
+}
+extern "C" rw::Texture *revc_tex_default_find_cb(const char *name);
+extern "C" rw::Texture *revc_tex_default_read_cb(const char *name, const char *mask);
+namespace rw {
+
 struct Texture
 {
 	enum FilterMode {
@@ -316,8 +322,9 @@ struct Texture
 	void setAddressV(Addressing v) { filterAddressing = (filterAddressing & ~0xF000) | v<<12; }
 	static Texture *read(const char *name, const char *mask);
 
-	static Texture *(*findCB)(const char *name);
-	static Texture *(*readCB)(const char *name, const char *mask);
+	// defaults in Rust (rwtexture.rs)
+	static inline Texture *(*findCB)(const char *name) = revc_tex_default_find_cb;
+	static inline Texture *(*readCB)(const char *name, const char *mask) = revc_tex_default_read_cb;
 	static void setLoadTextures(bool32);	// default: true
 	static void setCreateDummies(bool32);	// default: false
 	static void setMipmapping(bool32);	// default: false
@@ -333,7 +340,10 @@ struct Texture
 #endif
 };
 
-extern int32 anisotOffset;
+}
+extern "C" rw::int32 revc_anisot_offset;
+namespace rw {
+inline int32 &anisotOffset = revc_anisot_offset;
 #define GETANISOTROPYEXT(texture) PLUGINOFFSET(int32, texture, rw::anisotOffset)
 void registerAnisotropyPlugin(void);
 int32 getMaxSupportedMaxAnisotropy(void);

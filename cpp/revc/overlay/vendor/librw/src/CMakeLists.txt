@@ -18,7 +18,6 @@ add_library(librw
     rwplugins.h
     rwrender.h
     skin.cpp
-    texture.cpp
 
     wgpu/rwwgpu.h
     wgpu/wgpudevice.cpp

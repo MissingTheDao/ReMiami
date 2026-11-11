@@ -79,8 +79,195 @@ pub type ReadCb = unsafe extern "C" fn(name: *const c_char, mask: *const c_char)
 static mut HOOKS: Option<Hooks> = None;
 
 fn hooks() -> &'static Hooks {
-    // SAFETY: set once at startup (before any texture exists), read-only afterwards.
-    unsafe { (*std::ptr::addr_of!(HOOKS)).as_ref().expect("revc_tex_set_hooks not called") }
+    // SAFETY: set before use (tests), read-only afterwards; the game uses the defaults.
+    unsafe { (*std::ptr::addr_of!(HOOKS)).as_ref().unwrap_or(&DEFAULT_HOOKS) }
+}
+
+// ---------------------------------------------------------------- the game's hooks, the texture module, the default callbacks, anisotropy (7d2, texture.cpp)
+
+mod defaults {
+    use super::*;
+    use crate::rwplugin::{self as pl, CLASS_TEXDICTIONARY, CLASS_TEXTURE, class_list};
+    pub(super) unsafe extern "C" fn tex_size() -> usize {
+        unsafe { (*class_list(CLASS_TEXTURE)).size as usize }
+    }
+    pub(super) unsafe extern "C" fn tex_construct(t: *mut Texture) {
+        unsafe { pl::pl_construct(class_list(CLASS_TEXTURE), t as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn tex_destruct(t: *mut Texture) {
+        unsafe { pl::pl_destruct(class_list(CLASS_TEXTURE), t as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn dict_size() -> usize {
+        unsafe { (*class_list(CLASS_TEXDICTIONARY)).size as usize }
+    }
+    pub(super) unsafe extern "C" fn dict_construct(d: *mut TexDictionary) {
+        unsafe { pl::pl_construct(class_list(CLASS_TEXDICTIONARY), d as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn dict_destruct(d: *mut TexDictionary) {
+        unsafe { pl::pl_destruct(class_list(CLASS_TEXDICTIONARY), d as *mut c_void) }
+    }
+    pub(super) unsafe extern "C" fn raster_destroy(r: *mut c_void) {
+        unsafe { crate::rwraster::destroy(r as *mut crate::rwraster::Raster) }
+    }
+    pub(super) unsafe extern "C" fn raster_create_dummy() -> *mut c_void {
+        unsafe { crate::rwengine::raster_create(0, 0, 0, crate::rwraster::DONTALLOCATE, 0) as *mut c_void }
+    }
+    pub(super) unsafe extern "C" fn allocated(kind: i32, delta: i32) {
+        unsafe { *pl::alloc_count(if kind == 0 { CLASS_TEXTURE } else { CLASS_TEXDICTIONARY }) += delta }
+    }
+}
+static DEFAULT_HOOKS: Hooks = Hooks {
+    tex_size: defaults::tex_size,
+    tex_construct: defaults::tex_construct,
+    tex_destruct: defaults::tex_destruct,
+    dict_size: defaults::dict_size,
+    dict_construct: defaults::dict_construct,
+    dict_destruct: defaults::dict_destruct,
+    raster_destroy: defaults::raster_destroy,
+    raster_create_dummy: defaults::raster_create_dummy,
+    allocated: defaults::allocated,
+};
+
+static mut TEXTURE_MODULE_OFFSET: i32 = 0;
+
+/// The running engine's TextureGlobals (TEXGLOBALS).
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_tex_globals() -> *mut TextureGlobals {
+    unsafe { (*std::ptr::addr_of!(crate::rwengine::revc_engine) as *mut u8).add(*std::ptr::addr_of!(TEXTURE_MODULE_OFFSET) as usize) as *mut TextureGlobals }
+}
+
+/// textureOpen: the lists, the initial dictionary (current), textures loaded from files.
+unsafe extern "C" fn texture_open(o: *mut c_void, off: i32, _: i32) -> *mut c_void {
+    unsafe {
+        *std::ptr::addr_of_mut!(TEXTURE_MODULE_OFFSET) = off;
+        let g = revc_tex_globals();
+        crate::rwframe::list_init(&mut (*g).tex_dicts);
+        crate::rwframe::list_init(&mut (*g).textures);
+        let d = dict_create(g);
+        (*g).initial_tex_dict = d;
+        (*g).current_tex_dict = d;
+        (*g).load_textures = 1;
+        (*g).make_dummies = 0;
+        (*g).mipmapping = 0;
+        (*g).auto_mipmapping = 0;
+    }
+    o
+}
+
+/// textureClose: every dictionary goes, then any texture still around (reported).
+unsafe extern "C" fn texture_close(o: *mut c_void, _: i32, _: i32) -> *mut c_void {
+    unsafe {
+        let g = revc_tex_globals();
+        let head = std::ptr::addr_of_mut!((*g).tex_dicts.link);
+        let mut l = (*head).next;
+        while l != head {
+            let next = (*l).next;
+            dict_destroy(g, (l as *mut u8).sub(std::mem::offset_of!(TexDictionary, in_global_list)) as *mut TexDictionary);
+            l = next;
+        }
+        (*g).initial_tex_dict = std::ptr::null_mut();
+        (*g).current_tex_dict = std::ptr::null_mut();
+        let head = std::ptr::addr_of_mut!((*g).textures.link);
+        let mut l = (*head).next;
+        while l != head {
+            let next = (*l).next;
+            let t = (l as *mut u8).sub(std::mem::offset_of!(Texture, in_global_list)) as *mut Texture;
+            let name = std::ffi::CStr::from_ptr((*t).name.as_ptr() as *const c_char).to_string_lossy();
+            let mask = std::ffi::CStr::from_ptr((*t).mask.as_ptr() as *const c_char).to_string_lossy();
+            println!("Tex still allocated: {} {name} {mask}", (*t).ref_count);
+            tex_destroy(t);
+            l = next;
+        }
+    }
+    o
+}
+const ID_TEXTUREMODULE: u32 = 0x408;
+
+/// Texture::registerModule
+///
+/// # Safety
+/// During Engine::init.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_texture_register_module() {
+    unsafe {
+        crate::rwplugin::pl_register(
+            crate::rwplugin::class_list(crate::rwplugin::CLASS_ENGINE),
+            size_of::<TextureGlobals>() as i32,
+            ID_TEXTUREMODULE,
+            Some(texture_open),
+            Some(texture_close),
+            None,
+        );
+    }
+}
+
+/// Texture::findCB's default: the current dictionary.
+///
+/// # Safety
+/// `name` a C string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_tex_default_find_cb(name: *const c_char) -> *mut Texture {
+    unsafe { default_find(revc_tex_globals(), name) }
+}
+
+/// Texture::readCB's default: the image file (with its mask) as a new texture of that name.
+///
+/// # Safety
+/// `name` a C string, `mask` one or null.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_tex_default_read_cb(name: *const c_char, mask: *const c_char) -> *mut Texture {
+    unsafe {
+        let n = std::ffi::CStr::from_ptr(name).to_str().unwrap_or("");
+        let m = if mask.is_null() { None } else { Some(std::ffi::CStr::from_ptr(mask).to_str().unwrap_or("")) };
+        let img = crate::rwimagefile::read_masked(".", n, m);
+        if img.is_null() {
+            return std::ptr::null_mut();
+        }
+        let tex = tex_create(revc_tex_globals(), crate::rwengine::raster_create_from_image(img, 0) as *mut c_void);
+        // strncpy(name, 32)
+        let copy = |dst: &mut [u8; 32], src: *const c_char| {
+            let b = std::ffi::CStr::from_ptr(src).to_bytes();
+            dst.fill(0);
+            let k = b.len().min(32);
+            dst[..k].copy_from_slice(&b[..k]);
+        };
+        copy(&mut (*tex).name, name);
+        if !mask.is_null() {
+            copy(&mut (*tex).mask, mask);
+        }
+        crate::rwimage::image_destroy(img);
+        tex
+    }
+}
+
+/// The anisotropy plugin's offset in Texture (rw::anisotOffset; 0 = not registered).
+#[unsafe(no_mangle)]
+pub static mut revc_anisot_offset: i32 = 0;
+unsafe extern "C" fn anisot_create(o: *mut c_void, off: i32, _: i32) -> *mut c_void {
+    unsafe { *((o as *mut u8).add(off as usize) as *mut i32) = 1 };
+    o
+}
+unsafe extern "C" fn anisot_copy(d: *mut c_void, s: *mut c_void, off: i32, _: i32) -> *mut c_void {
+    unsafe { *((d as *mut u8).add(off as usize) as *mut i32) = *((s as *mut u8).add(off as usize) as *mut i32) };
+    d
+}
+unsafe extern "C" fn anisot_read(st: *mut c_void, _: i32, o: *mut c_void, off: i32, _: i32) -> *mut c_void {
+    unsafe { *((o as *mut u8).add(off as usize) as *mut i32) = i32::from_le_bytes(crate::rwplugin::stream_read_bytes::<4>(st)) };
+    st
+}
+const ID_ANISOT: u32 = 0x127;
+
+/// registerAnisotropyPlugin
+///
+/// # Safety
+/// During plugin attach.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_register_anisotropy_plugin() {
+    unsafe {
+        let l = crate::rwplugin::class_list(crate::rwplugin::CLASS_TEXTURE);
+        *std::ptr::addr_of_mut!(revc_anisot_offset) = crate::rwplugin::pl_register(l, 4, ID_ANISOT, Some(anisot_create), None, Some(anisot_copy));
+        crate::rwplugin::pl_register_stream(l, ID_ANISOT, Some(anisot_read), None, None);
+    }
 }
 
 fn layout<T>(size: usize) -> std::alloc::Layout {

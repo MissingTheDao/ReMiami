@@ -255,6 +255,50 @@ unsafe fn rw_new(sz: usize) -> *mut c_void {
     unsafe { (memfuncs().rwmustmalloc.expect("memfuncs"))(sz, MEMDUR_GLOBAL) }
 }
 
+// ---------------------------------------------------------------- driver dispatch (rwobjects.h's Raster methods)
+
+unsafe fn driver_of(platform: i32) -> *mut Driver {
+    unsafe { (*engine()).driver[platform as usize] }
+}
+fn platform_or_default(platform: i32) -> i32 {
+    if platform != 0 { platform } else { unsafe { *addr_of!(revc_platform) } }
+}
+
+/// Raster::create: the raster object, then the driver's rasterCreate.
+///
+/// # Safety
+/// The engine is open.
+pub(crate) unsafe fn raster_create(w: i32, h: i32, depth: i32, format: i32, platform: i32) -> *mut crate::rwraster::Raster {
+    unsafe {
+        let r = crate::rwraster::create(w, h, depth, format, platform_or_default(platform));
+        let f: unsafe extern "C" fn(*mut crate::rwraster::Raster) -> *mut crate::rwraster::Raster = std::mem::transmute((*driver_of((*r).platform)).raster_create);
+        f(r)
+    }
+}
+
+/// Raster::createFromImage: the driver's raster format for the image, a raster of it, filled
+/// from the image; null if any of that fails.
+///
+/// # Safety
+/// The engine is open; a live image.
+pub(crate) unsafe fn raster_create_from_image(img: *mut crate::rwimage::Image, platform: i32) -> *mut crate::rwraster::Raster {
+    unsafe {
+        const TEXTURE: i32 = 4;
+        let d = driver_of(platform_or_default(platform));
+        let find: unsafe extern "C" fn(*mut crate::rwimage::Image, i32, *mut i32, *mut i32, *mut i32, *mut i32) -> i32 = std::mem::transmute((*d).image_find_raster_format);
+        let (mut w, mut h, mut depth, mut format) = (0, 0, 0, 0);
+        if find(img, TEXTURE, &mut w, &mut h, &mut depth, &mut format) == 0 {
+            return null_mut();
+        }
+        let r = raster_create(w, h, depth, format, platform);
+        if r.is_null() {
+            return r;
+        }
+        let from: unsafe extern "C" fn(*mut crate::rwraster::Raster, *mut crate::rwimage::Image) -> i32 = std::mem::transmute((*driver_of(platform_or_default(platform))).raster_from_image);
+        if from(r, img) != 0 { r } else { null_mut() }
+    }
+}
+
 // ---------------------------------------------------------------- the null driver's raster functions
 
 // librw asserts in these (no raster support without a driver); release builds return nothing.

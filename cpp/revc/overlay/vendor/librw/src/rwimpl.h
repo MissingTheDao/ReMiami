@@ -1545,3 +1545,177 @@ inline void registerNativeRaster(void) { revc_wgpu_register_native_raster(); }
 
 }
 }
+
+// ---------------------------------------------------------------- Texture, TexDictionary (rwtexture.rs)
+namespace rw {
+
+
+
+struct TextureGlobals
+{
+	TexDictionary *initialTexDict;
+	TexDictionary *currentTexDict;
+	// load textures from files
+	bool32 loadTextures;
+	// create dummy textures to store just names
+	bool32 makeDummies;
+	bool32 mipmapping;
+	bool32 autoMipmapping;
+	LinkList texDicts;
+
+	LinkList textures;
+};
+
+#define TEXTUREGLOBAL(v) (revc_tex_globals()->v)
+#define TEXGLOBALS (revc_tex_globals())
+
+// revc (docs/RENDERER_PORT.md, stage 2 step 5a): the texture object model is in Rust
+// (rust/revc/src/rwtexture.rs): textures and dictionaries (allocated there), reference counts,
+// the lists, find and Texture::read, checked against tests/golden/rwtexture.txt; the module, the default callbacks and the
+// anisotropy plugin too (step 7d2).
+extern "C" {
+TextureGlobals *revc_tex_globals(void);
+void revc_texture_register_module(void);
+void revc_register_anisotropy_plugin(void);
+TexDictionary *revc_texdict_create(TextureGlobals *g);
+void revc_texdict_destroy(TextureGlobals *g, TexDictionary *d);
+void revc_texdict_add(TexDictionary *d, Texture *t);
+void revc_texdict_add_front(TexDictionary *d, Texture *t);
+void revc_texdict_remove(TexDictionary *d, Texture *t);
+Texture *revc_texdict_find(TexDictionary *d, const char *name);
+Texture *revc_tex_create(TextureGlobals *g, Raster *raster);
+void revc_tex_destroy(Texture *t);
+Texture *revc_tex_default_find(TextureGlobals *g, const char *name);
+Texture *revc_tex_read(TextureGlobals *g, const char *name, const char *mask,
+                       Texture *(*find)(const char *), Texture *(*read)(const char *, const char *));
+}
+static_assert(sizeof(Texture) == 120 && offsetof(Texture, inGlobalList) == 104 && sizeof(TexDictionary) == 48,
+              "texture layouts (rwtexture.rs)");
+inline void Texture::registerModule(void) { revc_texture_register_module(); }
+
+inline void
+Texture::setLoadTextures(bool32 b)
+{
+	TEXTUREGLOBAL(loadTextures) = b;
+}
+
+inline void
+Texture::setCreateDummies(bool32 b)
+{
+	TEXTUREGLOBAL(makeDummies) = b;
+}
+
+inline void Texture::setMipmapping(bool32 b) { TEXTUREGLOBAL(mipmapping) = b; }
+inline void Texture::setAutoMipmapping(bool32 b) { TEXTUREGLOBAL(autoMipmapping) = b; }
+inline bool32 Texture::getMipmapping(void) { return TEXTUREGLOBAL(mipmapping); }
+inline bool32 Texture::getAutoMipmapping(void) { return TEXTUREGLOBAL(autoMipmapping); }
+
+//
+// TexDictionary
+//
+
+inline TexDictionary*
+TexDictionary::create(void)
+{
+	TexDictionary *dict = revc_texdict_create(TEXGLOBALS);
+	if(dict == nil)
+		RWERROR_HDR((ERR_ALLOC, s_plglist.size));
+	return dict;
+}
+
+inline void
+TexDictionary::destroy(void)
+{
+	revc_texdict_destroy(TEXGLOBALS, this);
+}
+
+inline void
+TexDictionary::add(Texture *t)
+{
+	revc_texdict_add(this, t);
+}
+
+inline void
+TexDictionary::remove(Texture *t)
+{
+	revc_texdict_remove(this, t);
+}
+
+inline void
+TexDictionary::addFront(Texture *t)
+{
+	revc_texdict_add_front(this, t);
+}
+
+inline Texture*
+TexDictionary::find(const char *name)
+{
+	return revc_texdict_find(this, name);
+}
+
+
+inline void
+TexDictionary::setCurrent(TexDictionary *txd)
+{
+	revc_tex_globals()->currentTexDict = txd;
+}
+
+inline TexDictionary*
+TexDictionary::getCurrent(void)
+{
+	return revc_tex_globals()->currentTexDict;
+}
+
+//
+// Texture
+//
+
+inline Texture*
+Texture::create(Raster *raster)
+{
+	Texture *tex = revc_tex_create(TEXGLOBALS, raster);
+	if(tex == nil)
+		RWERROR_HDR((ERR_ALLOC, s_plglist.size));
+	return tex;
+}
+
+inline void
+Texture::destroy(void)
+{
+	revc_tex_destroy(this);
+}
+
+inline Texture*
+Texture::read(const char *name, const char *mask)
+{
+	return revc_tex_read(TEXGLOBALS, name, mask, Texture::findCB, Texture::readCB);
+}
+
+
+inline void registerAnisotropyPlugin(void) { revc_register_anisotropy_plugin(); }
+
+inline void
+Texture::setMaxAnisotropy(int32 maxaniso)
+{
+	if(anisotOffset > 0)
+		*GETANISOTROPYEXT(this) = maxaniso;
+}
+
+inline int32
+Texture::getMaxAnisotropy(void)
+{
+	if(anisotOffset > 0)
+		return *GETANISOTROPYEXT(this);
+	return 1;
+}
+
+inline int32
+getMaxSupportedMaxAnisotropy(void)
+{
+#ifdef RW_WGPU
+	return 16;	// wgpu's anisotropy clamp limit
+#endif
+	return 1;
+}
+
+}
