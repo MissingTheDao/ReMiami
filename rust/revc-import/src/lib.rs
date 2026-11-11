@@ -109,6 +109,9 @@ pub const MANIFEST: &[Lift] = &[
     Lift { kind: DiscKind::Ps2, dir: "MODELS/FRONTEN2.TXD", exts: &[], dest: "models" },
     // PS2 time cycle: 5 rows differ from the PC's (the PS2 visual style uses it, plan task 13).
     Lift { kind: DiscKind::Ps2, dir: "DATA/TIMECYC.DAT", exts: &[], dest: "data" },
+    // PS2 ped animations: 13 differ from the PC's (walk_start, idle_armed, the woman's walks, ...);
+    // the PS2 UI style plays them (animation/AnimManager.cpp ReplacePedAnimsFromPS2).
+    Lift { kind: DiscKind::Ps2, dir: "ANIM/PED.IFP", exts: &[], dest: "anim" },
 ];
 
 fn matches(lift: &Lift, path: &str) -> bool {

@@ -1,0 +1,95 @@
+--- a/src/animation/AnimManager.cpp
++++ b/src/animation/AnimManager.cpp
+@@ -1234,10 +1234,80 @@
+ CAnimManager::LoadAnimFiles(void)
+ {
+ 	LoadAnimFile("ANIM\\PED.IFP");
++#ifdef LIBRW_HOST
++	ReplacePedAnimsFromPS2();
++#endif
+ 	ms_aAnimAssocGroups = new CAnimBlendAssocGroup[NUM_ANIM_ASSOC_GROUPS];
+ 	CreateAnimAssocGroups();
+ }
+ 
++#ifdef LIBRW_HOST
++extern "C" ssize_t revc_import_read(int kind, const char *rel, uint8 *buf, size_t cap);
++extern int8 gUiStyle;
++// revc (plan task 13): the PS2 UI style plays the PS2's own ped animations where they differ from
++// the PC's (13 of ped.ifp's, e.g. walk_start 0.40 s vs 0.27 s; research motion-data/
++// ps2_anim_diff.txt), read from the player's imported PS2 disc (ANIM/PED.IFP). The PS2 file is
++// loaded as a second "ped" block, each animation with a PC namesake swaps places with it, and the
++// extra block is dropped (the PC's data stays behind in its slots, unused). Before the
++// association groups are made, so they point at the swapped data. Applies at start-up.
++void
++CAnimManager::ReplacePedAnimsFromPS2(void)
++{
++	if (gUiStyle != 1)
++		return;
++	const size_t cap = 16 << 20;
++	uint8 *buf = new uint8[cap];
++	ssize_t len = revc_import_read(1, "anim/ped.ifp", buf, cap);
++	if (len <= 0) {
++		delete[] buf;
++		return;
++	}
++	CAnimBlock *pc = GetAnimationBlock("ped");
++	if (pc == nil) {
++		delete[] buf;
++		return;
++	}
++	strncpy(pc->name, "ped_pc", MAX_ANIMBLOCK_NAME);
++	int blocksBefore = ms_numAnimBlocks;
++	RwMemory mem;
++	mem.start = buf;
++	mem.length = (RwUInt32)len;
++	RwStream *stream = RwStreamOpen(rwSTREAMMEMORY, rwSTREAMREAD, &mem);
++	if (stream) {
++		LoadAnimFile(stream, true);
++		RwStreamClose(stream, &mem);
++	}
++	CAnimBlock *ps2 = ms_numAnimBlocks > blocksBefore ? &ms_aAnimBlocks[ms_numAnimBlocks - 1] : nil;
++	int swapped = 0;
++	if (ps2) {
++		for (int i = 0; i < ps2->numAnims; i++) {
++			CAnimBlendHierarchy *h = &ms_aAnimations[ps2->firstIndex + i];
++			for (int j = 0; j < pc->numAnims; j++) {
++				CAnimBlendHierarchy *p = &ms_aAnimations[pc->firstIndex + j];
++				if (CGeneral::faststricmp(p->name, h->name) == 0) {
++					CAnimBlendHierarchy t = *p;
++					*p = *h;
++					*h = t;
++					swapped++;
++					break;
++				}
++			}
++		}
++		// drop the extra block and free its slots (they hold the PC's swapped-out data and the
++		// PS2-only animations, which nothing uses), so the streamed blocks keep their room
++		for (int i = 0; i < ps2->numAnims; i++)
++			ms_aAnimations[ps2->firstIndex + i].Shutdown();
++		ms_numAnimations = ps2->firstIndex;
++		ps2->numAnims = 0;
++		ps2->isLoaded = false;
++		ms_numAnimBlocks--;
++	}
++	strncpy(pc->name, "ped", MAX_ANIMBLOCK_NAME);
++	delete[] buf;
++	debug("revc: PS2 ped animations: %d swapped in\n", swapped);
++}
++#endif
++
+ void
+ CAnimManager::CreateAnimAssocGroups(void)
+ {
+--- a/src/animation/AnimManager.h
++++ b/src/animation/AnimManager.h
+@@ -137,6 +137,9 @@
+ 	static CAnimBlendAssociation *AddAnimationAndSync(RpClump *clump, CAnimBlendAssociation *syncanim, AssocGroupId groupId, AnimationId animId);
+ 	static CAnimBlendAssociation *BlendAnimation(RpClump *clump, AssocGroupId groupId, AnimationId animId, float delta);
+ 	static void LoadAnimFiles(void);
++#ifdef LIBRW_HOST
++	static void ReplacePedAnimsFromPS2(void);
++#endif
+ 	static void LoadAnimFile(const char *filename);
+ 	static void LoadAnimFile(RwStream *stream, bool compress, char (*uncompressedAnims)[32] = nil);
+ 	static void CreateAnimAssocGroups(void);
