@@ -399,6 +399,22 @@ MenuSkinXboxDialogBack(uint8 alpha)
 	CSprite2d::Draw2DPolygon(X(85.0f), Y(138.0f), X(520.0f), Y(118.0f), X(100.0f), Y(337.0f), X(505.0f), Y(333.0f), CRGBA(105, 198, 247, alpha));
 }
 
+// The Xbox's slider: a rising wedge from x 325 to 485 (12 px tall at the left, 33 at the right,
+// bottom 21 px under the row's top), faint where empty, with bright bars up to the value
+// (measured on the Display page). Returns the right end of the filled part (the PC slider's
+// "last active bar", used for mouse hover).
+float
+MenuSkinXboxWedge(float y, float progress, uint8 alpha)
+{
+	const float x0 = X(325.0f), x1 = X(485.0f), bottom = y + H(21.0f);
+	auto top = [&](float x) { return bottom - H(12.0f) - (x - x0) / (x1 - x0) * H(21.0f); };
+	CSprite2d::Draw2DPolygon(x0, top(x0), x1, top(x1), x0, bottom, x1, bottom, CRGBA(120, 170, 220, alpha * 90 / 255));
+	float filled = x0 + (x1 - x0) * Clamp(progress, 0.0f, 1.0f);
+	for (float x = x0; x + W(3.0f) <= filled; x += W(6.0f))
+		CSprite2d::DrawRect(CRect(x, top(x + W(1.5f)), x + W(3.0f), bottom), CRGBA(110, 190, 245, alpha));
+	return filled;
+}
+
 // LT/RT step through the pages, as on the Xbox pause menu. True when it switched.
 bool
 MenuSkinXboxInput(CMenuManager *m)

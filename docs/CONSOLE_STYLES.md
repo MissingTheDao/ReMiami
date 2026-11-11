@@ -327,7 +327,12 @@ Page contents, part 1:
   the pause menu's Options entry until the console-style option lists (PS2 options tab, Xbox
   advanced sub-tab) exist.
 
-Next: the console-style option lists; Xbox confirm dialog (dimmed page, OK/Cancel); stats/brief
+Part 2 (round 4): the Xbox wedge slider (x 325-485, faint wedge with bright bars to the value)
+for brightness and volumes; Xbox labels "music", "sfx", "select controls", "invert up/down"; Xbox
+value columns 331 / 378 (radio) / 435 (controls); PS2 Display rows 30 px apart from y 92.
+
+Next: the PS2 controls page with the DualShock 2 picture, the PS2 audio two-column layout, the
+Xbox full logo strip, "screen position", the console-style option lists; Xbox confirm dialog (dimmed page, OK/Cancel); stats/brief
 sub-tabs; load page layouts; map legend item; save page; the round-3 details (help-line items per
 page, the highlight's lighter tail and length). Plan for the extras (research, from the user's "add options without
 breaking cohesion", `menu-compare/OPTIONS_PLACEMENT.md`): console pages stay as on the console;
