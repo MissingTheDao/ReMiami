@@ -339,8 +339,12 @@ ps2-ui-remake.zip: the game can't read PS2 TXDs yet) with black callout lines an
 following the current bindings (`DrawPadPicturePS2`, core/PadPicture.cpp). `menu-shots.sh`
 installs game/mods for the shots (REVC_TEST_MODS).
 
-Next: the PS2 audio two-column layout, the Xbox full logo strip, "screen position", the
-console-style option lists; Xbox confirm dialog (dimmed page, OK/Cancel); stats/brief
+Part 4 (round 6): the PS2 Audio page in the console's two columns (music/sfx headings over taller
+bars at x 191/336, "radio station" with the name under it, label boxes drawn there); the Xbox
+whole-row bar without a tail; font widths of the FONT1 "*I" slots (", *, /, ;, =) set to those
+characters' widths (they had the console icons' widths: "up/ down").
+
+Next: the Xbox full logo strip, "screen position", credits, the console-style option lists; Xbox confirm dialog (dimmed page, OK/Cancel); stats/brief
 sub-tabs; load page layouts; map legend item; save page; the round-3 details (help-line items per
 page, the highlight's lighter tail and length). Plan for the extras (research, from the user's "add options without
 breaking cohesion", `menu-compare/OPTIONS_PLACEMENT.md`): console pages stay as on the console;

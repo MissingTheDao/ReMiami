@@ -370,14 +370,18 @@ DrawHelpLine(CMenuManager *m, uint8 alpha)
 // growing from 0.9x to 1.157 x 1.081 while fading from 0.5 to 0.059 alpha, every 0.8 s
 // (R3_Menu.anm, decoded; docs/CONSOLE_STYLES.md 13h).
 void
-MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha)
+MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool tail)
 {
 	// Tilted with the panel (top edge leaning right), from the label's left edge to at least a
 	// fixed width, the last part a darker mint tail (measured on the Xbox's list pages).
 	x1 = Max(x1, x0 + W(150.0f));
-	float tilt = W(5.0f), tail = W(16.0f);
-	CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 - tail + tilt, y0, x0, y1, x1 - tail, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
-	CSprite2d::Draw2DPolygon(x1 - tail + tilt, y0, x1 + tilt, y0, x1 - tail, y1, x1, y1, CRGBA(0, 120, 80, alpha));
+	float tilt = W(5.0f), tailW = W(16.0f);
+	if (!tail) {	// whole-row bars (the radio station) have no tail
+		CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 + tilt, y0, x0, y1, x1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
+	} else {
+	CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 - tailW + tilt, y0, x0, y1, x1 - tailW, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
+	CSprite2d::Draw2DPolygon(x1 - tailW + tilt, y0, x1 + tilt, y0, x1 - tailW, y1, x1, y1, CRGBA(0, 120, 80, alpha));
+	}
 	// the pulse: a white glow over the bar growing 0.9 -> 1.157 x 1.081 while fading 0.5 -> 0.059,
 	// every 0.8 s (R3_Menu.anm)
 	float t = (CTimer::GetTimeInMillisecondsPauseMode() % 800) / 800.0f;
