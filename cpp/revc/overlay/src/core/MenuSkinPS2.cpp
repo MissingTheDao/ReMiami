@@ -89,16 +89,20 @@ DrawTabs(CMenuManager *m, uint8 alpha)
 static void
 DrawHelpBox(uint8 alpha)
 {
+	// thick black outline, about 8 capture pixels all round (measured)
+	const float o = 8.0f;
+	CSprite2d::Draw2DPolygon(HX(975.0f - o), HY(742.0f - o), HX(1390.0f + o), HY(728.0f - o), HX(990.0f - o), HY(882.0f + o), HX(1418.0f + o), HY(910.0f + o),
+		CRGBA(0, 0, 0, alpha));
 	CSprite2d::Draw2DPolygon(HX(975.0f), HY(742.0f), HX(1390.0f), HY(728.0f), HX(990.0f), HY(882.0f), HX(1418.0f), HY(910.0f),
 		CRGBA(PS2_GREEN.r, PS2_GREEN.g, PS2_GREEN.b, alpha));
 	static const char *keys[4] = { "~X~", "~T~", "RVC_HST", nil };
 	static const char *actions[4] = { "RVC_HSE", "RVC_HBA", "RVC_HRE", "RVC_HNA" };
 	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
-	CFont::SetScale(SX(0.38f), SY(0.64f));
+	CFont::SetScale(SX(0.41f), SY(0.68f));
 	CFont::SetPropOn();
 	CFont::SetBackgroundOff();
 	CFont::SetDropShadowPosition(0);
-	CFont::SetColor(CRGBA(255, 255, 255, alpha));
+	CFont::SetColor(CRGBA(0, 0, 0, alpha));	// black text on the green, as on the PS2
 	wchar buf[64];
 	for (int i = 0; i < 4; i++) {
 		float y = HY(752.0f + 36.0f * i);
