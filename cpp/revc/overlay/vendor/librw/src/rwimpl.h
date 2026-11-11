@@ -1719,3 +1719,555 @@ getMaxSupportedMaxAnisotropy(void)
 }
 
 }
+
+// ---------------------------------------------------------------- HAnim, Skin, MatFX plugins (rwplugins.rs, rwhanim.rs)
+namespace rw {
+
+
+// revc (docs/RENDERER_PORT.md, stage 2 step 4b): the bone matrices and the HAnim keyframe
+// callbacks are in Rust (rust/revc/src/rwhanim.rs), checked against tests/golden/rwhanim.txt.
+extern "C" {
+void revc_hanim_update_matrices(HAnimHierarchy *h);
+void revc_hanim_callbacks(AnimInterpolatorInfo::ApplyCB *apply, AnimInterpolatorInfo::InterpCB *interp);
+}
+static_assert(sizeof(HAnimKeyFrame) == 40 && sizeof(HAnimInterpFrame) == 48 && sizeof(HAnimNodeInfo) == 24 &&
+              sizeof(HAnimHierarchy) == 56, "HAnim layouts (rwhanim.rs)");
+
+inline HAnimHierarchy*
+HAnimHierarchy::create(int32 numNodes, int32 *nodeFlags, int32 *nodeIDs,
+                       int32 flags, int32 maxKeySize)
+{
+	HAnimHierarchy *hier = revc_hier_create(numNodes, nodeFlags, nodeIDs, flags, maxKeySize);
+	if(hier == nil)
+		RWERROR_HDR((ERR_ALLOC, sizeof(*hier)));
+	return hier;
+}
+
+inline void
+HAnimHierarchy::destroy(void)
+{
+	revc_hier_destroy(this);
+}
+
+inline void
+HAnimHierarchy::attachByIndex(int32 idx)
+{
+	revc_hier_attach_by_index(this, idx);
+}
+
+inline void
+HAnimHierarchy::attach(void)
+{
+	revc_hier_attach(this);
+}
+
+inline int32
+HAnimHierarchy::getIndex(int32 id)
+{
+	return revc_hier_get_index_id(this, id);
+}
+
+inline int32
+HAnimHierarchy::getIndex(Frame *f)
+{
+	return revc_hier_get_index_frame(this, f);
+}
+
+inline HAnimHierarchy*
+HAnimHierarchy::get(Frame *f)
+{
+	return HAnimData::get(f)->hierarchy;
+}
+
+inline HAnimHierarchy*
+HAnimHierarchy::find(Frame *f)
+{
+	return revc_hier_find(f);
+}
+
+inline void
+HAnimHierarchy::updateMatrices(void)
+{
+	revc_hanim_update_matrices(this);
+}
+
+inline HAnimData*
+HAnimData::get(Frame *f)
+{
+	return PLUGINOFFSET(HAnimData, f, hAnimOffset);
+}
+
+inline void*
+createHAnim(void *object, int32 offset, int32)
+{
+	revc_hanim_create(object);
+	return object;
+}
+
+inline void*
+destroyHAnim(void *object, int32 offset, int32)
+{
+	revc_hanim_destroy(object);
+	return object;
+}
+
+inline void*
+copyHAnim(void *dst, void *src, int32 offset, int32)
+{
+	revc_hanim_copy(dst, src);
+	return dst;
+}
+
+
+inline void*
+hanimOpen(void *object, int32 offset, int32 size)
+{
+	AnimInterpolatorInfo *info = rwNewT(AnimInterpolatorInfo, 1, MEMDUR_GLOBAL | ID_HANIM);
+	info->id = 1;
+	info->interpKeyFrameSize = sizeof(HAnimInterpFrame);
+	info->animKeyFrameSize = sizeof(HAnimKeyFrame);
+	info->customDataSize = 0;
+	revc_hanim_callbacks(&info->applyCB, &info->interpCB);
+	info->blendCB = nil;
+	info->addCB = nil;
+	info->mulRecipCB = nil;
+	// revc: animations aren't streamed through librw (the game reads its own .ifp)
+	info->streamRead = nil;
+	info->streamWrite = nil;
+	info->streamGetSize = nil;
+	AnimInterpolatorInfo::registerInterp(info);
+	return object;
+}
+
+inline void*
+hanimClose(void *object, int32 offset, int32 size)
+{
+	AnimInterpolatorInfo::unregisterInterp(AnimInterpolatorInfo::find(1));
+	return object;
+}
+
+
+// the hooks for rwplugins.rs: librw's allocator and the plugin offsets
+extern "C" {
+struct RevcPluginsHooks {
+	uint8 *(*alloc)(size_t size);
+	void (*free)(uint8 *p);
+	int32 hanimOffset, skinGeoOffset, matfxMaterialOffset, matfxAtomicOffset;
+};
+void revc_plugins_set_hooks(RevcPluginsHooks h);
+}
+static_assert(sizeof(HAnimData) == 16 && sizeof(Skin) == 112 && sizeof(MatFX) == 88, "plugin layouts (rwplugins.rs)");
+inline uint8 *pluginAlloc(size_t size) { return (uint8*)rwMalloc(size, MEMDUR_EVENT); }
+inline void pluginFree(uint8 *p) { rwFree(p); }
+inline void
+revcPluginsUpdateHooks(void)
+{
+	RevcPluginsHooks h = { pluginAlloc, pluginFree, hAnimOffset, skinGlobals.geoOffset,
+	                       matFXGlobals.materialOffset, matFXGlobals.atomicOffset };
+	revc_plugins_set_hooks(h);
+}
+
+inline void
+registerHAnimPlugin(void)
+{
+	Engine::registerPlugin(0, ID_HANIM, hanimOpen, hanimClose);
+	hAnimOffset = Frame::registerPlugin(sizeof(HAnimData), ID_HANIM,
+	                                    createHAnim,
+	                                    destroyHAnim, copyHAnim);
+	// revc: read in Rust (rw/DffRead.cpp); models aren't written
+	revcPluginsUpdateHooks();
+}
+
+}
+namespace rw {
+
+
+inline void*
+createSkin(void *object, int32 offset, int32)
+{
+	revc_skin_create(object);
+	return object;
+}
+
+inline void*
+destroySkin(void *object, int32 offset, int32)
+{
+	revc_skin_destroy(object);
+	return object;
+}
+
+inline void*
+copySkin(void *dst, void *src, int32 offset, int32)
+{
+	revc_skin_copy(dst, src);
+	return dst;
+}
+
+// revc: the pre-3.3 skin in the atomic's extension isn't read: none of the game's 4,621 DFFs
+// has one (all 275 skins are in the geometry's extension, read in Rust by rw/DffRead.cpp).
+
+inline void
+skinRights(void *object, int32, int32, uint32)
+{
+	Skin::setPipeline((Atomic*)object, 1);
+}
+
+inline void
+skinAlways(void *object, int32, int32)
+{
+	Atomic *atomic = (Atomic*)object;
+	Geometry *geo = atomic->geometry;
+	if(geo == nil) return;
+	Skin *skin = Skin::get(geo);
+	if(skin == nil) return;
+	Skin::setPipeline((Atomic*)object, 1);
+}
+
+inline void*
+createSkinAtm(void *object, int32 offset, int32)
+{
+	*PLUGINOFFSET(void*, object, offset) = nil;
+	return object;
+}
+
+inline void*
+destroySkinAtm(void *object, int32 offset, int32)
+{
+	return object;
+}
+
+inline void*
+copySkinAtm(void *dst, void *src, int32 offset, int32)
+{
+	*PLUGINOFFSET(void*, dst, offset) = *PLUGINOFFSET(void*, src, offset);
+	return dst;
+}
+
+inline void*
+skinOpen(void *o, int32, int32)
+{
+	// init dummy pipelines
+	skinGlobals.dummypipe = ObjPipeline::create();
+	skinGlobals.dummypipe->pluginID = ID_SKIN;
+	skinGlobals.dummypipe->pluginData = 1;
+	for(uint i = 0; i < nelem(skinGlobals.pipelines); i++)
+		skinGlobals.pipelines[i] = skinGlobals.dummypipe;
+	return o;
+}
+
+inline void*
+skinClose(void *o, int32, int32)
+{
+	for(uint i = 0; i < nelem(skinGlobals.pipelines); i++)
+		if(skinGlobals.pipelines[i] == skinGlobals.dummypipe)
+			matFXGlobals.pipelines[i] = nil;
+	skinGlobals.dummypipe->destroy();
+	skinGlobals.dummypipe = nil;
+	return o;
+}
+
+inline void
+registerSkinPlugin(void)
+{
+	Driver::registerPlugin(PLATFORM_NULL, 0, ID_SKIN,
+	                       skinOpen, skinClose);
+	wgpu::initSkin();
+
+	int32 o;
+	o = Geometry::registerPlugin(sizeof(Skin*), ID_SKIN,
+	                             createSkin, destroySkin, copySkin);
+	Geometry::registerPluginStream(ID_SKIN,
+	                               nil /* revc: read in Rust (rw/DffRead.cpp) */, nil, nil);
+	skinGlobals.geoOffset = o;
+	o = Atomic::registerPlugin(sizeof(HAnimHierarchy*),ID_SKIN,
+	                           createSkinAtm, destroySkinAtm, copySkinAtm);
+	skinGlobals.atomicOffset = o;
+		Atomic::setStreamRightsCallback(ID_SKIN, skinRights);
+	Atomic::setStreamAlwaysCallback(ID_SKIN, skinAlways);
+	revcPluginsUpdateHooks();
+}
+
+inline void
+Skin::init(int32 numBones, int32 numUsedBones, int32 numVertices)
+{
+	revc_skin_init(this, numBones, numUsedBones, numVertices);
+}
+
+
+
+//static_assert(sizeof(Skin::RLEcount) == 2, "RLEcount size");
+//static_assert(sizeof(Skin::RLE) == 2, "RLE size");
+
+inline void
+Skin::findNumWeights(int32 numVertices)
+{
+	revc_skin_find_num_weights(this, numVertices);
+}
+
+inline void
+Skin::findUsedBones(int32 numVertices)
+{
+	revc_skin_find_used_bones(this, numVertices);
+}
+
+inline void
+Skin::setPipeline(Atomic *a, int32 type)
+{
+	(void)type;
+	a->pipeline = skinGlobals.pipelines[rw::platform];
+}
+
+}
+namespace rw {
+
+
+
+// Atomic
+
+inline void*
+createAtomicMatFX(void *object, int32 offset, int32)
+{
+	revc_matfx_atomic_create(object);
+	return object;
+}
+
+inline void*
+copyAtomicMatFX(void *dst, void *src, int32 offset, int32)
+{
+	// don't call seteffects, it will override the pipeline
+	revc_matfx_atomic_copy(dst, src);
+	return dst;
+}
+
+// Material
+
+
+// TODO: Frames and Matrices?
+inline void
+MatFX::setEffects(Material *mat, uint32 type)
+{
+	revc_matfx_set_effects(mat, type);
+}
+
+inline uint32
+MatFX::getEffects(const Material *m)
+{
+	return revc_matfx_get_effects(m);
+}
+
+inline MatFX*
+MatFX::get(const Material *m)
+{
+	return *PLUGINOFFSET(MatFX*, m, matFXGlobals.materialOffset);
+}
+
+inline int32
+MatFX::getEffectIndex(uint32 type)
+{
+	return revc_matfx_effect_index(this, type);
+}
+
+inline void
+MatFX::setBumpTexture(Texture *t)
+{
+	revc_matfx_set_bump_texture(this, t);
+}
+
+inline void
+MatFX::setBumpCoefficient(float32 coef)
+{
+	revc_matfx_set_bump_coefficient(this, coef);
+}
+
+inline Texture*
+MatFX::getBumpTexture(void)
+{
+	return revc_matfx_get_bump_texture(this);
+}
+
+inline float32
+MatFX::getBumpCoefficient(void)
+{
+	return revc_matfx_get_bump_coefficient(this);
+}
+
+inline void
+MatFX::setEnvTexture(Texture *t)
+{
+	revc_matfx_set_env_texture(this, t);
+}
+
+inline void
+MatFX::setEnvFrame(Frame *f)
+{
+	revc_matfx_set_env_frame(this, f);
+}
+
+inline void
+MatFX::setEnvCoefficient(float32 coef)
+{
+	revc_matfx_set_env_coefficient(this, coef);
+}
+
+inline void
+MatFX::setEnvFBAlpha(bool32 useFBAlpha)
+{
+	revc_matfx_set_env_fb_alpha(this, useFBAlpha);
+}
+
+inline Texture*
+MatFX::getEnvTexture(void)
+{
+	return revc_matfx_get_env_texture(this);
+}
+
+inline Frame*
+MatFX::getEnvFrame(void)
+{
+	return revc_matfx_get_env_frame(this);
+}
+
+inline float32
+MatFX::getEnvCoefficient(void)
+{
+	return revc_matfx_get_env_coefficient(this);
+}
+
+inline bool32
+MatFX::getEnvFBAlpha(void)
+{
+	return revc_matfx_get_env_fb_alpha(this);
+}
+
+
+inline void
+MatFX::setDualTexture(Texture *t)
+{
+	revc_matfx_set_dual_texture(this, t);
+}
+
+inline void
+MatFX::setDualSrcBlend(int32 blend)
+{
+	revc_matfx_set_dual_src_blend(this, blend);
+}
+
+inline void
+MatFX::setDualDestBlend(int32 blend)
+{
+	revc_matfx_set_dual_dest_blend(this, blend);
+}
+
+inline Texture*
+MatFX::getDualTexture(void)
+{
+	return revc_matfx_get_dual_texture(this);
+}
+
+inline int32
+MatFX::getDualSrcBlend(void)
+{
+	return revc_matfx_get_dual_src_blend(this);
+}
+
+inline int32
+MatFX::getDualDestBlend(void)
+{
+	return revc_matfx_get_dual_dest_blend(this);
+}
+
+inline void
+MatFX::setUVTransformMatrices(Matrix *base, Matrix *dual)
+{
+	revc_matfx_set_uv_transform(this, base, dual);
+}
+
+inline void
+MatFX::getUVTransformMatrices(Matrix **base, Matrix **dual)
+{
+	revc_matfx_get_uv_transform(this, base, dual);
+}
+
+inline void*
+createMaterialMatFX(void *object, int32 offset, int32)
+{
+	revc_matfx_material_create(object);
+	return object;
+}
+
+inline void*
+destroyMaterialMatFX(void *object, int32 offset, int32)
+{
+	revc_matfx_material_destroy(object);
+	return object;
+}
+
+inline void*
+copyMaterialMatFX(void *dst, void *src, int32 offset, int32)
+{
+	revc_matfx_material_copy(dst, src);
+	return dst;
+}
+
+inline void
+MatFX::enableEffects(Atomic *atomic)
+{
+	*PLUGINOFFSET(int32, atomic, matFXGlobals.atomicOffset) = 1;
+	atomic->pipeline = matFXGlobals.pipelines[rw::platform];
+}
+
+// This prevents setting the pipeline on clone
+inline void
+MatFX::disableEffects(Atomic *atomic)
+{
+	*PLUGINOFFSET(int32, atomic, matFXGlobals.atomicOffset) = 0;
+}
+
+inline bool32
+MatFX::getEffects(Atomic *atomic)
+{
+	return *PLUGINOFFSET(int32, atomic, matFXGlobals.atomicOffset);
+}
+
+inline void*
+matfxOpen(void *o, int32, int32)
+{
+	// init dummy pipelines
+	matFXGlobals.dummypipe = ObjPipeline::create();
+	matFXGlobals.dummypipe->pluginID = 0; //ID_MATFX;
+	matFXGlobals.dummypipe->pluginData = 0;
+	for(uint i = 0; i < nelem(matFXGlobals.pipelines); i++)
+		matFXGlobals.pipelines[i] = matFXGlobals.dummypipe;
+	return o;
+}
+
+inline void*
+matfxClose(void *o, int32, int32)
+{
+	for(uint i = 0; i < nelem(matFXGlobals.pipelines); i++)
+		if(matFXGlobals.pipelines[i] == matFXGlobals.dummypipe)
+			matFXGlobals.pipelines[i] = nil;
+	matFXGlobals.dummypipe->destroy();
+	matFXGlobals.dummypipe = nil;
+	return o;
+}
+
+inline void
+registerMatFXPlugin(void)
+{
+	Driver::registerPlugin(PLATFORM_NULL, 0, ID_MATFX,
+	                       matfxOpen, matfxClose);
+	wgpu::initMatFX();
+
+	matFXGlobals.atomicOffset =
+	Atomic::registerPlugin(sizeof(int32), ID_MATFX,
+	                       createAtomicMatFX, nil, copyAtomicMatFX);
+
+	matFXGlobals.materialOffset =
+	Material::registerPlugin(sizeof(MatFX*), ID_MATFX,
+	                         createMaterialMatFX, destroyMaterialMatFX,
+	                         copyMaterialMatFX);
+	revcPluginsUpdateHooks();
+}
+
+}

@@ -76,7 +76,7 @@ struct HAnimData
 	static HAnimData *get(Frame *f);
 };
 
-extern int32 hAnimOffset;
+inline int32 hAnimOffset;
 extern bool32 hAnimDoStream;
 void registerHAnimPlugin(void);
 
@@ -161,10 +161,10 @@ struct MatFX
 	static void disableEffects(Atomic *atomic);
 	static bool32 getEffects(Atomic *atomic);
 
-	static bool32 envMapFlipU;	// PS2 does this for some reason
-	static bool32 envMapApplyLight;	// modulate env map by lighting
-	static bool32 envMapUseMatColor;	// modulate env map by material color
-	static RGBA envMapColor;	// if !envMapUseMatColor, use this
+	static inline bool32 envMapFlipU;	// PS2 does this for some reason
+	static inline bool32 envMapApplyLight;	// modulate env map by lighting
+	static inline bool32 envMapUseMatColor;	// modulate env map by material color
+	static inline RGBA envMapColor = { 255, 255, 255, 255 };	// if !envMapUseMatColor, use this
 };
 
 struct MatFXGlobals
@@ -174,7 +174,7 @@ struct MatFXGlobals
 	ObjPipeline *pipelines[NUM_PLATFORMS];
 	ObjPipeline *dummypipe;
 };
-extern MatFXGlobals matFXGlobals;
+inline MatFXGlobals matFXGlobals = { 0, 0, { nil }, nil };
 void registerMatFXPlugin(void);
 
 
@@ -189,7 +189,7 @@ struct SkinGlobals
 	ObjPipeline *pipelines[NUM_PLATFORMS];
 	ObjPipeline *dummypipe;
 };
-extern SkinGlobals skinGlobals;
+inline SkinGlobals skinGlobals = { 0, 0, { nil }, nil };
 
 struct Skin
 {

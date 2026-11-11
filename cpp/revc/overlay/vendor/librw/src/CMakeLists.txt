@@ -5,8 +5,6 @@ add_library(librw
     base.cpp
     charset.cpp
     engine.cpp
-    hanim.cpp
-    matfx.cpp
     rwanim.h
     rwengine.h
     rwerror.h
@@ -17,7 +15,6 @@ add_library(librw
     rwplg.h
     rwplugins.h
     rwrender.h
-    skin.cpp
 
     wgpu/rwwgpu.h
     wgpu/wgpudevice.cpp
