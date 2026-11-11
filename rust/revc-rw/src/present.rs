@@ -154,6 +154,14 @@ impl Presenter {
             Some(r) => {
                 let mut px = readback_finish(&self.gpu, r)?;
                 px.as_chunks_mut::<4>().0.iter_mut().for_each(|p| p[3] = 255);
+                // REVC_TEST_SHOT_POSTFX=1: the shot as presented, with the output stage's colour
+                // transform applied the same way as the final blit (frame.rs fs_xbox).
+                if std::env::var_os("REVC_TEST_SHOT_POSTFX").is_some()
+                    && crate::frame::OUTPUT_TRANSFORM.load(std::sync::atomic::Ordering::Relaxed) == 1
+                {
+                    let lut: Vec<u8> = (0..256).map(|i| ((i as f32 / 255.0).powf(1.0 / 1.1) * 255.0 + 0.5) as u8).collect();
+                    px.as_chunks_mut::<4>().0.iter_mut().for_each(|p| for c in &mut p[..3] { *c = lut[*c as usize] });
+                }
                 Some((size.0, size.1, px))
             }
             None => None,
