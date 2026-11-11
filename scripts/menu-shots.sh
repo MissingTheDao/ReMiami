@@ -56,6 +56,7 @@ if (( CLIPS )); then
       ps2) clip ps2 1 640 480 ;;
       xbox) clip xbox 2 640 480 ;;
       xbox_pulse) clip xbox_pulse 2 640 480; mv "$OUT/xbox_pulse_walkthrough.mp4" "$OUT/xbox_pulse_still.mp4" ;;	# 5 s on Display
+      ps2_mapzoom) clip ps2_mapzoom 1 640 480; mv "$OUT/ps2_mapzoom_walkthrough.mp4" "$OUT/ps2_map_zoom_hold.mp4" ;;	# R1 1.5 s, R2 1.5 s
       *) echo "unknown set $set" >&2; exit 2 ;;
     esac
   done

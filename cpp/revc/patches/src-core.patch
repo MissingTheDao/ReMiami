@@ -2056,7 +2056,7 @@
  	CFont::PrintString(MENU_X_LEFT_ALIGNED(STATS_RATING_X) - CFont::GetStringWidth(gUString2, true) / 2.f, MENU_Y(STATS_RATING_Y_2), gUString2);
  }
  
-@@ -3602,6 +4554,26 @@
+@@ -3602,6 +4554,28 @@
  				}
  			}
  
@@ -2067,10 +2067,12 @@
 +			uint32 zoomNow = CTimer::GetTimeInMillisecondsPauseMode();
 +			float zoomDt = Min(100u, zoomNow - lastZoomTick) / 1000.0f;
 +			lastZoomTick = zoomNow;
-+			const bool ps2Zoom = PS2_SKIN_ON && (CPad::GetPad(0)->GetRightShoulder1() || CPad::GetPad(0)->GetRightShoulder2()) &&
++			extern int gRevcTestMapZoom;	// (skel/host/testhooks.cpp: 1 holds R1, -1 R2, for clips)
++			const bool zoomIn = CPad::GetPad(0)->GetRightShoulder1() || gRevcTestMapZoom > 0;
++			const bool ps2Zoom = PS2_SKIN_ON && (zoomIn || CPad::GetPad(0)->GetRightShoulder2() || gRevcTestMapZoom < 0) &&
 +				!CPad::GetPad(0)->GetMouseWheelUp() && !CPad::GetPad(0)->GetMouseWheelDown();
 +			if (ps2Zoom) {
-+				float base = MENU_Y(150.0f), target = CPad::GetPad(0)->GetRightShoulder1() ? base * 10.0f : base;
++				float base = MENU_Y(150.0f), target = zoomIn ? base * 10.0f : base;
 +				float ls = logf(m_fMapSize);
 +				ls += (logf(target) - ls) * (1.0f - expf(-zoomDt / 1.2f));
 +				float z2 = expf(ls) / m_fMapSize;
@@ -2083,7 +2085,7 @@
  			if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
  				if (CPad::GetPad(0)->GetMouseWheelDown() && m_fMapSize > MENU_X(MAP_SIZE_TO_ALLOW_X_MOVE))
  					ZOOM(mapCrosshair.x, mapCrosshair.y, false);
-@@ -3715,11 +4687,11 @@
+@@ -3715,11 +4689,11 @@
  			break;
  		}
  		case MENUPAGE_SOUND_SETTINGS:
@@ -2097,7 +2099,7 @@
  					m_nHoverOption = HOVEROPTION_NEXT_RADIO;
  			}
  			break;
-@@ -4297,6 +5269,8 @@
+@@ -4297,6 +5271,8 @@
  
  	if (!m_AllowNavigation && m_firstStartCounter == 255)
  		m_AllowNavigation = true;
@@ -2106,7 +2108,7 @@
  	if (!m_bShowMouse && m_nCurrScreen != MENUPAGE_MAP && (m_nMouseOldPosX != m_nMousePosX || m_nMouseOldPosY != m_nMousePosY)) {
  		m_bShowMouse = true;
  	}
-@@ -4547,7 +5521,8 @@
+@@ -4547,7 +5523,8 @@
  		}
  	}
  	if (changeValueBy != 0) {
@@ -2116,7 +2118,7 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_NOTHING
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_LABEL
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_YES
-@@ -4957,7 +5932,7 @@
+@@ -4957,7 +5934,7 @@
  					ControlsManager.MakeControllerActionsBlank();
  					ControlsManager.InitDefaultControlConfiguration();
  					ControlsManager.InitDefaultControlConfigMouse(MousePointerStateHelper.GetMouseSetUp());
@@ -2125,7 +2127,7 @@
  					if (AllValidWinJoys.m_aJoys[JOYSTICK1].m_bInitialised) {
  						DIDEVCAPS devCaps;
  						devCaps.dwSize = sizeof(DIDEVCAPS);
-@@ -5720,6 +6695,7 @@
+@@ -5720,6 +6697,7 @@
  void
  CMenuManager::UnloadTextures()
  {
@@ -2133,7 +2135,7 @@
  	if (m_nCurrScreen == MENUPAGE_SOUND_SETTINGS)
  		DMAudio.StopFrontEndTrack();
  
-@@ -5827,52 +6803,54 @@
+@@ -5827,52 +6805,54 @@
  
  	// Because m_fMapSize is half of the map length(hence * 2), and map consists of 3x3 tiles(hence / 3).
  	float halfTile = m_fMapSize * 2.f / 3.f / 2.f;
@@ -2215,7 +2217,7 @@
  	}
  
  	CRadar::DrawBlips();
-@@ -5933,12 +6911,15 @@
+@@ -5933,12 +6913,15 @@
  		mapCrosshair.y = m_nMousePosY;
  	}
  

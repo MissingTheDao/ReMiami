@@ -79,6 +79,7 @@ unsafe extern "C" {
     fn revc_test_menu_state(page: i32, option: i32, context: i32, layout: i32, legend: i32) -> i32;
     fn revc_test_menu_page_id(name: *const std::ffi::c_char) -> i32;
     fn revc_test_menu_input(down: i32, change: i32);
+    fn revc_test_map_zoom(dir: i32);
     fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
     fn revc_test_goto_spot(x: f32, y: f32, z: f32, dx: f32, dy: f32, dz: f32, hour: i32, minute: i32) -> f32;
 }
@@ -259,6 +260,9 @@ const MENU_SHOTS_XBOX_END: &[MenuShot] = &[
 /// A still clip for the selection pulse (set xbox_pulse, with --clips): Display, brightness
 /// selected, held 5 s with no input.
 const MENU_SHOTS_XBOX_PULSE: &[MenuShot] = &[("pulse_still", "console_display", 0, -1, -1, -1, 1000)];
+/// A clip of the PS2 map zoom (set ps2_mapzoom, with --clips): the map page, R1 held 1.5 s, let go
+/// 1 s, R2 held 1.5 s, let go 1 s.
+const MENU_SHOTS_PS2_MAPZOOM: &[MenuShot] = &[("mapzoom_still", "map", 0, -1, -1, 1, 1000)];
 
 static MENU_SHOT_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
 static MENU_VIDEO_FRAME: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -269,6 +273,7 @@ fn menu_shots() -> (&'static str, &'static [MenuShot]) {
         Ok("ps2_endgame") => ("ps2", MENU_SHOTS_PS2_END),
         Ok("xbox_endgame") => ("xbox", MENU_SHOTS_XBOX_END),
         Ok("xbox_pulse") => ("xbox", MENU_SHOTS_XBOX_PULSE),
+        Ok("ps2_mapzoom") => ("ps2", MENU_SHOTS_PS2_MAPZOOM),
         _ => ("ps2", MENU_SHOTS_PS2),
     }
 }
@@ -760,6 +765,10 @@ impl Driver {
                 }
                 let radio = id.contains("radio");
                 let still = id.ends_with("_still");	// held without input, 5 s
+                if id == "mapzoom_still" {
+                    let dir = match frames { 1..=90 => 1, 151..=240 => -1, _ => 0 };
+                    unsafe { revc_test_map_zoom(dir) };
+                }
                 match if still { 0 } else { frames } {
                     30 if radio => unsafe { revc_test_menu_input(0, 1) },
                     60 if radio => unsafe { revc_test_menu_input(0, -1) },

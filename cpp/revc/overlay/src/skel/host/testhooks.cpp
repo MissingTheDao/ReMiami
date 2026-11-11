@@ -236,6 +236,14 @@ revc_test_menu_page_id(const char *name)
 	return -1;
 }
 extern "C++" bool MenuSkinPS2Active(int page, bool gameNotLoaded);	// (C++ linkage inside this file's extern "C" block)
+// Clips: the map zoom held (1 R1, -1 R2, 0 nothing), as the player would hold the shoulders.
+int gRevcTestMapZoom = 0;
+void
+revc_test_map_zoom(int dir)
+{
+	gRevcTestMapZoom = dir;
+}
+
 int
 revc_test_menu_state(int page, int option, int context, int layout, int legend)
 {
