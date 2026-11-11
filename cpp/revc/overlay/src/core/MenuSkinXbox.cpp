@@ -155,6 +155,12 @@ MenuSkinXboxText(float x, float y, float height, const wchar *text, const CRGBA 
 	return true;
 }
 
+float
+MenuSkinXboxTextWidth(const wchar *text, float height)
+{
+	return fontRW.ok ? XboxFontWidth(fontRW, text, height) : 0.0f;
+}
+
 static bool
 LoadSprites(void)
 {

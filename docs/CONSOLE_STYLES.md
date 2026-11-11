@@ -252,8 +252,14 @@ native 640x480 xemu captures:
   the Xbox's green with teal lines (measured). Titles and items stay in the game's heading font,
   which is what the Xbox shows there too.
 
-Still to do: the Stats page in the Xbox layout (a stats/unlocked-items pair of tabs), the
-panel shapes compared at 640x480, the Xbox's "Fire missiles" callout, every page checked in play.
+- Stats: the Xbox's box (92..540 x 118..295) and rating positions, the same scrolling lines and
+  standard font in the Xbox's columns (110 / right at 527). The Xbox's Unlocked Items tab is not
+  shown: the PC game keeps no unlocked-items list.
+- Panel shapes checked at 640x480 (`REVC_TEST_WINDOW=640x480` with a 640x480 config): within a few
+  pixels of the captures (Display: revc 84,84 / 578,366 vs Xbox 84,84 / 580,378).
+
+Still to do: the Xbox's "Fire missiles" callout, every page checked in play, the comparison shot set
+(research request: `REVC_TEST=menus`, every page per style, see below).
 
 ## 13i: texture packs per UI style
 
