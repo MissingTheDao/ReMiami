@@ -16,7 +16,7 @@
  		if(Alpha < fDefaultAlphaOrient-0.05f)
  			AlphaOffset = 0.05f;
  		else if(Alpha < fDefaultAlphaOrient)
-@@ -2500,6 +2504,40 @@
+@@ -2500,6 +2504,44 @@
  
  float fBike1stPersonOffsetZ = 0.15f;
  
@@ -26,20 +26,24 @@
 +// CPad::LookAroundLeftRight/UpDown ((|axis| - 85) * 127/32), by the stick's tilt (|axis|/127):
 +// piecewise linear through the consoles' measurements at the default FOV.
 +//  - PS2 v1.40 yaw: nothing to 0.88, 38 at 0.90, 136 at 0.95, 220 full; pitch 150 full.
-+//  - Xbox yaw (sweep run): nothing to 0.80, 57 at 0.85, 73 at 0.90, 108 at 0.95, 140 full;
-+//    pitch 83 full. Provisional below full tilt: another Xbox run gave faster partial tilts,
-+//    possibly depending on the pitch.
++//  - Xbox yaw, by the camera's pitch (a targeted run at five pitches, research
++//    autopad-runs/xbox_cam_partial_curve.csv; the same at a pitch 10 s apart, so the camera
++//    state, not time): level or up nothing to 0.80, 57 at 0.85, 79 at 0.90, 108 at 0.95, 144
++//    full; looking down (below about -10 degrees, uncertain by ~10: measured at 0, +60, ~-20,
++//    -89.5) 67 at 0.75, 78 at 0.80, 94, 111, 127, 145 full (below 0.75 extended linearly to the
++//    dead zone, 85/128, unmeasured). Pitch 83 full, the same curve scaled.
 +static float
-+ConsoleLookRate(float look, bool pitch)
++ConsoleLookRate(float look, bool pitch, bool lookingDown)
 +{
 +	static const float ps2[][2] = { { 0.88f, 0.0f }, { 0.90f, 38.0f }, { 0.95f, 136.0f }, { 1.0f, 220.0f } };
-+	static const float xbox[][2] = { { 0.80f, 0.0f }, { 0.85f, 57.0f }, { 0.90f, 73.0f }, { 0.95f, 108.0f }, { 1.0f, 140.0f } };
++	static const float xboxLevel[][2] = { { 0.80f, 0.0f }, { 0.85f, 57.0f }, { 0.90f, 79.0f }, { 0.95f, 108.0f }, { 1.0f, 144.0f } };
++	static const float xboxDown[][2] = { { 85.0f/127.0f, 48.0f }, { 0.75f, 67.0f }, { 0.80f, 78.0f }, { 0.85f, 94.0f }, { 0.90f, 111.0f }, { 0.95f, 127.0f }, { 1.0f, 145.0f } };
 +	bool isPs2 = gUiStyle == 1;
-+	const float (*t)[2] = isPs2 ? ps2 : xbox;
-+	int n = isPs2 ? 4 : 5;
++	const float (*t)[2] = isPs2 ? ps2 : lookingDown ? xboxDown : xboxLevel;
++	int n = isPs2 ? 4 : lookingDown ? 7 : 5;
 +	float tilt = Min(1.0f, (85.0f + Abs(look) * 32.0f / 127.0f) / 127.0f);
 +	float rate = 0.0f;
-+	if(look == 0.0f || tilt <= t[0][0])
++	if(look == 0.0f || tilt < t[0][0])
 +		return 0.0f;
 +	if(tilt >= t[n-1][0])
 +		rate = t[n-1][1];
@@ -50,14 +54,14 @@
 +				break;
 +			}
 +	if(pitch)
-+		rate *= isPs2 ? 150.0f / 220.0f : 83.0f / 140.0f;
++		rate *= isPs2 ? 150.0f / 220.0f : 83.0f / t[n-1][1];
 +	return rate;
 +}
 +
  void
  CCam::Process_1stPerson(const CVector &CameraTarget, float TargetOrientation, float SpeedVar, float TargetSpeedVar)
  {
-@@ -2564,8 +2602,17 @@
+@@ -2564,8 +2606,18 @@
  		LookUpDown = CPad::GetPad(0)->LookAroundUpDown();
  		float xdir = LookLeftRight < 0.0f ? -1.0f : 1.0f;
  		float ydir = LookUpDown < 0.0f ? -1.0f : 1.0f;
@@ -66,8 +70,9 @@
 +			// CAMERA_LOOK_RATES.md, PS2 v1.40 and Xbox pans and stick sweeps): no ramp-up or
 +			// carry-on, the rate a function of the stick's tilt (deg/s; pitch the same curve
 +			// scaled). The PC's is quadratic past 85/128 and reaches ~330 deg/s.
-+			Beta += xdir * DEGTORAD(ConsoleLookRate(LookLeftRight, false)) / 50.0f * CTimer::GetTimeStep();
-+			Alpha += ydir * DEGTORAD(ConsoleLookRate(LookUpDown, true)) / 50.0f * CTimer::GetTimeStep();
++			bool down = Alpha < DEGTORAD(-10.0f);
++			Beta += xdir * DEGTORAD(ConsoleLookRate(LookLeftRight, false, down)) / 50.0f * CTimer::GetTimeStep();
++			Alpha += ydir * DEGTORAD(ConsoleLookRate(LookUpDown, true, down)) / 50.0f * CTimer::GetTimeStep();
 +		}else{
  		Beta += SQR(LookLeftRight/100.0f)*xdir*0.8f/14.0f * FOV/80.0f * CTimer::GetTimeStep();
  		Alpha += SQR(LookUpDown/150.0f)*ydir*1.0f/14.0f * FOV/80.0f * CTimer::GetTimeStep();
@@ -3813,6 +3818,25 @@
  
  	PCTempJoyState.Clear();
  	PCTempKeyState.Clear();
+@@ -3293,11 +3319,17 @@
+ 	return 0;
+ }
+ 
++extern int8 gUiStyle;
++
+ int16 CPad::LookAroundUpDown(void)
+ {
+ 	int16 axis = GetPad(0)->NewState.RightStickY;
+ #ifdef FIX_BUGS
+-	axis = -axis;
++	// revc (plan task 13): not in the console styles. The PS2 and Xbox look like the original
++	// code: with "invert" off, stick up looks down (flight style; research
++	// CAMERA_LOOK_RATES.md, PS2 v1.40 beach and Xbox lobby pans).
++	if (gUiStyle != 1 && gUiStyle != 2)
++		axis = -axis;
+ #endif
+ 	if (CPad::bInvertLook4Pad)
+ 		axis = -axis;
 --- a/src/core/Radar.cpp
 +++ b/src/core/Radar.cpp
 @@ -1117,7 +1117,7 @@
