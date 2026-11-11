@@ -150,7 +150,7 @@ DrawTabs(CMenuManager *m, uint8 alpha)
 static void
 DrawHelpBox(uint8 alpha, int page)
 {
-	const bool mapPage = page == MENUPAGE_MAP, savePage = page == MENUPAGE_CHOOSE_SAVE_SLOT, optionsPage = page == MENUPAGE_CONSOLE_OPTIONS;
+	const bool mapPage = page == MENUPAGE_MAP && pageFocus, savePage = page == MENUPAGE_CHOOSE_SAVE_SLOT, optionsPage = page == MENUPAGE_CONSOLE_OPTIONS;
 	const int rows = mapPage ? 5 : 4, nd = savePage || optionsPage ? 2 : 4;	// (the options list: up/down scroll)
 	// thick black outline, about 8 capture pixels all round (measured)
 	const float o = 8.0f;
@@ -277,13 +277,45 @@ MenuSkinPS2Active(int page, bool gameNotLoaded)
 		page == MENUPAGE_SAVE_OVERWRITE_CONFIRM || page == MENUPAGE_SAVING_IN_PROGRESS || page == MENUPAGE_SAVE_SUCCESSFUL);
 }
 
-// L1/R1 step through the tabs, as on the PS2 pause menu (the PC menu's own navigation stays).
-// Returns true when it switched pages (the rest of this frame's menu input is skipped).
+// Navigation as on the PS2 (measured: autopad probes in PCSX2, EU v3.00). Focus is on the tab bar
+// or in the page's list:
+// - the tab bar: left/right move in the row, up/down to the other row in the same column (both
+//   wrap); the page changes at once; cross enters the list at row 0 (never remembered); triangle
+//   closes the menu. L1/R1 do nothing.
+// - the list: the PC menu's own input, except triangle, which goes back to the tab bar (on
+//   pages that aren't a tab's own page, e.g. a confirmation, triangle goes back as on the PC,
+//   and the tab page then has the tab bar focused).
+// START from the game opens the Map page with the tab bar focused (Frontend.cpp).
+// pageFocus: true = the list has focus.
 
 bool
 MenuSkinPS2PageFocus(void)
 {
 	return pageFocus;
+}
+
+// The list has focus (test shots that select a row; Frontend.cpp's highlight checks).
+void
+MenuSkinPS2SetFocus(int page, bool list)
+{
+	focusPage = page;
+	pageFocus = list;
+}
+
+// A tab's own page (the pages the tab bar switches to)?
+static bool
+IsTabPage(int page)
+{
+	for (int i = 0; i < (int)ARRAY_SIZE(tabs); i++)
+		if (tabs[i].page == page)
+			return true;
+	return false;
+}
+
+bool
+MenuSkinPS2TabFocus(CMenuManager *m)
+{
+	return MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded) && IsTabPage(m->m_nCurrScreen) && !pageFocus;
 }
 
 bool
@@ -308,23 +340,50 @@ MenuSkinPS2Input(CMenuManager *m)
 		return true;
 	}
 	if (m->m_nCurrScreen != focusPage) {
+		// a new page: a tab's page has the tab bar focused, any other page (confirmations,
+		// sub-pages) its list
 		focusPage = m->m_nCurrScreen;
-		pageFocus = false;
-	}
-	if (m->m_nCurrScreen == MENUPAGE_MAP) {
-		CPad *p = CPad::GetPad(0);
-		if (p->GetDPadUpJustDown() || p->GetDPadDownJustDown() || p->GetUpJustDown() || p->GetDownJustDown())
-			pageFocus = true;
+		pageFocus = !IsTabPage(m->m_nCurrScreen);
 	}
 	if (!MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return false;
 	CPad *pad = CPad::GetPad(0);
-	int step = pad->GetRightShoulder1JustDown() ? 1 : pad->GetLeftShoulder1JustDown() ? -1 : 0;
-	if (step == 0)
+	if (pageFocus) {
+		if (IsTabPage(m->m_nCurrScreen) && (pad->GetTriangleJustDown() || pad->GetEscapeJustDown())) {
+			pageFocus = false;
+			return true;
+		}
 		return false;
-	int n = ARRAY_SIZE(tabs);
-	int next = (CurrentTab(m->m_nCurrScreen) + step + n) % n;
-	m->SwitchToNewScreen(tabs[next].page);
+	}
+	if (!IsTabPage(m->m_nCurrScreen))
+		return false;
+	// the tab bar
+	if (pad->GetTriangleJustDown() || pad->GetEscapeJustDown()) {
+		m->m_bShutDownFrontEndRequested = true;
+		return true;
+	}
+	if (pad->GetCrossJustDown() || pad->GetEnterJustDown()) {
+		pageFocus = true;
+		m->m_nCurrOption = aScreens[m->m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL ? 1 : 0;
+		m->m_nFirstVisibleRowOnList = 0;
+		return true;
+	}
+	int n = ARRAY_SIZE(tabs), perRow = (n + 1) / 2;
+	int cur = CurrentTab(m->m_nCurrScreen), row = cur / perRow, col = cur % perRow;
+	int rowLen[2] = { perRow, n - perRow };
+	if (pad->GetDPadLeftJustDown() || pad->GetLeftJustDown()) col = (col + rowLen[row] - 1) % rowLen[row];
+	else if (pad->GetDPadRightJustDown() || pad->GetRightJustDown()) col = (col + 1) % rowLen[row];
+	else if (pad->GetDPadUpJustDown() || pad->GetUpJustDown() || pad->GetDPadDownJustDown() || pad->GetDownJustDown()) {
+		row = 1 - row;
+		col = Min(col, rowLen[row] - 1);
+	} else
+		return true;	// nothing else acts on the tab bar
+	int next = row * perRow + col;
+	if (next != cur) {
+		m->SwitchToNewScreen(tabs[next].page);
+		focusPage = m->m_nCurrScreen;
+		pageFocus = false;
+	}
 	return true;
 }
 

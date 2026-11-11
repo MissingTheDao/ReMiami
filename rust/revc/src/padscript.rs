@@ -65,6 +65,10 @@ fn json_string(s: &str, key: &str) -> Option<String> {
 }
 
 impl PadScript {
+    pub fn new(id: &str, style: &str, start: &str) -> PadScript {
+        PadScript { id: id.into(), style: style.into(), start: start.into(), ..Default::default() }
+    }
+
     pub fn parse(json: &str) -> Result<PadScript, String> {
         let mut p = PadScript {
             id: json_string(json, "id").unwrap_or_default(),

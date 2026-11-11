@@ -343,7 +343,8 @@ revc_test_menu_page_id(const char *name)
 			return e.p;
 	return -1;
 }
-extern "C++" bool MenuSkinPS2Active(int page, bool gameNotLoaded);	// (C++ linkage inside this file's extern "C" block)
+extern "C++" bool MenuSkinPS2Active(int page, bool gameNotLoaded);
+extern "C++" void MenuSkinPS2SetFocus(int page, bool list);	// (C++ linkage inside this file's extern "C" block)
 // Clips: the map zoom held (1 R1, -1 R2, 0 nothing), as the player would hold the shoulders.
 int gRevcTestMapZoom = 0;
 void
@@ -387,6 +388,9 @@ revc_test_menu_state(int page, int option, int context, int layout, int legend)
 		FrontEndMenuManager.m_PrefsShowLegends = legend;
 	if (FrontEndMenuManager.m_nCurrScreen != page)
 		FrontEndMenuManager.SwitchToNewScreen(page);
+	// PS2 style: rows are only highlighted with the list focused (the Map page keeps its tab bar)
+	if (option >= 0 || page != MENUPAGE_MAP)
+		MenuSkinPS2SetFocus(page, page != MENUPAGE_MAP);
 	if (FrontEndMenuManager.m_nCurrOption != option) {
 		// from the top, moving down as the player does (so long pages scroll the row into view)
 		FrontEndMenuManager.m_nCurrOption = 0;

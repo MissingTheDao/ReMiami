@@ -9,7 +9,8 @@
 #   source the json names. For a run, an optional "revc_run" entry gives "start"/"end" in frames
 #   relative to the input (default -3 and the end of the run) and "roi" in revc's 640x480 frame
 #   (default: the revc entry's roi, else the ref roi). Ids need the out dir to be given first.
-#   Writes <out>/<id>/frame_*.png, <out>/motions.json and motiontest.py's out/motion plots.
+#   Writes <out>/<id>/frame_*.png, <out>/motions.json and motiontest.py's out/motion plots, and for
+#   motions revc reaches by the console's button route (MOTION_ROUTES) <out>/<id>.pad.json.
 #   Exit 1 if any motion fails (or a run fails).
 # Wrap it in scripts/headless.sh like the other game runs.
 set -euo pipefail
@@ -35,7 +36,7 @@ for id in "${IDS[@]}"; do
   sed -e "s/^\[Graphics\]/[Graphics]\nUiStyle=$st/" -e "s/^Width=.*/Width=640/" -e "s/^Height=.*/Height=480/" \
     "$ROOT/tests/config/reVC.ini" > "$cfg"
   rm -rf "${OUT:?}/$id"; mkdir -p "$OUT/$id"
-  if REVC_TEST_CONFIG=$cfg REVC_TEST_WINDOW=640x480 REVC_TEST_MOTION=$id REVC_FIXED_FPS=60 \
+  if REVC_TEST_CONFIG=$cfg REVC_TEST_WINDOW=640x480 REVC_TEST_MOTION=$id REVC_TEST_PAD_OUT="$OUT" REVC_FIXED_FPS=60 \
       REVC_TEST_VIDEO_DIR="$OUT/$id" REVC_TEST_TIMEOUT=300 "$ROOT/scripts/test.sh" menus > "$OUT/$id.log" 2>&1; then
     RAN+=("$id"); echo "motion $id: $(ls "$OUT/$id" | wc -l) frames"
   else
@@ -50,7 +51,7 @@ base = os.path.dirname(src)
 ms = json.load(open(src))
 for m in ms:
     for side in ('ref', 'revc'):	# keep the json's own paths valid from the new location
-        if side in m and 'video' in m[side] and not os.path.isabs(os.path.expanduser(m[side]['video'])):
+        if side in m and m[side].get('video') and not os.path.isabs(os.path.expanduser(m[side]['video'])):
             m[side]['video'] = os.path.join(base, m[side]['video'])
     if m['id'] in ran:
         d = os.path.join(out, m['id']); n = len([f for f in os.listdir(d) if f.startswith('frame_')])

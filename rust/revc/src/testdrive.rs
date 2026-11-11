@@ -312,16 +312,113 @@ const MOTIONS: &[Motion] = &[
     ("xbox_confirm_open", "load", 1, -1, -1, "select", 90),
 ];
 
-/// The pad script of REVC_TEST_PAD_SCRIPT (a file), parsed once.
+/// The pad script of REVC_TEST_PAD_SCRIPT (a file), or of REVC_TEST_MOTION's route
+/// (MOTION_ROUTES, also written to REVC_TEST_PAD_OUT/<id>.pad.json), parsed once.
 fn pad_script() -> Result<&'static crate::padscript::PadScript, String> {
     static S: std::sync::OnceLock<Result<crate::padscript::PadScript, String>> = std::sync::OnceLock::new();
     S.get_or_init(|| {
+        if let Some(r) = motion_route() {
+            let p = route_script(r)?;
+            if let Some(dir) = std::env::var_os("REVC_TEST_PAD_OUT") {
+                let path = PathBuf::from(dir).join(format!("{}.pad.json", p.id));
+                std::fs::write(&path, p.to_json()).map_err(|e| format!("{}: {e}", path.display()))?;
+            }
+            return Ok(p);
+        }
         let path = std::env::var("REVC_TEST_PAD_SCRIPT").map_err(|_| "REVC_TEST_PAD_SCRIPT not set".to_string())?;
         let text = std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
         crate::padscript::PadScript::parse(&text).map_err(|e| format!("{path}: {e}"))
     })
     .as_ref()
     .map_err(|e| e.clone())
+}
+
+/// Motion tests driven by the console's own button route (PS2 style; navigation measured on the
+/// PS2, MenuSkinPS2.cpp): (id, presses from menu_base = in game with the menu closed, the
+/// motion's input, frames held after it). Presses are 4-frame taps 30 frames apart (60 after
+/// START, for the menu to open); the input comes 60 frames after the last press. Inputs: a tap
+/// ("cross"), "+r1:90" (held 90 frames) or "none". Tabs: map brief load stats / controls audio
+/// display options, the menu opens on Map with the tab bar focused; cross enters a list at row 0.
+/// The same route is written as <id>.pad.json (REVC_TEST_PAD_OUT) for the console captures.
+type MotionRoute = (&'static str, &'static str, &'static str, u32);
+const MOTION_ROUTES: &[MotionRoute] = &[
+    ("ps2_menu_open", "", "start", 60),
+    ("ps2_menu_close", "start", "start", 60),
+    ("ps2_page_change_right", "start down right", "right", 60),
+    ("ps2_page_change_left", "start down right right", "left", 60),
+    ("ps2_page_change_to_map", "start right", "left", 60),
+    ("ps2_page_change_from_map", "start", "right", 60),
+    ("ps2_tab_brief_to_load", "start right", "right", 60),
+    ("ps2_tab_brief_to_audio", "start right", "down", 60),
+    ("ps2_tab_audio_to_brief", "start right down", "up", 60),
+    ("ps2_confirm_open", "start right right cross down", "cross", 60),
+    ("ps2_confirm_close", "start right right cross down cross", "triangle", 60),
+    ("ps2_focus_tabs_to_list_display", "start down right right", "cross", 60),
+    ("ps2_focus_tabs_to_list_audio", "start down right", "cross", 60),
+    ("ps2_focus_tabs_to_list_controls", "start down", "cross", 60),
+    ("ps2_focus_list_to_tabs_map", "start cross", "triangle", 60),
+    ("ps2_focus_list_to_tabs_audio", "start down right cross", "triangle", 60),
+    ("ps2_highlight_down", "start down right cross", "down", 60),
+    ("ps2_highlight_up", "start down right cross down", "up", 60),
+    ("ps2_highlight_wrap", "start down right cross", "up", 60),
+    ("ps2_highlight_wrap_down", "start down right right cross up", "down", 60),
+    ("ps2_glide_load", "start right right cross", "down", 60),
+    ("ps2_glide_audio_sideways", "start down right cross", "down", 60),
+    ("ps2_radio_right", "start down right cross down down", "right", 60),
+    ("ps2_radio_left", "start down right cross down down", "left", 60),
+    ("ps2_slider_step", "start down right cross", "right", 60),
+    ("ps2_legend_off", "start cross", "cross", 60),
+    ("ps2_legend_on", "start cross cross", "cross", 60),
+    ("ps2_map_blip_blink", "start", "none", 240),
+    ("ps2_map_zoom_in", "start cross", "+r1:90", 150),
+    ("ps2_map_zoom_out", "start cross +r1:120", "+r2:90", 150),
+    ("ps2_stats_scroll", "start right right right", "none", 600),
+    ("ps2_setup_switch", "start down cross", "right", 60),
+    ("ps2_display_screen_pos", "start down right right cross down down down down down down cross", "right", 60),
+];
+
+/// The pad script for a routed motion (MOTION_ROUTES).
+fn route_script(r: &MotionRoute) -> Result<crate::padscript::PadScript, String> {
+    let (id, route, input, hold) = *r;
+    let mut p = crate::padscript::PadScript::new(id, id.split('_').next().unwrap_or(""), "menu_base");
+    let mut f = 0u32;
+    let mut first = true;
+    let press = |p: &mut crate::padscript::PadScript, f: u32, op: &str| -> Result<u32, String> {
+        // "+btn:N" holds N frames, otherwise a 4-frame tap; returns the frames it takes
+        if let Some((b, n)) = op.strip_prefix('+').and_then(|o| o.split_once(':')) {
+            let n: u32 = n.parse().map_err(|_| format!("bad hold {op}"))?;
+            p.add_step(&format!("{f} +{b}"))?;
+            p.add_step(&format!("{} -{b}", f + n))?;
+            Ok(n)
+        } else {
+            p.add_step(&format!("{f} {op}*4"))?;
+            Ok(4)
+        }
+    };
+    for op in route.split_whitespace() {
+        if !first {
+            f += 30;
+        }
+        first = false;
+        let took = press(&mut p, f, op)?;
+        f += took.saturating_sub(4);
+        if op == "start" {
+            f += 30;
+        }
+    }
+    let input_at = if route.is_empty() { 30 } else { f + 60 };
+    p.add_step(&format!("{input_at} mark:input"))?;
+    if input != "none" {
+        press(&mut p, input_at, input)?;
+    }
+    p.add_step(&format!("{} mark:end", input_at + hold))?;
+    Ok(p)
+}
+
+/// REVC_TEST_MOTION's route, if it has one.
+fn motion_route() -> Option<&'static MotionRoute> {
+    let id = std::env::var("REVC_TEST_MOTION").ok()?;
+    MOTION_ROUTES.iter().find(|m| m.0 == id)
 }
 
 fn motion() -> Option<&'static Motion> {
@@ -672,12 +769,12 @@ impl Driver {
                     self.phase = Phase::Pads;
                     return false;
                 }
-                if self.scenario == Scenario::Menus {
-                    self.phase = Phase::Menus { idx: 0, frames: 0 };
+                if self.scenario == Scenario::PadScript || (self.scenario == Scenario::Menus && motion_route().is_some()) {
+                    self.phase = Phase::PadScript { frame: 0 };
                     return false;
                 }
-                if self.scenario == Scenario::PadScript {
-                    self.phase = Phase::PadScript { frame: 0 };
+                if self.scenario == Scenario::Menus {
+                    self.phase = Phase::Menus { idx: 0, frames: 0 };
                     return false;
                 }
                 if self.scenario == Scenario::Scenes {
