@@ -410,6 +410,8 @@ const MOTION_ROUTES: &[MotionRoute] = &[
     ("xbox_page_load_to_map", "start", "right", 60),
     ("xbox_page_map_to_brief", "start right", "right", 60),
     ("xbox_page_brief_to_stats", "start right right", "right", 60),
+    ("xbox_page_stats_to_brief", "start right right right", "left", 60),
+    ("xbox_highlight_down_load", "start a", "down", 60),	// Load: new game -> load game
     ("xbox_page_stats_to_controls", "start right right right", "right", 60),
     ("xbox_page_controls_to_audio", "start right right right right", "right", 60),
     ("xbox_page_change_right", "start left left", "right", 60),	// Audio -> Display
@@ -471,7 +473,7 @@ fn route_script(r: &MotionRoute) -> Result<crate::padscript::PadScript, String> 
 fn motion_route() -> Option<&'static MotionRoute> {
     let id = std::env::var("REVC_TEST_MOTION").ok()?;
     // (the research catalogue's newer references carry a version suffix: same motion, same route)
-    let base = id.strip_suffix("_v140").unwrap_or(&id);
+    let base = id.strip_suffix("_v140").or_else(|| id.strip_suffix("_v2")).unwrap_or(&id);
     MOTION_ROUTES.iter().find(|m| m.0 == base)
 }
 

@@ -821,8 +821,14 @@ MenuSkinXboxInput(CMenuManager *m)
 		return true;
 	}
 	if (HasSubTabs(m->m_nCurrScreen) && !SettingsSubTabs(m->m_nCurrScreen)) {
-		if (left || right)
+		if (left || right) {
 			MenuSkinXboxSetSubTab(m->m_nCurrScreen, 1 - MenuSkinXboxSubTab(m->m_nCurrScreen));
+			extern bool gPs2FadeIsPageChange;
+			m->m_nMenuFadeAlpha = 0;	// the sub-tab's content fades in (~214 ms 10-90 %, Xbox autopad)
+			gPs2FadeIsPageChange = false;
+			extern bool gXboxSubTabFade;
+			gXboxSubTabFade = true;
+		}
 		return left || right || a;
 	}
 	return false;

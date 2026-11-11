@@ -30,7 +30,8 @@ KNOWN=$(/usr/bin/grep -oE '^ *\("(ps2|xbox)_[a-z0-9_]+"' "$ROOT/rust/revc/src/te
 FAILED=0
 RAN=()
 for id in "${IDS[@]}"; do
-  /usr/bin/grep -qx -- "${id%_v140}" <<< "$KNOWN" || { echo "motion $id: no revc motion, using the json's revc source"; continue; }
+  base=${id%_v140}; base=${base%_v2}
+  /usr/bin/grep -qx -- "$base" <<< "$KNOWN" || { echo "motion $id: no revc motion, using the json's revc source"; continue; }
   st=1; [[ $id == xbox_* ]] && st=2
   cfg="$OUT/$id.ini"
   sed -e "s/^\[Graphics\]/[Graphics]\nUiStyle=$st/" -e "s/^Width=.*/Width=640/" -e "s/^Height=.*/Height=480/" \
