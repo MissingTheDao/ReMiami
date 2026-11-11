@@ -2074,7 +2074,7 @@
 +				// distance: ~12 frames into Brief/Stats, ~23 into Map, Display, Audio, Controls;
 +				// Xbox autopad sets 2-3; frames scaled by ~1.13 as revc's steps land early)
 +				int xboxFrames = m_nCurrScreen == MENUPAGE_BRIEFS || m_nCurrScreen == MENUPAGE_STATS ? 14 : 31;
-+				int xboxStep = 255 * 2 / xboxFrames;
++				int xboxStep = XBOX_DIALOG_ON ? 255 : 255 * 2 / xboxFrames;	// (a dialog cuts in)
 +				(void)gPanelMove;
 +				m_nMenuFadeAlpha += !ps2 ? (gXboxSubTabFade ? 30 : gPs2FadeIsPageChange && MenuSkinXboxActive(m_nCurrScreen, m_bGameNotLoaded) ? xboxStep : 20) :
 +					gPs2FadeIsPageChange ? 48 : 64;	// (PS2 page change: ~136 ms 10-90 %, v1.40; Xbox sub-tab ~214 ms)	// (PS2 page change: 10-90 % ~140 ms vs the console 133-136, v1.40 autopad)

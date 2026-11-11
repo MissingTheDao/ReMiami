@@ -417,6 +417,7 @@ const MOTION_ROUTES: &[MotionRoute] = &[
     ("xbox_page_controls_to_stats", "start right right right right", "left", 60),
     ("xbox_page_audio_to_display", "start left left", "right", 60),
     ("xbox_highlight_down_load", "start a", "down", 60),	// Load: new game -> load game
+    ("xbox_confirm_open", "start a", "a", 60),	// Load: A on "new game" -> the confirm dialog
     ("xbox_page_stats_to_controls", "start right right right", "right", 60),
     ("xbox_page_controls_to_audio", "start right right right right", "right", 60),
     ("xbox_page_change_right", "start left left", "right", 60),	// Audio -> Display
