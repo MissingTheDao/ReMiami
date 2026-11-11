@@ -559,6 +559,32 @@ layouts and is checked against a recording of the original, as in steps 3 and 4.
   halves width and stride separately); and rasterFromImage leaked the unpalettized copy of
   every 4/8-bit image.
 
+### Stage 2, step 6: the scene objects (plan, 2026-11-11)
+
+What's left of librw after step 5 (about 9,800 lines) splits into the scene objects the game
+builds and draws (this step) and the engine core under them (step 7). Same method as before:
+each part moves into Rust on librw's layouts, checked against a recording of the original, and
+code nothing calls is deleted rather than ported.
+
+- **6a. Geometry and materials.** geometry.cpp's objects: Geometry create/destroy/lock/unlock,
+  addMorphTargets, allocateData, hasColoredMaterial, the mesh header (geoplg.cpp:
+  allocateMeshes, setupIndices, guessNumTriangles); MaterialList (append, find) and Material
+  create/clone/destroy/setTexture with their reference counts. The stream writers and the
+  tool-only functions (generateTriangles, correctTristripWinding, removeUnusedMaterials) have no
+  callers and go.
+- **6b. Atomics, clumps, lights, world.** clump.cpp, light.cpp and world.cpp: Atomic create/
+  clone/destroy/setGeometry, the world bounding sphere's dirty logic, the frame sync callbacks;
+  Clump create/clone/destroy and its atomic, light and camera lists; Light create/destroy and
+  its parameters; World add/remove and the object lists the renderer walks.
+- **6c. Plugin data.** skin.cpp (skin weights and bone data: create, copy, destroy, the setters
+  the game uses), matfx.cpp (effect setup per material: env map, bump, dual), hanim.cpp's
+  frame plugin and HAnimHierarchy create/destroy/attach. uvanim.cpp and userdata.cpp are never
+  registered or used by the game and are deleted.
+
+Step 7 (outlook): the engine core (Engine open/start/stop, plugin lists, streams, pipelines,
+render state, errors), the debug charset, and the wgpu driver's remaining C++ glue; after that
+librw and the fakerw shim are gone.
+
 ## Appendix: every RW function the game calls
 
 | Function | Call sites | Area |
