@@ -380,11 +380,11 @@ DrawHelpLine(CMenuManager *m, uint8 alpha)
 // growing from 0.9x to 1.157 x 1.081 while fading from 0.5 to 0.059 alpha, every 0.8 s
 // (R3_Menu.anm, decoded; docs/CONSOLE_STYLES.md 13h).
 void
-MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool tail)
+MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool tail, float minWidth)
 {
 	// Tilted with the panel (top edge leaning right), from the label's left edge to at least a
 	// fixed width, the last part a darker mint tail (measured on the Xbox's list pages).
-	x1 = Max(x1, x0 + W(150.0f));
+	x1 = Max(x1, x0 + W(minWidth));	// (dialog buttons: tight, minWidth 0)
 	float tilt = W(5.0f), tailW = W(16.0f);
 	if (!tail) {	// whole-row bars (the radio station) have no tail
 		CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 + tilt, y0, x0, y1, x1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
@@ -398,10 +398,9 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 	float sx = 0.9f + (1.157f - 0.9f) * t, sy = 0.9f + (1.081f - 0.9f) * t;
 	float a = 0.5f + (0.059f - 0.5f) * t;
 	float cx = (x0 + x1) / 2.0f, cy = (y0 + y1) / 2.0f, hw = (x1 - x0) / 2.0f * sx, hh = (y1 - y0) / 2.0f * sy;
-	// whole-row bars (the radio station) reach the panel's edge: the glow stays within the bar
-	// there, or it shows as a grey box over the black beyond the panel (round 7)
-	if (!tail)
-		hw = Min(hw, (x1 - x0) / 2.0f);
+	// the glow grows only vertically past the bar: wider, it shows as a grey box where the bar
+	// meets black (the radio row, the map legend; rounds 7-8)
+	hw = Min(hw, (x1 - x0) / 2.0f);
 	CSprite2d::DrawRect(CRect(cx - hw, cy - hh, cx + hw, cy + hh), CRGBA(255, 255, 255, (uint8)(a * alpha)));
 }
 

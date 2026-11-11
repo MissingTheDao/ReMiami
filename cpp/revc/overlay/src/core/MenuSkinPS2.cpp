@@ -49,6 +49,11 @@ static const Ps2Tab tabs[] = {
 	{ MENUPAGE_LANGUAGE_SETTINGS, -1, 1043.0f, 995.0f, "RVC_PT7" },
 };
 
+// Focus on the Map page: on the tab bar (the "map" tab boxed) until up/down moves it to the
+// legend item (then only the legend is boxed), as on the PS2.
+static int focusPage = -1;
+static bool pageFocus = false;
+
 static int
 CurrentTab(int page)
 {
@@ -83,7 +88,7 @@ DrawTabs(CMenuManager *m, uint8 alpha)
 	// the confirmations show the tabs without a highlight (console)
 	bool confirm = m->m_nCurrScreen == MENUPAGE_NEW_GAME_RELOAD || m->m_nCurrScreen == MENUPAGE_LOAD_SLOT_CONFIRM ||
 		m->m_nCurrScreen == MENUPAGE_DELETE_SLOT_CONFIRM;
-	if (!confirm) {
+	if (!confirm && !(m->m_nCurrScreen == MENUPAGE_MAP && pageFocus)) {
 		float w = CFont::GetStringWidth(TheText.Get(tabs[cur].name), true);
 		float cx = SCALE_AND_CENTER_X(tabCX[cur]), cy = SCREEN_SCALE_Y(tabRowY[cur / 4]);
 		float hw = w / 2.0f + SX(8.0f), h0 = SY(13.0f), t = SY(2.0f);
@@ -99,9 +104,13 @@ DrawTabs(CMenuManager *m, uint8 alpha)
 	CFont::SetDropShadowPosition(0);
 }
 
+// page: the Map page has a fifth row (R1 \ R2 button - Zoom) and "Scroll" for the arrows; the
+// Save page navigates with up/down only (as on the PS2).
 static void
-DrawHelpBox(uint8 alpha)
+DrawHelpBox(uint8 alpha, int page)
 {
+	const bool mapPage = page == MENUPAGE_MAP, savePage = page == MENUPAGE_CHOOSE_SAVE_SLOT;
+	const int rows = mapPage ? 5 : 4, nd = savePage ? 2 : 4;
 	// thick black outline, about 8 capture pixels all round (measured)
 	const float o = 8.0f;
 	CSprite2d::Draw2DPolygon(HX(975.0f - o), HY(742.0f - o), HX(1390.0f + o), HY(728.0f - o), HX(990.0f - o), HY(882.0f + o), HX(1418.0f + o), HY(910.0f + o),
@@ -113,7 +122,7 @@ DrawHelpBox(uint8 alpha)
 	// pack the game's own coloured button textures are drawn as they are.
 	static const int glyphs[3] = { BUTTON_CROSS, BUTTON_TRIANGLE, BUTTON_START };
 	static const int dpad[4] = { BUTTON_DPAD_UP, BUTTON_DPAD_DOWN, BUTTON_DPAD_RIGHT, BUTTON_DPAD_LEFT };
-	static const char *actions[4] = { "RVC_HSE", "RVC_HBA", "RVC_HRE", "RVC_HNA" };
+	const char *actions[5] = { "RVC_HSE", "RVC_HBA", "RVC_HRE", mapPage ? "RVC_HSC" : "RVC_HNA", "RVC_HZO" };
 	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
 	CFont::SetScale(SX(0.41f), SY(0.68f));
 	CFont::SetPropOn();
@@ -129,7 +138,7 @@ DrawHelpBox(uint8 alpha)
 	const float dashGap = SCREEN_SCALE_X(10.0f * 640.0f / 1440.0f), actionGap = SCREEN_SCALE_X(40.0f * 640.0f / 1440.0f);
 	const bool dpadGlyphs = gGlyphPackLoaded && CFont::ButtonSprite[dpad[0]].m_pTexture;
 	wchar left[3][64];
-	float leftW[4], rightW = 0.0f, leftMax = 0.0f;
+	float leftW[5], rightW = 0.0f, leftMax = 0.0f;
 	for (int i = 0; i < 3; i++) {
 		CSprite2d &g = CFont::ButtonSprite[glyphs[i]];
 		if (g.m_pTexture == nil && i == 2) {
@@ -142,8 +151,17 @@ DrawHelpBox(uint8 alpha)
 			UnicodeStrcpy(left[i], TheText.Get("RVC_HBT"));
 		leftW[i] = CFont::GetStringWidth(left[i], true) + (g.m_pTexture ? gap + gs : 0.0f);
 	}
-	leftW[3] = dpadGlyphs ? 4.0f * gs + 3.0f * sy * 2.0f : HX(1202.0f) - HX(1068.0f);
-	for (int i = 0; i < 4; i++) {
+	leftW[3] = dpadGlyphs ? nd * gs + (nd - 1) * sy * 2.0f : (HX(1202.0f) - HX(1068.0f)) * (savePage ? 0.5f : 1.0f);
+	// the zoom row: R1 \ R2 glyphs then "button" (text "R1 \ R2 button" without the glyphs)
+	wchar zoomSep[4], zoomText[48];
+	AsciiToUnicode(" \\ ", zoomSep);
+	const bool shoulderGlyphs = gGlyphPackLoaded && CFont::ButtonSprite[BUTTON_R1].m_pTexture && CFont::ButtonSprite[BUTTON_R2].m_pTexture;
+	if (shoulderGlyphs)
+		UnicodeStrcpy(zoomText, TheText.Get("RVC_HBT"));
+	else
+		UnicodeStrcpy(zoomText, TheText.Get("RVC_HZB"));
+	leftW[4] = shoulderGlyphs ? 2.0f * gs + CFont::GetStringWidth(zoomSep, true) + gap + CFont::GetStringWidth(zoomText, true) : CFont::GetStringWidth(zoomText, true);
+	for (int i = 0; i < rows; i++) {
 		leftMax = Max(leftMax, leftW[i]);
 		rightW = Max(rightW, CFont::GetStringWidth(TheText.Get(actions[i]), true));
 	}
@@ -153,10 +171,10 @@ DrawHelpBox(uint8 alpha)
 
 	// vertically too: the four rows (36 capture pixels apart, glyph-high) centred on the box's
 	// centre, the average of its corners (y 815.5)
-	const float step = SCREEN_SCALE_Y(36.0f * 448.0f / 1080.0f);
-	const float top = HY(815.5f) - (3.0f * step + gs) / 2.0f;
+	const float step = SCREEN_SCALE_Y((mapPage ? 29.0f : 36.0f) * 448.0f / 1080.0f);	// five rows sit closer
+	const float top = HY(815.5f) - ((rows - 1) * step + gs) / 2.0f;
 
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < rows; i++) {
 		float y = top + step * i;
 		if (i < 3) {
 			CSprite2d &g = CFont::ButtonSprite[glyphs[i]];
@@ -167,10 +185,22 @@ DrawHelpBox(uint8 alpha)
 			CFont::SetRightJustifyOn();
 			CFont::PrintString(column, y, left[i]);
 			CFont::SetRightJustifyOff();
+		} else if (i == 4) {
+			if (shoulderGlyphs) {
+				float gx = column - leftW[4];
+				CFont::ButtonSprite[BUTTON_R1].Draw(CRect(gx, y + 0.5f * sy, gx + gs, y + 0.5f * sy + gs), glyphColor);
+				gx += gs;
+				CFont::PrintString(gx, y, zoomSep);
+				gx += CFont::GetStringWidth(zoomSep, true);
+				CFont::ButtonSprite[BUTTON_R2].Draw(CRect(gx, y + 0.5f * sy, gx + gs, y + 0.5f * sy + gs), glyphColor);
+			}
+			CFont::SetRightJustifyOn();
+			CFont::PrintString(column, y, zoomText);
+			CFont::SetRightJustifyOff();
 		} else if (dpadGlyphs) {
 			// Navigate: the pad's D-pad glyphs up, down, right, left (the PS2's order).
 			float gx = column - leftW[3];
-			for (int k = 0; k < 4; k++, gx += gs + sy * 2.0f)
+			for (int k = 0; k < nd; k++, gx += gs + sy * 2.0f)
 				if (CFont::ButtonSprite[dpad[k]].m_pTexture)
 					CFont::ButtonSprite[dpad[k]].Draw(CRect(gx, y + 0.5f * sy, gx + gs, y + 0.5f * sy + gs), glyphColor);
 		} else {
@@ -184,8 +214,10 @@ DrawHelpBox(uint8 alpha)
 			auto X = [&](float x) { return HX(x) + shift; };
 			CSprite2d::Draw2DPolygon(X(cx[0]), HY(cy - r), X(cx[0]), HY(cy - r), X(cx[0] - r), HY(cy + r), X(cx[0] + r), HY(cy + r), black);
 			CSprite2d::Draw2DPolygon(X(cx[1] - r), HY(cy - r), X(cx[1] + r), HY(cy - r), X(cx[1]), HY(cy + r), X(cx[1]), HY(cy + r), black);
+			if (nd == 4) {
 			CSprite2d::Draw2DPolygon(X(cx[2] - r), HY(cy - r), X(cx[2] + r), HY(cy), X(cx[2] - r), HY(cy + r), X(cx[2] + r), HY(cy), black);
 			CSprite2d::Draw2DPolygon(X(cx[3] + r), HY(cy - r), X(cx[3] - r), HY(cy), X(cx[3] + r), HY(cy + r), X(cx[3] - r), HY(cy), black);
+			}
 		}
 		CFont::PrintString(column + dashGap, y, TheText.Get("RVC_HDA"));
 		CFont::PrintString(column + actionGap, y, TheText.Get(actions[i]));
@@ -199,14 +231,31 @@ MenuSkinPS2Active(int page, bool gameNotLoaded)
 {
 	// REVC_TEST_MENU_SKIN: also before a game is loaded (screenshots from the boot test).
 	static bool test = getenv("REVC_TEST_MENU_SKIN") != nil;
-	return gUiStyle == 1 && (!gameNotLoaded || test) && CurrentTab(page) >= 0;
+	// (the Save page has no tab, but the PS2 frame and help box too)
+	return gUiStyle == 1 && (!gameNotLoaded || test) && (CurrentTab(page) >= 0 || page == MENUPAGE_CHOOSE_SAVE_SLOT);
 }
 
 // L1/R1 step through the tabs, as on the PS2 pause menu (the PC menu's own navigation stays).
 // Returns true when it switched pages (the rest of this frame's menu input is skipped).
+
+bool
+MenuSkinPS2PageFocus(void)
+{
+	return pageFocus;
+}
+
 bool
 MenuSkinPS2Input(CMenuManager *m)
 {
+	if (m->m_nCurrScreen != focusPage) {
+		focusPage = m->m_nCurrScreen;
+		pageFocus = false;
+	}
+	if (m->m_nCurrScreen == MENUPAGE_MAP) {
+		CPad *p = CPad::GetPad(0);
+		if (p->GetDPadUpJustDown() || p->GetDPadDownJustDown() || p->GetUpJustDown() || p->GetDownJustDown())
+			pageFocus = true;
+	}
 	if (!MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return false;
 	CPad *pad = CPad::GetPad(0);
@@ -230,7 +279,7 @@ MenuSkinPS2Draw(CMenuManager *m, uint8 alpha, float cornerX, float cornerY)
 	gCornerY = PY(870.0f) - SY(5.0f);
 	if (!MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return;
-	DrawHelpBox(alpha);
+	DrawHelpBox(alpha, m->m_nCurrScreen);
 	DrawTabs(m, alpha);
 	CFont::DrawFonts();
 }

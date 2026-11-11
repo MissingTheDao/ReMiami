@@ -215,12 +215,25 @@ const MENU_SHOTS_XBOX: &[MenuShot] = &[
     ("save_slots", "save", 1, -1, -1, -1, 1000),
 ];
 
+/// Stats with an endgame save (REVC_TEST_SAVE, set ps2_endgame / xbox_endgame): the top, then the
+/// list scrolled further and further down.
+const MENU_SHOTS_PS2_END: &[MenuShot] = &[
+    ("stats_endgame", "stats", 0, -1, -1, -1, 1000),
+    ("stats_endgame_scrolled_1", "stats", 0, -1, -1, -1, 8000),
+    ("stats_endgame_scrolled_2", "stats", 0, -1, -1, -1, 16000),
+    ("stats_endgame_scrolled_3", "stats", 0, -1, -1, -1, 24000),
+    ("stats_endgame_scrolled_4", "stats", 0, -1, -1, -1, 32000),
+];
+const MENU_SHOTS_XBOX_END: &[MenuShot] = MENU_SHOTS_PS2_END;
+
 static MENU_SHOT_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
 static MENU_VIDEO_FRAME: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 fn menu_shots() -> (&'static str, &'static [MenuShot]) {
     match std::env::var("REVC_TEST_MENU_SET").as_deref() {
         Ok("xbox") => ("xbox", MENU_SHOTS_XBOX),
+        Ok("ps2_endgame") => ("ps2", MENU_SHOTS_PS2_END),
+        Ok("xbox_endgame") => ("xbox", MENU_SHOTS_XBOX_END),
         _ => ("ps2", MENU_SHOTS_PS2),
     }
 }

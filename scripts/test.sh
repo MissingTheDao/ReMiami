@@ -65,6 +65,9 @@ for f in "$GAME"/* ; do
   case "$(basename "$f")" in reVC.ini|userfiles|mods) ;; *) ln -s "$f" "$T/" ;; esac
 done
 cp "$ROOT"/tests/saves/*.b "$T/userfiles/"
+# REVC_TEST_SAVE=<file>: that save as slot 1 instead (e.g. an endgame save for the menu shots; a
+# local file, never copied into the repo)
+[[ -n "${REVC_TEST_SAVE:-}" ]] && cp "$REVC_TEST_SAVE" "$T/userfiles/GTAVCsf1.b"
 printf 'width=1280\nheight=720\nmaximized=0\n' > "$T/userfiles/revc_window.ini"
 cleanup() { (( KEEP )) && echo "kept $T" || rm -rf "$TMP"; }
 trap cleanup EXIT
