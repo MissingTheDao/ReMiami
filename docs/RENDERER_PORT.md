@@ -711,6 +711,13 @@ there is logic, deletion where nothing calls it.
   - **7d2. Statics and registration to Rust**: the class plugin lists and counters become Rust
     statics the headers reach through extern "C"; module open/close and the wgpu driver
     plugins register from Rust; the hooks of steps 3 to 7 collapse into direct Rust calls.
+    **Part (a) done 2026-11-11:** the class plugin lists, the drivers' lists and the
+    numAllocated counters are Rust statics (`revc_plugin_lists`, `revc_driver_plugin_lists`,
+    `revc_alloc_counts` in `rwplugin.rs`); `PLUGINBASE(CLASS)` makes `Class::s_plglist` and
+    `Class::numAllocated` C++17 inline static references to them (constant-initialised, so no
+    static initialisation order), and their C++ definitions are gone. The lists start at the
+    Rust layouts' sizes (asserted against `sizeof` on the C++ side) when Engine::init sets them
+    up; the driver lists are rebuilt on every init as librw did.
   - **7d3. librw's .cpp files go**: every remaining method becomes an inline forwarder in its
     header (calling `revc_*`); the librw CMake target is removed.
   - **7d4. fakerw goes**: fake.cpp's RW API (358 functions) is exported by Rust under the C

@@ -61,8 +61,23 @@ struct Plugin
 	LLLink inGlobalList;
 };
 
-#define PLUGINBASE \
-	static PluginList s_plglist;						    \
+// revc (stage 2 step 7d2): the classes' plugin lists, the drivers' and the allocation counters are
+// Rust statics (rust/revc/src/rwplugin.rs); Class::s_plglist and Class::numAllocated refer to them.
+enum {
+	REVC_CLASS_FRAME, REVC_CLASS_RASTER, REVC_CLASS_TEXTURE, REVC_CLASS_TEXDICTIONARY,
+	REVC_CLASS_GEOMETRY, REVC_CLASS_MATERIAL, REVC_CLASS_ATOMIC, REVC_CLASS_CLUMP,
+	REVC_CLASS_LIGHT, REVC_CLASS_CAMERA, REVC_CLASS_WORLD, REVC_CLASS_ENGINE,
+	REVC_CLASS_IMAGE	// a counter only
+};
+}
+extern "C" rw::PluginList revc_plugin_lists[];
+extern "C" rw::PluginList revc_driver_plugin_lists[];
+extern "C" rw::int32 revc_alloc_counts[];
+namespace rw {
+
+#define PLUGINBASE(cls) \
+	static inline PluginList &s_plglist = revc_plugin_lists[REVC_CLASS_##cls]; \
+	static inline int32 &numAllocated = revc_alloc_counts[REVC_CLASS_##cls]; \
 	static int32 registerPlugin(int32 size, uint32 id, Constructor ctor, 	    \
 			Destructor dtor, CopyConstructor copy){			    \
 		return s_plglist.registerPlugin(size, id, ctor, dtor, copy);	    \

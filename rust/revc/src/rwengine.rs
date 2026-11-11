@@ -63,10 +63,6 @@ pub struct Hooks {
     pub engine: *mut *mut Engine,
     /// &Engine::memfuncs
     pub memfuncs: *mut MemoryFunctions,
-    /// &Engine::s_plglist
-    pub engine_plugins: *mut PluginList,
-    /// Driver::s_plglist (NUM_PLATFORMS lists)
-    pub driver_plugins: *mut PluginList,
     /// Frame/Image/Raster/Texture::registerModule, the numAllocated resets, then the wgpu
     /// driver's plugins (engine.cpp's "core plugin attach" and "driver plugin attach")
     pub register_modules: unsafe extern "C" fn(),
@@ -265,7 +261,10 @@ fn engine() -> *mut Engine {
     unsafe { *hooks().engine }
 }
 fn driver_list(i: usize) -> *mut PluginList {
-    unsafe { hooks().driver_plugins.add(i) }
+    rwplugin::driver_list(i)
+}
+fn engine_plugins() -> *mut PluginList {
+    rwplugin::class_list(rwplugin::CLASS_ENGINE)
 }
 
 unsafe fn system(req: i32, arg: *mut c_void, n: i32) -> i32 {
@@ -292,6 +291,8 @@ pub unsafe fn init(mf: *const MemoryFunctions) -> bool {
         }
 
         rwplugin::pl_open();
+        rwplugin::init_class_lists();
+        // librw constructs the driver lists anew on every init
         for i in 0..NUM_PLATFORMS {
             let l = &mut *driver_list(i);
             l.size = size_of::<Driver>() as i32;
@@ -314,7 +315,7 @@ pub unsafe fn open(p: *mut c_void) -> bool {
             rw_error(0, ERR_ENGINEOPEN);
             return false;
         }
-        let e = rw_new((*hooks().engine_plugins).size as usize) as *mut Engine;
+        let e = rw_new((*engine_plugins()).size as usize) as *mut Engine;
         *hooks().engine = e;
         (*e).current_camera = null_mut();
         (*e).current_world = null_mut();
@@ -353,7 +354,7 @@ pub unsafe fn start() -> bool {
             return false;
         }
         system(DEVICEINIT, null_mut(), 0);
-        rwplugin::pl_construct(hooks().engine_plugins, e as *mut c_void);
+        rwplugin::pl_construct(engine_plugins(), e as *mut c_void);
         for i in 0..NUM_PLATFORMS {
             rwplugin::pl_construct(driver_list(i), (*e).driver[i] as *mut c_void);
         }
@@ -415,7 +416,7 @@ pub unsafe fn stop() {
         for i in 0..NUM_PLATFORMS {
             rwplugin::pl_destruct(driver_list(i), (*e).driver[i] as *mut c_void);
         }
-        rwplugin::pl_destruct(hooks().engine_plugins, e as *mut c_void);
+        rwplugin::pl_destruct(engine_plugins(), e as *mut c_void);
         system(DEVICETERM, null_mut(), 0);
         set_state(State::Opened);
     }

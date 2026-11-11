@@ -87,7 +87,7 @@ struct Driver
 	bool32 (*rasterFromImage)(Raster*, Image*);
 	Image *(*rasterToImage)(Raster*);
 
-	static PluginList s_plglist[NUM_PLATFORMS];
+	static inline PluginList *s_plglist = revc_driver_plugin_lists;
 	static int32 registerPlugin(int32 platform, int32 size, uint32 id,
 	                            Constructor ctor, Destructor dtor){
 		return s_plglist[platform].registerPlugin(size, id,
@@ -186,7 +186,7 @@ struct Engine
 	static uint32 getMultiSamplingLevels(void);
 	static bool32 setMultiSamplingLevels(uint32 levels);
 
-	static PluginList s_plglist;
+	static inline PluginList &s_plglist = revc_plugin_lists[REVC_CLASS_ENGINE];
 	static int32 registerPlugin(int32 size, uint32 id,
 	                            Constructor ctor, Destructor dtor){
 		return s_plglist.registerPlugin(size, id, ctor, dtor, nil);

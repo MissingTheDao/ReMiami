@@ -28,7 +28,7 @@ struct Object
 
 struct Frame
 {
-	PLUGINBASE
+	PLUGINBASE(FRAME)
 	typedef Frame *(*Callback)(Frame *f, void *data);
 	enum { ID = 0 };
 	enum {		// private flags
@@ -55,7 +55,6 @@ struct Frame
 	Frame *next;
 	Frame *root;
 
-	static int32 numAllocated;
 
 	static Frame *create(void);
 	Frame *cloneHierarchy(void);
@@ -122,7 +121,7 @@ struct Image
 	uint8 *pixels;
 	uint8 *palette;
 
-	static int32 numAllocated;
+	static inline int32 &numAllocated = revc_alloc_counts[REVC_CLASS_IMAGE];
 
 	static Image *create(int32 width, int32 height, int32 depth);
 	void destroy(void);
@@ -175,7 +174,7 @@ struct Raster
 {
 	enum { FLIPWAITVSYNCH = 1 };
 
-	PLUGINBASE
+	PLUGINBASE(RASTER)
 	int32 platform;
 
 	// TODO: use bytes
@@ -196,7 +195,6 @@ struct Raster
 	Raster *parent;
 	int32 offsetX, offsetY;
 
-	static int32 numAllocated;
 
 	static Raster *create(int32 width, int32 height, int32 depth,
 	                      int32 format, int32 platform = 0);
@@ -292,7 +290,7 @@ struct Texture
 		BORDER
 	};
 
-	PLUGINBASE
+	PLUGINBASE(TEXTURE)
 	Raster *raster;
 	TexDictionary *dict;
 	LLLink inDict;
@@ -303,7 +301,6 @@ struct Texture
 
 	LLLink inGlobalList;	// actually not in RW
 
-	static int32 numAllocated;
 
 	static Texture *create(Raster *raster);
 	void addRef(void) { this->refCount++; }
@@ -349,14 +346,13 @@ struct SurfaceProperties
 
 struct Material
 {
-	PLUGINBASE
+	PLUGINBASE(MATERIAL)
 	Texture *texture;
 	RGBA color;
 	SurfaceProperties surfaceProps;
 	Pipeline *pipeline;
 	int32 refCount;
 
-	static int32 numAllocated;
 
 	static Material *create(void);
 	void addRef(void) { this->refCount++; }
@@ -428,7 +424,7 @@ struct MaterialList
 
 struct Geometry
 {
-	PLUGINBASE
+	PLUGINBASE(GEOMETRY)
 	enum { ID = 8 };
 	Object object;
 	uint32 flags;
@@ -450,7 +446,6 @@ struct Geometry
 
 	int32 refCount;
 
-	static int32 numAllocated;
 
 	static Geometry *create(int32 numVerts, int32 numTris, uint32 flags);
 	void addRef(void) { this->refCount++; }
@@ -517,7 +512,7 @@ struct World;
 
 struct Atomic
 {
-	PLUGINBASE
+	PLUGINBASE(ATOMIC)
 	typedef void (*RenderCB)(Atomic *atomic);
 	enum { ID = 1 };
 	enum {
@@ -542,7 +537,6 @@ struct Atomic
 	World *world;
 	ObjectWithFrame::Sync originalSync;
 
-	static int32 numAllocated;
 
 	static Atomic *create(void);
 	Atomic *clone(void);
@@ -575,7 +569,7 @@ void registerAtomicRightsPlugin(void);
 
 struct Light
 {
-	PLUGINBASE
+	PLUGINBASE(LIGHT)
 	enum { ID = 3 };
 	ObjectWithFrame object;
 	float32 radius;
@@ -591,7 +585,6 @@ struct Light
 	World *world;
 	ObjectWithFrame::Sync originalSync;
 
-	static int32 numAllocated;
 
 	static Light *create(int32 type);
 	void destroy(void);
@@ -634,7 +627,7 @@ struct FrustumPlane
 
 struct Camera
 {
-	PLUGINBASE
+	PLUGINBASE(CAMERA)
 	enum { ID = 4 };
 	enum { PERSPECTIVE = 1, PARALLEL };
 	enum { CLEARIMAGE = 0x1, CLEARZ = 0x2, CLEARSTENCIL = 0x4 };
@@ -676,7 +669,6 @@ struct Camera
 	void (*originalBeginUpdate)(Camera*);
 	void (*originalEndUpdate)(Camera*);
 
-	static int32 numAllocated;
 
 	static Camera *create(void);
 	Camera *clone(void);
@@ -702,7 +694,7 @@ struct Camera
 
 struct Clump
 {
-	PLUGINBASE
+	PLUGINBASE(CLUMP)
 	enum { ID = 2 };
 	Object object;
 	LinkList atomics;
@@ -712,7 +704,6 @@ struct Clump
 	World *world;
 	LLLink inWorld;
 
-	static int32 numAllocated;
 
 	static Clump *create(void);
 	Clump *clone(void);
@@ -749,14 +740,13 @@ struct WorldLights
 // A bit of a stub right now
 struct World
 {
-	PLUGINBASE
+	PLUGINBASE(WORLD)
 	enum { ID = 7 };
 	Object object;
 	LinkList localLights;	// these have positions (type >= 0x80)
 	LinkList globalLights;	// these do not (type < 0x80)
 	LinkList clumps;
 
-	static int32 numAllocated;
 
 	static World *create(BBox *bbox = nil);	// TODO: should probably make this non-optional
 	void destroy(void);
@@ -774,13 +764,12 @@ struct World
 
 struct TexDictionary
 {
-	PLUGINBASE
+	PLUGINBASE(TEXDICTIONARY)
 	enum { ID = 6 };
 	Object object;
 	LinkList textures;
 	LLLink inGlobalList;
 
-	static int32 numAllocated;
 
 	static TexDictionary *create(void);
 	static TexDictionary *fromLink(LLLink *lnk){

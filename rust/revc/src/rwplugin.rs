@@ -1012,3 +1012,95 @@ mod golden {
         assert!(bad.is_empty(), "differences (first {}):\n{}", bad.len(), bad.join("\n"));
     }
 }
+
+// ---------------------------------------------------------------- the class plugin lists (7d2)
+
+/// Indices of the classes' plugin lists and allocation counters (rwplg.h REVC_CLASS_*).
+pub const CLASS_FRAME: usize = 0;
+pub const CLASS_RASTER: usize = 1;
+pub const CLASS_TEXTURE: usize = 2;
+pub const CLASS_TEXDICTIONARY: usize = 3;
+pub const CLASS_GEOMETRY: usize = 4;
+pub const CLASS_MATERIAL: usize = 5;
+pub const CLASS_ATOMIC: usize = 6;
+pub const CLASS_CLUMP: usize = 7;
+pub const CLASS_LIGHT: usize = 8;
+pub const CLASS_CAMERA: usize = 9;
+pub const CLASS_WORLD: usize = 10;
+pub const CLASS_ENGINE: usize = 11;
+/// Image has a counter but no plugin list.
+pub const CLASS_IMAGE: usize = 12;
+pub const NUM_CLASS_LISTS: usize = 12;
+pub const NUM_PLATFORMS: usize = 14;
+
+const EMPTY_LIST: PluginList = PluginList { size: 0, default_size: 0, plugins: LinkList { link: LLLink { next: std::ptr::null_mut(), prev: std::ptr::null_mut() } } };
+
+/// Each class's PluginList (librw's `Class::s_plglist`; the C++ headers refer to these).
+#[unsafe(no_mangle)]
+pub static mut revc_plugin_lists: [PluginList; NUM_CLASS_LISTS] = [EMPTY_LIST; NUM_CLASS_LISTS];
+/// Driver::s_plglist, one per platform.
+#[unsafe(no_mangle)]
+pub static mut revc_driver_plugin_lists: [PluginList; NUM_PLATFORMS] = [EMPTY_LIST; NUM_PLATFORMS];
+/// Each class's numAllocated.
+#[unsafe(no_mangle)]
+pub static mut revc_alloc_counts: [i32; NUM_CLASS_LISTS + 1] = [0; NUM_CLASS_LISTS + 1];
+
+/// The plugin list of class `i` (CLASS_*).
+pub fn class_list(i: usize) -> *mut PluginList {
+    unsafe { std::ptr::addr_of_mut!(revc_plugin_lists[i]) }
+}
+/// The driver plugin list of platform `i`.
+pub fn driver_list(i: usize) -> *mut PluginList {
+    unsafe { std::ptr::addr_of_mut!(revc_driver_plugin_lists[i]) }
+}
+/// numAllocated of class `i` (CLASS_*, or CLASS_IMAGE).
+pub fn alloc_count(i: usize) -> *mut i32 {
+    unsafe { std::ptr::addr_of_mut!(revc_alloc_counts[i]) }
+}
+
+/// The classes' sizes, which their plugin lists start from (librw's `s_plglist(sizeof(Class))`).
+pub fn class_sizes() -> [i32; NUM_CLASS_LISTS] {
+    [
+        size_of::<crate::rwframe::Frame>() as i32,
+        size_of::<crate::rwraster::Raster>() as i32,
+        size_of::<crate::rwtexture::Texture>() as i32,
+        size_of::<crate::rwtexture::TexDictionary>() as i32,
+        size_of::<crate::rwgeomobj::Geometry>() as i32,
+        size_of::<crate::rwgeomobj::Material>() as i32,
+        size_of::<crate::rwscene::Atomic>() as i32,
+        size_of::<crate::rwscene::Clump>() as i32,
+        size_of::<crate::rwscene::Light>() as i32,
+        size_of::<crate::rwscene::Camera>() as i32,
+        size_of::<crate::rwscene::World>() as i32,
+        size_of::<crate::rwengine::Engine>() as i32,
+    ]
+}
+
+/// Sets up a list never used yet (librw built them as static objects): empty, at its default
+/// size. Lists already set up keep their plugins.
+unsafe fn init_list(l: *mut PluginList, size: i32) {
+    unsafe {
+        if (*l).plugins.link.next.is_null() {
+            (*l).size = size;
+            (*l).default_size = size;
+            list_init(&mut (*l).plugins);
+        }
+    }
+}
+
+/// Sets up the class and driver plugin lists (Engine::init, before any registration).
+///
+/// # Safety
+/// Not while plugins are being used.
+pub unsafe fn init_class_lists() {
+    unsafe {
+        for (i, size) in class_sizes().into_iter().enumerate() {
+            init_list(class_list(i), size);
+        }
+        for i in 0..NUM_PLATFORMS {
+            init_list(driver_list(i), size_of::<crate::rwengine::Driver>() as i32);
+        }
+    }
+}
+
+const _: () = assert!(size_of::<crate::rwframe::Frame>() == 200 && size_of::<crate::rwraster::Raster>() == 96 && size_of::<crate::rwtexture::Texture>() == 120);
