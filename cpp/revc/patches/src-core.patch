@@ -2595,7 +2595,15 @@
  #endif
 --- a/src/core/main.cpp
 +++ b/src/core/main.cpp
-@@ -23,6 +23,7 @@
+@@ -16,6 +16,7 @@
+ #include "Clouds.h"
+ #include "Draw.h"
+ #include "Sprite2d.h"
++extern "C" void revc_device_set_output_transform(uint32 mode);	// (rust revc/src/rwdevice.rs)
+ #include "Renderer.h"
+ #include "Coronas.h"
+ #include "WaterLevel.h"
+@@ -23,6 +24,7 @@
  #include "Glass.h"
  #include "WaterCannon.h"
  #include "SpecialFX.h"
@@ -2603,7 +2611,7 @@
  #include "Shadows.h"
  #include "Skidmarks.h"
  #include "Antennas.h"
-@@ -1097,8 +1098,8 @@
+@@ -1097,8 +1099,8 @@
  		    "D3D9 "
  #elif defined RWLIBS
  		    "D3D8 "
@@ -2614,7 +2622,7 @@
  #endif
  #if defined AUDIO_OAL
  		    "OAL "
-@@ -1413,6 +1414,54 @@
+@@ -1413,6 +1415,54 @@
  	POP_RENDERGROUP();
  }
  
@@ -2669,7 +2677,7 @@
  void
  Render2dStuff(void)
  {
-@@ -1465,6 +1514,7 @@
+@@ -1465,6 +1515,7 @@
  		CSprite2d::DrawRect(CRect(SCREEN_WIDTH / 2 + SCREEN_SCALE_X(210), 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), black);
  	}
  
@@ -2677,7 +2685,7 @@
  	MusicManager.DisplayRadioStationName();
  	TheConsole.Display();
  #ifdef GTA_SCENE_EDIT
-@@ -1481,6 +1531,7 @@
+@@ -1481,6 +1532,7 @@
  	CGarages::PrintMessages();
  	CPad::PrintErrorMessage();
  	CFont::DrawFonts();
@@ -2685,7 +2693,7 @@
  #ifndef MASTER
  	COcclusion::Render();
  #endif
-@@ -1498,12 +1549,43 @@
+@@ -1498,12 +1550,43 @@
  	{
  		PUSH_RENDERGROUP("RenderMenus");
  		FrontEndMenuManager.DrawFrontEnd();
@@ -2729,7 +2737,7 @@
  }
  
  void
-@@ -1517,16 +1599,43 @@
+@@ -1517,16 +1600,43 @@
  #ifdef MOBILE_IMPROVEMENTS
  	if (CDraw::FadeValue != 0)
  #endif
@@ -2775,7 +2783,7 @@
  
  	tbInit();
  
-@@ -1548,25 +1657,62 @@
+@@ -1548,25 +1658,62 @@
  	if(CGame::bDemoMode && CTimer::GetTimeInMilliseconds() > (3*60 + 30)*1000 && !CCutsceneMgr::IsCutsceneProcessing()){
  		WANT_TO_LOAD = false;
  		FrontEndMenuManager.m_bWantToRestart = true;
@@ -2842,7 +2850,7 @@
  		RwV2d pos;
  		pos.x = SCREEN_WIDTH / 2.0f;
  		pos.y = SCREEN_HEIGHT / 2.0f;
-@@ -1587,9 +1733,16 @@
+@@ -1587,9 +1734,16 @@
  		tbEndTimer("CnstrRenderList");
  
  		tbStartTimer(0, "PreRender");
@@ -2860,9 +2868,16 @@
  #ifdef FIX_BUGS
  		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void *)FALSE); // TODO: temp? this fixes OpenGL render but there should be a better place for this
  		// This has to be done BEFORE RwCameraBeginUpdate
-@@ -1631,7 +1784,11 @@
+@@ -1630,15 +1784,30 @@
+ 		        TheCamera.SetMotionBlurAlpha(150);
  
  #ifdef SCREEN_DROPLETS
++		extern bool gScreenDroplets;	// revc: per visual style (FixMods S16): the Xbox and mobile presets
++		{	// revc: the Xbox's output stage (its gamma ramp) with the Xbox output option (FixMods S21)
++			extern bool gXboxTrails;
++			revc_device_set_output_transform(gXboxTrails ? 1 : 0);
++		}
++		if(gScreenDroplets){
  		CPostFX::GetBackBuffer(Scene.camera);
 -		ScreenDroplets::Process();
 +		// Spawning, moving and fading drops is per game step (the original's 30 fps frames):
@@ -2871,9 +2886,10 @@
 +		if(afterSimulation)
 +			ScreenDroplets::Process();
  		ScreenDroplets::Render();
++		}
  #endif
  
-@@ -1639,6 +1796,10 @@
+ 		tbStartTimer(0, "RenderMotionBlur");
  		TheCamera.RenderMotionBlur();
  		tbEndTimer("RenderMotionBlur");
  
@@ -2884,7 +2900,7 @@
  		tbStartTimer(0, "Render2dStuff");
  		Render2dStuff();
  		tbEndTimer("Render2dStuff");
-@@ -1691,6 +1852,16 @@
+@@ -1691,6 +1860,16 @@
  }
  
  void
@@ -2929,7 +2945,19 @@
  	#define MULTISAMPLING_SELECTOR MENUACTION_CFO_DYNAMIC, "FED_AAS", { new CCFODynamic((int8*)&FrontEndMenuManager.m_nPrefsMSAALevel, "Graphics", "MultiSampling", MultiSamplingDraw, MultiSamplingButtonPress) }, 0, 0, MENUALIGN_LEFT,
  #else
  	#define MULTISAMPLING_SELECTOR
-@@ -88,10 +92,24 @@
+@@ -67,7 +71,10 @@
+ #endif
+ 
+ #ifdef PS2_ALPHA_TEST
+-	#define DUALPASS_SELECTOR MENUACTION_CFO_SELECT, "FEM_2PR", { new CCFOSelect((int8*)&gPS2alphaTest, "Graphics", "PS2AlphaTest", off_on, 2, false) }, 0, 0, MENUALIGN_LEFT,
++	#define DUALPASS_SELECTOR MENUACTION_CFO_SELECT, "FEM_2PR", { new CCFOSelect((int8*)&gPS2alphaTest, "Graphics", "PS2AlphaTest", off_on, 2, false) }, 0, 0, MENUALIGN_LEFT, \
++		MENUACTION_CFO_SELECT, "RVC_SDR", { new CCFOSelect((int8*)&gScreenDroplets, "Graphics", "ScreenDroplets", off_on, 2, false) }, 0, 0, MENUALIGN_LEFT, \
++		MENUACTION_CFO_SELECT, "RVC_XTR", { new CCFOSelect((int8*)&gXboxTrails, "Graphics", "XboxTrails", off_on, 2, false) }, 0, 0, MENUALIGN_LEFT,
++	extern bool gScreenDroplets, gXboxTrails;	// (revc: the visual style presets set them, FixMods S16/S3)
+ #else
+ 	#define DUALPASS_SELECTOR 
+ #endif
+@@ -88,10 +95,24 @@
  #endif
  
  #ifdef EXTENDED_COLOURFILTER
@@ -2954,7 +2982,7 @@
  	#define POSTFX_SELECTORS
  #endif	
  
-@@ -107,9 +125,247 @@
+@@ -107,31 +128,274 @@
  	#define SELECT_CONTROLLER_TYPE
  #endif
  
@@ -3091,13 +3119,17 @@
 +// ui: the UI style (skel/host/glyphs.cpp gUiStyle: 0 PC, 1 PS2, 2 Xbox; -1 = left as it is).
 +// lod: the draw distance (LOD scale). PS2 and Xbox use 1.0 with no slider (PS2 m_PrefsLOD, Xbox XBE
 +// ms_lodDistScale; docs/CONSOLE_STYLES.md), the PC release defaults to 1.2; 0 = left as it is.
-+struct VisualStyle { int8 filter; bool alphaTest; bool neo; float lod; int8 ui; bool trails; int8 control; const char *name; };
++// droplets: the water drops on the screen (only the Xbox and mobile versions have them; FixMods
++// S16). xboxTrails: the Xbox's trail offset (postfx.cpp, S3).
++struct VisualStyle { int8 filter; bool alphaTest; bool neo; float lod; int8 ui; bool trails; int8 control; bool droplets; bool xboxTrails; const char *name; };
 +static const VisualStyle visualStyles[] = {
-+	{ CPostFX::POSTFX_PC, false, false, 1.2f, 0, false, CONTROL_STANDARD, "RVC_VS0" },
-+	{ CPostFX::POSTFX_NORMAL, true, false, 1.0f, 1, true, CONTROL_CLASSIC, "RVC_VS1" },
-+	{ CPostFX::POSTFX_NORMAL, true, true, 1.0f, 2, true, CONTROL_CLASSIC, "RVC_VS2" },
-+	{ CPostFX::POSTFX_MOBILE, false, false, 0.0f, -1, false, -1, "RVC_VS3" },
++	{ CPostFX::POSTFX_PC, false, false, 1.2f, 0, false, CONTROL_STANDARD, false, false, "RVC_VS0" },
++	{ CPostFX::POSTFX_NORMAL, true, false, 1.0f, 1, true, CONTROL_CLASSIC, false, false, "RVC_VS1" },
++	{ CPostFX::POSTFX_NORMAL, true, true, 1.0f, 2, true, CONTROL_CLASSIC, true, true, "RVC_VS2" },
++	{ CPostFX::POSTFX_MOBILE, false, false, 0.0f, -1, false, -1, true, false, "RVC_VS3" },
 +};
++bool gScreenDroplets = false;	// (saved: [Graphics] ScreenDroplets)
++extern bool gXboxTrails;
 +
 +static bool
 +NeoAvailable(void)
@@ -3122,6 +3154,8 @@
 +		if (s.ui >= 0 && gUiStyle != s.ui)
 +			continue;
 +		if (CPostFX::MotionBlurOn != s.trails)
++			continue;
++		if (gScreenDroplets != s.droplets || gXboxTrails != s.xboxTrails)
 +			continue;
 +		if (s.control >= 0 && FrontEndMenuManager.m_ControlMethod != s.control)
 +			continue;
@@ -3157,6 +3191,8 @@
 +	if (s.ui >= 0)
 +		gUiStyle = s.ui;
 +	CPostFX::MotionBlurOn = s.trails;
++	gScreenDroplets = s.droplets;
++	gXboxTrails = s.xboxTrails;
 +	if (s.control >= 0) {
 +		FrontEndMenuManager.m_ControlMethod = s.control;
 +		CCamera::m_bUseMouse3rdPerson = s.control == CONTROL_STANDARD;
@@ -3203,13 +3239,14 @@
  void RestoreDefGraphics(int8 action) {
  	if (action != FEOPTION_ACTION_SELECT)
  		return;
-@@ -117,21 +373,18 @@
+ 
  	#ifdef PS2_ALPHA_TEST
- 		gPS2alphaTest = false;
- 	#endif
+-		gPS2alphaTest = false;
++		gPS2alphaTest = gUiStyle != 0;	// revc (FixMods S9): as the UI style's visual preset (consoles on, PC off)
++	#endif
 +	#ifdef RW_WGPU
 +		rw::wgpu::antialiasing = 0;
-+	#endif
+ 	#endif
  	#ifdef MULTISAMPLING
  		FrontEndMenuManager.m_nPrefsMSAALevel = FrontEndMenuManager.m_nDisplayMSAALevel = 0;
  	#endif
@@ -3231,7 +3268,7 @@
  		FrontEndMenuManager.m_PrefsVsyncDisp = true;
  		#ifdef LEGACY_MENU_OPTIONS
  			FrontEndMenuManager.m_PrefsVsync = true;
-@@ -306,7 +559,7 @@
+@@ -306,7 +570,7 @@
  
  wchar* DetectJoystickDraw(bool* disabled, bool userHovering) {
  
@@ -3240,7 +3277,7 @@
  	int numButtons;
  	int found = -1;
  	const char *joyname;
-@@ -420,13 +673,11 @@
+@@ -420,13 +684,11 @@
  		MENUACTION_MUSICVOLUME,		"FEA_MUS", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 40, 76, MENUALIGN_LEFT,
  		MENUACTION_SFXVOLUME,		"FEA_SFX", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		MENUACTION_MP3VOLUMEBOOST,	"FEA_MPB", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
@@ -3257,7 +3294,7 @@
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 367, MENUALIGN_CENTER,
  #else
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 327, MENUALIGN_CENTER,
-@@ -441,9 +692,8 @@
+@@ -441,9 +703,8 @@
  		MENUACTION_DRAWDIST,	"FEM_LOD", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		DENSITY_SLIDERS
  #ifdef LEGACY_MENU_OPTIONS
@@ -3268,7 +3305,7 @@
  #if defined LEGACY_MENU_OPTIONS && !defined EXTENDED_COLOURFILTER
  		MENUACTION_TRAILS,		"FED_TRA", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  #endif
-@@ -455,7 +705,6 @@
+@@ -455,7 +716,6 @@
  		MENUACTION_SCREENRES,	"FED_RES", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  		MULTISAMPLING_SELECTOR
@@ -3276,7 +3313,7 @@
  		DUALPASS_SELECTOR
  		CUTSCENE_BORDERS_TOGGLE
  		FREE_CAM_TOGGLE
-@@ -640,6 +889,8 @@
+@@ -640,6 +900,8 @@
  #ifdef DETECT_JOYSTICK_MENU
  		MENUACTION_CHANGEMENU,	"FEC_JOD", {nil, SAVESLOT_NONE, MENUPAGE_DETECT_JOYSTICK}, 0, 0, MENUALIGN_CENTER,
  #endif
@@ -3285,7 +3322,7 @@
  		MENUACTION_CHANGEMENU,	"FEC_MOU", {nil, SAVESLOT_NONE, MENUPAGE_MOUSE_CONTROLS}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_RESTOREDEF,	"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_CONTROLLER_PC}, 320, 0, MENUALIGN_CENTER,
  		MENUACTION_GOBACK,		"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 320, 0, MENUALIGN_CENTER,
-@@ -659,6 +910,7 @@
+@@ -659,6 +921,7 @@
  #endif
  		 MENUACTION_CHANGEMENU,		"FEO_LAN", {nil, SAVESLOT_NONE, MENUPAGE_LANGUAGE_SETTINGS}, 0, 0, MENUALIGN_CENTER,
  		 MENUACTION_PLAYERSETUP,	"FET_PS", {nil, SAVESLOT_NONE, MENUPAGE_SKIN_SELECT}, 0, 0, MENUALIGN_CENTER,
@@ -3293,7 +3330,7 @@
  		 MENUACTION_GOBACK,			"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -673,6 +925,7 @@
+@@ -673,6 +936,7 @@
  	{ "FEM_MM", MENUPAGE_DISABLED, nil, nil,
  		  MENUACTION_CHANGEMENU,	"FEP_STG",	{nil, SAVESLOT_NONE,	MENUPAGE_NEW_GAME}, 320, 170, MENUALIGN_CENTER,
  		  MENUACTION_CHANGEMENU,	"FEP_OPT",	{nil, SAVESLOT_NONE,	MENUPAGE_OPTIONS}, 0, 0, MENUALIGN_CENTER,
@@ -3301,7 +3338,7 @@
  		  MENUACTION_CHANGEMENU,	"FEP_QUI",	{nil, SAVESLOT_NONE,	MENUPAGE_EXIT}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -783,13 +1036,12 @@
+@@ -783,13 +1047,12 @@
  		MENUACTION_WIDESCREEN,	"FED_WIS", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  #ifdef LEGACY_MENU_OPTIONS
@@ -3317,7 +3354,7 @@
  		POSTFX_SELECTORS
  #elif defined LEGACY_MENU_OPTIONS
  		MENUACTION_TRAILS,		"FED_TRA", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
-@@ -809,6 +1061,46 @@
+@@ -809,6 +1072,46 @@
  	},
  #endif
  
@@ -3364,7 +3401,7 @@
  		
  #ifdef MISSION_REPLAY
  	// MENUPAGE_MISSION_RETRY = 57 on mobile
-@@ -826,3 +1118,268 @@
+@@ -826,3 +1129,268 @@
  
  #endif
  #endif

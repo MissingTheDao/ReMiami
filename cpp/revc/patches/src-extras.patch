@@ -20,7 +20,28 @@
  #include "postfx.h"
  
  RwRaster *CPostFX::pFrontBuffer;
-@@ -28,22 +29,20 @@
+@@ -22,28 +23,41 @@
+ 
+ static RwIm2DVertex Vertex[4];
+ static RwIm2DVertex Vertex2[4];
++// revc: the trail quad's bounds (set in Open) and the Xbox's own offset (FixMods S3; XBOX_COLOUR_RE
++// 3.2: one pass shifted (0, +1) px of 480 lines; PS2/PC: (+2, +2) of 448), chosen per frame by the
++// visual style preset (gXboxTrails, core/MenuScreensCustom.cpp).
++static float sTrailZero, sTrailXmax, sTrailYmax, sTrailHeight;
++bool gXboxTrails;
++static void
++SetTrailShift(void)
++{
++	float ox = gXboxTrails ? 0.0f : 2.0f * sTrailHeight / 448.0f;
++	float oy = gXboxTrails ? sTrailHeight / 480.0f : 2.0f * sTrailHeight / 448.0f;
++	RwIm2DVertexSetScreenX(&Vertex2[0], sTrailZero + ox); RwIm2DVertexSetScreenY(&Vertex2[0], sTrailZero + oy);
++	RwIm2DVertexSetScreenX(&Vertex2[1], sTrailZero + ox); RwIm2DVertexSetScreenY(&Vertex2[1], sTrailYmax + oy);
++	RwIm2DVertexSetScreenX(&Vertex2[2], sTrailXmax + ox); RwIm2DVertexSetScreenY(&Vertex2[2], sTrailYmax + oy);
++	RwIm2DVertexSetScreenX(&Vertex2[3], sTrailXmax + ox); RwIm2DVertexSetScreenY(&Vertex2[3], sTrailZero + oy);
++}
+ static RwImVertexIndex Index[6] = { 0, 1, 2, 0, 2, 3 };
+ 
+ #ifdef RW_D3D9
  void *colourfilterVC_PS;
  void *contrast_PS;
  #endif
@@ -53,7 +74,7 @@
  }
  
  void
-@@ -108,8 +107,11 @@
+@@ -108,8 +122,12 @@
  	RwIm2DVertexSetIntRGBA(&Vertex[3], 255, 255, 255, 255);
  
  
@@ -62,12 +83,13 @@
 +	// revc (plan task 13): the trail offset is 2 px at the consoles' 448 lines; keep it the same
 +	// fraction of the screen at any resolution.
 +	float off = 2.0f * RwRasterGetHeight(RwCameraGetRaster(cam)) / 448.0f;
++	sTrailZero = zero; sTrailXmax = xmax; sTrailYmax = ymax; sTrailHeight = RwRasterGetHeight(RwCameraGetRaster(cam));
 +	RwIm2DVertexSetScreenX(&Vertex2[0], zero + off);
 +	RwIm2DVertexSetScreenY(&Vertex2[0], zero + off);
  	RwIm2DVertexSetScreenZ(&Vertex2[0], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[0], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[0], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -117,8 +119,8 @@
+@@ -117,8 +135,8 @@
  	RwIm2DVertexSetV(&Vertex2[0], 0.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[0], 255, 255, 255, 255);
  
@@ -78,7 +100,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[1], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[1], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[1], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -126,8 +128,8 @@
+@@ -126,8 +144,8 @@
  	RwIm2DVertexSetV(&Vertex2[1], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[1], 255, 255, 255, 255);
  
@@ -89,7 +111,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[2], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[2], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[2], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -135,8 +137,8 @@
+@@ -135,8 +153,8 @@
  	RwIm2DVertexSetV(&Vertex2[2], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[2], 255, 255, 255, 255);
  
@@ -100,7 +122,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[3], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[3], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[3], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -151,28 +153,6 @@
+@@ -151,28 +169,6 @@
  #include "shaders/obj/contrastPS.inc"
  	contrast_PS = rw::d3d::createPixelShader(contrastPS_cso);
  #endif
@@ -129,7 +151,7 @@
  }
  
  void
-@@ -196,16 +176,6 @@
+@@ -196,16 +192,6 @@
  		contrast_PS = nil;
  	}
  #endif
@@ -146,17 +168,18 @@
  }
  
  void
-@@ -226,7 +196,8 @@
+@@ -226,7 +212,9 @@
  	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
  
 -	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, BlurOn ? Vertex2 : Vertex, 4, Index, 6);
 +	// revc: the previous frame is always drawn shifted, as on PS2/Xbox/PC with trails on.
++	SetTrailShift();
 +	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex2, 4, Index, 6);
  
  
  	RwIm2DVertexSetIntRGBA(&Vertex2[0], r, g, b, a);
-@@ -242,7 +213,7 @@
+@@ -242,7 +230,7 @@
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
  
  	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
@@ -165,7 +188,7 @@
  }
  
  void
-@@ -282,11 +253,9 @@
+@@ -282,11 +270,9 @@
  
  		rw::d3d::im2dOverridePS = contrast_PS;
  #endif
@@ -180,7 +203,7 @@
  #endif
  	}else{
  		float f = Intensity;
-@@ -299,18 +268,17 @@
+@@ -299,18 +285,17 @@
  		rw::d3d::d3ddevice->SetPixelShaderConstantF(10, blurcolors, 1);
  		rw::d3d::im2dOverridePS = colourfilterVC_PS;
  #endif
@@ -204,7 +227,7 @@
  #endif
  }
  
-@@ -446,9 +414,17 @@
+@@ -446,9 +431,17 @@
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
  
  	if(NeedFrontBuffer(type)){

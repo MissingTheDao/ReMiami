@@ -760,6 +760,13 @@ pub extern "C" fn revc_device_set_im2d_offset(dx: f32, dy: f32) {
     g().im2d_offset = [dx, dy];
 }
 
+/// The output stage's colour transform (0 none, 1 the Xbox's gamma ramp), per frame from the
+/// game's visual style (core/main.cpp; FixMods S21).
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_device_set_output_transform(mode: u32) {
+    revc_rw::frame::OUTPUT_TRANSFORM.store(mode, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub(crate) const TEX_LINEAR: u32 = 2;
 pub(crate) const TEX_WRAP: u32 = 1;
 

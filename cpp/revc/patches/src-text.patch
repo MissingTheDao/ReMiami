@@ -1010,7 +1010,7 @@
  #include "Timer.h"
  
  wchar WideErrorString[25];
-@@ -16,173 +15,246 @@
+@@ -16,173 +15,248 @@
  CText::CText(void)
  {
  	encoding = 'e';
@@ -1311,6 +1311,8 @@
 +	{ "RVC_OSC", "CONTROLS:" },
 +	{ "RVC_OSG", "GAME:" },
 +	{ "RVC_HU2", "SCREEN EDGES" },
++	{ "RVC_SDR", "SCREEN DROPLETS" },
++	{ "RVC_XTR", "XBOX OUTPUT" },	// (the Xbox's trail offset and gamma ramp)
 +	{ "RVC_LNG", "LANGUAGE" },
 +	{ "RVC_RCD", "RESET TO CONSOLE DEFAULTS" },
 +	{ "RVC_SCP", "SCREEN POSITION" },
@@ -1388,7 +1390,7 @@
  }
  
  void
-@@ -201,297 +273,24 @@
+@@ -201,297 +275,24 @@
  }
  
  void
@@ -1691,7 +1693,7 @@
  	return aStr;
  }
  
-@@ -499,13 +298,7 @@
+@@ -499,13 +300,7 @@
  UnicodeToAsciiForSaveLoad(wchar *src)
  {
  	static char aStr[256];
@@ -1706,7 +1708,7 @@
  	return aStr;
  }
  
-@@ -513,13 +306,7 @@
+@@ -513,13 +308,7 @@
  UnicodeToAsciiForMemoryCard(wchar *src)
  {
  	static char aStr[256];

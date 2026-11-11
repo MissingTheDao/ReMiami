@@ -500,7 +500,19 @@ fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
 fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     return textureLoad(scene, vec2<i32>(pos.xy), 0);
 }
+
+// The Xbox's output: its hardware gamma ramp at the default brightness, x^(1/1.1) (research
+// XBOX_COLOUR_RE 2.3; FixMods S21).
+@fragment
+fn fs_xbox(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    let c = textureLoad(scene, vec2<i32>(pos.xy), 0);
+    return vec4<f32>(pow(max(c.rgb, vec3<f32>(0.0)), vec3<f32>(1.0 / 1.1)), c.a);
+}
 "#;
+
+/// The output stage's colour transform for the final blit: 0 none, 1 the Xbox's gamma ramp (set
+/// per frame by the game's visual style; screenshots read the scene before it).
+pub static OUTPUT_TRANSFORM: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 struct Geom {
     vertices: wgpu::Buffer,
@@ -930,6 +942,7 @@ pub struct Renderer {
     /// Pipelines draw into the scene texture (SCENE_FORMAT).
     format: wgpu::TextureFormat,
     blit_pipeline: wgpu::RenderPipeline,
+    blit_xbox_pipeline: wgpu::RenderPipeline,
     blit_layout: wgpu::BindGroupLayout,
     scene: Option<(wgpu::Texture, wgpu::BindGroup, (u32, u32))>,
     /// MSAA sample count of the scene (1 = off) and its multisampled colour target, resolved
@@ -1278,6 +1291,17 @@ impl Renderer {
             multiview_mask: None,
             cache: None,
         });
+        let blit_xbox_pipeline = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("blit xbox"),
+            layout: Some(&blit_pl),
+            vertex: wgpu::VertexState { module: &blit_shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
+            fragment: Some(wgpu::FragmentState { module: &blit_shader, entry_point: Some("fs_xbox"), targets: &[Some(output.into())], compilation_options: Default::default() }),
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            multiview_mask: None,
+            cache: None,
+        });
         let models_decl = if gpu.model_storage {
             "@group(2) @binding(0) var<storage, read> models: array<M>;"
         } else {
@@ -1366,6 +1390,7 @@ impl Renderer {
         Renderer {
             format,
             blit_pipeline,
+            blit_xbox_pipeline,
             blit_layout,
             scene: None,
             samples,
@@ -2512,7 +2537,8 @@ impl Renderer {
             })],
             ..Default::default()
         });
-        blit.set_pipeline(&self.blit_pipeline);
+        let xbox = OUTPUT_TRANSFORM.load(std::sync::atomic::Ordering::Relaxed) == 1;
+        blit.set_pipeline(if xbox { &self.blit_xbox_pipeline } else { &self.blit_pipeline });
         blit.set_bind_group(0, shown_bind.as_ref().unwrap_or(&self.scene.as_ref().unwrap().1), &[]);
         blit.draw(0..3, 0..1);
         drop(blit);
