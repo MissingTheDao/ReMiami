@@ -30,7 +30,7 @@ extern "C" int revc_import_busy(void);
 extern "C" void revc_import_prompt(void);
 extern "C" int PadLayoutCurrent(void);
 
-static int8 padContext;	// 0 on foot, 1 in car
+static int8 padContext;	// 0 on foot, 1 in car, 2 flying (as the Xbox's Walking / Driving / Flying)
 // Heap, never destroyed: a static CSprite2d would free its texture after RenderWare shut down.
 static CSprite2d *padSprite;
 static bool padPrompted;
@@ -38,14 +38,16 @@ static bool padPrompted;
 wchar*
 PadPictureContextDraw(bool *disabled, bool userHovering)
 {
-	return TheText.Get(padContext == 0 ? "RVC_PPF" : "RVC_PPC");
+	return TheText.Get(padContext == 0 ? "RVC_PPF" : padContext == 1 ? "RVC_PPC" : "RVC_PPH");
 }
 
 void
 PadPictureContextPress(int8 action)
 {
-	if (action == FEOPTION_ACTION_LEFT || action == FEOPTION_ACTION_RIGHT || action == FEOPTION_ACTION_SELECT)
-		padContext ^= 1;
+	if (action == FEOPTION_ACTION_LEFT)
+		padContext = (padContext + 2) % 3;
+	else if (action == FEOPTION_ACTION_RIGHT || action == FEOPTION_ACTION_SELECT)
+		padContext = (padContext + 1) % 3;
 }
 
 // The imported pad outline as a sprite (once the import is there).
@@ -91,18 +93,22 @@ static const PadSpot padSpots[] = {
 };
 
 // What is shown for each context: an action and its name (GXT key).
-struct PadAction { e_ControllerAction action; const char *text; int8 context; };	// context: 0 foot, 1 car, 2 both
+// contexts: bit 1 on foot, 2 in car, 4 flying. Flying is the Xbox's own page: throttle up and
+// down, fire, sub-missions, radio, camera, enter/exit (no horn, handbrake or look left/right).
+struct PadAction { e_ControllerAction action; const char *text; int8 contexts; };
+enum { FOOT = 1, CAR = 2, FLY = 4 };
 static const PadAction padActions[] = {
-	{ PED_FIREWEAPON, "FEC_FIR", 0 }, { PED_LOCK_TARGET, "FEC_TAR", 0 }, { PED_SPRINT, "FEC_SPN", 0 },
-	{ PED_JUMPING, "FEC_JMP", 0 }, { VEHICLE_ENTER_EXIT, "FEC_EEX", 2 }, { PED_CYCLE_WEAPON_RIGHT, "FEC_NWE", 0 },
-	{ PED_CYCLE_WEAPON_LEFT, "FEC_PWE", 0 }, { PED_ANSWER_PHONE, "FEC_ANS", 0 }, { PED_DUCK, "FEC_CRO", 0 },
-	{ PED_LOOKBEHIND, "FEC_LBA", 0 }, { CAMERA_CHANGE_VIEW_ALL_SITUATIONS, "FEC_CMR", 2 },
-	{ PED_CENTER_CAMERA_BEHIND_PLAYER, "FEC_CEN", 0 }, { PED_CYCLE_TARGET_RIGHT, "FEC_NTR", 0 },
-	{ PED_CYCLE_TARGET_LEFT, "FEC_PTT", 0 }, { GO_FORWARD, "FEC_FOR", 0 }, { GO_BACK, "FEC_BAC", 0 },
-	{ GO_LEFT, "FEC_LEF", 0 }, { GO_RIGHT, "FEC_RIG", 0 },
-	{ VEHICLE_ACCELERATE, "RVC_ACC", 1 }, { VEHICLE_BRAKE, "RVC_BRK", 1 }, { VEHICLE_HANDBRAKE, "FEC_HND", 1 },
-	{ VEHICLE_FIREWEAPON, "FEC_FIR", 1 }, { VEHICLE_HORN, "FEC_HRN", 1 }, { TOGGLE_SUBMISSIONS, "FEC_SUB", 1 },
-	{ VEHICLE_CHANGE_RADIO_STATION, "FEC_RAD", 1 }, { VEHICLE_LOOKLEFT, "FEC_LOL", 1 }, { VEHICLE_LOOKRIGHT, "FEC_LOR", 1 },
+	{ PED_FIREWEAPON, "FEC_FIR", FOOT }, { PED_LOCK_TARGET, "FEC_TAR", FOOT }, { PED_SPRINT, "FEC_SPN", FOOT },
+	{ PED_JUMPING, "FEC_JMP", FOOT }, { VEHICLE_ENTER_EXIT, "FEC_EEX", FOOT | CAR | FLY }, { PED_CYCLE_WEAPON_RIGHT, "FEC_NWE", FOOT },
+	{ PED_CYCLE_WEAPON_LEFT, "FEC_PWE", FOOT }, { PED_ANSWER_PHONE, "FEC_ANS", FOOT }, { PED_DUCK, "FEC_CRO", FOOT },
+	{ PED_LOOKBEHIND, "FEC_LBA", FOOT }, { CAMERA_CHANGE_VIEW_ALL_SITUATIONS, "FEC_CMR", FOOT | CAR | FLY },
+	{ PED_CENTER_CAMERA_BEHIND_PLAYER, "FEC_CEN", FOOT }, { PED_CYCLE_TARGET_RIGHT, "FEC_NTR", FOOT },
+	{ PED_CYCLE_TARGET_LEFT, "FEC_PTT", FOOT }, { GO_FORWARD, "FEC_FOR", FOOT }, { GO_BACK, "FEC_BAC", FOOT },
+	{ GO_LEFT, "FEC_LEF", FOOT }, { GO_RIGHT, "FEC_RIG", FOOT },
+	{ VEHICLE_ACCELERATE, "RVC_ACC", CAR | FLY }, { VEHICLE_BRAKE, "RVC_BRK", CAR }, { VEHICLE_BRAKE, "RVC_DEC", FLY },
+	{ VEHICLE_HANDBRAKE, "FEC_HND", CAR },
+	{ VEHICLE_FIREWEAPON, "FEC_FIR", CAR | FLY }, { VEHICLE_HORN, "FEC_HRN", CAR }, { TOGGLE_SUBMISSIONS, "FEC_SUB", CAR | FLY },
+	{ VEHICLE_CHANGE_RADIO_STATION, "FEC_RAD", CAR | FLY }, { VEHICLE_LOOKLEFT, "FEC_LOL", CAR }, { VEHICLE_LOOKRIGHT, "FEC_LOR", CAR },
 };
 
 struct Callout { const PadSpot *spot; wchar text[96]; };
@@ -184,7 +190,7 @@ DrawPadPicture(void)
 		else
 			for (int a = 0; a < ARRAY_SIZE(padActions); a++) {
 				const PadAction &pa = padActions[a];
-				if ((pa.context == padContext || pa.context == 2) &&
+				if ((pa.contexts & (1 << padContext)) &&
 				    ControlsManager.GetControllerKeyAssociatedWithAction(pa.action, JOYSTICK) == c.spot->joy)
 					AppendText(c.text, pa.text, ARRAY_SIZE(c.text));
 			}

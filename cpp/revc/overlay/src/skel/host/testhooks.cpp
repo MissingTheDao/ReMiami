@@ -275,9 +275,13 @@ revc_test_show_controls_menu(void)
 	if (const char *layout = getenv("REVC_TEST_PAD_LAYOUT")) {
 		PadLayoutApply(atoi(layout));
 	}
-	// REVC_TEST_PAD_CONTEXT=1: the pad picture's In Car side.
-	if (getenv("REVC_TEST_PAD_CONTEXT") && atoi(getenv("REVC_TEST_PAD_CONTEXT")) == 1) {
-		PadPictureContextPress(FEOPTION_ACTION_SELECT);
+	// REVC_TEST_PAD_CONTEXT=1: the pad picture's In Car side, 2 Flying.
+	// (2: the Flying side; pressed once per call, the in-game capture calls this twice)
+	static bool contextDone;
+	if (getenv("REVC_TEST_PAD_CONTEXT") && !contextDone) {
+		contextDone = true;
+		for (int n = atoi(getenv("REVC_TEST_PAD_CONTEXT")); n > 0; n--)
+			PadPictureContextPress(FEOPTION_ACTION_SELECT);
 	}
 	FrontEndMenuManager.m_nCurrScreen = !page ? MENUPAGE_CONTROLLER_PC : strcmp(page, "pad") == 0 ? MENUPAGE_PAD_PICTURE : strcmp(page, "graphics") == 0 ? MENUPAGE_GRAPHICS_SETTINGS : atoi(page);
 	FrontEndMenuManager.m_nCurrOption = option ? atoi(option) : 0;

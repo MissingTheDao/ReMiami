@@ -239,9 +239,10 @@ native 640x480 xemu captures:
   logo and icon bar; the layout name moves under the title, the SHOW/context row sits between the
   pad and the icon bar on the mint bar, BACK is hidden.
 
-Still to do (user 2026-11-11): the Xbox controller page's **Flying** context. The Xbox shows
-Walking / Driving / Flying; revc's page has On foot / In car. Flying needs the helicopter and plane
-bindings and callouts.
+- Controller page contexts (user 2026-11-11): ON FOOT / IN CAR / FLYING like the Xbox's Walking /
+  Driving / Flying. Flying shows what the Xbox page lists: steer, accelerate, decelerate (brake),
+  fire, sub-missions, radio, camera, enter/exit. The Xbox's separate "Fire missiles" has no
+  action of its own in the controls found so far: not shown.
 
 Still to do: the Xbox per-page panel shapes,
 the Xbox fonts (RWFont/RWSFArborcrestHeavy), dialogs (blue layered panels), the Load list and Stats in the Xbox style, checking every page
