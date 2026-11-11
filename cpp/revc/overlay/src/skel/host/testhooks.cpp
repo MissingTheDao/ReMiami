@@ -240,9 +240,18 @@ revc_test_menu_state(int page, int option, int context, int layout, int legend)
 			FrontEndMenuManager.m_bStartUpFrontEndRequested = true;
 		return 0;
 	}
+	{	// REVC_TEST_BRIEF_LISTS: Xbox list entries for the shots (core/BriefLists.cpp), once
+		static bool filled = false;
+		void BriefListsTestFill(void);
+		if (!filled) { filled = true; BriefListsTestFill(); }
+	}
 	if (layout >= 0)
 		PadLayoutApply(layout);
-	if (context >= 0)
+	// context: the controller picture's context, or on Stats/Brief the Xbox sub-tab
+	void MenuSkinXboxSetSubTab(int page, int tab);
+	if (context >= 0 && (page == MENUPAGE_STATS || page == MENUPAGE_BRIEFS))
+		MenuSkinXboxSetSubTab(page, context);
+	else if (context >= 0)
 		PadPictureSetContext(context);
 	if (legend >= 0)
 		FrontEndMenuManager.m_PrefsShowLegends = legend;

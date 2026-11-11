@@ -124,7 +124,7 @@ DrawHelpBox(uint8 alpha, int page)
 	static const int dpad[4] = { BUTTON_DPAD_UP, BUTTON_DPAD_DOWN, BUTTON_DPAD_RIGHT, BUTTON_DPAD_LEFT };
 	const char *actions[5] = { "RVC_HSE", "RVC_HBA", "RVC_HRE", mapPage ? "RVC_HSC" : "RVC_HNA", "RVC_HZO" };
 	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
-	CFont::SetScale(SX(0.41f), SY(0.68f));
+	CFont::SetScale(SX(mapPage ? 0.36f : 0.41f), SY(mapPage ? 0.62f : 0.68f));	// five rows: a little smaller to fit the box
 	CFont::SetPropOn();
 	CFont::SetBackgroundOff();
 	CFont::SetDropShadowPosition(0);

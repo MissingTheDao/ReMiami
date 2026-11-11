@@ -96,6 +96,10 @@ pub const MANIFEST: &[Lift] = &[
     Lift { kind: DiscKind::Xbox, dir: "neo/UserInterface/models/", exts: &[".dds"], dest: "ui" },
     Lift { kind: DiscKind::Xbox, dir: "neo/UserInterface/", exts: &[".dds", ".txd"], dest: "ui" },
     Lift { kind: DiscKind::Xbox, dir: "neo/UserInterface/fonts/", exts: &[], dest: "ui/fonts" },
+    // The pause menu's "tutorial briefings" and "unlocked items" lists: which text keys each
+    // collects (core/BriefLists.cpp).
+    Lift { kind: DiscKind::Xbox, dir: "neo/Hints.txt", exts: &[], dest: "neo" },
+    Lift { kind: DiscKind::Xbox, dir: "neo/UnlockedItems.txt", exts: &[], dest: "neo" },
     // HUD and fonts (DXT5: smoother alpha than the PC's DXT3).
     Lift { kind: DiscKind::Xbox, dir: "models/hud.txd", exts: &[], dest: "models" },
     Lift { kind: DiscKind::Xbox, dir: "models/fonts.txd", exts: &[], dest: "models" },

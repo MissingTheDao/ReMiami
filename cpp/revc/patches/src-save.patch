@@ -663,7 +663,16 @@
  
  	DMAudio.SetMusicMasterVolume(FrontEndMenuManager.m_PrefsMusicVolume);
  	DMAudio.SetEffectsMasterVolume(FrontEndMenuManager.m_PrefsSfxVolume);
-@@ -542,65 +481,32 @@
+@@ -424,6 +363,8 @@
+ 	}
+ 
+ 	DoGameSpecificStuffAfterSucessLoad();
++	void BriefListsLoad(const char *saveFile);
++	BriefListsLoad(LoadFileName);	// revc: the Xbox lists from the save's sidecar (empty without)
+ 	debug("Game successfully loaded \n");
+ 	return true;
+ }
+@@ -542,65 +483,32 @@
  	return SlotFileName[slot];
  }
  
@@ -745,7 +754,7 @@
  }
  
  bool
-@@ -620,11 +526,11 @@
+@@ -620,11 +528,11 @@
  			PcSaveHelper.nErrorCode = SAVESTATUS_ERR_LOAD_CLOSE;
  		return false;
  	} else {
@@ -762,7 +771,7 @@
  		CStreaming::RemoveUnusedBigBuildings(CGame::currLevel);
  		CStreaming::RemoveUnusedBuildings(CGame::currLevel);
  
-@@ -644,573 +550,45 @@
+@@ -644,573 +552,45 @@
  }
  
  #ifdef FIX_INCOMPATIBLE_SAVES
@@ -1376,7 +1385,16 @@
  extern char DefaultPCSaveFileName[260];
 --- a/src/save/PCSave.cpp
 +++ b/src/save/PCSave.cpp
-@@ -89,6 +89,26 @@
+@@ -53,6 +53,8 @@
+ 		if (GenericSave(file)) {
+ 			if (!!CFileMgr::CloseFile(file))
+ 				nErrorCode = SAVESTATUS_ERR_SAVE_CLOSE;
++			void BriefListsSave(const char *saveFile);
++			BriefListsSave(ValidSaveName);	// revc: the Xbox lists, in a sidecar next to the save
+ 			return 0;
+ 		}
+ 
+@@ -89,6 +91,26 @@
  	return true;
  }
  
@@ -1403,7 +1421,7 @@
  void
  C_PcSave::PopulateSlotInfo()
  {
-@@ -98,69 +118,21 @@
+@@ -98,69 +120,21 @@
  		SlotSaveDate[i][0] = '\0';
  	}
  	for (int i = 0; i < SLOT_COUNT; i++) {

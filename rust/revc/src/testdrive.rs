@@ -198,6 +198,8 @@ const MENU_SHOTS_XBOX: &[MenuShot] = &[
     ("brief", "brief", 0, -1, -1, -1, 1000),
     ("stats", "stats", 0, -1, -1, -1, 1000),
     ("stats_scrolled", "stats", 0, -1, -1, -1, 5000),
+    ("unlocked_items", "stats", 0, 1, -1, -1, 1000),
+    ("brief_tutorial", "brief", 0, 1, -1, -1, 1000),
     ("controls", "console_controls", 0, -1, -1, -1, 1000),
     ("controls_select", "console_controls", 0, -1, -1, -1, 1000),
     ("controls_walking", "pad", 0, 0, 0, -1, 1000),
@@ -224,7 +226,14 @@ const MENU_SHOTS_PS2_END: &[MenuShot] = &[
     ("stats_endgame_scrolled_3", "stats", 0, -1, -1, -1, 24000),
     ("stats_endgame_scrolled_4", "stats", 0, -1, -1, -1, 32000),
 ];
-const MENU_SHOTS_XBOX_END: &[MenuShot] = MENU_SHOTS_PS2_END;
+const MENU_SHOTS_XBOX_END: &[MenuShot] = &[
+    ("stats_endgame", "stats", 0, -1, -1, -1, 1000),
+    ("stats_endgame_scrolled_1", "stats", 0, -1, -1, -1, 8000),
+    ("stats_endgame_scrolled_2", "stats", 0, -1, -1, -1, 16000),
+    ("stats_endgame_scrolled_3", "stats", 0, -1, -1, -1, 24000),
+    ("stats_endgame_scrolled_4", "stats", 0, -1, -1, -1, 32000),
+    ("unlocked_items_endgame", "stats", 0, 1, -1, -1, 1000),
+];
 
 static MENU_SHOT_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
 static MENU_VIDEO_FRAME: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);

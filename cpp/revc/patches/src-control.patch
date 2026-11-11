@@ -340,3 +340,29 @@
 +	static float (&PoliceRestartHeadings)[NUM_RESTART_POINTS];
 +	static uint16 &NumberOfPoliceRestarts;
  };
+--- a/src/control/Script.cpp
++++ b/src/control/Script.cpp
+@@ -741,6 +741,8 @@
+ 
+ void CTheScripts::Init()
+ {
++	void BriefListsReset(void);
++	BriefListsReset();	// revc: a new game's Xbox lists start empty (a load reads them after)
+ 	for (int i = 0; i < SIZE_SCRIPT_SPACE; i++)
+ 		ScriptSpace[i] = 0;
+ 	pActiveScripts = pIdleScripts = nil;
+--- a/src/control/Script.h
++++ b/src/control/Script.h
+@@ -513,8 +513,12 @@
+ 	}
+ 	static void ReadTextLabelFromScript(uint32* pIp, char* buf) {
+ 		strncpy(buf, (const char*)&CTheScripts::ScriptSpace[*pIp], KEY_LENGTH_IN_SCRIPT);
++		void BriefListsOffer(const char *label);	// revc: the Xbox tutorial / unlocked-items lists
++		BriefListsOffer((const char*)&CTheScripts::ScriptSpace[*pIp]);
+ 	}
+ 	static wchar* GetTextByKeyFromScript(uint32* pIp) {
++		void BriefListsOffer(const char *label);
++		BriefListsOffer((const char*)&CTheScripts::ScriptSpace[*pIp]);
+ 		wchar* text = TheText.Get((const char*)&CTheScripts::ScriptSpace[*pIp]);
+ 		*pIp += KEY_LENGTH_IN_SCRIPT;
+ 		return text;

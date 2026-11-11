@@ -25,6 +25,7 @@ static float Y(float y) { return SCREEN_SCALE_Y(y); }
 static float W(float w) { return SCREEN_SCALE_X(w); }
 static float H(float h) { return SCREEN_SCALE_Y(h); }
 
+static bool HasSubTabs(int page);
 const CRGBA XBOX_MINT(0, 210, 141, 255);
 const CRGBA XBOX_PINK(255, 154, 227, 255);
 
@@ -364,6 +365,11 @@ DrawHelpLine(CMenuManager *m, uint8 alpha)
 		return;
 	}
 	HelpItem(X(52.0f), y, start, 1, nil, "RVC_XHR", alpha);
+	if (HasSubTabs(m->m_nCurrScreen)) {	// "START:resume game  <-/->:select  B:back" (the sub-tabs)
+		HelpItem(X(200.0f), y, lr, 2, nil, "RVC_XHS", alpha);
+		HelpItem(X(340.0f), y, b, 1, nil, "RVC_XHB", alpha);
+		return;
+	}
 	if (m->m_nCurrScreen == MENUPAGE_PAD_PICTURE) {
 		HelpItem(X(200.0f), y, lr, 2, nil, "RVC_XHC", alpha);
 		HelpItem(X(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
@@ -432,6 +438,60 @@ MenuSkinXboxWedge(float y, float progress, uint8 alpha)
 	return filled;
 }
 
+// Sub-tabs on the Stats ("stats | unlocked items") and Brief ("briefs | tutorial briefings")
+// pages, at the bottom left: the active one on a mint bar with a dark block at its outer end
+// (measured at 640x480: labels at x 68 and 248 / 308, y 330; bars 60-240 with the block at
+// 45-60, and 300-590 with the block at 590-605). <-/-> switches.
+static int subTab = 0, subTabPage = -1;
+
+static bool
+HasSubTabs(int page)
+{
+	return page == MENUPAGE_STATS || page == MENUPAGE_BRIEFS;
+}
+
+int
+MenuSkinXboxSubTab(int page)
+{
+	return page == subTabPage ? subTab : 0;
+}
+
+extern "C" void	// (C linkage: called from skel/host/testhooks.cpp)
+MenuSkinXboxSetSubTab(int page, int tab)
+{
+	subTabPage = page;
+	subTab = tab;
+}
+
+static void
+DrawSubTabs(int page, uint8 alpha)
+{
+	const bool stats = page == MENUPAGE_STATS;
+	const char *names[2] = { stats ? "RVC_XS1" : "RVC_XB1", stats ? "RVC_XS2" : "RVC_XB2" };
+	const float lx[2] = { 68.0f, stats ? 248.0f : 308.0f };
+	const float ty = 330.0f * 448.0f / 480.0f, y0 = Y(320.0f * 448.0f / 480.0f), y1 = Y(355.0f * 448.0f / 480.0f);
+	int cur = MenuSkinXboxSubTab(page);
+	CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
+	CFont::SetScale(W(BIGTEXT_X_SCALE * 1.2f), H(BIGTEXT_Y_SCALE * 1.2f));
+	CFont::SetPropOn();
+	CFont::SetCentreOff();
+	CFont::SetRightJustifyOff();
+	CFont::SetWrapx(SCREEN_WIDTH);
+	float w = CFont::GetStringWidth(TheText.Get(names[cur]), true);
+	float bx0 = X(lx[cur] - 8.0f), bx1 = Max(X(lx[cur]) + w + W(60.0f), X(lx[cur] + 172.0f)), tilt = W(5.0f);
+	CSprite2d::Draw2DPolygon(bx0 + tilt, y0, bx1 + tilt, y0, bx0, y1, bx1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
+	if (cur == 0)	// the dark block at the bar's outer end
+		CSprite2d::Draw2DPolygon(bx0 - W(15.0f) + tilt, y0, bx0 + tilt, y0, bx0 - W(15.0f), y1, bx0, y1, CRGBA(40, 40, 40, alpha));
+	else
+		CSprite2d::Draw2DPolygon(bx1 + tilt, y0, bx1 + W(15.0f) + tilt, y0, bx1, y1, bx1 + W(15.0f), y1, CRGBA(40, 40, 40, alpha));
+	CFont::SetDropShadowPosition(2);
+	CFont::SetDropColor(CRGBA(0, 0, 0, alpha));
+	CFont::SetColor(CRGBA(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha));
+	for (int i = 0; i < 2; i++)
+		CFont::PrintString(X(lx[i]), Y(ty), TheText.Get(names[i]));
+	CFont::SetDropShadowPosition(0);
+}
+
 // LT/RT step through the pages, as on the Xbox pause menu. True when it switched.
 bool
 MenuSkinXboxInput(CMenuManager *m)
@@ -439,6 +499,11 @@ MenuSkinXboxInput(CMenuManager *m)
 	if (!MenuSkinXboxActive(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return false;
 	CPad *pad = CPad::GetPad(0);
+	if (HasSubTabs(m->m_nCurrScreen) && (pad->GetDPadLeftJustDown() || pad->GetDPadRightJustDown() || pad->GetLeftJustDown() || pad->GetRightJustDown())) {
+		MenuSkinXboxSetSubTab(m->m_nCurrScreen, 1 - MenuSkinXboxSubTab(m->m_nCurrScreen));
+		barFocus = false;
+		return true;
+	}
 	int step = pad->GetRightShoulder2JustDown() ? 1 : pad->GetLeftShoulder2JustDown() ? -1 : 0;
 	if (step == 0)
 		return false;
@@ -462,6 +527,8 @@ MenuSkinXboxDraw(CMenuManager *m, uint8 alpha)
 		else if (m->m_nCurrOption != barFocusOption)
 			barFocus = false;
 	}
+	if (HasSubTabs(m->m_nCurrScreen))
+		DrawSubTabs(m->m_nCurrScreen, alpha);
 	DrawIconBar(m, DialogDim(alpha));
 	DrawHelpLine(m, DialogDim(alpha));
 	CFont::DrawFonts();

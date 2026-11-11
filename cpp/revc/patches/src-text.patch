@@ -1010,7 +1010,7 @@
  #include "Timer.h"
  
  wchar WideErrorString[25];
-@@ -16,173 +15,218 @@
+@@ -16,173 +15,229 @@
  CText::CText(void)
  {
  	encoding = 'e';
@@ -1297,6 +1297,13 @@
 +	{ "RVC_XCR", "CREDITS" },
 +	{ "RVC_LEG", "LEGEND" },
 +	{ "RVC_XOK", "OK" },
++	{ "RVC_NIY", "Nothing yet..." },
++	{ "RVC_NEW", "New" },
++	{ "RVC_XS1", "STATS" },
++	{ "RVC_XS2", "UNLOCKED ITEMS" },
++	{ "RVC_XB1", "BRIEFS" },
++	{ "RVC_XB2", "TUTORIAL BRIEFINGS" },
++	{ "RVC_XNG", "Are you sure you want to start a new game? All progress since the last save game will be lost. Proceed?" },
 +	{ "RVC_XSG", "Save Game" },
 +	{ "RVC_XNP", "not present." },
 +	{ "RVC_XCA", "CANCEL" },
@@ -1317,11 +1324,15 @@
 +wchar*
 +CText::GetRevcText(const char *key)
 +{
-+	static wchar texts[ARRAY_SIZE(RevcTexts)][32];
++	// each text converted once into a buffer of its own length (a fixed 32-character slot let
++	// long texts run into the next ones)
++	static wchar *texts[ARRAY_SIZE(RevcTexts)];
 +	for (int i = 0; i < (int)ARRAY_SIZE(RevcTexts); i++)
 +		if (strncmp(key, RevcTexts[i].key, 8) == 0) {
-+			if (texts[i][0] == 0)
++			if (texts[i] == nil) {
++				texts[i] = new wchar[strlen(RevcTexts[i].text) + 1];
 +				AsciiToUnicode(RevcTexts[i].text, texts[i]);
++			}
 +			return texts[i];
 +		}
 +	return nil;
@@ -1360,7 +1371,7 @@
  }
  
  void
-@@ -201,297 +245,24 @@
+@@ -201,297 +256,24 @@
  }
  
  void
@@ -1663,7 +1674,7 @@
  	return aStr;
  }
  
-@@ -499,13 +270,7 @@
+@@ -499,13 +281,7 @@
  UnicodeToAsciiForSaveLoad(wchar *src)
  {
  	static char aStr[256];
@@ -1678,7 +1689,7 @@
  	return aStr;
  }
  
-@@ -513,13 +278,7 @@
+@@ -513,13 +289,7 @@
  UnicodeToAsciiForMemoryCard(wchar *src)
  {
  	static char aStr[256];
