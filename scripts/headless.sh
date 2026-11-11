@@ -15,6 +15,10 @@ if [[ -z ${REVC_IN_SCOPE:-} && ${REVC_RUN_MEM:-3G} != 0 ]] && command -v systemd
   exec systemd-run --user --scope --quiet --collect -p MemoryMax="${REVC_RUN_MEM:-3G}" -p MemorySwapMax=1G \
     -p ManagedOOMMemoryPressure=kill -- "$0" "$@"
 fi
+# Temporary files on disk: /tmp is often RAM (tmpfs), and run frames and shots pushed into swap
+# there were behind systemd-oomd killing the desktop session's apps (2026-11-11). REVC_TMPDIR picks
+# another place.
+export TMPDIR=${REVC_TMPDIR:-/var/tmp}
 SIZE=4096x2304
 [[ "${1:-}" == --size ]] && { SIZE=$2; shift 2; }
 (( $# )) || { echo "usage: headless.sh [--size WxH] command [args ...]"; exit 2; }
