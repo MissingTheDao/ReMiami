@@ -2933,7 +2933,7 @@
  		
  #ifdef MISSION_REPLAY
  	// MENUPAGE_MISSION_RETRY = 57 on mobile
-@@ -826,3 +1117,212 @@
+@@ -826,3 +1117,277 @@
  
  #endif
  #endif
@@ -2973,6 +2973,54 @@
 +	return style == 2 && (a == MENUACTION_WIDESCREEN || a == MENUACTION_CFO_DYNAMIC);	// (and the PS2's screen position)
 +}
 +
++// The options list's "language" row (the EU discs' 8th tab, now a row): left/right cycles the five
++// languages as the Language page does.
++static wchar*
++ConsoleLanguageDraw(bool *disabled, bool userHovering)
++{
++	static const char *names[] = { "FEL_ENG", "FEL_FRE", "FEL_GER", "FEL_ITA", "FEL_SPA" };
++	int l = FrontEndMenuManager.m_PrefsLanguage;
++	return TheText.Get(l >= 0 && l < 5 ? names[l] : "FEL_ENG");
++}
++static void
++ConsoleLanguagePress(int8 action)
++{
++	if (action != FEOPTION_ACTION_LEFT && action != FEOPTION_ACTION_RIGHT && action != FEOPTION_ACTION_SELECT)
++		return;
++	int l = FrontEndMenuManager.m_PrefsLanguage;
++	l = ((l >= 0 && l < 5 ? l : 0) + (action == FEOPTION_ACTION_LEFT ? 4 : 1)) % 5;
++	FrontEndMenuManager.m_PrefsLanguage = l;
++	FrontEndMenuManager.m_bFrontEnd_ReloadObrTxtGxt = true;
++	FrontEndMenuManager.InitialiseChangedLanguageSettings();
++	FrontEndMenuManager.SaveSettings();
++}
++
++// "reset to console defaults": revc's extra settings back to what the console style had (the
++// UI style's visual-style preset: filter, alpha test, draw distance, trails, camera; densities
++// 1.0, cutscene borders on, free cam off, no MP3 boost, dynamic acoustics on, automatic button
++// prompts). The machine's own choices (resolution, vsync, antialiasing) and the language stay.
++static void
++ConsoleDefaultsPress(int8 action)
++{
++	if (action != FEOPTION_ACTION_SELECT)
++		return;
++	if (gUiStyle == 1 || gUiStyle == 2)
++		ApplyVisualStyle(gUiStyle);
++#ifdef PED_CAR_DENSITY_SLIDERS
++	PedDensityChange(CIniFile::PedNumberMultiplier, 1.0f);
++	CarDensityChange(CIniFile::CarNumberMultiplier, 1.0f);
++	CIniFile::PedNumberMultiplier = CIniFile::CarNumberMultiplier = 1.0f;
++#endif
++	FrontEndMenuManager.m_PrefsCutsceneBorders = true;
++	TheCamera.bFreeCam = false;
++	FrontEndMenuManager.m_PrefsMP3BoostVolume = 0;
++	DMAudio.SetMP3BoostVolume(0);
++	FrontEndMenuManager.m_PrefsDMA = true;
++	DMAudio.SetDynamicAcousticModelingStatus(true);
++	gButtonPromptsOverride = 0;
++	FrontEndMenuManager.SaveSettings();
++}
++
 +// The console options list: section headings (MENUACTION_LABEL) and copies of the PC pages'
 +// entries, found by name. section -1: all (PS2 "options" tab); 0 display and look, 1 audio,
 +// 2 controls (the Xbox "advanced" sub-tab of Display, Audio, Controls).
@@ -3010,6 +3058,9 @@
 +	CMenuScreenCustom &pg = aScreens[MENUPAGE_CONSOLE_OPTIONS];
 +	memset(pg.m_aEntries, 0, sizeof(pg.m_aEntries));
 +	int n = 0;
++	// the language row (section 0's "game:") and the closing reset row, made here
++	static CCFODynamic languageOption(nil, nil, nil, ConsoleLanguageDraw, ConsoleLanguagePress);
++	static CCFODynamic defaultsOption(nil, nil, nil, nil, ConsoleDefaultsPress);
 +	for (int g = 0; g < (int)ARRAY_SIZE(groups); g++) {
 +		if (section >= 0 && groups[g].section != section)
 +			continue;
@@ -3021,6 +3072,20 @@
 +		for (int k = 0; k < 14 && groups[g].keys[k]; k++)
 +			if (pool[g][k].m_EntryName[0] && n < NUM_MENUROWS - 1)
 +				pg.m_aEntries[n++] = pool[g][k];
++	}
++	if ((section < 0 || section == 0) && n < NUM_MENUROWS - 3) {
++		pg.m_aEntries[n].m_Action = MENUACTION_LABEL;
++		strncpy(pg.m_aEntries[n++].m_EntryName, "RVC_OSG", 8);	// "game:"
++		pg.m_aEntries[n].m_Action = MENUACTION_CFO_DYNAMIC;
++		strncpy(pg.m_aEntries[n].m_EntryName, "FEO_LAN", 8);
++		pg.m_aEntries[n].m_CFODynamic = &languageOption;
++		pg.m_aEntries[n++].m_Align = MENUALIGN_LEFT;
++	}
++	if (n < NUM_MENUROWS - 1) {
++		pg.m_aEntries[n].m_Action = MENUACTION_CFO_DYNAMIC;
++		strncpy(pg.m_aEntries[n].m_EntryName, "RVC_RCD", 8);	// "reset to console defaults"
++		pg.m_aEntries[n].m_CFODynamic = &defaultsOption;
++		pg.m_aEntries[n++].m_Align = MENUALIGN_LEFT;
 +	}
 +}
 +

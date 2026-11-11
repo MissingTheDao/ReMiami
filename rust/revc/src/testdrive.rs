@@ -204,6 +204,7 @@ const MENU_SHOTS_PS2: &[MenuShot] = &[
     ("save_overwrite_yes", "save_overwrite", 2, -1, -1, -1, 1000),
     ("save_success", "save_success", 1, -1, -1, -1, 1000),
     ("options_2", "console_options", 14, -1, -1, -1, 1000),
+    ("options_3", "console_options", 27, -1, -1, -1, 1000),
     ("save_slots", "save", 1, -1, -1, -1, 1000),
     ("load_confirm", "load_confirm", 1, -1, -1, -1, 1000),
     ("new_game_confirm", "new_game_confirm", 1, -1, -1, -1, 1000),
