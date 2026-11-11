@@ -520,23 +520,18 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 	float sx = key[k][0] + (key[k + 1][0] - key[k][0]) * f, sy = key[k][1] + (key[k + 1][1] - key[k][1]) * f;
 	float a = key[k][2] + (key[k + 1][2] - key[k][2]) * f;
 	{
-		float bx1 = tail ? x1 - tailW : x1;
-		float cx = (x0 + bx1) / 2.0f, cy = (y0 + y1) / 2.0f, hw = (bx1 - x0) / 2.0f * sx, hh = (y1 - y0) / 2.0f * sy;
+		// centred on the whole bar (the anim's target position is the bar's own)
+		float cx = (x0 + x1) / 2.0f, cy = (y0 + y1) / 2.0f, hw = (x1 - x0) / 2.0f * sx, hh = (y1 - y0) / 2.0f * sy;
 		CRGBA glow(255, 255, 255, (uint8)(a * alpha));
 		if (!DrawBarShape(cx - hw, cy - hh, cx + hw, cy + hh, glow, false))
 			CSprite2d::DrawRect(CRect(cx - hw, cy - hh, cx + hw, cy + hh), glow);
 	}
-	if (DrawBarShape(x0, y0, tail ? x1 - tailW : x1, y1, CRGBA(0, 207, 133, alpha))) {
-		// the console's own outline (its colour from the shape's brush: 0, 207, 133), with the
-		// dark block at its end kept (round 22)
-		if (tail)
-			CSprite2d::Draw2DPolygon(x1 - tailW + tilt, y0, x1 + tilt, y0, x1 - tailW, y1, x1, y1, CRGBA(0, 120, 80, alpha));
-	} else if (!tail) {
+	// The bar: the console's own outline (colour from the shape's brush: 0, 207, 133), or a tilted
+	// quad without the import. No end block: what looked like a lighter tail on the console is the
+	// pulse's halo past the bar's end (round 25); the sub-tab bars draw their own block.
+	(void)tailW;
+	if (!DrawBarShape(x0, y0, x1, y1, CRGBA(0, 207, 133, alpha)))
 		CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 + tilt, y0, x0, y1, x1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
-	} else {
-		CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 - tailW + tilt, y0, x0, y1, x1 - tailW, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
-		CSprite2d::Draw2DPolygon(x1 - tailW + tilt, y0, x1 + tilt, y0, x1 - tailW, y1, x1, y1, CRGBA(0, 120, 80, alpha));
-	}
 }
 
 // A dialog's background, drawn before the page's own text (CMenuManager::DrawStandardMenus): the
