@@ -256,6 +256,10 @@ const MENU_SHOTS_XBOX_END: &[MenuShot] = &[
     ("unlocked_items_endgame", "stats", 0, 1, -1, -1, 1000),
 ];
 
+/// A still clip for the selection pulse (set xbox_pulse, with --clips): Display, brightness
+/// selected, held 5 s with no input.
+const MENU_SHOTS_XBOX_PULSE: &[MenuShot] = &[("pulse_still", "console_display", 0, -1, -1, -1, 1000)];
+
 static MENU_SHOT_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
 static MENU_VIDEO_FRAME: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
@@ -264,6 +268,7 @@ fn menu_shots() -> (&'static str, &'static [MenuShot]) {
         Ok("xbox") => ("xbox", MENU_SHOTS_XBOX),
         Ok("ps2_endgame") => ("ps2", MENU_SHOTS_PS2_END),
         Ok("xbox_endgame") => ("xbox", MENU_SHOTS_XBOX_END),
+        Ok("xbox_pulse") => ("xbox", MENU_SHOTS_XBOX_PULSE),
         _ => ("ps2", MENU_SHOTS_PS2),
     }
 }
@@ -754,13 +759,14 @@ impl Driver {
                     return false;
                 }
                 let radio = id.contains("radio");
-                match frames {
+                let still = id.ends_with("_still");	// held without input, 5 s
+                match if still { 0 } else { frames } {
                     30 if radio => unsafe { revc_test_menu_input(0, 1) },
                     60 if radio => unsafe { revc_test_menu_input(0, -1) },
                     30 if !id.contains("controls_") && !id.starts_with("map") => unsafe { revc_test_menu_input(1, 0) },
                     _ => {}
                 }
-                if frames >= 90 {
+                if frames >= if still { 300 } else { 90 } {
                     if idx + 1 < shots.len() {
                         self.phase = Phase::Menus { idx: idx + 1, frames: 0 };
                     } else {
