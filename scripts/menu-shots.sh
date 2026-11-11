@@ -43,9 +43,9 @@ for f in sys.argv[2:]:
 }
 hud() {	# set, ui style, width, height, suffix: the HUD on foot (scene S1, noon) in that style
   local cfg=$TMP/hud.ini wrap=()
-  sed -e "s/^\[Graphics\]/[Graphics]\nUiStyle=$2/" -e "s/^Width=.*/Width=$3/" -e "s/^Height=.*/Height=$4/" \
+  # (scenes.ini has its own UiStyle line: replace it, an inserted one would lose to it)
+  sed -e "s/^UiStyle=.*/UiStyle=$2/" -e "s/^Width=.*/Width=$3/" -e "s/^Height=.*/Height=$4/" \
     "$ROOT/tests/config/scenes.ini" > "$cfg"
-  grep -q '^\[Graphics\]' "$cfg" || printf '[Graphics]\nUiStyle=%s\n' "$2" >> "$cfg"
   [[ "$3x$4" == 2560x1080 ]] && wrap=("$ROOT/scripts/headless.sh" --size "$3x$4")
   REVC_TEST_CONFIG=$cfg REVC_SCENE_W=$3 REVC_SCENE_H=$4 REVC_TEST_SCENES=S1 \
     "${wrap[@]}" "$ROOT/scripts/test.sh" scenes || { echo "menu-shots: the scenes run FAILED ($1 $3x$4)" >&2; FAILED=1; }

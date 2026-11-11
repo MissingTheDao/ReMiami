@@ -2278,7 +2278,7 @@
  #endif
  #if defined AUDIO_OAL
  		    "OAL "
-@@ -1413,6 +1414,49 @@
+@@ -1413,6 +1414,54 @@
  	POP_RENDERGROUP();
  }
  
@@ -2300,7 +2300,12 @@
 +	// the PS2 style's screen position (Display page) moves the HUD, for TVs that crop the picture
 +	extern float ScreenPositionX(void), ScreenPositionY(void);
 +	float px = gUiStyle == 1 ? Floor(SCREEN_SCALE_X(ScreenPositionX())) : 0.0f, py = gUiStyle == 1 ? Floor(SCREEN_SCALE_Y(ScreenPositionY())) : 0.0f;
-+	bool area = !(gUiStyle == 0 || gConsoleHudArea == 0 || w43 >= SCREEN_WIDTH);
++	// HUD area: 0 corners (on screens wider than 16:9, of a centred 16:9 box: no console went
++	// wider; HIRES_PRESENTATION 4b), 1 the console's 4:3, 2 the screen's edges
++	float w169 = Floor(SCREEN_HEIGHT * 16.0f / 9.0f);
++	if (gUiStyle != 0 && gConsoleHudArea == 0 && w169 < SCREEN_WIDTH)
++		w43 = w169;
++	bool area = !(gUiStyle == 0 || gConsoleHudArea == 2 || w43 >= SCREEN_WIDTH);
 +	if (!area && px == 0.0f && py == 0.0f)
 +		return;
 +	CFont::DrawFonts();	// text queued before (pickup texts) is placed on the whole screen
@@ -2309,7 +2314,7 @@
 +	if (area) {
 +		revc_device_set_im2d_offset(Floor((RsGlobal.width - w43) / 2.0f) + px, py);
 +		RsGlobal.width = (int32)w43;
-+		CDraw::SetAspectRatio(4.0f / 3.0f);
++		CDraw::SetAspectRatio(w43 / SCREEN_HEIGHT);
 +	} else
 +		revc_device_set_im2d_offset(px, py);
 +}
@@ -2328,7 +2333,7 @@
  void
  Render2dStuff(void)
  {
-@@ -1465,6 +1509,7 @@
+@@ -1465,6 +1514,7 @@
  		CSprite2d::DrawRect(CRect(SCREEN_WIDTH / 2 + SCREEN_SCALE_X(210), 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), black);
  	}
  
@@ -2336,7 +2341,7 @@
  	MusicManager.DisplayRadioStationName();
  	TheConsole.Display();
  #ifdef GTA_SCENE_EDIT
-@@ -1481,6 +1526,7 @@
+@@ -1481,6 +1531,7 @@
  	CGarages::PrintMessages();
  	CPad::PrintErrorMessage();
  	CFont::DrawFonts();
@@ -2344,7 +2349,7 @@
  #ifndef MASTER
  	COcclusion::Render();
  #endif
-@@ -1517,16 +1563,43 @@
+@@ -1517,16 +1568,43 @@
  #ifdef MOBILE_IMPROVEMENTS
  	if (CDraw::FadeValue != 0)
  #endif
@@ -2390,7 +2395,7 @@
  
  	tbInit();
  
-@@ -1548,25 +1621,62 @@
+@@ -1548,25 +1626,62 @@
  	if(CGame::bDemoMode && CTimer::GetTimeInMilliseconds() > (3*60 + 30)*1000 && !CCutsceneMgr::IsCutsceneProcessing()){
  		WANT_TO_LOAD = false;
  		FrontEndMenuManager.m_bWantToRestart = true;
@@ -2457,7 +2462,7 @@
  		RwV2d pos;
  		pos.x = SCREEN_WIDTH / 2.0f;
  		pos.y = SCREEN_HEIGHT / 2.0f;
-@@ -1587,9 +1697,16 @@
+@@ -1587,9 +1702,16 @@
  		tbEndTimer("CnstrRenderList");
  
  		tbStartTimer(0, "PreRender");
@@ -2475,7 +2480,7 @@
  #ifdef FIX_BUGS
  		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void *)FALSE); // TODO: temp? this fixes OpenGL render but there should be a better place for this
  		// This has to be done BEFORE RwCameraBeginUpdate
-@@ -1631,7 +1748,11 @@
+@@ -1631,7 +1753,11 @@
  
  #ifdef SCREEN_DROPLETS
  		CPostFX::GetBackBuffer(Scene.camera);
@@ -2488,7 +2493,7 @@
  		ScreenDroplets::Render();
  #endif
  
-@@ -1639,6 +1760,10 @@
+@@ -1639,6 +1765,10 @@
  		TheCamera.RenderMotionBlur();
  		tbEndTimer("RenderMotionBlur");
  
@@ -2499,7 +2504,7 @@
  		tbStartTimer(0, "Render2dStuff");
  		Render2dStuff();
  		tbEndTimer("Render2dStuff");
-@@ -1691,6 +1816,16 @@
+@@ -1691,6 +1821,16 @@
  }
  
  void
@@ -2554,7 +2559,7 @@
 +	static const char *uiStyleOpts[] = { "RVC_VS0", "RVC_VS1", "RVC_VS2" };
 +	// where the console HUD goes on wide screens: the corners, or the console's 4:3 area
 +	extern int8 gConsoleHudArea;
-+	static const char *hudAreaOpts[] = { "RVC_HU0", "RVC_HU1" };
++	static const char *hudAreaOpts[] = { "RVC_HU0", "RVC_HU1", "RVC_HU2" };	// corners (16:9 at most), 4:3, screen edges
 +	// revc: one choice for the platform look (plan task 13); see VisualStyleButtonPress.
 +	wchar *VisualStyleDraw(bool *disabled, bool userHovering);
 +	void VisualStyleButtonPress(int8 action);
