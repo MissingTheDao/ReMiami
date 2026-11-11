@@ -746,6 +746,13 @@ there is logic, deletion where nothing calls it.
       an extension. Moving the game to C++17 is worth doing in stage 4.)
   - **7d4. fakerw goes**: fake.cpp's RW API (358 functions) is exported by Rust under the C
     names fakerw's headers declare (extern "C"); fake.cpp is deleted.
+    **Done 2026-11-11, differently from the plan above:** the RW API adapters are inline in
+    `src/fakerw/fakeimpl.h` (included at the end of rwcore.h; each body opens with
+    `using namespace rw;` so no header imports librw's names into the game) and fake.cpp is
+    deleted. Exporting them from Rust under their C names would add a second FFI hop for C++
+    callers only, and rewriting ~250 adapters has no behaviour to gain; they move to Rust with
+    their callers when the game is ported (stages 4 and 5). With this, stage 2 is complete: no
+    C++ is left in librw or fakerw, both are headers over the Rust objects.
 
 ## Appendix: every RW function the game calls
 
