@@ -123,18 +123,18 @@ LoadFont(XboxFont &f, const char *tex, const char *met)
 
 // Width of `text` at `height` px (the font's 28 px cells scaled).
 static float
-XboxFontWidth(const XboxFont &f, const wchar *text, float height)
+XboxFontWidth(const XboxFont &f, const wchar *text, float height, float spacing = 0.0f)
 {
 	float w = 0.0f, s = height / 28.0f;
 	for (; *text; text++) {
 		const XboxFont::Box &b = f.box[*text < 256 ? *text : '?'];
-		w += (b.r - b.l + 1) * s;
+		w += (b.r - b.l + 1) * s + spacing;
 	}
 	return w;
 }
 
 static void
-XboxFontPrint(const XboxFont &f, float x, float y, float height, const wchar *text, const CRGBA &col)
+XboxFontPrint(const XboxFont &f, float x, float y, float height, const wchar *text, const CRGBA &col, float spacing = 0.0f)
 {
 	if (!f.ok)
 		return;
@@ -146,7 +146,7 @@ XboxFontPrint(const XboxFont &f, float x, float y, float height, const wchar *te
 			float u0 = b.l / 256.0f, u1 = (b.r + 1) / 256.0f, v0 = b.t / 256.0f, v1 = (b.b + 1) / 256.0f;
 			f.sprite->Draw(CRect(x, y, x + w, y + (b.b - b.t + 1) * s), col, u0, v0, u1, v0, u0, v1, u1, v1);
 		}
-		x += w;
+		x += w + spacing;
 	}
 }
 
@@ -364,22 +364,72 @@ DrawIconBar(CMenuManager *m, uint8 alpha)
 	}
 }
 
-// "START: resume game   <-/->: select   A: select   B: back" in pink under the icons: the pad's
-// glyphs (Xbox UI style: coloured) and the text in the Xbox's RWSFArborcrestHeavy (measured at y 427, 15 px).
-// One help-line item: the pad's glyphs (up to two) or text, then ":" and the word.
+// "START:resume game   <-/->:select   A:select   B:back" in pink under the icons, all in the
+// Xbox's RWSFArborcrestHeavy, 17 px (word widths ~1.15x the 15 px cell, capitals at y 431-438;
+// autopad set 2): the buttons as words (START, A, B, Y,
+// thumbsticks), the d-pad as solid arrows about 10 x 7 px centred at y 434.5, 2 px in (autopad sets 1-3;
+// the font has only a thin right arrow, so these are drawn).
+// `x` in screen pixels (its left edge), the rest in 640x480 menu units.
+static void
+HelpArrow(float x, float cy, int dir, const CRGBA &col)
+{
+	// dir 0 left, 1 right, 2 up, 3 down; 10 long, the head 4 long and 7 wide, the shaft 4 wide
+	const float L = 10.0f, hl = 4.0f, hw = 3.5f, sw = 2.0f;
+	auto P = [&](float along, float across, float &px, float &py) {	// along: from the tip
+		float u, v;
+		switch (dir) {
+		case 0: u = along; v = across; break;
+		case 1: u = L - along; v = across; break;
+		case 2: u = 3.0f + across; v = -5.0f + along; break;
+		default: u = 3.0f + across; v = 5.0f - along; break;
+		}
+		px = x + W(u);
+		py = Y(cy + v);
+	};
+	float ax, ay, bx, by, cx, cyy, dx, dy;
+	P(0.0f, 0.0f, ax, ay); P(hl, -hw, bx, by); P(hl, hw, cx, cyy);
+	CSprite2d::Draw2DPolygon(ax, ay, bx, by, ax, ay, cx, cyy, col);
+	P(hl - 0.5f, -sw, ax, ay); P(L, -sw, bx, by); P(hl - 0.5f, sw, cx, cyy); P(L, sw, dx, dy);
+	CSprite2d::Draw2DPolygon(ax, ay, bx, by, cx, cyy, dx, dy, col);
+}
+
+// One help-line item: the buttons (up to two, joined by "/"), ":" and the word; returns the end x.
 static float
 HelpItem(float x, float y, const int *glyphs, int ng, const char *pre, const char *word, uint8 alpha)
 {
-	const float gh = H(14.0f), th = H(15.0f);
+	const float th = H(17.0f), sp = W(0.7f);	// (letters ~0.7 px further apart than the font's boxes)
 	CRGBA pink(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha);
-	for (int k = 0; k < ng; k++) {
-		CSprite2d &g = CFont::ButtonSprite[glyphs[k]];
-		if (g.m_pTexture) {
-			g.Draw(CRect(x, y - H(1.0f), x + gh, y - H(1.0f) + gh), CRGBA(255, 255, 255, alpha));
-			x += gh + W(1.0f);
-		}
-	}
 	wchar buf[64];
+	auto text = [&](const char *t) {
+		AsciiToUnicode(t, buf);
+		if (fontRW.ok) {
+			XboxFontPrint(fontRW, x, y, th, buf, pink, sp);
+			x += XboxFontWidth(fontRW, buf, th, sp);
+		}
+	};
+	for (int k = 0; k < ng; k++) {
+		if (k > 0)
+			text("/");
+		int dir = -1;
+		const char *name = nil;
+		switch (glyphs[k]) {
+		case BUTTON_DPAD_LEFT: dir = 0; break;
+		case BUTTON_DPAD_RIGHT: dir = 1; break;
+		case BUTTON_DPAD_UP: dir = 2; break;
+		case BUTTON_DPAD_DOWN: dir = 3; break;
+		case BUTTON_START: name = "START"; break;
+		case BUTTON_CROSS: name = "A"; break;
+		case BUTTON_CIRCLE: name = "B"; break;
+		case BUTTON_TRIANGLE: name = "Y"; break;
+		case BUTTON_SQUARE: name = "X"; break;
+		default: name = "thumbsticks"; k = ng; break;	// (the map's two sticks: one word)
+		}
+		if (dir >= 0) {
+			HelpArrow(x + W(2.0f), 434.5f, dir, pink);
+			x += W(dir < 2 ? 12.0f : 9.0f);
+		} else
+			text(name);
+	}
 	int n = 0;
 	if (pre) {
 		AsciiToUnicode(pre, buf);
@@ -388,8 +438,8 @@ HelpItem(float x, float y, const int *glyphs, int ng, const char *pre, const cha
 	buf[n++] = ':';
 	UnicodeStrcpy(buf + n, TheText.Get(word));
 	if (fontRW.ok)
-		XboxFontPrint(fontRW, x, y, th, buf, pink);
-	return x + (fontRW.ok ? XboxFontWidth(fontRW, buf, th) : 0.0f);
+		XboxFontPrint(fontRW, x, y, th, buf, pink, sp);
+	return x + (fontRW.ok ? XboxFontWidth(fontRW, buf, th, sp) : 0.0f);
 }
 
 // The help line under the icons, per state as on the Xbox (measured slots at x 52, 200, 340,
@@ -399,7 +449,7 @@ HelpItem(float x, float y, const int *glyphs, int ng, const char *pre, const cha
 static void
 DrawHelpLine(CMenuManager *m, uint8 alpha)
 {
-	const float y = Y(427.0f);
+	const float y = Y(424.2f);
 	static const int start[1] = { BUTTON_START }, lr[2] = { BUTTON_DPAD_LEFT, BUTTON_DPAD_RIGHT }, ud[2] = { BUTTON_DPAD_UP, BUTTON_DPAD_DOWN };
 	static const int a[1] = { BUTTON_CROSS }, b[1] = { BUTTON_CIRCLE }, sticks[2] = { BUTTON_UP, BUTTON_RSTICK_UP };
 	if (m->m_nCurrScreen == MENUPAGE_MAP) {
