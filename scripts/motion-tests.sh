@@ -62,5 +62,10 @@ for m in ms:
         m['revc'] = r
 json.dump(ms, open(os.path.join(out, 'motions.json'), 'w'), indent=1)
 EOF
-python3 "$(dirname "$JSON")/motiontest.py" "$OUT/motions.json" "${IDS[@]}" || FAILED=1
+# (no ids given: the whole catalogue, where motiontest skips references superseded by newer ones)
+if (( $# )); then
+  python3 "$(dirname "$JSON")/motiontest.py" "$OUT/motions.json" "${IDS[@]}" || FAILED=1
+else
+  python3 "$(dirname "$JSON")/motiontest.py" "$OUT/motions.json" || FAILED=1
+fi
 exit $FAILED
