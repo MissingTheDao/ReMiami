@@ -332,7 +332,7 @@ revc_test_telemetry(float *out, char *anim, int animLen, float *animTime)
 		out[6 + i] = veh && veh->IsCar() ? ((CAutomobile*)veh)->m_aSuspensionSpringRatio[i] :
 			veh && veh->IsBike() ? ((CBike*)veh)->m_aSuspensionSpringRatio[i] : -1.0f;
 	out[10] = veh ? veh->m_fGasPedal : 0.0f;
-	out[11] = veh ? veh->m_fSteerAngle : 0.0f;
+	out[11] = veh ? veh->m_fSteerAngle : RADTODEG(ped->m_fRotationDest);	// (on foot: the heading it turns to)
 	anim[0] = '\0';
 	*animTime = 0.0f;
 	CAnimBlendAssociation *a = RpAnimBlendClumpGetMainAssociation(ped->GetClump(), nil, nil);
