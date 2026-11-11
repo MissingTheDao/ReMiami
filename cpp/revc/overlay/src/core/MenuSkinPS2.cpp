@@ -240,7 +240,8 @@ MenuSkinPS2Active(int page, bool gameNotLoaded)
 	// REVC_TEST_MENU_SKIN: also before a game is loaded (screenshots from the boot test).
 	static bool test = getenv("REVC_TEST_MENU_SKIN") != nil;
 	// (the Save page has no tab, but the PS2 frame and help box too)
-	return gUiStyle == 1 && (!gameNotLoaded || test) && (CurrentTab(page) >= 0 || page == MENUPAGE_CHOOSE_SAVE_SLOT);
+	return gUiStyle == 1 && (!gameNotLoaded || test) && (CurrentTab(page) >= 0 || page == MENUPAGE_CHOOSE_SAVE_SLOT ||
+		page == MENUPAGE_SAVE_OVERWRITE_CONFIRM || page == MENUPAGE_SAVING_IN_PROGRESS || page == MENUPAGE_SAVE_SUCCESSFUL);
 }
 
 // L1/R1 step through the tabs, as on the PS2 pause menu (the PC menu's own navigation stays).

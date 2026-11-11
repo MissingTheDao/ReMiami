@@ -228,6 +228,7 @@ revc_test_menu_page_id(const char *name)
 		{ "console_display", MENUPAGE_CONSOLE_DISPLAY }, { "console_controls", MENUPAGE_CONSOLE_CONTROLS },
 		{ "new_game", MENUPAGE_NEW_GAME },
 		{ "console_options", MENUPAGE_CONSOLE_OPTIONS },
+		{ "save_overwrite", MENUPAGE_SAVE_OVERWRITE_CONFIRM }, { "save_success", MENUPAGE_SAVE_SUCCESSFUL },
 	};
 	for (auto &e : pages)
 		if (strcmp(e.n, name) == 0)
@@ -247,7 +248,11 @@ revc_test_menu_state(int page, int option, int context, int layout, int legend)
 		void BriefListsTestFill(void);
 		if (!filled) { filled = true; BriefListsTestFill(); }
 	}
-	if (layout >= 0)
+	// layout: the pad layout, or on the Map page a zoom level (0 as opened, 1 twice, 2 the maximum)
+	if (layout >= 0 && page == MENUPAGE_MAP) {
+		float base = SCREEN_SCALE_Y(162.0f);
+		FrontEndMenuManager.m_fMapSize = layout == 0 ? base : layout == 1 ? base * 2.0f : SCREEN_SCALE_Y(1000.0f);
+	} else if (layout >= 0)
 		PadLayoutApply(layout);
 	// context: the controller picture's context, or on Stats/Brief the Xbox sub-tab
 	void MenuSkinXboxSetSubTab(int page, int tab);
