@@ -174,6 +174,11 @@ case "$cmd" in
     # The working tree as it is (tracked and new files, not ignored ones): same content as deploy.
     git -C "$ROOT" ls-files -co --exclude-standard -z |
       rsync -a --from0 --files-from=- --delete-missing-args "$ROOT/" "$HOST:revc-src/" || exit 1
+    # The reVC C++ tree isn't tracked (scripts/revc-source.sh): the box builds it from the verified
+    # original files of this machine's tree (your own copy) plus cpp/revc, in a scratch folder,
+    # then copies only changed files into revc-src/cpp/re3-miami (incremental builds stay).
+    rsync -a --delete "$ROOT/cpp/re3-miami/.reVC-original/" "$HOST:revc-original/" || exit 1
+    ssh -o BatchMode=yes "$HOST" "bash -c 'set -e; rm -rf ~/revc-tree-new; cd ~/revc-src; REVC_CPP_DIR=\$HOME/revc-tree-new scripts/revc-source.sh prepare ~/revc-original > /dev/null; rsync -a -c --delete --exclude build ~/revc-tree-new/ cpp/re3-miami/; rm -rf ~/revc-tree-new'" || exit 1
     git -C "$ROOT" describe --always --dirty > /tmp/revc-n150-commit.$$
     scp -q /tmp/revc-n150-commit.$$ "$HOST:revc-src/COMMIT"; rm -f /tmp/revc-n150-commit.$$
     echo "building $(ssh -o BatchMode=yes "$HOST" cat revc-src/COMMIT) on $HOST"

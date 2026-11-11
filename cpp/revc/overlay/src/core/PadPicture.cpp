@@ -288,13 +288,13 @@ static const Ps2Label ps2Foot[4][8] = {
 	{ { 7, "Target" }, { 8, "Attack or Fire weapon" }, { 4, "Enter vehicle" }, { 1, "Look forward" }, { 2, "Run" }, { 13, "NA" }, { 9, "Camera modes" } },
 };
 static const Ps2Label ps2CarCommon[] = {
-	{ 5, "Look left" }, { 6, "Look right" }, { 12, "Pause" },
+	{ 5, "Look left" }, { 6, "Look right" }, { 22, "Look behind" }, { 12, "Pause" },	// (22: the L2+R2 bracket)
 };
 static const Ps2Label ps2Car[4][12] = {
 	{ { 7, "Radio stations" }, { 8, "Hand brake" }, { 4, "Enter and exit vehicle" }, { 1, "Fire" }, { 2, "Accelerate" }, { 3, "Brake or Reverse" },
 	  { 13, "Vehicle control" }, { 20, "Vehicle control" }, { 10, "Horn [L3 button]" }, { 21, "Turret control" }, { 11, "Sub-mission [R3 button]" }, { 9, "Camera modes" } },
 	{ { 7, "Horn" }, { 8, "Hand brake" }, { 4, "Enter and exit vehicle" }, { 1, "Fire" }, { 2, "Accelerate" }, { 3, "Brake or Reverse" },
-	  { 13, "Camera modes" }, { 20, "Vehicle control" }, { 10, "Radio stations" }, { 21, "Turret control" }, { 11, "Sub-mission [R3 button]" }, { 9, "NA" } },
+	  { 13, "Camera modes" }, { 20, "Vehicle control" }, { 10, "NA" }, { 21, "Turret control" }, { 11, "Sub-mission [R3 button]" }, { 9, "Radio stations" } },
 	{ { 7, "Enter and exit vehicle" }, { 8, "Horn" }, { 4, "Hand brake" }, { 1, "Fire" }, { 2, "Accelerate" }, { 3, "Brake or Reverse" },
 	  { 13, "Vehicle control" }, { 20, "Vehicle control" }, { 10, "Radio station cycle [L3 button]" }, { 21, "Turret control" }, { 11, "Sub-mission [R3 button]" }, { 9, "Camera modes" } },
 	{ { 7, "Hand brake" }, { 8, "Fire" }, { 4, "Enter and exit vehicle" }, { 1, "Radio stations" }, { 2, "NA" }, { 3, "Sub-mission" },
@@ -323,6 +323,99 @@ Ps2SetupLabel(int joy, int context, wchar *out)
 	strncpy(buf, t, sizeof(buf) - 1);
 	buf[sizeof(buf) - 1] = 0;
 	AsciiToUnicode(buf, out);
+	return true;
+}
+
+// The PS2's own callout overlay (fe_arrows1-4 from FRONTEN2): each a whole overlay drawn over
+// exactly the pad's rectangle (re3's Frontend_PS2.cpp: same AddPicture rect as fe_controller);
+// arrows1 on foot / arrows2 in car, arrows3 / arrows4 for setup 2. Each label where the console
+// puts it at its arrow's end (read off the v3.00 captures): align 0 right-aligned to x,
+// 1 left-aligned, 2 centred; wrap: the width the console breaks lines at.
+struct Ps2Anchor { int joy; float x, y; int align; float wrap; };
+static const Ps2Anchor ps2FootAnchors[] = {
+	{ 5, 171, 159, 2, 200 }, { 6, 403, 159, 2, 200 }, { 7, 150, 198, 0, 70 }, { 3, 315, 191, 0, 80 },
+	{ 8, 404, 201, 1, 220 }, { 4, 404, 228, 1, 220 }, { 13, 151, 241, 0, 80 }, { 1, 404, 241, 1, 220 },
+	{ 2, 404, 254, 1, 220 }, { 20, 151, 266, 0, 80 }, { 21, 404, 271, 1, 220 }, { 10, 151, 281, 0, 60 },
+	{ 11, 404, 284, 1, 136 }, { 12, 314, 303, 2, 80 }, { 9, 271, 316, 2, 130 },
+};
+static const Ps2Anchor ps2CarAnchors[] = {
+	{ 5, 210, 159, 2, 120 }, { 6, 365, 159, 2, 120 }, { 22, 279, 169, 2, 120 }, { 3, 282, 183, 2, 66 },
+	{ 7, 150, 198, 0, 70 }, { 8, 404, 201, 1, 220 }, { 4, 404, 228, 1, 220 }, { 13, 150, 236, 0, 70 },
+	{ 1, 404, 241, 1, 220 }, { 2, 404, 254, 1, 220 }, { 20, 150, 265, 0, 70 }, { 21, 404, 271, 1, 220 },
+	{ 11, 404, 284, 1, 220 }, { 12, 314, 303, 2, 80 }, { 9, 296, 315, 2, 70 }, { 10, 185, 335, 2, 160 },
+};
+static CSprite2d *ps2Arrows;
+
+static bool
+LoadPackSprite(CSprite2d &spr, const char *texture)
+{
+	if (spr.m_pTexture)
+		return true;
+	int w, h;
+	unsigned char *px;
+	if (!revc_texmod_find("frontend2", texture, &w, &h, &px))
+		return false;
+	rw::Image *img = rw::Image::create(w, h, 32);
+	img->pixels = px;
+	img->stride = w * 4;
+	rw::Raster *ras = rw::Raster::create(w, h, 32, rw::Raster::C8888 | rw::Raster::TEXTURE | rw::Raster::MIPMAP | rw::Raster::AUTOMIPMAP);
+	if (ras && ras->setFromImage(img)) {
+		rw::Texture *tex = rw::Texture::create(ras);
+		tex->setFilter(rw::Texture::LINEARMIPLINEAR);
+		spr.m_pTexture = tex;
+	} else if (ras)
+		ras->destroy();
+	img->pixels = nil;
+	img->destroy();
+	revc_texmod_free(px, w, h);
+	return spr.m_pTexture != nil;
+}
+
+// The PS2 setups' page: overlay and labels; false without the overlay textures.
+static bool
+DrawPs2SetupCallouts(int context, uint8 alpha, const CRect &pad)
+{
+	extern int8 gPs2Setup;
+	if (ps2Arrows == nil)
+		ps2Arrows = new CSprite2d[4];
+	const bool car = context == 1;
+	int v = (car ? 1 : 0) + (gPs2Setup == 1 ? 2 : 0);	// 0..3: fe_arrows1..4
+	static const char *names[4] = { "fe_arrows1", "fe_arrows2", "fe_arrows3", "fe_arrows4" };
+	if (!LoadPackSprite(ps2Arrows[v], names[v]))
+		return false;
+	ps2Arrows[v].Draw(pad, CRGBA(255, 255, 255, alpha));
+	const Ps2Anchor *anchors = car ? ps2CarAnchors : ps2FootAnchors;
+	int n = car ? ARRAY_SIZE(ps2CarAnchors) : ARRAY_SIZE(ps2FootAnchors);
+	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
+	CFont::SetScale(MENU_X(0.32f), MENU_Y(0.62f));
+	CFont::SetPropOn();
+	CFont::SetDropShadowPosition(1);
+	CFont::SetDropColor(CRGBA(0, 0, 0, alpha));
+	CFont::SetColor(CRGBA(255, 255, 255, alpha));
+	for (int i = 0; i < n; i++) {
+		static wchar text[96];
+		text[0] = 0;
+		if (!Ps2SetupLabel(anchors[i].joy, context, text) || text[0] == 0)
+			continue;
+		const Ps2Anchor &a = anchors[i];
+		CFont::SetCentreOff();
+		CFont::SetRightJustifyOff();
+		if (a.align == 0) {
+			CFont::SetRightJustifyOn();
+			CFont::SetRightJustifyWrap(MENU_X_LEFT_ALIGNED(a.x - a.wrap));
+		} else if (a.align == 1)
+			CFont::SetWrapx(MENU_X_LEFT_ALIGNED(a.x + a.wrap));
+		else {
+			CFont::SetCentreOn();
+			CFont::SetCentreSize(MENU_X(a.wrap));
+		}
+		CFont::PrintString(MENU_X_LEFT_ALIGNED(a.x), MENU_Y(a.y), text);
+	}
+	CFont::SetCentreOff();
+	CFont::SetRightJustifyOff();
+	CFont::SetWrapx(SCREEN_WIDTH);
+	CFont::SetDropShadowPosition(0);
+	CFont::DrawFonts();
 	return true;
 }
 
@@ -355,6 +448,9 @@ DrawPadPicturePS2(void)
 	const float px = 160.0f, py = 168.0f, pw = 239.0f, ph = 195.0f;
 	uint8 alpha = FrontEndMenuManager.FadeIn(255);
 	ds2Sprite->Draw(CRect(MENU_X_LEFT_ALIGNED(px), MENU_Y(py), MENU_X_LEFT_ALIGNED(px + pw), MENU_Y(py + ph)), CRGBA(255, 255, 255, alpha));
+	if (Ps2SetupActive() && DrawPs2SetupCallouts(padContext, alpha,
+	        CRect(MENU_X_LEFT_ALIGNED(px), MENU_Y(py), MENU_X_LEFT_ALIGNED(px + pw), MENU_Y(py + ph))))
+		return;	// the PS2's own overlay and labels
 
 	Callout callouts[ARRAY_SIZE(ds2Spots)];
 	int n = 0;
