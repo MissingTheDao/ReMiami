@@ -26,6 +26,7 @@ static float W(float w) { return SCREEN_SCALE_X(w); }
 static float H(float h) { return SCREEN_SCALE_Y(h); }
 
 static bool HasSubTabs(int page);
+static bool IsTabPage(int page);
 void ConsoleAudioRows(bool);	// (core/MenuScreensCustom.cpp)
 static bool SettingsSubTabs(int page);
 const CRGBA XBOX_MINT(0, 210, 141, 255);
@@ -49,10 +50,12 @@ static const float ICON_Y = 395.0f, ICON_SIZE = 50.0f, ICON_SELECTED = 80.0f;
 // Heap-allocated so nothing runs at program exit (after RenderWare is gone); freed with the menu's
 // own textures by MenuSkinXboxUnload.
 static CSprite2d *icons, *logoSprite, *glint, *tapeDeck;
-// Focus on the icon bar (the Xbox's top level): after LT/RT until the player moves in the page's
-// list. The current icon's green card and the help line's items follow it.
-static bool barFocus;
-static int barFocusOption = -1;
+// Focus on the icon bar (the Xbox's top level) or inside the page (its list, or the sub-tab bar of
+// Brief/Stats). The current icon's green card and the help line's items follow it. Navigation as
+// measured on the Xbox (autopad probes in xemu, US Rev 1): see MenuSkinXboxInput.
+static bool barFocus = true;
+// The page START opens: Load the first time, then the last page used.
+static int lastPage = MENUPAGE_NEW_GAME;
 #define logo (*logoSprite)
 static int spritesState;	// 0 not tried, 1 loaded, -1 no import
 
@@ -390,7 +393,7 @@ DrawHelpLine(CMenuManager *m, uint8 alpha)
 		return;
 	}
 	HelpItem(X(52.0f), y, start, 1, nil, "RVC_XHR", alpha);
-	if (HasSubTabs(m->m_nCurrScreen) && (!SettingsSubTabs(m->m_nCurrScreen) || subBarFocus)) {	// "START:resume game  <-/->:select  B:back" (the sub-tabs)
+	if (HasSubTabs(m->m_nCurrScreen) && !(barFocus && IsTabPage(m->m_nCurrScreen)) && (!SettingsSubTabs(m->m_nCurrScreen) || subBarFocus)) {	// "START:resume game  <-/->:select  B:back" (the sub-tabs)
 		HelpItem(X(200.0f), y, lr, 2, nil, "RVC_XHS", alpha);
 		HelpItem(X(340.0f), y, b, 1, nil, "RVC_XHB", alpha);
 		return;
@@ -643,7 +646,57 @@ DrawSubTabs(int page, uint8 alpha)
 	CFont::SetDropShadowPosition(0);
 }
 
-// LT/RT step through the pages, as on the Xbox pause menu. True when it switched.
+// The page START opens (Frontend.cpp), with the icon bar focused.
+int
+MenuSkinXboxOpenPage(void)
+{
+	barFocus = true;
+	return lastPage;
+}
+
+// The icon bar has focus (Frontend.cpp: no row highlighted).
+bool
+MenuSkinXboxBarFocus(CMenuManager *m)
+{
+	return MenuSkinXboxActive(m->m_nCurrScreen, m->m_bGameNotLoaded) && barFocus && !MenuSkinXboxDialog(m->m_nCurrScreen);
+}
+
+// Test shots: focus inside the page (rows highlighted) or on the icon bar.
+extern "C" void
+MenuSkinXboxSetBarFocus(int bar)
+{
+	barFocus = bar != 0;
+}
+
+// A page the icon bar switches to (not a sub-page, dialog or "advanced" list).
+static bool
+IsTabPage(int page)
+{
+	for (int i = 0; i < (int)ARRAY_SIZE(tabs); i++)
+		if (tabs[i].page == page)
+			return true;
+	return false;
+}
+
+// Focus into the page: Brief/Stats focus their sub-tab bar, the others row 0.
+static void
+EnterPage(CMenuManager *m)
+{
+	barFocus = false;
+	if (!HasSubTabs(m->m_nCurrScreen)) {
+		m->m_nCurrOption = aScreens[m->m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL ? 1 : 0;
+		m->m_nFirstVisibleRowOnList = 0;
+	}
+}
+
+// Navigation as on the Xbox pause menu (measured):
+// - the icon bar: left/right switch pages at once and wrap (load map brief stats controls audio
+//   display); A goes into the page; B closes the menu; nothing else acts.
+// - inside a page: the PC menu's own list input; LT/RT switch to the previous/next page and stay
+//   inside it; B goes back to the icon bar (on sub-pages, dialogs and the "advanced" list B goes
+//   back as on the PC). Brief and Stats: inside means the sub-tab bar, left/right switch sub-tabs.
+// - revc: Y on Display/Audio/Controls opens their "advanced" list (B comes back).
+// START closes the menu from anywhere (Frontend.cpp). True when the input was used here.
 bool
 MenuSkinXboxInput(CMenuManager *m)
 {
@@ -651,11 +704,40 @@ MenuSkinXboxInput(CMenuManager *m)
 		return false;
 	CPad *pad = CPad::GetPad(0);
 	const bool left = pad->GetDPadLeftJustDown() || pad->GetLeftJustDown(), right = pad->GetDPadRightJustDown() || pad->GetRightJustDown();
-	const bool up = pad->GetDPadUpJustDown() || pad->GetUpJustDown(), down = pad->GetDPadDownJustDown() || pad->GetDownJustDown();
-	(void)left; (void)right; (void)up; (void)down;
+	const bool a = pad->GetCrossJustDown() || pad->GetEnterJustDown(), b = pad->GetCircleJustDown() || pad->GetEscapeJustDown();
 	subBarFocus = false;
-	// Y (the help line's "Y:advanced") on Display, Audio and Controls opens their "advanced"
-	// list; B there goes back to the page
+	if (IsTabPage(m->m_nCurrScreen))
+		lastPage = m->m_nCurrScreen;
+	int n = ARRAY_SIZE(tabs), cur = CurrentTab(m->m_nCurrScreen);
+	if (barFocus && !MenuSkinXboxDialog(m->m_nCurrScreen)) {
+		if (b) {
+			m->m_bShutDownFrontEndRequested = true;
+			return true;
+		}
+		if (a) {
+			if (!IsTabPage(m->m_nCurrScreen))
+				return false;	// (a sub-page: as on the PC)
+			EnterPage(m);
+			return true;
+		}
+		if ((left || right) && cur >= 0) {
+			m->SwitchToNewScreen(SWITCH_TO_PAGE(tabs[(cur + (right ? 1 : -1) + n) % n].page));
+			barFocus = true;
+		}
+		return true;
+	}
+	// inside a page
+	int step = pad->GetRightShoulder2JustDown() ? 1 : pad->GetLeftShoulder2JustDown() ? -1 : 0;
+	if (step != 0 && cur >= 0) {
+		m->SwitchToNewScreen(SWITCH_TO_PAGE(tabs[(cur + step + n) % n].page));
+		EnterPage(m);
+		return true;
+	}
+	if (b && IsTabPage(m->m_nCurrScreen)) {
+		barFocus = true;
+		return true;
+	}
+	// Y on Display, Audio and Controls opens their "advanced" list; B there goes back to the page
 	if (SettingsSubTabs(m->m_nCurrScreen) && m->m_nCurrScreen != MENUPAGE_CONSOLE_OPTIONS && pad->GetTriangleJustDown()) {
 		extern int gConsoleOptionsSection;
 		optionsOrigin = m->m_nCurrScreen;
@@ -665,19 +747,12 @@ MenuSkinXboxInput(CMenuManager *m)
 		m->SwitchToNewScreen(MENUPAGE_CONSOLE_OPTIONS);
 		return true;
 	}
-	if (HasSubTabs(m->m_nCurrScreen) && !SettingsSubTabs(m->m_nCurrScreen) && (pad->GetDPadLeftJustDown() || pad->GetDPadRightJustDown() || pad->GetLeftJustDown() || pad->GetRightJustDown())) {
-		MenuSkinXboxSetSubTab(m->m_nCurrScreen, 1 - MenuSkinXboxSubTab(m->m_nCurrScreen));
-		barFocus = false;
-		return true;
+	if (HasSubTabs(m->m_nCurrScreen) && !SettingsSubTabs(m->m_nCurrScreen)) {
+		if (left || right)
+			MenuSkinXboxSetSubTab(m->m_nCurrScreen, 1 - MenuSkinXboxSubTab(m->m_nCurrScreen));
+		return left || right || a;
 	}
-	int step = pad->GetRightShoulder2JustDown() ? 1 : pad->GetLeftShoulder2JustDown() ? -1 : 0;
-	if (step == 0)
-		return false;
-	int n = ARRAY_SIZE(tabs);
-	m->SwitchToNewScreen(tabs[(CurrentTab(m->m_nCurrScreen) + step + n) % n].page);
-	barFocus = true;
-	barFocusOption = -1;
-	return true;
+	return false;
 }
 
 // Called by CMenuManager::DrawBackground after the page.
@@ -686,13 +761,6 @@ MenuSkinXboxDraw(CMenuManager *m, uint8 alpha)
 {
 	if (!MenuSkinXboxActive(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return;
-	// focus leaves the icon bar once the player moves in the page's list
-	if (barFocus) {
-		if (barFocusOption < 0)
-			barFocusOption = m->m_nCurrOption;
-		else if (m->m_nCurrOption != barFocusOption)
-			barFocus = false;
-	}
 	if (HasSubTabs(m->m_nCurrScreen))
 		DrawSubTabs(m->m_nCurrScreen, alpha);
 	DrawIconBar(m, DialogDim(alpha));

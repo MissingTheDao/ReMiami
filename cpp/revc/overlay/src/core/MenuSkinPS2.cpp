@@ -294,6 +294,19 @@ MenuSkinPS2PageFocus(void)
 	return pageFocus;
 }
 
+// The Load page's list is two columns on the PS2: "load game" / "new game" / (revc: "console
+// discs") on the left, then the slots. Cross from the tab bar focuses "load game"; cross on it
+// moves into the slots, triangle there comes back to the left column. loadRow: 0 load game,
+// 1 new game (entry 8), 2 console discs (entry 9).
+static bool loadColumn;
+static int loadRow;
+
+bool
+MenuSkinPS2LoadHeadingFocus(CMenuManager *m)
+{
+	return pageFocus && loadColumn && loadRow == 0 && m->m_nCurrScreen == MENUPAGE_CHOOSE_LOAD_SLOT && MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded);
+}
+
 // The list has focus (test shots that select a row; Frontend.cpp's highlight checks).
 void
 MenuSkinPS2SetFocus(int page, bool list)
@@ -344,12 +357,48 @@ MenuSkinPS2Input(CMenuManager *m)
 		// sub-pages) its list
 		focusPage = m->m_nCurrScreen;
 		pageFocus = !IsTabPage(m->m_nCurrScreen);
+		loadColumn = false;
 	}
 	if (!MenuSkinPS2Active(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return false;
 	CPad *pad = CPad::GetPad(0);
+	const bool tri = pad->GetTriangleJustDown() || pad->GetEscapeJustDown();
+	const bool cross = pad->GetCrossJustDown() || pad->GetEnterJustDown();
+	const bool up = pad->GetDPadUpJustDown() || pad->GetUpJustDown(), down = pad->GetDPadDownJustDown() || pad->GetDownJustDown();
+	if (pageFocus && m->m_nCurrScreen == MENUPAGE_CHOOSE_LOAD_SLOT) {
+		int rows = aScreens[MENUPAGE_CHOOSE_LOAD_SLOT].m_aEntries[9].m_Action == MENUACTION_NOTHING ? 2 : 3;
+		if (!loadColumn) {	// the slots
+			if (tri) {
+				loadColumn = true;
+				loadRow = 0;
+				return true;
+			}
+			return false;
+		}
+		if (tri) {
+			pageFocus = false;
+			loadColumn = false;
+			return true;
+		}
+		if (up || down) {
+			loadRow = (loadRow + (down ? 1 : rows - 1)) % rows;
+			if (loadRow > 0)
+				m->m_nCurrOption = 7 + loadRow;
+			return true;
+		}
+		if (cross && loadRow == 0) {	// into the slots
+			loadColumn = false;
+			m->m_nCurrOption = 0;
+			return true;
+		}
+		if (loadRow > 0) {
+			m->m_nCurrOption = 7 + loadRow;
+			return false;	// cross on new game / console discs: the PC menu acts on the row
+		}
+		return true;
+	}
 	if (pageFocus) {
-		if (IsTabPage(m->m_nCurrScreen) && (pad->GetTriangleJustDown() || pad->GetEscapeJustDown())) {
+		if (IsTabPage(m->m_nCurrScreen) && tri) {
 			pageFocus = false;
 			return true;
 		}
@@ -362,8 +411,10 @@ MenuSkinPS2Input(CMenuManager *m)
 		m->m_bShutDownFrontEndRequested = true;
 		return true;
 	}
-	if (pad->GetCrossJustDown() || pad->GetEnterJustDown()) {
+	if (cross) {
 		pageFocus = true;
+		loadColumn = m->m_nCurrScreen == MENUPAGE_CHOOSE_LOAD_SLOT;
+		loadRow = 0;
 		m->m_nCurrOption = aScreens[m->m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL ? 1 : 0;
 		m->m_nFirstVisibleRowOnList = 0;
 		return true;
@@ -380,7 +431,7 @@ MenuSkinPS2Input(CMenuManager *m)
 		return true;	// nothing else acts on the tab bar
 	int next = row * perRow + col;
 	if (next != cur) {
-		m->SwitchToNewScreen(tabs[next].page);
+		m->SwitchToNewScreen(SWITCH_TO_PAGE(tabs[next].page));
 		focusPage = m->m_nCurrScreen;
 		pageFocus = false;
 	}

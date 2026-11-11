@@ -7,6 +7,14 @@
 # usage: scripts/headless.sh [--size WxH] command [args ...]   (default size 4096x2304, room for a
 #        3840x2160 window with its decorations)
 set -u
+# Run in a memory-capped systemd scope of its own (REVC_RUN_MEM, default 3G; REVC_RUN_MEM=0 for
+# none): a game run that grows can then only kill itself, never the session or app that started
+# it (systemd-oomd acts on the whole cgroup that runs out).
+if [[ -z ${REVC_IN_SCOPE:-} && ${REVC_RUN_MEM:-3G} != 0 ]] && command -v systemd-run > /dev/null; then
+  export REVC_IN_SCOPE=1
+  exec systemd-run --user --scope --quiet --collect -p MemoryMax="${REVC_RUN_MEM:-3G}" -p MemorySwapMax=1G \
+    -p ManagedOOMMemoryPressure=kill -- "$0" "$@"
+fi
 SIZE=4096x2304
 [[ "${1:-}" == --size ]] && { SIZE=$2; shift 2; }
 (( $# )) || { echo "usage: headless.sh [--size WxH] command [args ...]"; exit 2; }

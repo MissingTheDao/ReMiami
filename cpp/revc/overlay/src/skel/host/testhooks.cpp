@@ -387,10 +387,12 @@ revc_test_menu_state(int page, int option, int context, int layout, int legend)
 	if (legend >= 0)
 		FrontEndMenuManager.m_PrefsShowLegends = legend;
 	if (FrontEndMenuManager.m_nCurrScreen != page)
-		FrontEndMenuManager.SwitchToNewScreen(page);
+		FrontEndMenuManager.SwitchToNewScreen(SWITCH_TO_PAGE(page));
 	// PS2 style: rows are only highlighted with the list focused (the Map page keeps its tab bar)
 	if (option >= 0 || page != MENUPAGE_MAP)
 		MenuSkinPS2SetFocus(page, page != MENUPAGE_MAP);
+	void MenuSkinXboxSetBarFocus(int bar);	// Xbox style: shots show the page's rows focused
+	MenuSkinXboxSetBarFocus(0);
 	if (FrontEndMenuManager.m_nCurrOption != option) {
 		// from the top, moving down as the player does (so long pages scroll the row into view)
 		FrontEndMenuManager.m_nCurrOption = 0;

@@ -358,11 +358,11 @@ const MOTION_ROUTES: &[MotionRoute] = &[
     ("ps2_focus_tabs_to_list_controls", "start down", "cross", 60),
     ("ps2_focus_list_to_tabs_map", "start cross", "triangle", 60),
     ("ps2_focus_list_to_tabs_audio", "start down right cross", "triangle", 60),
-    ("ps2_highlight_down", "start down right cross", "down", 60),
-    ("ps2_highlight_up", "start down right cross down", "up", 60),
-    ("ps2_highlight_wrap", "start down right cross", "up", 60),
+    ("ps2_highlight_down", "start down right right cross", "down", 60),	// Display: brightness -> trails
+    ("ps2_highlight_up", "start down right right cross down", "up", 60),
+    ("ps2_highlight_wrap", "start down right right cross", "up", 60),
     ("ps2_highlight_wrap_down", "start down right right cross up", "down", 60),
-    ("ps2_glide_load", "start right right cross", "down", 60),
+    ("ps2_glide_load", "start right right cross cross", "down", 60),	// the slots
     ("ps2_glide_audio_sideways", "start down right cross", "down", 60),
     ("ps2_radio_right", "start down right cross down down", "right", 60),
     ("ps2_radio_left", "start down right cross down down", "left", 60),
@@ -375,6 +375,30 @@ const MOTION_ROUTES: &[MotionRoute] = &[
     ("ps2_stats_scroll", "start right right right", "none", 600),
     ("ps2_setup_switch", "start down cross", "right", 60),
     ("ps2_display_screen_pos", "start down right right cross down down down down down down cross", "right", 60),
+    // Xbox (pages: load map brief stats controls audio display; START opens Load the first time
+    // with the icon bar focused; A goes in, B out; LT/RT switch pages inside)
+    ("xbox_menu_open", "", "start", 60),
+    ("xbox_menu_close", "start", "start", 60),
+    ("xbox_back_to_game", "start", "b", 600),
+    ("xbox_page_load_to_map", "start", "right", 60),
+    ("xbox_page_map_to_brief", "start right", "right", 60),
+    ("xbox_page_brief_to_stats", "start right right", "right", 60),
+    ("xbox_page_stats_to_controls", "start right right right", "right", 60),
+    ("xbox_page_controls_to_audio", "start right right right right", "right", 60),
+    ("xbox_page_change_right", "start left left", "right", 60),	// Audio -> Display
+    ("xbox_page_change_left", "start left", "left", 60),	// Display -> Audio
+    ("xbox_subtab_change", "start right right right a", "right", 60),	// Stats: stats -> unlocked items
+    ("xbox_focus_icons_to_list", "start left left", "a", 60),	// Audio
+    ("xbox_focus_list_to_icons", "start left left a", "b", 60),
+    ("xbox_highlight_down", "start left left a", "down", 60),	// Audio: music -> SFX
+    ("xbox_highlight_up", "start left left a down", "up", 60),
+    ("xbox_row_display", "start left a", "down", 60),
+    ("xbox_radio_right", "start left left a down down", "right", 60),
+    ("xbox_radio_left", "start left left a down down", "left", 60),
+    ("xbox_bar_pulse", "start left a", "none", 150),
+    ("xbox_logo_shimmer", "start", "none", 1200),
+    ("xbox_list_scroll", "start right right a right", "none", 600),	// Brief: tutorial briefings
+    ("xbox_stats_scroll", "start right right right", "none", 600),
 ];
 
 /// The pad script for a routed motion (MOTION_ROUTES).
