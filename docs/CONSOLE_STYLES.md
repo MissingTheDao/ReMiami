@@ -10,7 +10,7 @@ content and stay outside the repo; this file records what the code does and why.
 | Step | What | State |
 |---|---|---|
 | 13a | Reference scenes: the `scenes` test scenario stands the player at the console capture spots (time, weather, follow camera, HUD on) and writes 640x480 frames; `scripts/scene_colours.py` measures them | done |
-| 13b | World colours per style (lighting, colour filter, PS2 highlight clipping), checked against the captures with the same measurements | |
+| 13b | World colours per style (lighting, colour filter, PS2 highlight clipping), checked against the captures with the same measurements | PS2 checked; Xbox lightmaps and gamma open |
 | 13c | Trails: console persistence (30/128 per 30 Hz frame), frame-rate and resolution independent, on in both console styles | |
 | 13d | Style settings: fixed LOD 1.0, Classic camera and movement, 4:3 option, PS2 time cycle from an imported disc | LOD done |
 | 13e | HUD per style (Xbox safe-area shift and rounder radar), console UI scaled by screen height | done (measured elements) |
@@ -40,8 +40,10 @@ First measurement (S1, noon, region means; `scene_colours.py`):
 | revc, no filter | 171 208 233 | 27 33 28, 0.13 | 161 171 181 |
 | revc, PS2 filter | 249 250 205 | 45 41 26, 0.20 | 212 213 159 |
 
-revc's roads are far darker than on either console, and the PS2 filter tints everything yellow
-where the PS2 stays neutral. That is 13b.
+Those revc numbers were wrong for a test reason: the save starts inside the hotel, and the
+teleport kept the interior's time-cycle colours (the "extra colour" rows: ambient 32 instead of
+70 outside), so the street was lit like a room. `revc_test_scene` and `revc_test_goto_spot` now
+stop the extra colour as leaving through a door does (the `spots` references were re-made).
 
 ## 13d: style settings
 
@@ -79,3 +81,32 @@ The 4:3 area: `ConsoleHudBegin`/`ConsoleHudEnd` in `core/main.cpp` give the HUD 
 (`revc_device_set_im2d_offset`). Text queued before (pickup texts placed in the 3D view) is drawn
 first. Not measured yet, so left at the PC positions: zone and vehicle names, subtitles, help and
 mission texts, timers and counters, the pager. Checking them needs console captures with those on screen.
+
+## 13b: world colours
+
+With outdoor lighting, revc's PS2 filter (re3's colourfilterVC emulation, `ColourFilter=2`) is
+already close to the PS2 capture (S1/S2 region means, `scene_colours.py`):
+
+| | PS2 capture | revc PS2 filter | Xbox capture |
+|---|---|---|---|
+| Noon road | 82 60 46 | 83 68 51 | 104 81 59 |
+| Noon white wall | 220 221 214 | 222 223 220 | |
+| Noon sky | 209 242 244 | 249 252 244 | 146 199 206 |
+| Night road | 68 46 34 | 80 54 39 | 93 58 47 |
+| Night building | 72 79 69 | 79 79 63 | 71 73 55 |
+| Night sky | 51 42 37 | 59 43 38 | 52 40 33 |
+
+Open: the noon sky is too red; night is about 15 % bright.
+
+How the Xbox draws it (reverse-engineered from the Xbox executable; local notes
+`xbox-research/XBOX_COLOUR_RE.md`):
+- Lighting as on PC: buildings get prelight + ambient (Amb_bl with trails, Amb without), no
+  directional, no x2; peds, cars and objects get Amb_Obj(_bl) + directional.
+- Every world material has a per-model lightmap (`name@` textures in the Xbox `generic.txd`),
+  combined as `V0*T0*(1 + LM*(T1-1))` with LM from `neo/worldTweakingTable.dat`. This is re3's
+  Neo world pipeline (`neoWorldVC`), i.e. revc's World Lightmaps option with the Xbox's own data.
+- The colour filter is one pass over the previous displayed frame (feedback):
+  `out = (1-k)*dst + col*T1 + (1+2k)*col*T0`, k = 30/255, col = BlurRGB/255, T1 the previous
+  frame at the pixel, T0 one row up (PC: three passes with a +2,+2 px offset). Trails off draws
+  nothing.
+- A hardware gamma ramp: at the default brightness the output is x^0.909.

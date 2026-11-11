@@ -74,6 +74,24 @@ pub extern "C" fn revc_import_status(kind: c_int) -> c_int {
     revc_import::imported(&cache_dir(), kind) as c_int
 }
 
+/// Contents of an imported file (`rel` inside the kind's folder, e.g. "data/timecyc.dat"): its
+/// size, copied into `buf` up to `cap` bytes; -1 if the import doesn't have it.
+///
+/// # Safety
+/// `rel` is a NUL-terminated string; `buf` holds `cap` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_import_read(kind: c_int, rel: *const c_char, buf: *mut u8, cap: usize) -> isize {
+    let kind = if kind == 1 { DiscKind::Ps2 } else { DiscKind::Xbox };
+    if !revc_import::imported(&cache_dir(), kind) || rel.is_null() {
+        return -1;
+    }
+    let rel = unsafe { CStr::from_ptr(rel) }.to_string_lossy().into_owned();
+    let Ok(data) = std::fs::read(cache_dir().join(kind.dir()).join(rel)) else { return -1 };
+    let n = data.len().min(cap);
+    unsafe { std::ptr::copy_nonoverlapping(data.as_ptr(), buf, n) };
+    n as isize
+}
+
 /// 1 while a file dialog or an import is running.
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_import_busy() -> c_int {

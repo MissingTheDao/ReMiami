@@ -101,6 +101,8 @@ pub const MANIFEST: &[Lift] = &[
     Lift { kind: DiscKind::Xbox, dir: "models/fonts.txd", exts: &[], dest: "models" },
     // PS2 front end: the controller-setup sprites (DualShock picture, callouts) re3's PS2 menu uses.
     Lift { kind: DiscKind::Ps2, dir: "MODELS/FRONTEN2.TXD", exts: &[], dest: "models" },
+    // PS2 time cycle: 5 rows differ from the PC's (the PS2 visual style uses it, plan task 13).
+    Lift { kind: DiscKind::Ps2, dir: "DATA/TIMECYC.DAT", exts: &[], dest: "data" },
 ];
 
 fn matches(lift: &Lift, path: &str) -> bool {

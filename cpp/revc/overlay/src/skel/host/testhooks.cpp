@@ -30,6 +30,7 @@ extern "C" void PadLayoutApply(int layout);
 #include "Streaming.h"
 #include "Clock.h"
 #include "Weather.h"
+#include "Timecycle.h"
 #include "Population.h"
 #include "CarCtrl.h"
 #include "PlayerPed.h"
@@ -170,6 +171,9 @@ revc_test_scene(float x, float y, float heading, int hour, int minute, int weath
 	CCarCtrl::CarDensityMultiplier = 0.0f;
 	CGame::currArea = AREA_MAIN_MAP;
 	CStreaming::RemoveBuildingsNotInArea(AREA_MAIN_MAP);
+	// The save starts inside the hotel: drop the interior's time-cycle colours (as leaving
+	// through a door does), or the outside is lit like a room.
+	CTimeCycle::StopExtraColour(false);
 	CClock::SetGameClock(hour, minute);
 	CWeather::ForceWeatherNow(weather);
 
@@ -210,6 +214,9 @@ revc_test_goto_spot(float x, float y, float z, float dx, float dy, float dz, int
 	CCarCtrl::CarDensityMultiplier = 0.0f;
 	CGame::currArea = AREA_MAIN_MAP;
 	CStreaming::RemoveBuildingsNotInArea(AREA_MAIN_MAP);
+	// The save starts inside the hotel: drop the interior's time-cycle colours (as leaving
+	// through a door does), or the outside is lit like a room.
+	CTimeCycle::StopExtraColour(false);
 	CClock::SetGameClock(hour, minute);
 	// REVC_TEST_RAIN=1 (not in the regression set): rain at the spots, for the screen droplet check
 	CWeather::ForceWeatherNow(getenv("REVC_TEST_RAIN") ? WEATHER_RAINY : WEATHER_SUNNY);
