@@ -847,6 +847,57 @@ pub extern "C" fn revc_glyph_set_id() -> c_int {
     }
 }
 
+/// The name of a button of the pad in use, as the console styles' help lines print it (research
+/// glyph-research/CONSOLE_STYLE_GLYPHS.md 4): `pos` 0-3 the face buttons south, east, west,
+/// north (their printed label: "A", "B", ...; PlayStation shapes as "cross", "circle", "square",
+/// "triangle" for the caller to draw), 4 start, 5 select (the pad's own word: "START", "MENU",
+/// "OPTIONS", "+", ...). Written NUL-terminated into `buf`; returns the length, 0 without a pad
+/// (keyboard) or for an unknown position.
+///
+/// # Safety
+/// `buf` holds `len` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_pad_button_name(pos: c_int, buf: *mut c_char, len: c_int) -> c_int {
+    let Some((kind, labels)) = glyph_pad() else { return 0 };
+    if kind == PadKind::KeyboardMouse || buf.is_null() || len <= 1 {
+        return 0;
+    }
+    let name: &str = match pos {
+        0..=3 => match labels[pos as usize] {
+            SDL_GAMEPAD_BUTTON_LABEL_A => "A",
+            SDL_GAMEPAD_BUTTON_LABEL_B => "B",
+            SDL_GAMEPAD_BUTTON_LABEL_X => "X",
+            SDL_GAMEPAD_BUTTON_LABEL_Y => "Y",
+            SDL_GAMEPAD_BUTTON_LABEL_CROSS => "cross",
+            SDL_GAMEPAD_BUTTON_LABEL_CIRCLE => "circle",
+            SDL_GAMEPAD_BUTTON_LABEL_SQUARE => "square",
+            SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE => "triangle",
+            _ => ["A", "B", "X", "Y"][pos as usize],
+        },
+        4 => match kind {
+            PadKind::XboxSeries | PadKind::SteamDeck => "MENU",
+            PadKind::PlayStation4 | PadKind::PlayStation5 => "OPTIONS",
+            PadKind::Switch => "+",
+            _ => "START",
+        },
+        5 => match kind {
+            PadKind::XboxSeries | PadKind::SteamDeck => "VIEW",
+            PadKind::PlayStation3 => "SELECT",
+            PadKind::PlayStation4 => "SHARE",
+            PadKind::PlayStation5 => "CREATE",
+            PadKind::Switch => "-",
+            _ => "BACK",
+        },
+        _ => return 0,
+    };
+    let n = name.len().min(len as usize - 1);
+    unsafe {
+        std::ptr::copy_nonoverlapping(name.as_ptr(), buf as *mut u8, n);
+        *buf.add(n) = 0;
+    }
+    n as c_int
+}
+
 /// Short name of the current glyph set, for logs and tests ("PlayStation5", "none").
 pub fn glyph_set_name() -> String {
     glyph_pad().map_or("none".into(), |(k, _)| format!("{k:?}"))

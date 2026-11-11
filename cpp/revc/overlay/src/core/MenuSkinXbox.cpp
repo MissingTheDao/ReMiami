@@ -19,6 +19,7 @@ extern int8 gUiStyle;
 extern "C" int revc_import_rgba(int kind, const char *rel, int *width, int *height, unsigned char **rgba);
 extern "C" void revc_texmod_free(unsigned char *rgba, int width, int height);
 extern "C" ssize_t revc_import_read(int kind, const char *rel, uint8 *buf, size_t cap);
+extern "C" int revc_pad_button_name(int pos, char *buf, int len);
 
 static float X(float x) { return SCALE_AND_CENTER_X(x); }
 static float Y(float y) { return SCREEN_SCALE_Y(y); }
@@ -394,7 +395,51 @@ HelpArrow(float x, float cy, int dir, const CRGBA &col)
 	CSprite2d::Draw2DPolygon(ax, ay, bx, by, cx, cyy, dx, dy, col);
 }
 
+// A line from (x0, y0) to (x1, y1), `t` thick (x in screen pixels, y and t in menu units).
+static void
+HelpLine(float x0, float y0, float x1, float y1, float t, const CRGBA &col)
+{
+	float lx = (x1 - x0) / W(1.0f), ly = y1 - y0, l = Sqrt(lx * lx + ly * ly);	// (in menu units)
+	if (l <= 0.0f)
+		return;
+	float nx = -ly / l * t / 2.0f, ny = lx / l * t / 2.0f;
+	CSprite2d::Draw2DPolygon(x0 + W(nx), Y(y0 + ny), x1 + W(nx), Y(y1 + ny), x0 - W(nx), Y(y0 - ny), x1 - W(nx), Y(y1 - ny), col);
+}
+
+// A PlayStation face symbol for a pad of that family, monochrome in the line's pink at cap height
+// (8 px), as the research's design rules put it (no circle around it): `x` its left edge in
+// screen pixels; returns the advance.
+static float
+HelpShape(float x, float cy, const char *name, const CRGBA &col)
+{
+	const float h = 8.0f, t = 1.6f;
+	float x0 = x, x1 = x + W(h), y0 = cy - h / 2.0f, y1 = cy + h / 2.0f;
+	if (strcmp(name, "cross") == 0) {
+		HelpLine(x0, y0, x1, y1, t, col);
+		HelpLine(x0, y1, x1, y0, t, col);
+	} else if (strcmp(name, "square") == 0) {
+		HelpLine(x0, y0, x1, y0, t, col);
+		HelpLine(x1, y0, x1, y1, t, col);
+		HelpLine(x1, y1, x0, y1, t, col);
+		HelpLine(x0, y1, x0, y0, t, col);
+	} else if (strcmp(name, "triangle") == 0) {
+		float xm = (x0 + x1) / 2.0f;
+		HelpLine(xm, y0, x1, y1, t, col);
+		HelpLine(x1, y1, x0, y1, t, col);
+		HelpLine(x0, y1, xm, y0, t, col);
+	} else {	// circle
+		float xm = (x0 + x1) / 2.0f, r = h / 2.0f;
+		for (int k = 0; k < 12; k++) {
+			float a0 = k * 6.2831853f / 12.0f, a1 = (k + 1) * 6.2831853f / 12.0f;
+			HelpLine(xm + W(r * Cos(a0)), cy + r * Sin(a0), xm + W(r * Cos(a1)), cy + r * Sin(a1), t, col);
+		}
+	}
+	return W(h + 3.0f);
+}
+
 // One help-line item: the buttons (up to two, joined by "/"), ":" and the word; returns the end x.
+// The buttons are named as on the pad in use (revc_pad_button_name: "A" on an Xbox pad, the
+// shapes on a PlayStation one, "+" for a Switch's start); without a pad, the Xbox's own words.
 static float
 HelpItem(float x, float y, const int *glyphs, int ng, const char *pre, const char *word, uint8 alpha)
 {
@@ -411,24 +456,29 @@ HelpItem(float x, float y, const int *glyphs, int ng, const char *pre, const cha
 	for (int k = 0; k < ng; k++) {
 		if (k > 0)
 			text("/");
-		int dir = -1;
+		int dir = -1, pos = -1;
 		const char *name = nil;
 		switch (glyphs[k]) {
 		case BUTTON_DPAD_LEFT: dir = 0; break;
 		case BUTTON_DPAD_RIGHT: dir = 1; break;
 		case BUTTON_DPAD_UP: dir = 2; break;
 		case BUTTON_DPAD_DOWN: dir = 3; break;
-		case BUTTON_START: name = "START"; break;
-		case BUTTON_CROSS: name = "A"; break;
-		case BUTTON_CIRCLE: name = "B"; break;
-		case BUTTON_TRIANGLE: name = "Y"; break;
-		case BUTTON_SQUARE: name = "X"; break;
+		case BUTTON_START: name = "START"; pos = 4; break;
+		case BUTTON_CROSS: name = "A"; pos = 0; break;
+		case BUTTON_CIRCLE: name = "B"; pos = 1; break;
+		case BUTTON_SQUARE: name = "X"; pos = 2; break;
+		case BUTTON_TRIANGLE: name = "Y"; pos = 3; break;
 		default: name = "thumbsticks"; k = ng; break;	// (the map's two sticks: one word)
 		}
+		static char padName[16];
+		if (pos >= 0 && revc_pad_button_name(pos, padName, sizeof(padName)) > 0)
+			name = padName;
 		if (dir >= 0) {
 			HelpArrow(x + W(2.0f), 434.5f, dir, pink);
 			x += W(dir < 2 ? 12.0f : 9.0f);
-		} else
+		} else if (strcmp(name, "cross") == 0 || strcmp(name, "circle") == 0 || strcmp(name, "square") == 0 || strcmp(name, "triangle") == 0)
+			x += HelpShape(x + W(1.0f), 434.5f, name, pink);
+		else
 			text(name);
 	}
 	int n = 0;
@@ -451,39 +501,43 @@ static void
 DrawHelpLine(CMenuManager *m, uint8 alpha)
 {
 	const float y = Y(424.2f);
+	// the Xbox's slots (x 52, 200, 340, 450, 530), each pushed right past a longer item before it
+	// (another pad's names: "OPTIONS:resume game")
+	float last = 0.0f;
+	auto slot = [&](float x) { return Max(X(x), last + W(8.0f)); };
 	static const int start[1] = { BUTTON_START }, lr[2] = { BUTTON_DPAD_LEFT, BUTTON_DPAD_RIGHT }, ud[2] = { BUTTON_DPAD_UP, BUTTON_DPAD_DOWN };
 	static const int a[1] = { BUTTON_CROSS }, b[1] = { BUTTON_CIRCLE }, sticks[2] = { BUTTON_UP, BUTTON_RSTICK_UP };
 	if (m->m_nCurrScreen == MENUPAGE_MAP) {
-		HelpItem(X(52.0f), y, a, 1, nil, "RVC_XHS", alpha);
-		HelpItem(X(200.0f), y, b, 1, nil, "RVC_XHB", alpha);
-		HelpItem(X(340.0f), y, sticks, 2, nil, "RVC_XHM", alpha);
+		last = HelpItem(slot(52.0f), y, a, 1, nil, "RVC_XHS", alpha);
+		last = HelpItem(slot(200.0f), y, b, 1, nil, "RVC_XHB", alpha);
+		last = HelpItem(slot(340.0f), y, sticks, 2, nil, "RVC_XHM", alpha);
 		return;
 	}
-	HelpItem(X(52.0f), y, start, 1, nil, "RVC_XHR", alpha);
+	last = HelpItem(slot(52.0f), y, start, 1, nil, "RVC_XHR", alpha);
 	if (HasSubTabs(m->m_nCurrScreen) && !(barFocus && IsTabPage(m->m_nCurrScreen)) && (!SettingsSubTabs(m->m_nCurrScreen) || subBarFocus)) {	// "START:resume game  <-/->:select  B:back" (the sub-tabs)
-		HelpItem(X(200.0f), y, lr, 2, nil, "RVC_XHS", alpha);
-		HelpItem(X(340.0f), y, b, 1, nil, "RVC_XHB", alpha);
+		last = HelpItem(slot(200.0f), y, lr, 2, nil, "RVC_XHS", alpha);
+		last = HelpItem(slot(340.0f), y, b, 1, nil, "RVC_XHB", alpha);
 		return;
 	}
 	if (m->m_nCurrScreen == MENUPAGE_CONSOLE_OPTIONS) {	// "START:resume game  up/down:select  <-/->:change  B:back"
-		HelpItem(X(200.0f), y, ud, 2, nil, "RVC_XHS", alpha);
-		HelpItem(X(340.0f), y, lr, 2, nil, "RVC_XHC", alpha);
-		HelpItem(X(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
+		last = HelpItem(slot(200.0f), y, ud, 2, nil, "RVC_XHS", alpha);
+		last = HelpItem(slot(340.0f), y, lr, 2, nil, "RVC_XHC", alpha);
+		last = HelpItem(slot(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
 		return;
 	}
 	if (m->m_nCurrScreen == MENUPAGE_PAD_PICTURE) {
-		HelpItem(X(200.0f), y, lr, 2, nil, "RVC_XHC", alpha);
-		HelpItem(X(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
+		last = HelpItem(slot(200.0f), y, lr, 2, nil, "RVC_XHC", alpha);
+		last = HelpItem(slot(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
 		return;
 	}
 	bool bar = barFocus && !MenuSkinXboxDialog(m->m_nCurrScreen);	// a dialog is a list
-	HelpItem(X(200.0f), y, bar ? lr : ud, 2, nil, "RVC_XHS", alpha);
-	HelpItem(X(340.0f), y, a, 1, nil, "RVC_XHS", alpha);
+	last = HelpItem(slot(200.0f), y, bar ? lr : ud, 2, nil, "RVC_XHS", alpha);
+	last = HelpItem(slot(340.0f), y, a, 1, nil, "RVC_XHS", alpha);
 	if (!bar)
-		HelpItem(X(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
+		last = HelpItem(slot(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
 	if (SettingsSubTabs(m->m_nCurrScreen)) {	// "Y:advanced" (the face-button item grammar of "X:delete")
 		static const int yb[1] = { BUTTON_TRIANGLE };
-		HelpItem(X(530.0f), y, yb, 1, nil, "RVC_XHA", alpha);
+		last = HelpItem(slot(530.0f), y, yb, 1, nil, "RVC_XHA", alpha);
 	}
 }
 
