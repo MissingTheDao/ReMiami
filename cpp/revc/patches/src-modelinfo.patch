@@ -12,3 +12,18 @@
  	}
  	return (RwObject*)clump;
  }
+@@ -1092,6 +1097,14 @@
+ 		float coef = RpMatFXMaterialGetEnvMapCoefficient(material);
+ 		coef *= 0.25f;	// Tone down a bit for PC
+ 		RpMatFXMaterialSetEnvMapCoefficient(material, coef);
++#else
++		// revc (FixMods S17): the PC style keeps the PC's toned-down reflections, the console
++		// styles the PS2's (applied as each vehicle model loads)
++		extern int8 gUiStyle;
++		if (gUiStyle == 0) {
++			float coef = RpMatFXMaterialGetEnvMapCoefficient(material);
++			RpMatFXMaterialSetEnvMapCoefficient(material, coef * 0.25f);
++		}
+ #endif
+ 	}
+ 	return material;

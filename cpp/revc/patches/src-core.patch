@@ -43,6 +43,41 @@
  	}
  	if(FrontEndMenuManager.m_bWantToRestart)
  		m_fTimeToFadeMusic = 0.0f;
+@@ -2063,9 +2072,16 @@
+ 		&& CMenuManager::m_PrefsCutsceneBorders
+ #endif
+ 		){
++#ifdef ASPECT_RATIO_SCALE
++		// revc: the same letterbox as DrawBordersForWideScreen
++		float cut = Max(0.0f, SCREEN_HEIGHT - SCREEN_WIDTH / 1.857f) * (m_ScreenReductionPercentage / 30.f);
++		rect.top = cut * 0.358f;
++		rect.bottom = SCREEN_HEIGHT - (cut - rect.top);
++#else
+ 		float borderSize = (SCREEN_HEIGHT / 2) * (m_ScreenReductionPercentage / 100.f);
+ 		rect.top = borderSize - SCREEN_SCALE_Y(22.f);
+ 		rect.bottom = SCREEN_HEIGHT - borderSize - SCREEN_SCALE_Y(14.f);
++#endif
+ 	}else{
+ 		rect.top = 0.0f;
+ 		rect.bottom = SCREEN_HEIGHT;
+@@ -2563,9 +2579,17 @@
+ {
+ 	float bottom, top;
+ 	if (m_WideScreenOn) {
++#ifdef ASPECT_RATIO_SCALE
++		// revc (FixMods F6, HIRES_PRESENTATION 4b): the bars letterbox the picture to the shape
++		// they give at 4:3 (~1.86:1), so they get thinner on wide screens and vanish at 21:9
++		float cut = Max(0.0f, SCREEN_HEIGHT - SCREEN_WIDTH / 1.857f) * (m_ScreenReductionPercentage / 30.f);
++		top = cut * 0.358f;
++		bottom = SCREEN_HEIGHT - (cut - top);
++#else
+ 		float borderSize = (SCREEN_HEIGHT / 2) * (m_ScreenReductionPercentage / 100.f);
+ 		top = borderSize - SCREEN_SCALE_Y(22.f);
+ 		bottom = SCREEN_HEIGHT - borderSize - SCREEN_SCALE_Y(14.f);
++#endif
+ 	} else {
+ 		top = 0.f;
+ 		bottom = SCREEN_HEIGHT;
 --- a/src/core/CdStreamPosix.cpp
 +++ b/src/core/CdStreamPosix.cpp
 @@ -3,6 +3,7 @@
