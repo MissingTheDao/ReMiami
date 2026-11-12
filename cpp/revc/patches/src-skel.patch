@@ -61,6 +61,45 @@
 -#define GLFW_GAMEPAD_BUTTON_Y 2
 -
 -#endif
+--- a/src/skel/events.cpp
++++ b/src/skel/events.cpp
+@@ -718,6 +718,8 @@
+ /*
+  *****************************************************************************
+  */
++bool Ps2SetupActive(void);	// (core/ControllerConfig.cpp)
++
+ static RsEventStatus
+ HandlePadButtonDown(RsPadButtonStatus *padButtonStatus)
+ {
+@@ -740,7 +742,9 @@
+ 		if ( ControlsManager.m_aButtonStates[i] == TRUE )
+ 			btn = (RsPadButtons)(i + 1);
+ 
+-		if ( FrontEndMenuManager.m_bMenuActive || bPadTwo )
++		// revc: in a PS2 setup the pad's buttons are the PS2's own (no bindings): straight into the
++		// pad state during play too (found by research: nothing fed them otherwise)
++		if ( FrontEndMenuManager.m_bMenuActive || bPadTwo || Ps2SetupActive() )
+ 			ControlsManager.UpdateJoyInConfigMenus_ButtonDown(btn, padNumber);
+ 		else
+ 			ControlsManager.AffectControllerStateOn_ButtonDown(btn, JOYSTICK);
+@@ -774,13 +778,15 @@
+ 	
+ 	ControlsManager.UpdateJoyButtonState(padNumber);
+ 	
++	if ( Ps2SetupActive() && ControlsManager.m_aButtonStates[0] == FALSE )	// (revc: the loop below skips button 1)
++		ControlsManager.UpdateJoyInConfigMenus_ButtonUp(rsPADBUTTON1, padNumber);
+ 	for ( int32 i = 1; i < _TODOCONST(16); i++ )
+ 	{
+ 		RsPadButtons btn = rsPADNULL;
+ 		if ( ControlsManager.m_aButtonStates[i] == FALSE )
+ 			btn = (RsPadButtons)(i + 1); // bug ?, cycle begins from 1(not zero), 1+1==2==rsPADBUTTON2, so we skip rsPADBUTTON1, right ?
+ 		
+-		if ( FrontEndMenuManager.m_bMenuActive || bPadTwo || bCam )
++		if ( FrontEndMenuManager.m_bMenuActive || bPadTwo || bCam || Ps2SetupActive() )
+ 			ControlsManager.UpdateJoyInConfigMenus_ButtonUp(btn, padNumber);
+ 		else
+ 			ControlsManager.AffectControllerStateOn_ButtonUp(btn, JOYSTICK);
 --- a/src/skel/hostapi.h
 +++ b/src/skel/hostapi.h
 @@ -2,9 +2,7 @@
@@ -159,7 +198,7 @@
  
  static RwBool		  ForegroundApp = TRUE;
  static RwBool		  WindowIconified = FALSE;
-@@ -241,8 +250,39 @@
+@@ -241,8 +250,44 @@
   *****************************************************************************
   */
  
@@ -191,6 +230,11 @@
 +	if (freq != 0) {
 +		// revc: the Xbox version's motor mapping: heavy (low-frequency) motor freq * 64 (at most
 +		// ~25 %), light motor freq * 256 (up to full strength).
++		// The PS2: the large motor alone, at the shake's strength (PS2 v1.40, research).
++		extern int8 gUiStyle;
++		if (gUiStyle == 1)
++			hostGamepadRumble(hostPad, (uint16)(freq * 257), 0, 200);
++		else
 +		hostGamepadRumble(hostPad, (uint16)(freq * 64), (uint16)(freq * 256), 200);
 +	} else if (lastFreq[padID] != 0) {
 +		hostGamepadRumble(hostPad, 0, 0, 0);
@@ -200,7 +244,7 @@
  
  /*
   *****************************************************************************
-@@ -1249,40 +1289,19 @@
+@@ -1249,40 +1294,19 @@
  /*
   *****************************************************************************
   */
@@ -236,22 +280,22 @@
  
 -#elif defined(REVC_RUST_MAIN)
 -// Rust owns main() (rust/revc); it calls this with the process argv.
+-extern "C" int
+-revc_cpp_main(int argc, char *argv[])
+-{
+-#else
+-// Called from Rust main() with the process argv.
 +// Process start: platform and RenderWare initialisation, settings. Returns 0 on failure.
  extern "C" int
 -revc_cpp_main(int argc, char *argv[])
 +revc_game_init(int argc, char *argv[])
  {
--#else
--// Called from Rust main() with the process argv.
--extern "C" int
--revc_cpp_main(int argc, char *argv[])
--{
 -#endif
 -	RwV2d pos;
  	RwInt32 i;
  
  #ifdef USE_CUSTOM_ALLOCATOR
-@@ -1416,8 +1435,21 @@
+@@ -1416,8 +1440,21 @@
  #endif
  	
  
@@ -274,7 +318,7 @@
  		RwInitialised = TRUE;
  		
  		/* 
-@@ -1451,49 +1483,146 @@
+@@ -1451,49 +1488,146 @@
  		TheMemoryCard.m_bWantToLoad = false;
  		
  		CTimer::Update();
@@ -449,7 +493,7 @@
  //					    else if (CPad::GetPad(0)->GetLeftMouseJustDown())
  //						    ++gGameState;
  //					    else if (CPad::GetPad(0)->GetEnterJustDown())
-@@ -1505,11 +1634,11 @@
+@@ -1505,11 +1639,11 @@
  //					    else if (CPad::GetPad(0)->GetTabJustDown())
  //						    ++gGameState;
  
@@ -465,7 +509,7 @@
  //#ifndef NO_MOVIES
  //					    CloseClip();
  //					    CoUninitialize();
-@@ -1520,17 +1649,17 @@
+@@ -1520,17 +1654,17 @@
  //					    else
  //						    PlayMovieInWindow(cmdShow, "movies\\GTAtitles.mpg");
  
@@ -490,7 +534,7 @@
  //					    else if (CPad::GetPad(0)->GetLeftMouseJustDown())
  //						    ++gGameState;
  //					    else if (CPad::GetPad(0)->GetEnterJustDown())
-@@ -1542,229 +1671,189 @@
+@@ -1542,229 +1676,189 @@
  //					    else if (CPad::GetPad(0)->GetTabJustDown())
  //						    ++gGameState;
  
@@ -871,7 +915,7 @@
  	
  #ifndef MASTER
  	if ( gbModelViewer )
-@@ -1790,7 +1879,6 @@
+@@ -1790,7 +1884,6 @@
  	RsEventHandler(rsTERMINATE, nil);
  
  
@@ -879,7 +923,7 @@
  }
  
  /*
-@@ -1836,11 +1924,22 @@
+@@ -1836,11 +1929,22 @@
  
  		// the host (like glfw) returns 0.0 for non-existent axes(which is bullocks) so we treat it as deadzone, and keep value of previous frame.
  		// otherwise if this axis is present, -1 = released, 1 = pressed
@@ -890,21 +934,21 @@
  		if (lt != 0.0f)
 -			ControlsManager.m_NewState.mappedButtons[15] = lt > -0.8f;
 +			ControlsManager.m_NewState.mappedButtons[15] = lt > pressedAt;
-+
-+		if (rt != 0.0f)
-+			ControlsManager.m_NewState.mappedButtons[16] = rt > pressedAt;
  
+ 		if (rt != 0.0f)
+-			ControlsManager.m_NewState.mappedButtons[16] = rt > -0.8f;
++			ControlsManager.m_NewState.mappedButtons[16] = rt > pressedAt;
++
 +		// revc: analog trigger values (0..255) for accelerate/brake bound to a trigger.
 +		extern uint8 gPadTriggerAnalog[2];
 +		if (lt != 0.0f)
 +			gPadTriggerAnalog[0] = (uint8)Clamp((lt + 1.0f) * 127.5f, 0.0f, 255.0f);
- 		if (rt != 0.0f)
--			ControlsManager.m_NewState.mappedButtons[16] = rt > -0.8f;
++		if (rt != 0.0f)
 +			gPadTriggerAnalog[1] = (uint8)Clamp((rt + 1.0f) * 127.5f, 0.0f, 255.0f);
  	}
  	// TODO? L2-R2 axes(not buttons-that's fine) on joysticks that don't have SDL gamepad mapping AREN'T handled, and I think it's impossible to do without mapping.
  
-@@ -1879,20 +1978,49 @@
+@@ -1879,20 +1983,56 @@
  		
  		CPad *pad = CPad::GetPad(bs.padID);
  
@@ -934,6 +978,12 @@
 +		float deadZone[2];
 +		for (int i = 0; i < 2; i++)
 +			deadZone[i] = !(seenX[i] && seenY[i]) ? 0.60f : aiming ? 0.10f : 0.25f;
++		// revc: the PS2's own: one dead zone of 42/128 per axis in every situation, the rest
++		// rescaled to +-127 (PS2 v1.40, research)
++		extern int8 gUiStyle;
++		const bool ps2Sticks = gUiStyle == 1;
++		if (ps2Sticks)
++			deadZone[0] = deadZone[1] = 42.0f / 128.0f;
 +		auto axis = [](float v, float d) -> float {
 +			if (v >= d) return (v - d) / (1.0f - d);
 +			if (v <= -d) return (v + d) / (1.0f - d);
@@ -941,22 +991,23 @@
 +		};
 +		float lx = axis(leftStickPos.x, deadZone[0]), ly = axis(leftStickPos.y, deadZone[0]);
 +		float rx = axis(rightStickPos.x, deadZone[1]), ry = axis(rightStickPos.y, deadZone[1]);
++		const float stickMax = ps2Sticks ? 127.0f : 128.0f;
 +
 +		if ( lx != 0.0f )
-+			pad->PCTempJoyState.LeftStickX	= (int32)(lx * 128.0f);
++			pad->PCTempJoyState.LeftStickX	= (int32)(lx * stickMax);
 +		
 +		if ( ly != 0.0f )
-+			pad->PCTempJoyState.LeftStickY	= (int32)(ly * 128.0f);
++			pad->PCTempJoyState.LeftStickY	= (int32)(ly * stickMax);
  		
 -		if ( Abs(rightStickPos.x) > 0.3f )
 -			pad->PCTempJoyState.RightStickX = (int32)(rightStickPos.x * 128.0f);
 +		if ( rx != 0.0f )
-+			pad->PCTempJoyState.RightStickX = (int32)(rx * 128.0f);
++			pad->PCTempJoyState.RightStickX = (int32)(rx * stickMax);
  
 -		if ( Abs(rightStickPos.y) > 0.3f )
 -			pad->PCTempJoyState.RightStickY = (int32)(rightStickPos.y * 128.0f);
 +		if ( ry != 0.0f )
-+			pad->PCTempJoyState.RightStickY = (int32)(ry * 128.0f);
++			pad->PCTempJoyState.RightStickY = (int32)(ry * stickMax);
  	}
  
 -	_psHandleVibration();
@@ -964,7 +1015,7 @@
  
  	return;
  }
-@@ -1924,4 +2052,4 @@
+@@ -1924,4 +2064,4 @@
  	}
  }
  

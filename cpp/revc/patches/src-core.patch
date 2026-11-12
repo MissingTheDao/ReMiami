@@ -4509,7 +4509,7 @@
 +{
 +	if (after && !before) {
 +		bool xbox = gUiStyle == 2;
-+		CPad::GetPad(0)->StartShake(xbox ? 150 : 350, 150);
++		CPad::GetPad(0)->StartShake(xbox ? 150 : gUiStyle == 1 ? 300 : 350, 150);	// (the PS2: 300 ms; PS2 v1.40, research)
 +		TimeToStopPadShaking = CTimer::GetTimeInMillisecondsPauseMode() + (xbox ? 150 : 500);
 +	} else if (!after && before) {
 +		CPad::StopPadsShaking();
@@ -5196,22 +5196,6 @@
 -	// "RDLU12ULDR"		-	RIGHT DOWN LEFT UP L1 L2 UP LEFT DOWN RIGHT
 -	else if ( !_CHEATCMP("RDLU21ULDR") )
 -		ChangePlayerCheat();
--
--	// "DULUX3421"		-	DOWN UP LEFT UP CROSS R1 R2 L2 L1
--	else if ( !_CHEATCMP("1243XULUD") )
--		MayhemCheat();
--
--	// "DULUX3412"		-	DOWN UP LEFT UP CROSS R1 R2 L1 L2
--	else if ( !_CHEATCMP("2143XULUD") )
--		EverybodyAttacksPlayerCheat();
--
--	// "43TX21UD"		-	R2 R1 TRIANGLE CROSS L2 L1 UP DOWN
--	else if ( !_CHEATCMP("DU12XT34") )
--		WeaponsForAllCheat();
--
--	// "TURDS12"		-	TRIANGLE UP RIGHT DOWN SQUARE L1 L2
--	else if ( !_CHEATCMP("21SDRUT") )
--		FastTimeCheat();
 +	// revc: Vice City's own console sequences (GTA III's were here; research on the PS2 and Xbox
 +	// builds): the strings hold the newest press first; T triangle/Y, C circle/B, X cross/A,
 +	// S square/X, U D L R the D-pad, 1 L1/LT, 2 L2/White, 3 R1/RT, 4 R2/Black. A match blanks the
@@ -5304,6 +5288,22 @@
 +	else if ( !_CHEATCMP("11S4T1T") )
 +		{ CheatString[0] = ' '; OnlyRenderWheelsCheat(); }
  
+-	// "DULUX3421"		-	DOWN UP LEFT UP CROSS R1 R2 L2 L1
+-	else if ( !_CHEATCMP("1243XULUD") )
+-		MayhemCheat();
+-
+-	// "DULUX3412"		-	DOWN UP LEFT UP CROSS R1 R2 L1 L2
+-	else if ( !_CHEATCMP("2143XULUD") )
+-		EverybodyAttacksPlayerCheat();
+-
+-	// "43TX21UD"		-	R2 R1 TRIANGLE CROSS L2 L1 UP DOWN
+-	else if ( !_CHEATCMP("DU12XT34") )
+-		WeaponsForAllCheat();
+-
+-	// "TURDS12"		-	TRIANGLE UP RIGHT DOWN SQUARE L1 L2
+-	else if ( !_CHEATCMP("21SDRUT") )
+-		FastTimeCheat();
+-
 -	// "TURDS34"		-	TRIANGLE UP RIGHT DOWN SQUARE R1 R2
 -	else if ( !_CHEATCMP("43SDRUT") )
 -		SlowTimeCheat();
@@ -5583,7 +5583,7 @@
  
  	PCTempJoyState.Clear();
  	PCTempKeyState.Clear();
-@@ -2007,14 +2261,29 @@
+@@ -2007,14 +2261,31 @@
  void CPad::DoCheats(void)
  {
  #ifdef DETECT_PAD_INPUT_SWITCH
@@ -5600,6 +5600,8 @@
  void CPad::DoCheats(int16 unk)
  {
  #ifdef GTA_PS2_STUFF
++	if (CCutsceneMgr::IsRunning())	// (revc: the consoles read no cheat presses during a cutscene; research)
++		return;
 +	// revc: the Xbox reads the cheat letters from the buttons themselves, whatever the layout
 +	// binds them to: 1 LT, 2 White (LB), 3 RT, 4 Black (RB) (research on the Xbox build)
 +	if (gUiStyle == 2 && this == GetPad(0)) {
@@ -5613,7 +5615,7 @@
  	if ( GetTriangleJustDown() )
  		AddToCheatString('T');
  
-@@ -2341,11 +2610,37 @@
+@@ -2341,11 +2612,37 @@
  	return 0;
  }
  
@@ -5651,7 +5653,7 @@
  	return !!(NewState.LeftShoulder2 && !NewState.RightShoulder2);
  }
  
-@@ -2354,6 +2649,9 @@
+@@ -2354,6 +2651,9 @@
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -5661,7 +5663,7 @@
  	return !!(NewState.RightShoulder2 && !NewState.LeftShoulder2);
  }
  
-@@ -2363,6 +2661,9 @@
+@@ -2363,6 +2663,9 @@
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -5671,7 +5673,33 @@
  	return !!(NewState.RightShoulder2 && NewState.LeftShoulder2);
  }
  
-@@ -3293,11 +3594,17 @@
+@@ -3244,6 +3547,8 @@
+ 	int16 dpad = (NewState.DPadRight - NewState.DPadLeft) / 2;
+ 
+ 	if ( Abs(axis) > Abs(dpad) ) {
++		if ( gUiStyle == 1 )	// (revc: the PS2 has no extra dead zone here; PS2 v1.40, research)
++			return axis;
+ 		if ( Abs(axis) > 35.0f ) {
+ 		  return (axis > 0.f ? axis - 35.f : axis + 35.f) * (128.f / (128 - 35));
+ 		} else {
+@@ -3259,6 +3564,7 @@
+ 	int16 dpad;
+ 
+ #ifdef FIX_BUGS
++	if ( gUiStyle != 1 )	// (revc: the PS2 only turns it over with "invert"; PS2 v1.40, research)
+ 	axis = -axis;
+ #endif
+ 	if (CPad::bInvertLook4Pad) {
+@@ -3269,6 +3575,8 @@
+ 	}
+ 
+ 	if ( Abs(axis) > Abs(dpad) ) {
++	    if ( gUiStyle == 1 )	// (no extra dead zone on the PS2)
++	      return axis;
+ 	    if ( Abs(axis) > 35.0f ) {
+ 	      return (axis > 0.f ? axis - 35.f : axis + 35.f) * (128.f / (128 - 35));
+ 	    } else {
+@@ -3293,11 +3601,17 @@
  	return 0;
  }
  

@@ -32,6 +32,18 @@
  
  		if ( m_nAmmoInClip > 0 )
  			m_nAmmoInClip--;
+@@ -2473,6 +2478,11 @@
+ 		// yes, double
+ 		double notFiringRate = (20.0 - info->m_nFiringRate) / 80.0;
+ 		double raisedNotFiringRate = Max(1.0, Max(0.0, notFiringRate));
++		{
++			extern int8 gUiStyle;
++			if (gUiStyle == 1)	// (revc: the PS2 clamps it to 0..1, so the shake is 130-210; PS2 v1.40, research)
++				raisedNotFiringRate = Min(1.0, Max(0.0, notFiringRate));
++		}
+ 
+ 		uint8 shakeFreq = 80.0 * raisedNotFiringRate + 130.0;
+ 		CPad::GetPad(0)->StartShake(20000.0f * CTimer::GetTimeStep() / shakeFreq, shakeFreq);
 --- a/src/weapons/WeaponInfo.cpp
 +++ b/src/weapons/WeaponInfo.cpp
 @@ -137,131 +137,39 @@

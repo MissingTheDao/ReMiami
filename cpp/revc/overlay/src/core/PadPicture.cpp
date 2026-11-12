@@ -473,7 +473,8 @@ Ps2SetupLabel(int joy, int context, wchar *out)
 	int no = context == 0 ? 8 : 12;
 	const char *t = nil;
 	for (int i = 0; i < nc && !t; i++)
-		if (common[i].joy == joy) t = common[i].text;
+		if (common[i].joy == joy && !(context != 0 && joy == 22 && gPs2Setup == 3))	// (setup 4 in a car shows no "look behind"; PS2 v1.40, research)
+			t = common[i].text;
 	for (int i = 0; i < no && !t; i++)
 		if (own[i].text && own[i].joy == joy) t = own[i].text;
 	if (t == nil)
