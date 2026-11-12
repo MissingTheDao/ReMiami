@@ -3830,15 +3830,15 @@
  	void LoadAllTextures();
 --- a/src/core/Game.cpp
 +++ b/src/core/Game.cpp
-@@ -94,6 +94,8 @@
- #include "VarConsole.h"
- #ifdef USE_TEXTURE_POOL
+@@ -96,6 +96,8 @@
  #include "TexturePools.h"
-+
-+extern int8 gUiStyle;	// (revc: UI style, 2 = Xbox)
  #endif
  
++extern int8 gUiStyle;	// (revc: UI style, 2 = Xbox)
++
  eLevelName CGame::currLevel;
+ int32 CGame::currArea;
+ bool CGame::bDemoMode = true;
 @@ -776,10 +778,8 @@
  	if (b_FoundRecentSavedGameWantToLoad || FrontEndMenuManager.m_bWantToLoad)
  	{

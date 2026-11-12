@@ -507,7 +507,69 @@
  				pPed->m_pMyVehicle->AutoPilot.m_nCruiseSpeed = 0;
 --- a/src/control/Script5.cpp
 +++ b/src/control/Script5.cpp
-@@ -2664,6 +2664,9 @@
+@@ -19,6 +19,9 @@
+ #include "main.h"
+ #include "SaveBuf.h"
+ 
++int XboxFlyLayout(void); bool XboxRawDown(int joy); bool XboxRawJustDown(int joy); int16 XboxStick(int axis);	// (core/Pad.cpp)
++
++
+ void CRunningScript::UpdateCompareFlag(bool flag)
+ {
+ 	if (m_bNotFlag)
+@@ -1397,9 +1400,51 @@
+ 	m_nWakeTime = 0;
+ }
+ 
++// revc: the Xbox's per-script buttons (its ScriptControls.txt; research on the Xbox build) where
++// they differ from what the PS2-style state gives under its layouts: -1 if not one of them.
++static int16
++XboxScriptButton(const char *script, uint16 button)
++{
++	auto is = [&](const char *name) {
++		for (int i = 0; i < 8; i++) {
++			char a = script[i] >= 'A' && script[i] <= 'Z' ? script[i] - 'A' + 'a' : script[i];
++			if (a != name[i])
++				return false;
++			if (a == '\0')
++				return true;
++		}
++		return true;
++	};
++	const int layout = XboxFlyLayout();
++	if (layout < 0)
++		return -1;
++	auto raw = [](int joy) -> int16 { return XboxRawDown(joy) ? 255 : 0; };
++	if (is("cell") && button == 4)	// answer the phone: LT
++		return raw(5);
++	if ((is("bankjo4") || is("shit")) && button == 16)	// back out: B
++		return raw(1);
++	if (is("pizza") && (button == 5 || button == 7)) {	// throw left / right: the right stick (Standard), the D-pad (Classic)
++		int16 x = layout == 1 ? (XboxRawDown(14) ? 1 : XboxRawDown(16) ? -1 : 0) : XboxStick(2);
++		return (button == 7 ? x > 0 : x < 0) ? 255 : 0;
++	}
++	if (is("race") && button == 15)	// cancel: B
++		return raw(1);
++	if (is("race") && button == 16)	// OK: A
++		return raw(2);
++	if ((is("ammu1") || is("ammu2") || is("ammu3") || is("hard1") || is("hard2") || is("hard3") || is("race")) &&
++	    (button == 10 || button == 11))	// browse: the D-pad itself (not bound to a PS2 D-pad press in the Xbox layouts)
++		return raw(button == 10 ? 16 : 14);
++	return -1;
++}
++
+ int16 CRunningScript::GetPadState(uint16 pad, uint16 button)
+ {
+ 	CPad* pPad = CPad::GetPad(pad);
++	if (pad == 0) {
++		int16 xbox = XboxScriptButton(m_abScriptName, button);
++		if (xbox >= 0)
++			return xbox;
++	}
+ 	switch (button) {
+ 	case 0: return pPad->NewState.LeftStickX;
+ 	case 1: return pPad->NewState.LeftStickY;
+@@ -2664,6 +2709,9 @@
  		if (pPed->InVehicle() && pPed->m_pMyVehicle) {
  			if (pPed->m_pMyVehicle->pDriver == pPed) {
  				pPed->m_pMyVehicle->RemoveDriver();
@@ -536,7 +598,16 @@
  				CVector vScreenPos;
 --- a/src/control/Script.cpp
 +++ b/src/control/Script.cpp
-@@ -741,6 +741,8 @@
+@@ -53,6 +53,8 @@
+ #include <stdarg.h>
+ #endif
+ 
++int XboxFlyLayout(void); bool XboxRawDown(int joy); bool XboxRawJustDown(int joy); int16 XboxStick(int axis);	// (core/Pad.cpp)
++
+ uint8 CTheScripts::ScriptSpace[SIZE_SCRIPT_SPACE];
+ CRunningScript CTheScripts::ScriptsArray[MAX_NUM_SCRIPTS];
+ intro_text_line CTheScripts::IntroTextLines[MAX_NUM_INTRO_TEXT_LINES];
+@@ -741,6 +743,8 @@
  
  void CTheScripts::Init()
  {
@@ -545,7 +616,17 @@
  	for (int i = 0; i < SIZE_SCRIPT_SPACE; i++)
  		ScriptSpace[i] = 0;
  	pActiveScripts = pIdleScripts = nil;
-@@ -3195,6 +3197,9 @@
+@@ -991,7 +995,8 @@
+ 	}
+ 	if (!m_bSkipWakeTime)
+ 		return;
+-	if (!CPad::GetPad(0)->GetCrossJustDown())
++	// (revc: the Xbox skips with A itself, whatever A is bound to; research)
++	if (!(XboxFlyLayout() >= 0 ? XboxRawJustDown(2) : CPad::GetPad(0)->GetCrossJustDown()))
+ 		return;
+ 	m_nWakeTime = 0;
+ 	for (int i = 0; i < NUMBIGMESSAGES; i++){
+@@ -3195,6 +3200,9 @@
  				pPlayer->m_pPed->bRenderPedInCar = true;
  			if (pPlayer->m_pPed->m_pMyVehicle->pDriver == pPlayer->m_pPed){
  				pPlayer->m_pPed->m_pMyVehicle->RemoveDriver();
