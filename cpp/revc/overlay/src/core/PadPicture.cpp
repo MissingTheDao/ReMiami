@@ -148,6 +148,160 @@ DrawLine(float x1, float y1, float x2, float y2, const CRGBA &col)
 	}
 }
 
+// revc: the Xbox's controller page (research on the Xbox build, its menu animation data; 640x480):
+// the Walking / Driving / Flying tabs, the pad picture with its button sprites, the mint ring
+// overlay, and a mint label on a leader line per control. The words are the Xbox's for its two
+// layouts; other layouts name what the buttons are bound to.
+static CSprite2d *xboxPadParts[8];	// 394 rings, 345 A, 347 B, 349 X, 351 Y, 353 black, 355 white, 357 d-pad
+static CSprite2d *xboxStick;		// 358
+
+static void
+LoadXboxSprite(CSprite2d *&spr, const char *rel)
+{
+	if (spr == nil)
+		spr = new CSprite2d;
+	if (spr->m_pTexture || !revc_import_status(0))
+		return;
+	int w, h;
+	unsigned char *px;
+	if (!revc_import_image(rel, &w, &h, &px))
+		return;
+	rw::Image *img = rw::Image::create(w, h, 32);
+	img->pixels = px;
+	img->stride = w * 4;
+	rw::Raster *ras = rw::Raster::create(w, h, 32, rw::Raster::C8888 | rw::Raster::TEXTURE);
+	if (ras && ras->setFromImage(img)) {
+		rw::Texture *tex = rw::Texture::create(ras);
+		strncpy(tex->name, "xboxpadpart", sizeof(tex->name) - 1);
+		tex->setFilter(rw::Texture::LINEAR);
+		spr->m_pTexture = tex;
+	} else if (ras)
+		ras->destroy();
+	img->pixels = nil;
+	img->destroy();
+	revc_texmod_free(px, w, h);
+}
+
+// The label slots: the control (the game's joystick button numbers, 20/21 the sticks, 13 the
+// d-pad), the label's x and baseline, its leader line (label end -> control, up to 4 points).
+struct XboxPadLabel { int joy; float x, baseline; int np; float pts[4][2]; };
+static const XboxPadLabel xboxPadLabels[13] = {
+	{ 5, 50.0f, 238.0f, 4, { { 51.5f, 237.93f }, { 194.07f, 237.93f }, { 203.75f, 228.25f }, { 217.5f, 228.25f } } },	// left trigger
+	{ 20, 50.0f, 268.0f, 3, { { 51.5f, 267.93f }, { 222.6f, 267.93f }, { 228.6f, 261.38f } } },	// left stick
+	{ 10, 50.0f, 298.0f, 3, { { 51.5f, 297.93f }, { 202.5f, 297.93f }, { 242.0f, 258.43f } } },	// left stick click
+	{ 13, 50.0f, 328.0f, 3, { { 51.5f, 327.93f }, { 234.0f, 327.93f }, { 253.5f, 308.93f } } },	// d-pad
+	{ 3, 393.75f, 218.0f, 4, { { 476.5f, 217.93f }, { 349.6f, 217.93f }, { 337.5f, 230.0f }, { 337.5f, 247.0f } } },	// X
+	{ 6, 396.5f, 238.0f, 4, { { 466.3f, 237.93f }, { 394.05f, 237.93f }, { 384.3f, 228.25f }, { 377.0f, 228.25f } } },	// right trigger
+	{ 4, 398.95f, 258.0f, 4, { { 476.3f, 257.93f }, { 399.05f, 257.93f }, { 381.55f, 240.43f }, { 364.5f, 240.43f } } },	// Y
+	{ 1, 401.5f, 278.0f, 4, { { 446.5f, 277.93f }, { 394.25f, 277.93f }, { 391.25f, 274.93f }, { 376.75f, 260.43f } } },	// B
+	{ 2, 404.05f, 298.0f, 4, { { 486.5f, 297.93f }, { 404.25f, 297.93f }, { 386.75f, 280.43f }, { 359.5f, 280.43f } } },	// A
+	{ 8, 408.0f, 318.0f, 3, { { 487.5f, 317.93f }, { 405.0f, 317.93f }, { 380.25f, 292.93f } } },	// black
+	{ 7, 408.0f, 338.0f, 3, { { 487.5f, 337.93f }, { 400.0f, 337.93f }, { 366.82f, 304.5f } } },	// white
+	{ 21, 378.0f, 358.0f, 2, { { 375.0f, 342.5f }, { 335.5f, 303.0f } } },	// right stick
+	{ 11, 205.6f, 358.0f, 2, { { 274.0f, 342.93f }, { 324.0f, 292.93f } } },	// right stick click
+};
+// The Xbox's words per layout (standard, classic) and tab (walking, driving, flying), in the
+// order of xboxPadLabels; nil: no label (research on the Xbox build: its two control mappings).
+static const char *const xboxPadWords[2][3][13] = {
+	{	// standard
+		{ "RVC_KTA", "RVC_KMV", "RVC_KCR", nil, "RVC_KJU", "RVC_KAT", "RVC_KEV", nil, "RVC_KRU", "RVC_KCC", "RVC_KCM", "RVC_KLA", "RVC_KLB" },
+		{ "RVC_KBR", "RVC_KVC", "RVC_KHO", nil, "RVC_KSM", "RVC_KAC", "RVC_KEV", "RVC_KHB", nil, "RVC_KRS", "RVC_KCM", "RVC_KLA", "RVC_KCW" },
+		{ "RVC_KDE", "RVC_KST", nil, nil, "RVC_KSM", "RVC_KAC", "RVC_KEV", "RVC_KFM", nil, "RVC_KRS", "RVC_KCM", nil, nil },
+	},
+	{	// classic
+		{ "RVC_KCC", "RVC_KMV", "RVC_KCR", nil, "RVC_KJU", "RVC_KTA", "RVC_KEV", "RVC_KAT", "RVC_KRU", nil, "RVC_KCM", "RVC_KLA", "RVC_KLB" },
+		{ nil, "RVC_KVC", "RVC_KHO", "RVC_KLA", "RVC_KBR", "RVC_KHB", "RVC_KEV", "RVC_KCW", "RVC_KAC", "RVC_KRS", "RVC_KCM", nil, "RVC_KSM" },
+		{ nil, "RVC_KST", "RVC_KFM", nil, "RVC_KDE", nil, "RVC_KEV", nil, "RVC_KAC", "RVC_KRS", "RVC_KCM", nil, "RVC_KSM" },
+	},
+};
+
+static void
+DrawPadPictureXbox(void)
+{
+	const uint8 a = FrontEndMenuManager.FadeIn(255);
+	auto X = [](float x) { return SCALE_AND_CENTER_X(x); };
+	auto Y = [](float y) { return MENU_Y(y); };	// (480 lines here: no FORCE_PC_SCALING in this file)
+	const CRGBA mint(0, 207, 133, a), pink(255, 150, 225, a);
+
+	// the tabs: "walking" / "driving" / "flying", the current one on its mint bar
+	static const char *tabKeys[3] = { "RVC_KWA", "RVC_KDR", "RVC_KFL" };
+	static const float tabX[3] = { 139.0f, 282.0f, 422.0f }, barX[3][2] = { { 136.9f, 268.1f }, { 274.2f, 405.4f }, { 414.2f, 545.4f } };
+	static const float barY[3][2] = { { 144.1f, 180.9f }, { 142.1f, 178.9f }, { 142.1f, 178.9f } };
+	extern void MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool tail, float minWidth);
+	MenuSkinXboxSelection(X(barX[padContext][0]), Y(barY[padContext][0]), X(barX[padContext][1]), Y(barY[padContext][1]), a, true, 0.0f);
+	CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
+	CFont::SetScale(MENU_X(BIGTEXT_X_SCALE * 1.2f), MENU_Y(BIGTEXT_Y_SCALE * 1.2f * 480.0f / 448.0f)	/* (the menu items' size: Frontend's 448 lines) */);
+	CFont::SetPropOn();
+	CFont::SetCentreOff();
+	CFont::SetRightJustifyOff();
+	CFont::SetWrapx(SCREEN_WIDTH);
+	CFont::SetDropShadowPosition(2);
+	CFont::SetDropColor(CRGBA(0, 0, 0, a));
+	CFont::SetColor(pink);
+	for (int t = 0; t < 3; t++)	// (baseline 178; the top measured against the console's page)
+		CFont::PrintString(X(tabX[t]), Y(148.0f), TheText.Get(tabKeys[t]));
+	CFont::DrawFonts();
+	CFont::SetDropShadowPosition(0);
+
+	// the pad, its rings, sticks, d-pad and buttons (sprite top-left corners and sizes)
+	if (padSprite->m_pTexture)
+		padSprite->Draw(CRect(X(189.5f), Y(206.0f), X(409.5f), Y(371.0f)), CRGBA(255, 255, 255, a));
+	static const char *parts[8] = { "xbox/ui/r3_menu_394.dds", "xbox/ui/r3_menu_345.dds", "xbox/ui/r3_menu_347.dds", "xbox/ui/r3_menu_349.dds",
+		"xbox/ui/r3_menu_351.dds", "xbox/ui/r3_menu_353.dds", "xbox/ui/r3_menu_355.dds", "xbox/ui/r3_menu_357.dds" };
+	for (int i = 0; i < 8; i++)
+		LoadXboxSprite(xboxPadParts[i], parts[i]);
+	LoadXboxSprite(xboxStick, "xbox/ui/r3_menu_358.dds");
+	auto part = [&](CSprite2d *s, float x, float y, float w, float h, uint8 alpha) {
+		if (s && s->m_pTexture)
+			s->Draw(CRect(X(x), Y(y), X(x + w), Y(y + h)), CRGBA(255, 255, 255, alpha));
+	};
+	// (sticks and d-pad centred in the rings: left stick 242.8,257.5, d-pad 270.1,291.8, right
+	// stick 324.7,291.2)
+	part(xboxStick, 242.8f - 13.3f, 257.5f - 13.2f, 26.6f, 26.4f, a);
+	part(xboxPadParts[7], 270.1f - 23.0f, 291.8f - 23.0f, 46.0f, 46.0f, a);
+	part(xboxStick, 324.7f - 13.8f, 291.2f - 13.3f, 27.6f, 26.6f, a);
+	part(xboxPadParts[0], 225.98f, 240.7f, 116.5f, 77.0f, a * 672 / 1000);
+	part(xboxPadParts[1], 348.0f, 265.4f, 16.0f, 16.0f, a);	// A
+	part(xboxPadParts[2], 364.0f, 249.1f, 16.0f, 16.0f, a);	// B
+	part(xboxPadParts[3], 331.5f, 249.1f, 16.0f, 16.0f, a);	// X
+	part(xboxPadParts[4], 348.0f, 232.6f, 16.0f, 16.0f, a);	// Y
+	part(xboxPadParts[5], 366.4f, 278.9f, 14.0f, 14.0f, a);	// black
+	part(xboxPadParts[6], 351.6f, 290.9f, 14.0f, 14.0f, a);	// white
+
+	// the labels: the Xbox's words for its layouts, else what the button does in this context
+	const int layout = PadLayoutCurrent();
+	const CRGBA lineCol(0, 207, 133, a * 672 / 1000);
+	extern bool MenuSkinXboxText(float x, float y, float height, const wchar *text, const CRGBA &col, int align);
+	for (int l = 0; l < 13; l++) {
+		const XboxPadLabel &s = xboxPadLabels[l];
+		static wchar text[96];
+		text[0] = 0;
+		if (layout == 0 || layout == 1) {
+			const char *k = xboxPadWords[layout][padContext][l];
+			if (k)
+				UnicodeStrcpy(text, TheText.Get(k));
+		} else if (s.joy == 20)
+			UnicodeStrcpy(text, TheText.Get(padContext == 0 ? "RVC_MOV" : "RVC_STR"));
+		else if (s.joy == 21)
+			UnicodeStrcpy(text, TheText.Get("RVC_CAM"));
+		else
+			for (int i = 0; i < ARRAY_SIZE(padActions) && !text[0]; i++) {
+				const PadAction &pa = padActions[i];
+				if (!(pa.contexts & (1 << padContext)))
+					continue;
+				int joy = ControlsManager.GetControllerKeyAssociatedWithAction(pa.action, JOYSTICK);
+				if (joy == s.joy || (s.joy == 13 && joy >= 13 && joy <= 16))
+					UnicodeStrcpy(text, TheText.Get(pa.text));
+			}
+		if (!text[0])
+			continue;
+		for (int p = 0; p + 1 < s.np; p++)
+			DrawLine(X(s.pts[p][0]), Y(s.pts[p][1]), X(s.pts[p + 1][0]), Y(s.pts[p + 1][1]), lineCol);
+		// (Arborcrest h20, its baseline on the leader line; the top measured against the console's page)
+		MenuSkinXboxText(X(s.x), Y(s.baseline - 19.0f), Y(19.0f), text, mint, 0);
+	}
+}
+
 void
 DrawPadPicture(void)
 {
@@ -155,6 +309,11 @@ DrawPadPicture(void)
 	if (!padSprite->m_pTexture && !padPrompted && !revc_import_busy() && !revc_import_status(0)) {
 		padPrompted = true;	// ask for the Xbox disc once a session
 		revc_import_prompt();
+	}
+	extern bool MenuSkinXboxActive(int page, bool gameNotLoaded);
+	if (MenuSkinXboxActive(FrontEndMenuManager.m_nCurrScreen, FrontEndMenuManager.m_bGameNotLoaded)) {
+		DrawPadPictureXbox();
+		return;
 	}
 
 	// The outline: 360x180 of the 640x448 menu, centred above the entries.

@@ -1010,7 +1010,7 @@
  #include "Timer.h"
  
  wchar WideErrorString[25];
-@@ -16,173 +15,248 @@
+@@ -16,173 +15,274 @@
  CText::CText(void)
  {
  	encoding = 'e';
@@ -1326,6 +1326,32 @@
 +	{ "RVC_XSG", "Save Game" },
 +	{ "RVC_XNP", "not present." },
 +	{ "RVC_XCA", "CANCEL" },
++	// the Xbox's controller page: its tabs and its words for each control
++	{ "RVC_KTA", "Target" },
++	{ "RVC_KMV", "Movement" },
++	{ "RVC_KCR", "Crouch" },
++	{ "RVC_KJU", "Jump" },
++	{ "RVC_KAT", "Attack or shoot" },
++	{ "RVC_KEV", "Enter vehicle" },
++	{ "RVC_KRU", "Run" },
++	{ "RVC_KCC", "Center camera" },
++	{ "RVC_KCM", "Camera modes" },
++	{ "RVC_KLA", "Look around" },
++	{ "RVC_KLB", "Look behind" },
++	{ "RVC_KBR", "Brake" },
++	{ "RVC_KVC", "Vehicle control" },
++	{ "RVC_KHO", "Horn" },
++	{ "RVC_KSM", "Sub-mission" },
++	{ "RVC_KAC", "Accelerate" },
++	{ "RVC_KHB", "Hand brake" },
++	{ "RVC_KRS", "Radio stations" },
++	{ "RVC_KCW", "Car weapon" },
++	{ "RVC_KDE", "Decelerate" },
++	{ "RVC_KST", "Steer" },
++	{ "RVC_KFM", "Fire missiles" },
++	{ "RVC_KWA", "WALKING" },
++	{ "RVC_KDR", "DRIVING" },
++	{ "RVC_KFL", "FLYING" },
 +	{ "RVC_XOU", "OUTPUT" },
 +	{ "RVC_XST", "STEREO" },
 +	{ "RVC_XSC", "SELECT CONTROLS" },
@@ -1390,7 +1416,7 @@
  }
  
  void
-@@ -201,297 +275,24 @@
+@@ -201,297 +301,24 @@
  }
  
  void
@@ -1693,7 +1719,7 @@
  	return aStr;
  }
  
-@@ -499,13 +300,7 @@
+@@ -499,13 +326,7 @@
  UnicodeToAsciiForSaveLoad(wchar *src)
  {
  	static char aStr[256];
@@ -1708,7 +1734,7 @@
  	return aStr;
  }
  
-@@ -513,13 +308,7 @@
+@@ -513,13 +334,7 @@
  UnicodeToAsciiForMemoryCard(wchar *src)
  {
  	static char aStr[256];

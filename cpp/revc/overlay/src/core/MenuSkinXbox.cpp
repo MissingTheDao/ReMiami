@@ -935,15 +935,17 @@ DrawSubTabs(int page, uint8 alpha)
 	CFont::SetCentreOff();
 	CFont::SetRightJustifyOff();
 	CFont::SetWrapx(SCREEN_WIDTH);
-	// the bars at the Xbox's fixed extents per sub-tab, y 318.7-355.4, no end block (research on the
-	// Xbox build); at full alpha with the icon bar focused too (autopad set 2, Brief -> Stats)
+	// the bars at the Xbox's fixed extents per sub-tab, y 318.7-355.4, no end block; on Brief/Stats
+	// with the icon bar focused the bar alone at 0.602 alpha, the labels opaque (research on the
+	// Xbox build, checked on autopad set 2)
 	static const float statsBar[2][2] = { { 59.9f, 243.5f }, { 239.5f, 593.6f } }, briefBar[2][2] = { { 62.4f, 298.4f }, { 302.8f, 591.4f } };
 	const float (*bar)[2] = page == MENUPAGE_BRIEFS ? briefBar : statsBar;
 	float tilt = W(5.0f), bx0 = X(bar[cur][0]), bx1 = X(bar[cur][1]) - tilt;
 	y0 = Y(318.7f);
 	y1 = Y(355.4f);
 	(void)page;
-	CSprite2d::Draw2DPolygon(bx0 + tilt, y0, bx1 + tilt, y0, bx0, y1, bx1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
+	const uint8 barAlpha = barFocus && !SettingsSubTabs(page) ? alpha * 602 / 1000 : alpha;
+	CSprite2d::Draw2DPolygon(bx0 + tilt, y0, bx1 + tilt, y0, bx0, y1, bx1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, barAlpha));
 	CFont::SetDropShadowPosition(2);
 	CFont::SetDropColor(CRGBA(0, 0, 0, alpha));
 	CFont::SetColor(CRGBA(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha));
