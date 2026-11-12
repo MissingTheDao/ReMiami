@@ -310,8 +310,11 @@ MenuSkinXboxTitle(wchar *title, uint8 alpha)
 	alpha = DialogDim(alpha);
 	CFont::SetRightJustifyOff();
 	CFont::SetCentreOff();
+	// the black copy under it: +4,+4 (Load +3.6,+4.0; Display +3.8,+3.8; research on the Xbox build)
+	const bool load = page == MENUPAGE_CHOOSE_LOAD_SLOT || page == MENUPAGE_NEW_GAME || MenuSkinXboxDialog(page);
+	const float sx = load ? 3.6f : page == MENUPAGE_CONSOLE_DISPLAY ? 3.8f : 4.0f, sy = page == MENUPAGE_CONSOLE_DISPLAY ? 3.8f : 4.0f;
 	CFont::SetColor(CRGBA(0, 0, 0, alpha));
-	CFont::PrintString(X(52.0f) + W(3.0f), Y(48.0f) + H(3.0f), title);
+	CFont::PrintString(X(52.0f) + W(sx), Y(48.0f) + H(sy), title);
 	CFont::SetColor(CRGBA(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha));
 	CFont::PrintString(X(52.0f), Y(48.0f), title);
 }
@@ -609,7 +612,7 @@ ReadBarShapes(void)
 
 // The selection (page, row, sub-tab) as last drawn; a change steps the bar's outline and restarts
 // the pulse (selectedAt), as the Xbox's states that move the selection do. The bar jumps to the new
-// row at once and swaps to the next outline one 30 Hz game frame later (research, autopad
+// row at once and swaps to the next outline 50 ms later (research, autopad
 // xbox_row_controls_slow: jump at 4015, next outline at 4018).
 static int selScreen = -1, selOption = -1, selSub = -1;
 static uint32 selectedAt;
@@ -620,7 +623,7 @@ NoteSelection(void)
 	int screen = FrontEndMenuManager.m_nCurrScreen, option = FrontEndMenuManager.m_nCurrOption;
 	int sub = HasSubTabs(screen) ? MenuSkinXboxSubTab(screen) : -1;
 	uint32 now = CTimer::GetTimeInMillisecondsPauseMode();
-	if (outlinePending && now - selectedAt >= 33) {
+	if (outlinePending && now - selectedAt >= 50) {	// (3 frames at 60 Hz: autopad 4015 -> 4018)
 		// entering Map, Brief or Display starts again at shape 1, any other move takes the next
 		// (the menu animation's states; research on the Xbox build, autopad set 2)
 		barShapeIndex = outlineReset ? 1 : (barShapeIndex + 1) % 5;
@@ -639,8 +642,11 @@ NoteSelection(void)
 }
 
 // Draws the current outline over x0..x1 x y0..y1 (the quad's extent mapped onto the bar's box).
+// native: x0..x1 x y0..y1 is the box of outline 0 at the bar's scale (the Xbox's data gives its bars
+// so); the current outline is drawn at its own shape and that scale about the same centre, as the
+// Xbox draws it (its outlines differ in size: 36-43 px tall at scale 1).
 static bool
-DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col, bool advance = true, int shape = -1)
+DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col, bool advance = true, int shape = -1, bool native = false)
 {
 	if (barShapes < 0)
 		ReadBarShapes();
@@ -658,6 +664,14 @@ DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col, bool adva
 		miny = Min(miny, q[k][1]); maxy = Max(maxy, q[k][1]);
 	}
 	float px[4], py[4];
+	if (native) {
+		// outline 0 spans x -61.8..69.35, y -17.9..18.9 (y up) at scale 1
+		const float sx = (x1 - x0) / 131.15f, sy = (y1 - y0) / 36.8f, cx = x0 + 61.8f * sx, cy = y0 + 18.9f * sy;
+		for (int k = 0; k < 4; k++) {
+			px[k] = cx + q[k][0] * sx;
+			py[k] = cy - q[k][1] * sy;
+		}
+	} else
 	for (int k = 0; k < 4; k++) {
 		px[k] = x0 + (q[k][0] - minx) / (maxx - minx) * (x1 - x0);
 		py[k] = y0 + (maxy - q[k][1]) / (maxy - miny) * (y1 - y0);	// (the shapes' y points up; research, captures)
@@ -675,6 +689,8 @@ DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col, bool adva
 // The mint selection bar behind the current item, with the Xbox's pulse: a white glow over it
 // growing from 0.9x to 1.157 x 1.081 while fading from 0.5 to 0.059 alpha, every 0.8 s
 // (R3_Menu.anm, decoded; docs/CONSOLE_STYLES.md 13h).
+static bool selectionNative;	// (MenuSkinXboxFixedBar)
+
 void
 MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool tail, float minWidth)
 {
@@ -710,7 +726,7 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 	// quad without the import. No end block: what looked like a lighter tail on the console is the
 	// pulse's halo past the bar's end (round 25); the sub-tab bars draw their own block.
 	(void)tailW;
-	if (!DrawBarShape(x0, y0, x1, y1, CRGBA(0, 207, 133, alpha)))
+	if (!DrawBarShape(x0, y0, x1, y1, CRGBA(0, 207, 133, alpha), true, -1, selectionNative))
 		CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 + tilt, y0, x0, y1, x1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
 }
 
@@ -720,6 +736,7 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 // logo, icon bar or help line. Overwriting a save asks in the Xbox's OK / Cancel dialog over it;
 // while saving, the black only (the message is the Xbox's dialog, CMenuManager::DrawOverlays).
 void MenuSkinXboxDialogBack(uint8 alpha);
+void MenuSkinXboxFixedBar(float x0, float y0, float x1, float y1, uint8 alpha);
 
 bool
 MenuSkinXboxSave(int page, bool gameNotLoaded)
@@ -752,7 +769,7 @@ MenuSkinXboxSaveScreen(CMenuManager *m, uint8 alpha)
 			static const float barCY[8] = { 122.95f, 156.95f, 192.95f, 226.95f, 260.95f, 297.25f, 332.55f, 367.7f };
 			if (sel) {
 				const float dx = k == 6 ? 1.0f : 0.0f;
-				MenuSkinXboxSelection(X(157.55f + dx), Y(barCY[k] - 18.9f), X(485.43f + dx), Y(barCY[k] + 17.9f), alpha, true, 150.0f);
+				MenuSkinXboxFixedBar(X(157.55f + dx), Y(barCY[k] - 18.9f), X(485.43f + dx), Y(barCY[k] + 17.9f), alpha);
 			}
 			static wchar name[96], date[40];
 			const wchar *l = nil, *r = nil;
@@ -777,7 +794,7 @@ MenuSkinXboxSaveScreen(CMenuManager *m, uint8 alpha)
 		} else if (s.m_aEntries[i].m_Action == MENUACTION_RESUME_FROM_SAVEZONE) {
 			// "cancel" above the card (x 150.2) on its bar (1.25 x the outline)
 			if (sel)
-				MenuSkinXboxSelection(X(124.5f), Y(60.9f), X(288.4f), Y(106.9f), alpha, true, 0.0f);
+				MenuSkinXboxFixedBar(X(124.5f), Y(60.9f), X(288.4f), Y(106.9f), alpha);
 			CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
 			CFont::SetScale(W(BIGTEXT_X_SCALE * 1.2f), H(BIGTEXT_Y_SCALE * 1.2f * 480.0f / 448.0f));
 			CFont::SetPropOn();
@@ -818,11 +835,21 @@ MenuSkinXboxSaveScreen(CMenuManager *m, uint8 alpha)
 			continue;
 		const bool yes = act == MENUACTION_YES;	// "OK" left, "Cancel" right
 		if (i == m->m_nCurrOption)
-			MenuSkinXboxSelection(X(yes ? 146.05f : 325.65f), Y(279.2f), X(yes ? 228.5f : 408.1f), Y(321.65f), alpha, false, 0.0f);
+			MenuSkinXboxFixedBar(X(yes ? 146.05f : 325.65f), Y(279.2f), X(yes ? 228.5f : 408.1f), Y(321.65f), alpha);
 		CFont::PrintString(X(yes ? 151.9f : 331.65f), Y(290.0f), TheText.Get(yes ? "RVC_XOK" : "RVC_XCA"));
 	}
 	CFont::DrawFonts();
 	CFont::SetDropShadowPosition(0);
+}
+
+// A bar the Xbox's data places (x0..x1 x y0..y1: outline 0's box at the bar's scale): the current
+// outline at its own shape about the same centre, with the pulse.
+void
+MenuSkinXboxFixedBar(float x0, float y0, float x1, float y1, uint8 alpha)
+{
+	selectionNative = true;
+	MenuSkinXboxSelection(x0, y0, x1, y1, alpha, true, 0.0f);
+	selectionNative = false;
 }
 
 // A dialog's background, drawn before the page's own text (CMenuManager::DrawStandardMenus), as the

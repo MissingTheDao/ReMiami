@@ -227,8 +227,8 @@ DrawPadPictureXbox(void)
 	static const char *tabKeys[3] = { "RVC_KWA", "RVC_KDR", "RVC_KFL" };
 	static const float tabX[3] = { 139.0f, 282.0f, 422.0f }, barX[3][2] = { { 136.9f, 268.1f }, { 274.2f, 405.4f }, { 414.2f, 545.4f } };
 	static const float barY[3][2] = { { 144.1f, 180.9f }, { 142.1f, 178.9f }, { 142.1f, 178.9f } };
-	extern void MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool tail, float minWidth);
-	MenuSkinXboxSelection(X(barX[padContext][0]), Y(barY[padContext][0]), X(barX[padContext][1]), Y(barY[padContext][1]), a, true, 0.0f);
+	extern void MenuSkinXboxFixedBar(float x0, float y0, float x1, float y1, uint8 alpha);
+	MenuSkinXboxFixedBar(X(barX[padContext][0]), Y(barY[padContext][0]), X(barX[padContext][1]), Y(barY[padContext][1]), a);
 	CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
 	CFont::SetScale(MENU_X(BIGTEXT_X_SCALE * 1.2f), MENU_Y(BIGTEXT_Y_SCALE * 1.2f * 480.0f / 448.0f)	/* (the menu items' size: Frontend's 448 lines) */);
 	CFont::SetPropOn();
