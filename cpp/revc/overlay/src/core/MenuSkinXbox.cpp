@@ -703,14 +703,16 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 
 // A dialog's background, drawn before the page's own text (CMenuManager::DrawStandardMenus): the
 // menu behind dimmed, then its layers as measured on the new-game dialog: a steel-blue layer
-// behind, offset down-right, a dark edge, and the light-blue panel.
+// behind, offset down-right, a dark edge, and the light-blue panel; the layers behind translucent.
 void
 MenuSkinXboxDialogBack(uint8 alpha)
 {
 	CSprite2d::DrawRect(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(0, 0, 0, alpha / 2));
-	CSprite2d::Draw2DPolygon(X(118.0f), Y(152.0f), X(560.0f), Y(136.0f), X(118.0f), Y(352.0f), X(538.0f), Y(347.0f), CRGBA(70, 118, 145, alpha));
-	CSprite2d::Draw2DPolygon(X(522.0f), Y(128.0f), X(543.0f), Y(126.0f), X(510.0f), Y(350.0f), X(531.0f), Y(350.0f), CRGBA(90, 160, 205, alpha));	// stacked lighter edges on the right
-	CSprite2d::Draw2DPolygon(X(498.0f), Y(126.0f), X(520.0f), Y(124.0f), X(484.0f), Y(352.0f), X(506.0f), Y(352.0f), CRGBA(20, 40, 60, alpha));
+	// (the layers behind the panel are translucent: 0.5 for the one offset down-right, 0.699 for the
+	// others; the panel opaque. Research on the Xbox build, its dialog animation data)
+	CSprite2d::Draw2DPolygon(X(118.0f), Y(152.0f), X(560.0f), Y(136.0f), X(118.0f), Y(352.0f), X(538.0f), Y(347.0f), CRGBA(70, 118, 145, alpha / 2));
+	CSprite2d::Draw2DPolygon(X(522.0f), Y(128.0f), X(543.0f), Y(126.0f), X(510.0f), Y(350.0f), X(531.0f), Y(350.0f), CRGBA(90, 160, 205, alpha * 699 / 1000));	// stacked lighter edges on the right
+	CSprite2d::Draw2DPolygon(X(498.0f), Y(126.0f), X(520.0f), Y(124.0f), X(484.0f), Y(352.0f), X(506.0f), Y(352.0f), CRGBA(20, 40, 60, alpha * 699 / 1000));
 	CSprite2d::Draw2DPolygon(X(85.0f), Y(138.0f), X(520.0f), Y(118.0f), X(100.0f), Y(337.0f), X(505.0f), Y(333.0f), CRGBA(105, 198, 247, alpha));
 }
 
