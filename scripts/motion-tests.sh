@@ -21,9 +21,10 @@ shift $(( $# >= 2 ? 2 : 1 ))
 mkdir -p "$OUT"
 mapfile -t IDS < <(python3 - "$JSON" "$@" <<'EOF'
 import json, sys
-ids = [m['id'] for m in json.load(open(sys.argv[1]))]
+motions = json.load(open(sys.argv[1]))
 want = sys.argv[2:]
-print('\n'.join(i for i in ids if not want or i in want))
+# all motions but those with a retake (superseded_by), or the ones named
+print('\n'.join(m['id'] for m in motions if ((m['id'] in want) if want else not m.get('superseded_by'))))
 EOF
 )
 KNOWN=$(/usr/bin/grep -oE '^ *\("(ps2|xbox)_[a-z0-9_]+"' "$ROOT/rust/revc/src/testdrive.rs" | tr -d ' ("')
