@@ -4615,7 +4615,17 @@
  		axis = -axis;
 --- a/src/core/Radar.cpp
 +++ b/src/core/Radar.cpp
-@@ -1117,7 +1117,7 @@
+@@ -128,7 +128,8 @@
+ #define RADAR_TILE_SIZE (RADAR_SIZE_X / RADAR_NUM_TILES)
+ static_assert(RADAR_TILE_SIZE == (RADAR_SIZE_Y / RADAR_NUM_TILES), "CRadar: not a square");
+ 
+-#define RADAR_MIN_RANGE (120.0f)
++extern int8 gUiStyle;
++#define RADAR_MIN_RANGE (gUiStyle == 2 ? 180.0f : 120.0f)	// (revc: the Xbox's on foot; research on the Xbox build)
+ #define RADAR_MAX_RANGE (350.0f)
+ #define RADAR_MIN_SPEED (0.3f)
+ #define RADAR_MAX_SPEED (0.9f)
+@@ -1117,7 +1118,7 @@
  					|| (x2 < 1 && y2 == 1)) // one pixel on each side of second to first/last line is transparent
  					pixels[x + y * 16] = 0;
  				else if((x2 == 2 && y2 >= 2)|| (y2 == 2 && x2 >= 2) )// colored square inside
@@ -4624,7 +4634,7 @@
  					pixels[x + y * 16] = WAYPOINT_R | (WAYPOINT_G << 8) | (WAYPOINT_B << 16) | (255 << 24);
  #else
  					pixels[x + y * 16] = WAYPOINT_B | (WAYPOINT_G << 8) | (WAYPOINT_R << 16) | (255 << 24);
-@@ -1375,7 +1375,11 @@
+@@ -1375,7 +1376,11 @@
  void CRadar::TransformRadarPointToScreenSpace(CVector2D &out, const CVector2D &in)
  {
  	if (FrontEndMenuManager.m_bMenuMapActive) {
@@ -4646,11 +4656,11 @@
 -#define RADAR_LEFT (40.0f)
 -#define RADAR_BOTTOM (40.0f)
 +// revc (plan task 13): the console UI styles use the consoles' radar: PS2 = the PC constants
-+// (94x76 at 40/40 in 640x448), Xbox 102x94 at left 55, bottom 42 in 640x480 (measured on Xbox
-+// captures, docs/CONSOLE_STYLES.md).
++// (94x76 at 40/40 in 640x448), Xbox 94x85 at left 60, bottom 46 in 640x480 (research on the Xbox
++// build).
 +extern int8 gUiStyle;
-+#define RADAR_LEFT (gUiStyle == 2 ? 58.85f : 40.0f)
-+#define RADAR_BOTTOM (gUiStyle == 2 ? 46.25f : 40.0f)
++#define RADAR_LEFT (gUiStyle == 2 ? 60.0f : 40.0f)
++#define RADAR_BOTTOM (gUiStyle == 2 ? 46.0f : 40.0f)
  
  #ifdef FIX_RADAR
  /*
@@ -4660,8 +4670,8 @@
  */
 -#define RADAR_WIDTH ((CDraw::ms_bFixRadar)  ? (82.0f) : (94.0f))	
 -#define RADAR_HEIGHT ((CDraw::ms_bFixRadar) ? (82.0f) : (76.0f))
-+#define RADAR_WIDTH (gUiStyle == 2 ? 94.3f : gUiStyle == 1 ? 94.0f : (CDraw::ms_bFixRadar)  ? (82.0f) : (94.0f))
-+#define RADAR_HEIGHT (gUiStyle == 2 ? 85.5f : gUiStyle == 1 ? 76.0f : (CDraw::ms_bFixRadar) ? (82.0f) : (76.0f))
++#define RADAR_WIDTH (gUiStyle == 2 ? 94.0f : gUiStyle == 1 ? 94.0f : (CDraw::ms_bFixRadar)  ? (82.0f) : (94.0f))
++#define RADAR_HEIGHT (gUiStyle == 2 ? 85.0f : gUiStyle == 1 ? 76.0f : (CDraw::ms_bFixRadar) ? (82.0f) : (76.0f))
  #else
  /*
  	broken since forever, someone tried to fix size for 640x512(PAL)

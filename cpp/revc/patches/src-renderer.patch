@@ -275,16 +275,16 @@
  	static void SetJustifyOn(void);
 --- a/src/renderer/Hud.cpp
 +++ b/src/renderer/Hud.cpp
-@@ -26,6 +26,36 @@
+@@ -26,6 +26,38 @@
  #include "General.h"
  #include "VarConsole.h"
  
-+// revc (plan task 13): the Xbox HUD is the PC/PS2 layout moved about 22 px left and 22 px down on
-+// its 640x480 screen (measured on Xbox captures, docs/CONSOLE_STYLES.md): money, weapon, health,
-+// armour, wanted level and clock. Positions only; sizes stay.
++// revc (plan task 13): the Xbox HUD is the PC/PS2 layout moved 20 px left and 20 px down on its
++// 640x480 screen (research on the Xbox build): money, weapon, health, armour, wanted level and
++// clock. Positions only; sizes stay. (The Xbox style's units are 480 lines: plain pixel values.)
 +extern int8 gUiStyle;
-+#define HUD_GROUP_DX (gUiStyle == 2 ? 22.0f : 0.0f)
-+#define HUD_GROUP_DY (gUiStyle == 2 ? 22.0f : 0.0f)
++#define HUD_GROUP_DX (gUiStyle == 2 ? 20.0f : 0.0f)
++#define HUD_GROUP_DY (gUiStyle == 2 ? 20.0f : 0.0f)
 +// Console HUD texts (plan task 13, research round 28: measured on 640x480 shots, so pixel values
 +// are converted to the 448-high default units with PX_Y).
 +#define HUD_PS2 (gUiStyle == 1)
@@ -296,13 +296,15 @@
 +#define HUD_FROM_RIGHT(a) SCREEN_SCALE_FROM_RIGHT((a) + HUD_GROUP_DX)
 +#define HUD_Y(a) SCREEN_SCALE_Y(HUD_PS2 ? PX_Y(a) : (a) + HUD_GROUP_DY)
 +#define HUD_SY (HUD_PS2 ? PX_Y(HUD_TEXT_SCALE_Y) : HUD_TEXT_SCALE_Y)
-+#define STAR_DX (HUD_PS2 ? 13.0f : HUD_XBOX ? 8.0f : 0.0f)
-+#define STAR_DY (HUD_XBOX ? PX_Y(-2.0f) : 0.0f)
++#define STAR_DX (HUD_PS2 ? 13.0f : 0.0f)
++#define STAR_DY 0.0f
 +// mission clock and counters: right edge, clock y, first counter y, counter pitch
-+#define TIMER_RIGHT (HUD_XBOX ? 66.0f : 37.0f)
-+#define TIMER_Y (HUD_PS2 ? PX_Y(110.0f) : HUD_XBOX ? 110.0f + PX_Y(22.0f) : 110.0f)
-+#define COUNTER_Y (HUD_PS2 ? PX_Y(132.0f) : HUD_XBOX ? 110.0f + PX_Y(44.0f) : 132.0f)
-+#define COUNTER_PITCH (HUD_PS2 ? HUD_SY * 20.0f : HUD_XBOX ? PX_Y(22.0f) : HUD_TEXT_SCALE_Y * 20.f)
++#define TIMER_RIGHT (HUD_XBOX ? 65.0f : 37.0f)
++#define TIMER_Y (HUD_PS2 ? PX_Y(110.0f) : HUD_XBOX ? 132.0f : 110.0f)
++#define COUNTER_Y (HUD_PS2 ? PX_Y(132.0f) : HUD_XBOX ? 162.0f : 132.0f)
++#define COUNTER_PITCH (HUD_PS2 ? HUD_SY * 20.0f : HUD_XBOX ? 25.0f : HUD_TEXT_SCALE_Y * 20.f)
++#define TIMER_LABEL_DX (HUD_XBOX ? 90.0f : 80.0f)	// (the label's right edge left of the number)
++static bool xboxSubtitleShown;	// revc: an in-game subtitle was drawn this frame (the Xbox lifts the mission title)
 +// The PS2's own font atlas (a texture pack's fonts/font2) has the armour and star icons at '[' and
 +// ']' where the PC's has '<' and '>' (PS2 v1.40, research).
 +extern "C" int revc_texmod_has(const char *txd, const char *texture);
@@ -312,7 +314,7 @@
  #if defined(FIX_BUGS)
  	#define SCREEN_SCALE_X_FIX(a) SCREEN_SCALE_X(a)
  	#define SCREEN_SCALE_Y_FIX(a) SCREEN_SCALE_Y(a)
-@@ -425,7 +455,7 @@
+@@ -425,7 +457,7 @@
  
  			CFont::SetPropOff();
  			CFont::SetBackgroundOff();
@@ -321,7 +323,7 @@
  			CFont::SetCentreOff();
  			CFont::SetRightJustifyOn();
  			CFont::SetRightJustifyWrap(0.0f);
-@@ -438,7 +468,7 @@
+@@ -438,7 +470,7 @@
  			CFont::SetColor(MONEY_COLOR);
  
  			if (FrontEndMenuManager.m_PrefsShowHud) {
@@ -330,16 +332,16 @@
  			}
  		}
  
-@@ -485,7 +515,7 @@
+@@ -485,7 +517,7 @@
  					RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
  					if (FrontEndMenuManager.m_PrefsShowHud)
  						Sprites[WeaponType].Draw(
 -							CRect(SCREEN_SCALE_FROM_RIGHT(99.0f), SCREEN_SCALE_Y(27.0f), SCREEN_SCALE_FROM_RIGHT(35.0f), SCREEN_SCALE_Y(91.0f)),
-+							CRect(HUD_FROM_RIGHT(99.0f), HUD_Y(HUD_PS2 ? 25.0f : 27.0f), HUD_FROM_RIGHT(35.0f), HUD_Y(HUD_PS2 ? 89.0f : 91.0f)),
++							CRect(HUD_FROM_RIGHT(HUD_XBOX ? 105.0f : 99.0f), HUD_Y(gUiStyle != 0 ? 25.0f : 27.0f), HUD_FROM_RIGHT(HUD_XBOX ? 41.0f : 35.0f), HUD_Y(gUiStyle != 0 ? 89.0f : 91.0f)),
  							CRGBA(255, 255, 255, alpha),
  							0.015f, 0.015f,
  							1.0f, 0.0f,
-@@ -503,14 +533,14 @@
+@@ -503,14 +535,14 @@
  							const float ySize = SCREEN_SCALE_Y(64.0f / 2.0f);
  							RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
  							RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(weaponIcon));
@@ -352,11 +354,11 @@
  							sprite.m_pTexture = weaponIcon;
  							sprite.Draw(
 -								CRect(SCREEN_SCALE_FROM_RIGHT(99.0f), SCREEN_SCALE_Y(27.0f), SCREEN_SCALE_FROM_RIGHT(35.0f), SCREEN_SCALE_Y(91.0f)),
-+								CRect(HUD_FROM_RIGHT(99.0f), HUD_Y(HUD_PS2 ? 25.0f : 27.0f), HUD_FROM_RIGHT(35.0f), HUD_Y(HUD_PS2 ? 89.0f : 91.0f)),
++								CRect(HUD_FROM_RIGHT(HUD_XBOX ? 105.0f : 99.0f), HUD_Y(gUiStyle != 0 ? 25.0f : 27.0f), HUD_FROM_RIGHT(HUD_XBOX ? 41.0f : 35.0f), HUD_Y(gUiStyle != 0 ? 89.0f : 91.0f)),
  								CRGBA(255, 255, 255, alpha),
  								0.015f, 0.015f,
  								1.0f, 0.0f,
-@@ -523,7 +553,7 @@
+@@ -523,7 +555,7 @@
  				}
  
  				CFont::SetBackgroundOff();
@@ -365,16 +367,25 @@
  				CFont::SetJustifyOff();
  				CFont::SetCentreOn();
  				CFont::SetCentreSize(SCREEN_STRETCH_X(DEFAULT_SCREEN_WIDTH));
-@@ -537,7 +567,7 @@
+@@ -536,8 +568,15 @@
+ 					CFont::SetDropColor(CRGBA(0, 0, 0, alpha));
  					AMMO_COLOR.a = alpha;
  					CFont::SetColor(AMMO_COLOR);
- 					if (FrontEndMenuManager.m_PrefsShowHud)
+-					if (FrontEndMenuManager.m_PrefsShowHud)
 -						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(66.0f), SCREEN_SCALE_Y(90.0f), sPrint);
-+						CFont::PrintString(HUD_FROM_RIGHT(66.0f), HUD_Y(90.0f), sPrint);
++					if (FrontEndMenuManager.m_PrefsShowHud) {
++						if (HUD_XBOX) {	// right-justified at R(51), no group offset (research on the Xbox build)
++							CFont::SetCentreOff();
++							CFont::SetRightJustifyOn();
++							CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(51.0f), SCREEN_SCALE_Y(90.0f), sPrint);
++							CFont::SetRightJustifyOff();
++						} else
++							CFont::PrintString(HUD_FROM_RIGHT(66.0f), HUD_Y(90.0f), sPrint);
++					}
  					CFont::SetDropShadowPosition(0);
  				}
  			}
-@@ -555,7 +585,7 @@
+@@ -555,7 +594,7 @@
  
  		if (m_EnergyLostState != FADED_OUT) {
  			CFont::SetBackgroundOff();
@@ -383,7 +394,7 @@
  			CFont::SetJustifyOff();
  			CFont::SetCentreOff();
  			CFont::SetRightJustifyWrap(0.0f);
-@@ -582,11 +612,11 @@
+@@ -582,11 +621,11 @@
  
  					CFont::SetColor(HEALTH_COLOR);
  					if (FrontEndMenuManager.m_PrefsShowHud) {
@@ -397,7 +408,7 @@
  						}
  					}
  				}
-@@ -596,9 +626,9 @@
+@@ -596,9 +635,9 @@
  				DrawArmour
  			*/
  			if (m_ItemToFlash == ITEM_ARMOUR && FRAMECOUNTER & 8 || m_ItemToFlash != ITEM_ARMOUR) {
@@ -409,7 +420,7 @@
  #ifdef FIX_BUGS
  					sprintf(sTemp, "%03d", int32(playerPed->m_fArmour + 0.5f));
  #else
-@@ -609,11 +639,11 @@
+@@ -609,11 +648,11 @@
  					CFont::SetColor(ARMOUR_COLOR);
  					if (FrontEndMenuManager.m_PrefsShowHud) {
  
@@ -423,7 +434,7 @@
  						}
  					}
  				}
-@@ -632,14 +662,14 @@
+@@ -632,14 +671,14 @@
  
  		if (m_WantedState != FADED_OUT) {
  			CFont::SetBackgroundOff();
@@ -440,7 +451,7 @@
  
  			for (int i = 0; i < 6; i++) {
  				if (FrontEndMenuManager.m_PrefsShowHud) {
-@@ -649,17 +679,17 @@
+@@ -649,17 +688,17 @@
  
  						WANTED_COLOR.a = alpha;
  						CFont::SetColor(WANTED_COLOR);
@@ -461,7 +472,7 @@
  					}
  				}
  			}
-@@ -681,7 +711,7 @@
+@@ -681,7 +720,7 @@
  				}
  				AsciiToUnicode(gString, gUString);
  				CFont::SetBackgroundOff();
@@ -470,73 +481,80 @@
  				CFont::SetCentreOff();
  				CFont::SetRightJustifyOn();
  				CFont::SetRightJustifyWrap(0.0f);
-@@ -697,7 +727,7 @@
+@@ -697,7 +736,7 @@
  				else
  					colour = CRGBA(178, 0, 162, 180);
  				CFont::SetColor(colour);
 -				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(110.0f), SCREEN_SCALE_Y(113.0f), gUString);
-+				CFont::PrintString(HUD_FROM_RIGHT(110.0f), HUD_Y(113.0f), gUString);
++				CFont::PrintString(HUD_FROM_RIGHT(110.0f), HUD_XBOX ? SCREEN_SCALE_Y(113.0f) : HUD_Y(113.0f), gUString);
  				
  				if (CStats::FindChaseString(fCurAttentionLevel) != prevChaseString) {
  					prevChaseString = CStats::FindChaseString(fCurAttentionLevel);
-@@ -707,7 +737,7 @@
+@@ -707,7 +746,7 @@
  				if (nMediaLevelCounter != 0) {
  					nMediaLevelCounter--;
  					UnicodeMakeUpperCase(gUString, CStats::FindChaseString(fCurAttentionLevel));
 -					CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(110.0f), SCREEN_SCALE_Y(138.0f), gUString);
-+					CFont::PrintString(HUD_FROM_RIGHT(110.0f), HUD_Y(138.0f), gUString);
++					CFont::PrintString(HUD_FROM_RIGHT(110.0f), HUD_XBOX ? SCREEN_SCALE_Y(138.0f) : HUD_Y(138.0f), gUString);
  				}
  			}
  		}
-@@ -789,11 +819,11 @@
+@@ -788,12 +827,14 @@
+ 					CFont::SetPropOn();
  					CFont::SetBackgroundOff();
  
- 					if (FrontEndMenuManager.m_PrefsLanguage == CMenuManager::LANGUAGE_SPANISH)
+-					if (FrontEndMenuManager.m_PrefsLanguage == CMenuManager::LANGUAGE_SPANISH)
 -						CFont::SetScale(SCREEN_SCALE_X(1.7f * 0.8f), SCREEN_SCALE_Y(1.8f));
++					// (the Xbox narrows it for every language but English; research on the Xbox build)
++					if (FrontEndMenuManager.m_PrefsLanguage == CMenuManager::LANGUAGE_SPANISH ||
++					    HUD_XBOX && FrontEndMenuManager.m_PrefsLanguage != CMenuManager::LANGUAGE_AMERICAN)
 +						CFont::SetScale(SCREEN_SCALE_X(1.7f * 0.8f), SCREEN_SCALE_Y(HUD_PS2 ? 1.68f : 1.8f));
  					else
 -						CFont::SetScale(SCREEN_SCALE_X(1.7f), SCREEN_SCALE_Y(1.8f));
 +						CFont::SetScale(SCREEN_SCALE_X(1.7f), SCREEN_SCALE_Y(HUD_PS2 ? 1.68f : 1.8f));
  
 -					CFont::SetSlantRefPoint(SCREEN_SCALE_FROM_RIGHT(32.0f), SCREEN_SCALE_FROM_BOTTOM(128.0f));
-+					CFont::SetSlantRefPoint(SCREEN_SCALE_FROM_RIGHT(HUD_XBOX ? 63.0f : 32.0f), SCREEN_SCALE_FROM_BOTTOM(128.0f + (HUD_XBOX ? PX_Y(32.0f) : 0.0f)));
++					CFont::SetSlantRefPoint(SCREEN_SCALE_FROM_RIGHT(HUD_XBOX ? 62.0f : 32.0f), SCREEN_SCALE_FROM_BOTTOM(HUD_XBOX ? 160.0f : 128.0f));
  					CFont::SetSlant(0.15f);
  
  					CFont::SetRightJustifyOn();
-@@ -805,7 +835,7 @@
+@@ -805,7 +846,7 @@
  					CFont::SetColor(CRGBA(ZONE_COLOR.r, ZONE_COLOR.g, ZONE_COLOR.b, fZoneAlpha));
  
  					if (!CTheScripts::bPlayerIsInTheStatium)
 -						CFont::PrintStringFromBottom(SCREEN_SCALE_FROM_RIGHT(32.0f), SCREEN_SCALE_FROM_BOTTOM(128.0f), m_ZoneToPrint);
-+						CFont::PrintStringFromBottom(SCREEN_SCALE_FROM_RIGHT(HUD_XBOX ? 63.0f : 32.0f), SCREEN_SCALE_FROM_BOTTOM(128.0f + (HUD_XBOX ? PX_Y(32.0f) : 0.0f)), m_ZoneToPrint);
++						CFont::PrintStringFromBottom(SCREEN_SCALE_FROM_RIGHT(HUD_XBOX ? 62.0f : 32.0f), SCREEN_SCALE_FROM_BOTTOM(HUD_XBOX ? 160.0f : 128.0f), m_ZoneToPrint);
  
  					CFont::SetSlant(0.f);
  				} else {
-@@ -889,11 +919,11 @@
+@@ -888,12 +929,13 @@
+ 					CFont::SetPropOn();
  					CFont::SetBackgroundOff();
  
- 					if (FrontEndMenuManager.m_PrefsLanguage != CMenuManager::LANGUAGE_ITALIAN && FrontEndMenuManager.m_PrefsLanguage != CMenuManager::LANGUAGE_SPANISH)
+-					if (FrontEndMenuManager.m_PrefsLanguage != CMenuManager::LANGUAGE_ITALIAN && FrontEndMenuManager.m_PrefsLanguage != CMenuManager::LANGUAGE_SPANISH)
 -						CFont::SetScale(SCREEN_SCALE_X(1.7f), SCREEN_SCALE_Y(1.8f));
++					if (FrontEndMenuManager.m_PrefsLanguage != CMenuManager::LANGUAGE_ITALIAN && FrontEndMenuManager.m_PrefsLanguage != CMenuManager::LANGUAGE_SPANISH &&
++					    !(HUD_XBOX && FrontEndMenuManager.m_PrefsLanguage != CMenuManager::LANGUAGE_AMERICAN))	// (Xbox: every language but English)
 +						CFont::SetScale(SCREEN_SCALE_X(1.7f), SCREEN_SCALE_Y(HUD_PS2 ? 1.68f : 1.8f));
  					else
 -						CFont::SetScale(SCREEN_SCALE_X(1.7f * 0.85f), SCREEN_SCALE_Y(1.8f));
 +						CFont::SetScale(SCREEN_SCALE_X(1.7f * 0.85f), SCREEN_SCALE_Y(HUD_PS2 ? 1.68f : 1.8f));
  
 -					CFont::SetSlantRefPoint(SCREEN_SCALE_FROM_RIGHT(32.0f), SCREEN_SCALE_FROM_BOTTOM(105.0f));
-+					CFont::SetSlantRefPoint(SCREEN_SCALE_FROM_RIGHT(HUD_XBOX ? 64.0f : 32.0f), SCREEN_SCALE_FROM_BOTTOM(105.0f + (HUD_XBOX ? PX_Y(32.0f) : 0.0f)));
++					CFont::SetSlantRefPoint(SCREEN_SCALE_FROM_RIGHT(HUD_XBOX ? 62.0f : 32.0f), SCREEN_SCALE_FROM_BOTTOM(HUD_XBOX ? 126.0f : 105.0f));
  					CFont::SetSlant(0.15f);
  
  					CFont::SetRightJustifyOn();
-@@ -904,7 +934,7 @@
+@@ -904,7 +946,7 @@
  					CFont::SetColor(CRGBA(VEHICLE_COLOR.r, VEHICLE_COLOR.g, VEHICLE_COLOR.b, fVehicleAlpha));
  					CFont::SetDropColor(CRGBA(0, 0, 0, fVehicleAlpha));
  
 -					CFont::PrintStringFromBottom(SCREEN_SCALE_FROM_RIGHT(32.0f), SCREEN_SCALE_FROM_BOTTOM(105.0f), m_pVehicleNameToPrint);
-+					CFont::PrintStringFromBottom(SCREEN_SCALE_FROM_RIGHT(HUD_XBOX ? 64.0f : 32.0f), SCREEN_SCALE_FROM_BOTTOM(105.0f + (HUD_XBOX ? PX_Y(32.0f) : 0.0f)), m_pVehicleNameToPrint);
++					CFont::PrintStringFromBottom(SCREEN_SCALE_FROM_RIGHT(HUD_XBOX ? 62.0f : 32.0f), SCREEN_SCALE_FROM_BOTTOM(HUD_XBOX ? 126.0f : 105.0f), m_pVehicleNameToPrint);
  
  					CFont::SetSlant(0.f);
  				}
-@@ -924,7 +954,7 @@
+@@ -924,7 +966,7 @@
  			CFont::SetJustifyOff();
  			CFont::SetCentreOff();
  			CFont::SetBackgroundOff();
@@ -545,7 +563,7 @@
  			CFont::SetBackGroundOnlyTextOff();
  			CFont::SetPropOff();
  			CFont::SetFontStyle(FONT_HEADING);
-@@ -938,7 +968,7 @@
+@@ -938,7 +980,7 @@
  
  			CFont::SetColor(CLOCK_COLOR);
  			if (FrontEndMenuManager.m_PrefsShowHud)
@@ -554,7 +572,7 @@
  		}
  
  		/*
-@@ -971,7 +1001,7 @@
+@@ -971,7 +1013,7 @@
  					AsciiToUnicode(CUserDisplay::OnscnTimer.m_sClocks[0].m_aClockBuffer, sTimer);
  					CFont::SetPropOn();
  					CFont::SetBackgroundOff();
@@ -563,7 +581,7 @@
  					CFont::SetRightJustifyOn();
  					CFont::SetRightJustifyWrap(0.0f);
  					CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
-@@ -979,16 +1009,16 @@
+@@ -979,16 +1021,16 @@
  					CFont::SetBackGroundOnlyTextOn();
  					CFont::SetDropShadowPosition(2);
  					CFont::SetDropColor(CRGBA(0, 0, 0, 255));
@@ -579,11 +597,11 @@
  						CFont::SetDropColor(CRGBA(0, 0, 0, 255));
  						CFont::SetColor(TIMER_COLOR);
 -						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(37.0f) - SCREEN_SCALE_X(80.0f), SCREEN_SCALE_Y(110.0f), TheText.Get(CUserDisplay::OnscnTimer.m_sClocks[0].m_aClockText));
-+						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(TIMER_RIGHT) - SCREEN_SCALE_X(80.0f), SCREEN_SCALE_Y(TIMER_Y), TheText.Get(CUserDisplay::OnscnTimer.m_sClocks[0].m_aClockText));
++						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(TIMER_RIGHT) - SCREEN_SCALE_X(TIMER_LABEL_DX), SCREEN_SCALE_Y(TIMER_Y), TheText.Get(CUserDisplay::OnscnTimer.m_sClocks[0].m_aClockText));
  					}
  				}
  			}
-@@ -1010,7 +1040,7 @@
+@@ -1010,7 +1052,7 @@
  							AsciiToUnicode(CUserDisplay::OnscnTimer.m_sCounters[i].m_aCounterBuffer, sTimer);
  							CFont::SetPropOn();
  							CFont::SetBackgroundOff();
@@ -592,7 +610,7 @@
  							CFont::SetCentreOff();
  							CFont::SetRightJustifyOn();
  							CFont::SetRightJustifyWrap(0.0f);
-@@ -1021,16 +1051,16 @@
+@@ -1021,16 +1063,17 @@
  							CFont::SetDropShadowPosition(2);
  							CFont::SetDropColor(CRGBA(0, 0, 0, 255));
  							CFont::SetColor(COUNTER_COLOR);
@@ -603,8 +621,10 @@
  
  							const float barWidth = SCREEN_SCALE_X(100.f / 2.f);
 -							const float right = SCREEN_SCALE_FROM_RIGHT(37.0f);
-+							const float right = SCREEN_SCALE_FROM_RIGHT(TIMER_RIGHT);
- 							const float left = right - barWidth;
+-							const float left = right - barWidth;
++							const float right = SCREEN_SCALE_FROM_RIGHT(TIMER_RIGHT) - (HUD_XBOX ? SCREEN_SCALE_X(4.0f) : 0.0f);
++							// (the Xbox's bar from x 508: 67 wide; research on the Xbox build)
++							const float left = HUD_XBOX ? SCREEN_SCALE_FROM_RIGHT(640.0f - 504.0f) : right - barWidth;
  
  							const float barHeight = SCREEN_SCALE_Y(11.0f);
 -							const float top = SCREEN_SCALE_Y(132.0f) + SCREEN_SCALE_Y(8.0f) + SCREEN_SCALE_Y(HUD_TEXT_SCALE_Y * 20.f * i);
@@ -612,7 +632,7 @@
  							const float bottom = top + barHeight;
  
  							// shadow
-@@ -1043,11 +1073,11 @@
+@@ -1043,11 +1086,11 @@
  						if (CUserDisplay::OnscnTimer.m_sCounters[i].m_aCounterText[0]) {
  							CFont::SetPropOn();
  							CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
@@ -622,11 +642,11 @@
  							CFont::SetDropColor(CRGBA(0, 0, 0, 255));
  							CFont::SetColor(COUNTER_COLOR);
 -							CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(37.0f) - SCREEN_SCALE_X(61.0f), SCREEN_SCALE_Y(HUD_TEXT_SCALE_Y * 20.f * i) + SCREEN_SCALE_Y(132.0f), TheText.Get(CUserDisplay::OnscnTimer.m_sCounters[i].m_aCounterText));
-+							CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(TIMER_RIGHT) - SCREEN_SCALE_X(61.0f), SCREEN_SCALE_Y(COUNTER_PITCH * i) + SCREEN_SCALE_Y(COUNTER_Y), TheText.Get(CUserDisplay::OnscnTimer.m_sCounters[i].m_aCounterText));
++							CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(TIMER_RIGHT) - SCREEN_SCALE_X(HUD_XBOX ? 90.0f : 61.0f), SCREEN_SCALE_Y(COUNTER_PITCH * i) + SCREEN_SCALE_Y(COUNTER_Y), TheText.Get(CUserDisplay::OnscnTimer.m_sCounters[i].m_aCounterText));
  						}
  						// unused/leftover color. I wonder what was it for
  						CFont::SetColor(CRGBA(244, 225, 91, 255));
-@@ -1070,7 +1100,10 @@
+@@ -1070,7 +1113,10 @@
  				rect.Translate(SCREEN_SCALE_X_FIX(RADAR_LEFT), SCREEN_SCALE_FROM_BOTTOM(RADAR_BOTTOM + RADAR_HEIGHT));
  
  #ifdef FIX_BUGS
@@ -638,17 +658,49 @@
  #else
  				rect.Grow(6.0f);
  #endif
-@@ -1213,7 +1246,8 @@
- 				float rectWidth = SCREEN_WIDTH - SCREEN_SCALE_X(20.0f) - SCREEN_SCALE_X(8.0f) - radarBulge;
+@@ -1167,6 +1213,7 @@
+ 		/*
+ 			DrawSubtitles
+ 		*/
++		xboxSubtitleShown = false;
+ 		if (m_Message[0] && !m_BigMessage[2][0]) {
+ 			if (m_VehicleState != 0)
+ 				m_VehicleState = 3;
+@@ -1195,9 +1242,10 @@
+ 				onceItWasWidescreen = true;
+ 				
+ 				if (FrontEndMenuManager.m_PrefsShowSubtitles || !CCutsceneMgr::IsRunning()) {
+-					CFont::SetCentreSize(SCREEN_WIDTH - SCREEN_SCALE_X(60.0f));
++					// (the Xbox: 540 wide, 85 from the bottom; research on the Xbox build)
++					CFont::SetCentreSize(HUD_XBOX ? SCREEN_SCALE_X(540.0f) : SCREEN_WIDTH - SCREEN_SCALE_X(60.0f));
+ 					CFont::SetScale(SCREEN_SCALE_X(0.58f), SCREEN_SCALE_Y(1.2f));
+-					CFont::PrintString(SCREEN_WIDTH / 2.f, SCREEN_SCALE_FROM_BOTTOM(80.0f), m_Message);
++					CFont::PrintString(SCREEN_WIDTH / 2.f, SCREEN_SCALE_FROM_BOTTOM(HUD_XBOX ? 85.0f : 80.0f), m_Message);
+ 				}
+ 			} else {
+ 				if (onceItWasWidescreen)
+@@ -1207,6 +1255,12 @@
+ 				CFont::DrawFonts();
+ 				CFont::SetDropShadowPosition(2);
+ 				CFont::SetDropColor(CRGBA(0, 0, 0, 255));
++				if (HUD_XBOX) {	// 0.56 x 1.18, 431 wide centred at x 375.5, 112 from the bottom (research on the Xbox build)
++					CFont::SetScale(SCREEN_SCALE_X(0.56f), SCREEN_SCALE_Y(1.18f));
++					CFont::SetCentreSize(SCREEN_SCALE_X(431.0f));
++					CFont::PrintString(SCREEN_SCALE_X(375.5f), SCREEN_SCALE_FROM_BOTTOM(112.0f), m_Message);
++					xboxSubtitleShown = true;
++				} else {
+ 				CFont::SetScale(SCREEN_SCALE_X(0.58f), SCREEN_SCALE_Y(1.22f));
+ 
+ 				float radarBulge = SCREEN_SCALE_X(140.0f) + SCREEN_SCALE_X(8.0f);
+@@ -1214,6 +1268,7 @@
  				CFont::SetCentreSize(rectWidth);
  
--				CFont::PrintString(rectWidth / 2.0f + radarBulge, SCREEN_SCALE_FROM_BOTTOM(105.f + 2.0f), m_Message);
-+				CFont::PrintString(rectWidth / 2.0f + radarBulge - (HUD_XBOX ? SCREEN_SCALE_X(9.0f) : 0.0f),
-+					SCREEN_SCALE_FROM_BOTTOM(105.f + 2.0f + (HUD_XBOX ? PX_Y(7.0f) : 0.0f)), m_Message);
+ 				CFont::PrintString(rectWidth / 2.0f + radarBulge, SCREEN_SCALE_FROM_BOTTOM(105.f + 2.0f), m_Message);
++				}
  			}
  			CFont::SetDropShadowPosition(0);
  		}
-@@ -1308,7 +1342,7 @@
+@@ -1308,7 +1363,7 @@
  						CFont::SetScale(SCREEN_SCALE_X(0.52f) * 1.35f, SCREEN_SCALE_Y(1.1f) * 1.25f);
  #endif
  					else
@@ -657,7 +709,7 @@
  
  					CFont::DrawFonts();
  					CFont::SetColor(CRGBA(175, 175, 175, 255));
-@@ -1318,14 +1352,28 @@
+@@ -1318,14 +1373,28 @@
  						CFont::SetWrapx(SCREEN_SCALE_X(229.0f + 34.0f - 4.0f));
  					else
  #endif
@@ -684,76 +736,118 @@
 +						CFont::SetLinePitch(0.0f);
 +					} else
 +						CFont::PrintString(SCREEN_SCALE_X(34.0f + (HUD_XBOX ? 30.0f : 0.0f)),
-+							SCREEN_SCALE_Y(28.0f + (HUD_XBOX ? PX_Y(20.0f) : 0.0f) + (150.0f - PagerXOffset) * 0.6f), m_HelpMessageToPrint);
++							SCREEN_SCALE_Y(28.0f + (HUD_XBOX ? 20.0f : 0.0f) + (150.0f - PagerXOffset) * 0.6f), m_HelpMessageToPrint);
  					CFont::SetAlphaFade(255.0f);
  					CFont::SetWrapx(SCREEN_WIDTH);
  				}
-@@ -1414,7 +1462,7 @@
+@@ -1342,14 +1411,14 @@
+ 				CFont::SetJustifyOff();
+ 				CFont::SetBackgroundOff();
+ 				CFont::SetBackGroundOnlyTextOff();
+-				if (CGame::frenchGame || CGame::germanGame) {
++				if ((CGame::frenchGame || CGame::germanGame) && !HUD_XBOX) {	// (the Xbox: 1.8 in every language)
+ 					CFont::SetScale(SCREEN_SCALE_X(1.6f), SCREEN_SCALE_Y(1.8f));
+ 				} else {
+ 					CFont::SetScale(SCREEN_SCALE_X(1.8f), SCREEN_SCALE_Y(1.8f));
+ 				}
+ 				CFont::SetPropOn();
+ 				CFont::SetCentreOn();
+-				CFont::SetCentreSize(SCREEN_SCALE_X(590.0f));
++				CFont::SetCentreSize(SCREEN_SCALE_X(HUD_XBOX ? 544.0f : 590.0f));
+ 				CFont::SetColor(CRGBA(255, 255, 0, BigMessageAlpha[0])); // unused color
+ 				CFont::SetFontStyle(FONT_HEADING);
+ 
+@@ -1401,7 +1470,9 @@
+ 
+ 				CFont::SetBackgroundOff();
+ 
+-				if (CGame::frenchGame || CGame::germanGame)
++				if (HUD_XBOX)	// (1.6 in every language; research on the Xbox build)
++					CFont::SetScale(SCREEN_SCALE_X(1.6f), SCREEN_SCALE_Y(1.6f));
++				else if (CGame::frenchGame || CGame::germanGame)
+ 					CFont::SetScale(SCREEN_SCALE_X(1.4f), SCREEN_SCALE_Y(1.4f));
+ 				else
+ 					CFont::SetScale(SCREEN_SCALE_X(2.0f), SCREEN_SCALE_Y(2.0f));
+@@ -1414,7 +1485,7 @@
  				CFont::SetDropColor(CRGBA(0, 0, 0, BigMessageAlpha[2]));
  
  				CFont::SetColor(CRGBA(WASTEDBUSTED_COLOR.r, WASTEDBUSTED_COLOR.g, WASTEDBUSTED_COLOR.b, BigMessageAlpha[2]));
 -				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(20.0f), SCREEN_SCALE_FROM_BOTTOM(90.0f), m_BigMessage[2]);
-+				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(20.0f), SCREEN_SCALE_FROM_BOTTOM(HUD_PS2 ? 84.0f : 90.0f), m_BigMessage[2]);
++				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(HUD_XBOX ? 55.0f : 20.0f), SCREEN_SCALE_FROM_BOTTOM(HUD_PS2 ? 84.0f : HUD_XBOX ? 85.0f : 90.0f), m_BigMessage[2]);
  			}
  			else {
  				BigMessageInUse[2] = 1.0f;
-@@ -1512,8 +1560,8 @@
+@@ -1508,12 +1579,12 @@
+ 		CFont::SetScale(SCREEN_SCALE_X(1.2f), SCREEN_SCALE_Y(1.5f));
+ 		CFont::SetCentreOn();
+ 		CFont::SetPropOn();
+-		CFont::SetCentreSize(SCREEN_SCALE_X(600.0f));
++		CFont::SetCentreSize(SCREEN_SCALE_X(HUD_XBOX ? 544.0f : 600.0f));
  		CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
  		CFont::SetDropShadowPosition(2);
  		CFont::SetDropColor(CRGBA(0, 0, 0, 255));
 -		CFont::SetColor(ODDJOB_COLOR);
 -		CFont::PrintString((SCREEN_WIDTH / 2), SCREEN_SCALE_Y(140.0f) - SCREEN_SCALE_Y(16.0f), m_BigMessage[3]);
-+		CFont::SetColor(HUD_PS2 ? CRGBA(97, 194, 247, ODDJOB_COLOR.a) : ODDJOB_COLOR);
-+		CFont::PrintString((SCREEN_WIDTH / 2), HUD_PS2 ? SCREEN_SCALE_Y(PX_Y(140.0f)) : SCREEN_SCALE_Y(140.0f) - SCREEN_SCALE_Y(16.0f), m_BigMessage[3]);
++		CFont::SetColor(gUiStyle != 0 ? CRGBA(97, 194, 247, ODDJOB_COLOR.a) : ODDJOB_COLOR);
++		CFont::PrintString((SCREEN_WIDTH / 2), HUD_PS2 ? SCREEN_SCALE_Y(PX_Y(140.0f)) : HUD_XBOX ? SCREEN_SCALE_Y(140.0f) : SCREEN_SCALE_Y(140.0f) - SCREEN_SCALE_Y(16.0f), m_BigMessage[3]);
  	}
  
  	if (!m_BigMessage[1][0] && m_BigMessage[4][0]) {
-@@ -1527,7 +1575,7 @@
+@@ -1522,12 +1593,12 @@
+ 		CFont::SetScale(SCREEN_SCALE_X(1.2f), SCREEN_SCALE_Y(1.5f));
+ 		CFont::SetCentreOn();
+ 		CFont::SetPropOn();
+-		CFont::SetCentreSize(SCREEN_SCALE_X(580.0f));
++		CFont::SetCentreSize(SCREEN_SCALE_X(HUD_XBOX ? 544.0f : 580.0f));
+ 		CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
  		CFont::SetDropShadowPosition(2);
  		CFont::SetDropColor(CRGBA(0, 0, 0, 255));
  		CFont::SetColor(ODDJOB_COLOR);
 -		CFont::PrintString((SCREEN_WIDTH / 2), SCREEN_SCALE_Y(140.0f), m_BigMessage[4]);
-+		CFont::PrintString((SCREEN_WIDTH / 2), SCREEN_SCALE_Y(140.0f - (HUD_PS2 ? PX_Y(10.0f) : 0.0f)), m_BigMessage[4]);
++		CFont::PrintString((SCREEN_WIDTH / 2), SCREEN_SCALE_Y(HUD_XBOX ? 190.0f : 140.0f - (HUD_PS2 ? PX_Y(10.0f) : 0.0f)), m_BigMessage[4]);
  	}
  
  	// Oddjob result
-@@ -1574,7 +1622,7 @@
+@@ -1574,15 +1645,15 @@
  		if (!m_BigMessage[1][0]) {
  			CFont::SetJustifyOff();
  			CFont::SetBackgroundOff();
 -			CFont::SetScale(SCREEN_SCALE_X(1.0f), SCREEN_SCALE_Y(1.2f));
-+			CFont::SetScale(SCREEN_SCALE_X(1.0f), SCREEN_SCALE_Y(HUD_PS2 ? 1.12f : 1.2f));
++			CFont::SetScale(SCREEN_SCALE_X(HUD_XBOX ? 0.85f : 1.0f), SCREEN_SCALE_Y(HUD_PS2 ? 1.12f : HUD_XBOX ? 1.05f : 1.2f));
  			CFont::SetCentreOn();
  			CFont::SetPropOn();
- 			CFont::SetCentreSize(SCREEN_SCALE_X(560.0f));
-@@ -1582,7 +1630,7 @@
+-			CFont::SetCentreSize(SCREEN_SCALE_X(560.0f));
++			CFont::SetCentreSize(SCREEN_SCALE_X(HUD_XBOX ? 544.0f : 560.0f));
+ 			CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
  			CFont::SetDropShadowPosition(2);
  			CFont::SetDropColor(CRGBA(0, 0, 0, 255));
  			CFont::SetColor(ODDJOB2_COLOR);
 -			CFont::PrintString(SCREEN_WIDTH / 2, SCREEN_SCALE_Y(217.0f), m_BigMessage[5]);
-+			CFont::PrintString(SCREEN_WIDTH / 2, SCREEN_SCALE_Y(HUD_PS2 ? PX_Y(217.0f) : 217.0f), m_BigMessage[5]);
++			CFont::PrintString(SCREEN_WIDTH / 2, SCREEN_SCALE_Y(HUD_PS2 ? PX_Y(217.0f) : HUD_XBOX ? 290.0f : 217.0f), m_BigMessage[5]);
  		}
  	}
  
-@@ -1604,7 +1652,7 @@
+@@ -1604,7 +1675,8 @@
  			CFont::SetRightJustifyWrap(SCALE_AND_CENTER_X(0.0f));
  			CFont::SetRightJustifyOn();
  			CFont::SetFontStyle(FONT_BANK);
 -			CFont::SetScale(FrontEndMenuManager.m_PrefsLanguage == CMenuManager::LANGUAGE_AMERICAN ? SCREEN_SCALE_X(1.7f) : SCREEN_SCALE_X(1.5f), SCREEN_SCALE_Y(1.8f));
-+			CFont::SetScale(FrontEndMenuManager.m_PrefsLanguage == CMenuManager::LANGUAGE_AMERICAN ? SCREEN_SCALE_X(1.7f) : SCREEN_SCALE_X(1.5f), SCREEN_SCALE_Y(HUD_PS2 ? 1.68f : 1.8f));
++			CFont::SetScale(FrontEndMenuManager.m_PrefsLanguage == CMenuManager::LANGUAGE_AMERICAN ? SCREEN_SCALE_X(HUD_XBOX ? 1.6f : 1.7f) : SCREEN_SCALE_X(1.5f),
++				SCREEN_SCALE_Y(HUD_PS2 ? 1.68f : HUD_XBOX ? 1.7f : 1.8f));
  
  			if (BigMessageX[1] >= SCREEN_SCALE_FROM_RIGHT(20.0f)) {
  				BigMessageInUse[1] += CTimer::GetTimeStep();
-@@ -1631,7 +1679,7 @@
+@@ -1631,7 +1703,8 @@
  			CFont::SetDropShadowPosition(2);
  			CFont::SetDropColor(CRGBA(0, 0, 0, BigMessageAlpha[1]));
  			CFont::SetColor(CRGBA(MISSIONTITLE_COLOR.r, MISSIONTITLE_COLOR.g, MISSIONTITLE_COLOR.b, BigMessageAlpha[1]));
 -			CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(20.0f), SCREEN_SCALE_FROM_BOTTOM(140.0f), m_BigMessage[1]);
-+			CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(HUD_XBOX ? 57.0f : 20.0f), SCREEN_SCALE_FROM_BOTTOM(140.0f - (HUD_XBOX ? PX_Y(13.0f) : 0.0f)), m_BigMessage[1]);
++						// (the Xbox: R(60), B(125), or B(155) while an in-game subtitle shows; research on the Xbox build)
++			CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(HUD_XBOX ? 60.0f : 20.0f), SCREEN_SCALE_FROM_BOTTOM(HUD_XBOX ? (xboxSubtitleShown ? 155.0f : 125.0f) : 140.0f), m_BigMessage[1]);
  		} else {
  			m_ZoneFadeTimer = 0;
  			BigMessageX[1] = SCREEN_SCALE_FROM_RIGHT(DEFAULT_SCREEN_WIDTH + 60.0f);
-@@ -1951,6 +1999,37 @@
+@@ -1951,6 +2024,37 @@
  	m_pZoneName = name;
  }
  
