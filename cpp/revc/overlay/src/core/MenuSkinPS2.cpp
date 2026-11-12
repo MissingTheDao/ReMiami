@@ -14,6 +14,9 @@
 #include "Text.h"
 #include "Timer.h"
 #include "Pad.h"
+#ifdef LIBRW_HOST
+#include "TexMods.h"
+#endif
 
 extern int8 gUiStyle;
 extern bool gGlyphPackLoaded;
@@ -129,6 +132,8 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 		// (the Controls and Audio boxes: their own measured curve; the generic lists use a
 		// constant speed, Frontend.cpp)
 		t = MenuSkinPS2GlideTTab(now - s.start);
+		if (t < 0.0f && id == 0)	// (back from the row to the tab: the row's box stays for that step;
+			t = 0.0f;		// v1.40 autopad set 2, list -> tabs on Map)
 		if (t < 0.0f) {	// the blank step: nothing drawn
 			s.cur = s.from;
 			return CRect(-100.0f, -100.0f, -100.0f, -100.0f);
@@ -670,4 +675,34 @@ MenuSkinPS2Draw(CMenuManager *m, uint8 alpha, float cornerX, float cornerY)
 	DrawHelpBox(alpha, m->m_nCurrScreen);
 	DrawTabs(m, alpha);
 	CFont::DrawFonts();
+}
+
+// The PS2 Display page's screen-position picture (fronten2/scsize) from a texture pack: not in the
+// PC's dictionaries, so a 1x1 texture the pack fills (mods/textures/fronten2/scsize.png, or the
+// pack's frontend2 folder). nil without one (the picture is drawn then). Made again when the UI
+// style changes (packs are per style).
+RwTexture *
+MenuSkinPS2ScreenSizeTexture(void)
+{
+#ifdef LIBRW_HOST
+	static RwTexture *tex;
+	static int8 style = -1;
+	static bool have;
+	if (style != gUiStyle) {
+		style = gUiStyle;
+		if (tex)
+			RwTextureDestroy(tex);
+		RwRaster *r = RwRasterCreate(1, 1, 0, rwRASTERTYPETEXTURE | rwRASTERFORMAT8888);
+		tex = RwTextureCreate(r);
+		RwTextureSetName(tex, "scsize");
+		RwTextureSetFilterMode(tex, rwFILTERLINEAR);
+		TexModsApplyTexture(tex, "fronten2", "scsize");
+		if (RwRasterGetWidth(RwTextureGetRaster(tex)) == 1)
+			TexModsApplyTexture(tex, "frontend2", "scsize");
+		have = RwRasterGetWidth(RwTextureGetRaster(tex)) > 1;
+	}
+	return have ? tex : nil;
+#else
+	return nil;
+#endif
 }

@@ -398,7 +398,7 @@ const MOTION_ROUTES: &[MotionRoute] = &[
     ("ps2_focus_tabs_to_list_audio", "start down right", "cross", 60),
     ("ps2_focus_tabs_to_list_controls", "start down", "cross", 60),
     ("ps2_focus_list_to_tabs_map", "start cross", "triangle", 60),
-    ("ps2_focus_list_to_tabs_audio", "start down right cross", "triangle", 60),
+    ("ps2_focus_list_to_tabs_audio", "start down right cross down", "triangle", 60),	// (from radio station, as the clip)
     ("ps2_highlight_down", "start down right right cross", "down", 60),	// Display: brightness -> trails
     ("ps2_highlight_up", "start down right right cross down", "up", 60),
     ("ps2_highlight_wrap", "start down right right cross", "up", 60),
