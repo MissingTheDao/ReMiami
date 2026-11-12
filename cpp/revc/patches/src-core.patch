@@ -2512,7 +2512,7 @@
  		// If it's still on screen
  		if (y > MENU_Y(STATS_VISIBLE_START_Y) && y < MENU_Y(STATS_VISIBLE_END_Y)) {
  			CStats::ConstructStatLine(row);
-@@ -3464,27 +4598,48 @@
+@@ -3464,27 +4598,53 @@
  			if (y >= MENU_Y(STATS_TOP_Y + STATS_FADING_AREA_LENGTH) && y <= MENU_Y(STATS_BOTTOM_Y - STATS_FADING_AREA_LENGTH))
  				alpha = 255.0f;
  
@@ -2551,6 +2551,11 @@
  	CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
  	CFont::SetScale(MENU_X(0.65f), MENU_Y(1.05f));
 -	CFont::PrintString(MENU_X_LEFT_ALIGNED(STATS_RATING_X), MENU_Y(STATS_RATING_Y_1), TheText.Get("CRIMRA"));
++	// revc: the Xbox draws the Stats header a few game frames after the page cuts in: "criminal
++	// rating" ~3.5 game frames (117 ms) later, the rating line 5 (167 ms; research, autopad set 3
++	// controls -> stats at 2956: +7 and +10 video frames)
++	uint32 statsAge = CTimer::GetTimeInMillisecondsPauseMode() - m_LastScreenSwitch;
++	if (!xbox || statsAge >= 117)
 +	CFont::PrintString(MENU_X_LEFT_ALIGNED(xbox ? 315.0f : STATS_RATING_X), MENU_Y(xbox ? 64.0f * XBOX_Y : STATS_RATING_Y_1), TheText.Get("CRIMRA"));
  
  	CFont::SetCentreOff();
@@ -2563,11 +2568,13 @@
  	AsciiToUnicode(gString, gUString);
  
  	UnicodeStrcpy(gUString2, CStats::FindCriminalRatingString());
-@@ -3499,6 +4654,13 @@
+@@ -3499,6 +4659,15 @@
  	CFont::SetColor(CRGBA(0, 0, 0, FadeIn(255)));
  	CFont::SetDropShadowPosition(0);
  
-+	if (xbox) {
++	if (xbox && statsAge < 167) {
++		// (not yet: see the header above)
++	} else if (xbox) {
 +		// the Xbox: the rows' letter height and twice their width, so the line spans about
 +		// 265 px (x 195-460) centred at 328
 +		CFont::SetScale(MENU_X((m_PrefsLanguage == LANGUAGE_AMERICAN ? 0.43f : 0.37f) * 1.95f), MENU_Y(0.75f));
@@ -2577,7 +2584,7 @@
  	CFont::PrintString(MENU_X_LEFT_ALIGNED(STATS_RATING_X) - CFont::GetStringWidth(gUString2, true) / 2.f, MENU_Y(STATS_RATING_Y_2), gUString2);
  }
  
-@@ -3597,11 +4759,35 @@
+@@ -3597,11 +4766,35 @@
  						float x = ((mapCrosshair.x - diffX) / (m_fMapSize * 2)) * (WORLD_SIZE_X / MENU_MAP_WIDTH_SCALE) - (WORLD_SIZE_X / 2 + MENU_MAP_LEFT_OFFSET * MENU_MAP_LENGTH_UNIT);
  						float y = (WORLD_SIZE_Y / 2 - MENU_MAP_TOP_OFFSET * MENU_MAP_LENGTH_UNIT) - ((mapCrosshair.y - diffY) / (m_fMapSize * 2)) * (WORLD_SIZE_Y / MENU_MAP_HEIGHT_SCALE);
  						CRadar::ToggleTargetMarker(x, y);
@@ -2614,7 +2621,7 @@
  			if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
  				if (CPad::GetPad(0)->GetMouseWheelDown() && m_fMapSize > MENU_X(MAP_SIZE_TO_ALLOW_X_MOVE))
  					ZOOM(mapCrosshair.x, mapCrosshair.y, false);
-@@ -3715,11 +4901,11 @@
+@@ -3715,11 +4908,11 @@
  			break;
  		}
  		case MENUPAGE_SOUND_SETTINGS:
@@ -2628,7 +2635,7 @@
  					m_nHoverOption = HOVEROPTION_NEXT_RADIO;
  			}
  			break;
-@@ -4100,7 +5286,7 @@
+@@ -4100,7 +5293,7 @@
  	}
  
  	if (CPad::GetPad(0)->GetTabJustDown()) {
@@ -2637,7 +2644,7 @@
  		m_bShowMouse = false;
  		switch (m_nCurrExLayer) {
  		case HOVEROPTION_BACK:
-@@ -4136,7 +5322,7 @@
+@@ -4136,7 +5329,7 @@
  		if (!m_bPressedUpOnList) {
  			m_bPressedUpOnList = true;
  			lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
@@ -2646,7 +2653,7 @@
  			ScrollUpListByOne();
  		}
  	} else {
-@@ -4158,7 +5344,7 @@
+@@ -4158,7 +5351,7 @@
  		if (!m_bPressedDownOnList) {
  			m_bPressedDownOnList = true;
  			lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
@@ -2655,7 +2662,7 @@
  			ScrollDownListByOne();
  		}
  	} else {
-@@ -4174,7 +5360,7 @@
+@@ -4174,7 +5367,7 @@
  				m_bPressedPgUpOnList = true;
  				lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
  				m_bShowMouse = false;
@@ -2664,7 +2671,7 @@
  				PageUpList(false);
  			}
  		}
-@@ -4186,14 +5372,14 @@
+@@ -4186,14 +5379,14 @@
  				m_bPressedPgDnOnList = true;
  				lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
  				m_bShowMouse = false;
@@ -2681,7 +2688,7 @@
  			if (m_nTotalListRow >= MAX_VISIBLE_OPTION_ON_SCREEN) {
  				m_nFirstVisibleRowOnList = 0;
  			}
-@@ -4203,7 +5389,7 @@
+@@ -4203,7 +5396,7 @@
  		if (CPad::GetPad(0)->GetEnd()) {
  			m_nCurrExLayer = HOVEROPTION_LIST;
  			m_bShowMouse = false;
@@ -2690,7 +2697,7 @@
  			if (m_nTotalListRow >= MAX_VISIBLE_OPTION_ON_SCREEN) {
  				m_nFirstVisibleRowOnList = m_nTotalListRow - MAX_VISIBLE_OPTION_ON_SCREEN;
  			}
-@@ -4297,6 +5483,8 @@
+@@ -4297,6 +5490,8 @@
  
  	if (!m_AllowNavigation && m_firstStartCounter == 255)
  		m_AllowNavigation = true;
@@ -2699,7 +2706,7 @@
  	if (!m_bShowMouse && m_nCurrScreen != MENUPAGE_MAP && (m_nMouseOldPosX != m_nMousePosX || m_nMouseOldPosY != m_nMousePosY)) {
  		m_bShowMouse = true;
  	}
-@@ -4351,7 +5539,7 @@
+@@ -4351,7 +5546,7 @@
  				++m_nOptionMouseHovering;
  			}
  			m_nOptionHighlightTransitionBlend = 0;
@@ -2708,7 +2715,7 @@
  		}
  	}
  
-@@ -4458,16 +5646,21 @@
+@@ -4458,16 +5653,21 @@
  			|| CPad::GetPad(0)->GetAnaloguePadLeftJustUp() || CPad::GetPad(0)->GetAnaloguePadRightJustUp()
  			|| CPad::GetPad(0)->GetMouseWheelUpJustDown() || CPad::GetPad(0)->GetMouseWheelDownJustDown()) {
  			int option = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action;
@@ -2734,7 +2741,7 @@
  
  		}
  		if (CPad::GetPad(0)->GetBackJustDown() || CPad::GetPad(0)->GetEscapeJustDown()) {
-@@ -4547,7 +5740,8 @@
+@@ -4547,7 +5747,8 @@
  		}
  	}
  	if (changeValueBy != 0) {
@@ -2744,7 +2751,7 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_NOTHING
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_LABEL
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_YES
-@@ -4559,7 +5753,7 @@
+@@ -4559,7 +5760,7 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_DRAWDIST
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_MOUSESENS
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_MP3VOLUMEBOOST) {
@@ -2753,7 +2760,7 @@
  		}
  	}
  	ProcessUserInput(goDown, goUp, optionSelected, goBack, changeValueBy);
-@@ -4661,7 +5855,7 @@
+@@ -4661,7 +5862,7 @@
  	int oldOption = m_nCurrOption;
  	if (goDown) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -2762,7 +2769,7 @@
  
  		m_nCurrOption++;
  		if (m_nCurrOption == NUM_MENUROWS || (aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_NOTHING)) {
-@@ -4672,7 +5866,7 @@
+@@ -4672,7 +5873,7 @@
  	}
  	if (goUp) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -2771,7 +2778,7 @@
  
  		if (m_nCurrOption == (aScreens[m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL)) {
  			while (m_nCurrOption != NUM_MENUROWS - 1
-@@ -4957,7 +6151,7 @@
+@@ -4957,7 +6158,7 @@
  					ControlsManager.MakeControllerActionsBlank();
  					ControlsManager.InitDefaultControlConfiguration();
  					ControlsManager.InitDefaultControlConfigMouse(MousePointerStateHelper.GetMouseSetUp());
@@ -2780,7 +2787,7 @@
  					if (AllValidWinJoys.m_aJoys[JOYSTICK1].m_bInitialised) {
  						DIDEVCAPS devCaps;
  						devCaps.dwSize = sizeof(DIDEVCAPS);
-@@ -5042,21 +6236,21 @@
+@@ -5042,21 +6243,21 @@
  			int saveSlot = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_SaveSlot;
  			if (saveSlot >= SAVESLOT_1 && saveSlot <= SAVESLOT_8 && Slots[m_nCurrOption] != SLOT_OK)
  #endif
@@ -2806,7 +2813,7 @@
  			m_ShowEmptyBindingError = true;
  		}
  	}
-@@ -5590,7 +6784,8 @@
+@@ -5590,7 +6791,8 @@
  
  		// Reminder: You need REGISTER_START_BUTTON defined to make it work.
  		if ((CPad::GetPad(0)->GetStartJustDown() || CPad::GetPad(0)->GetEscapeJustDown())
@@ -2816,7 +2823,7 @@
  			|| m_bShutDownFrontEndRequested || m_bStartUpFrontEndRequested
  #ifdef REGISTER_START_BUTTON
  			|| CPad::GetPad(0)->GetStartJustDown() && !m_bGameNotLoaded
-@@ -5608,6 +6803,8 @@
+@@ -5608,6 +6810,8 @@
  				DoRWStuffEndOfFrame();
  			}
  
@@ -2825,7 +2832,7 @@
  			if (m_bShutDownFrontEndRequested)
  				m_bMenuActive = false;
  			else if (m_bStartUpFrontEndRequested)
-@@ -5626,6 +6823,10 @@
+@@ -5626,6 +6830,10 @@
  				CPad::StopPadsShaking();
  #endif
  			} else {
@@ -2836,7 +2843,7 @@
  #ifdef EXTENDED_COLOURFILTER
  				// we always expect CPostFX to be open
  				CMBlur::BlurOn = true;
-@@ -5708,22 +6909,22 @@
+@@ -5708,22 +6916,22 @@
  	m_bStartUpFrontEndRequested = false;
  	m_bShutDownFrontEndRequested = false;
  
@@ -2863,7 +2870,7 @@
  	DMAudio.ChangeMusicMode(MUSICMODE_GAME);
  	if (m_bSpritesLoaded) {
  		printf("REMOVE frontend\n");
-@@ -5827,52 +7028,54 @@
+@@ -5827,52 +7035,54 @@
  
  	// Because m_fMapSize is half of the map length(hence * 2), and map consists of 3x3 tiles(hence / 3).
  	float halfTile = m_fMapSize * 2.f / 3.f / 2.f;
@@ -2945,7 +2952,7 @@
  	}
  
  	CRadar::DrawBlips();
-@@ -5933,12 +7136,15 @@
+@@ -5933,12 +7143,15 @@
  		mapCrosshair.y = m_nMousePosY;
  	}
  
@@ -2961,7 +2968,7 @@
  
  #endif
  	m_bMenuMapActive = false;
-@@ -5957,10 +7163,10 @@
+@@ -5957,10 +7170,10 @@
  	m_PrefsRadioStation += increaseBy;
  	m_ScrollRadioBy = increaseBy;
  	if (m_ScrollRadioBy == 1) {

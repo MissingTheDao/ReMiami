@@ -40,6 +40,15 @@ for id in "${IDS[@]}"; do
   state=()
   [[ $st == 2 ]] && state=(-e "s/^MotionBlur=.*/MotionBlur=1/" -e "s/^MusicVolume=.*/MusicVolume=32/" -e "s/^SfxVolume=.*/SfxVolume=52/"
     -e "s/^Radio=.*/Radio=0/" -e "s/^InvertPad=.*/InvertPad=1/" -e "s/^Vibration=.*/Vibration=0/" -e "s/^Brightness=.*/Brightness=256/")
+  # PS2 (v1.40, autopad sets 1-2): setup 1, controller display in car, vibration off, invert on;
+  # brightness 12/16, trails on, subtitles off, wide screen off, radar map & blips, HUD on; music
+  # and SFX 13/16; Wildstyle in set 1, K-Chat in set 2
+  if [[ $st == 1 ]]; then
+    radio=0; python3 -c "import json,sys; m=[m for m in json.load(open(sys.argv[1])) if m['id']==sys.argv[2]][0]; sys.exit(0 if 'set2' in m['ref'].get('video','') else 1)" "$JSON" "$id" && radio=2
+    state=(-e "s/^MotionBlur=.*/MotionBlur=1/" -e "s/^MusicVolume=.*/MusicVolume=52/" -e "s/^SfxVolume=.*/SfxVolume=52/"
+      -e "s/^Radio=.*/Radio=$radio/" -e "s/^InvertPad=.*/InvertPad=1/" -e "s/^Vibration=.*/Vibration=0/" -e "s/^Brightness=.*/Brightness=384/"
+      -e "s/^Subtitles=.*/Subtitles=0/" -e "s/^\[Controller\]/[Controller]\nPS2Setup=0/")
+  fi
   sed -e "s/^\[Graphics\]/[Graphics]\nUiStyle=$st/" -e "s/^Width=.*/Width=640/" -e "s/^Height=.*/Height=480/" "${state[@]}" \
     "$ROOT/tests/config/reVC.ini" > "$cfg"
   rm -rf "${OUT:?}/$id"; mkdir -p "$OUT/$id"
