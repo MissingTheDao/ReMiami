@@ -46,7 +46,7 @@
  
  RwRaster *CPostFX::pFrontBuffer;
  RwRaster *CPostFX::pBackBuffer;
-@@ -22,28 +24,41 @@
+@@ -22,28 +24,46 @@
  
  static RwIm2DVertex Vertex[4];
  static RwIm2DVertex Vertex2[4];
@@ -86,6 +86,11 @@
 +{
 +	if(EffectSwitch == POSTFX_PC)
 +		return CMBlur::BlurOn;
++	// revc: the console styles tint the lighting with the blur colours only with trails on, as the
++	// PS2 and Xbox do (research)
++	extern int8 gUiStyle;
++	if(gUiStyle != 0)
++		return EffectSwitch != POSTFX_SIMPLE && MotionBlurOn;
 +	return EffectSwitch != POSTFX_SIMPLE;
 +}
  
@@ -100,7 +105,7 @@
  }
  
  void
-@@ -108,8 +123,12 @@
+@@ -108,8 +128,12 @@
  	RwIm2DVertexSetIntRGBA(&Vertex[3], 255, 255, 255, 255);
  
  
@@ -115,7 +120,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[0], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[0], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[0], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -117,8 +136,8 @@
+@@ -117,8 +141,8 @@
  	RwIm2DVertexSetV(&Vertex2[0], 0.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[0], 255, 255, 255, 255);
  
@@ -126,7 +131,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[1], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[1], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[1], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -126,8 +145,8 @@
+@@ -126,8 +150,8 @@
  	RwIm2DVertexSetV(&Vertex2[1], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[1], 255, 255, 255, 255);
  
@@ -137,7 +142,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[2], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[2], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[2], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -135,8 +154,8 @@
+@@ -135,8 +159,8 @@
  	RwIm2DVertexSetV(&Vertex2[2], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[2], 255, 255, 255, 255);
  
@@ -148,7 +153,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[3], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[3], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[3], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -151,28 +170,6 @@
+@@ -151,28 +175,6 @@
  #include "shaders/obj/contrastPS.inc"
  	contrast_PS = rw::d3d::createPixelShader(contrastPS_cso);
  #endif
@@ -177,7 +182,7 @@
  }
  
  void
-@@ -196,16 +193,6 @@
+@@ -196,16 +198,6 @@
  		contrast_PS = nil;
  	}
  #endif
@@ -194,7 +199,7 @@
  }
  
  void
-@@ -226,7 +213,9 @@
+@@ -226,7 +218,9 @@
  	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
  
@@ -205,7 +210,7 @@
  
  
  	RwIm2DVertexSetIntRGBA(&Vertex2[0], r, g, b, a);
-@@ -242,7 +231,7 @@
+@@ -242,7 +236,7 @@
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
  
  	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
@@ -214,7 +219,7 @@
  }
  
  void
-@@ -282,11 +271,9 @@
+@@ -282,11 +276,9 @@
  
  		rw::d3d::im2dOverridePS = contrast_PS;
  #endif
@@ -229,7 +234,7 @@
  #endif
  	}else{
  		float f = Intensity;
-@@ -299,18 +286,17 @@
+@@ -299,18 +291,17 @@
  		rw::d3d::d3ddevice->SetPixelShaderConstantF(10, blurcolors, 1);
  		rw::d3d::im2dOverridePS = colourfilterVC_PS;
  #endif
@@ -253,7 +258,26 @@
  #endif
  }
  
-@@ -445,10 +431,27 @@
+@@ -396,7 +387,8 @@
+ 	assert(pFrontBuffer);
+ 	assert(pBackBuffer);
+ 
+-	if(type == MOTION_BLUR_LIGHT_SCENE){
++	extern int8 gUiStyle;
++	if(type == MOTION_BLUR_LIGHT_SCENE && gUiStyle == 0){	// (revc: the consoles use each frame's time-cycle colour as it is; research)
+ 		SmoothColor(red, green, blue, blur);
+ 		red = AvgRed;
+ 		green = AvgGreen;
+@@ -426,7 +418,7 @@
+ 		if(MotionBlurOn){
+ 			if(!bJustInitialised)
+ 				RenderOverlayBlur(cam, red, green, blue, blur);
+-		}else{
++		}else if(gUiStyle == 0){	// (revc: the consoles draw no colour overlay with trails off; research)
+ 			RenderOverlayShader(cam, red, green, blue, blur);
+ 		}
+ 		break;
+@@ -445,10 +437,27 @@
  	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
  
