@@ -1,6 +1,57 @@
 --- a/src/core/Cam.cpp
 +++ b/src/core/Cam.cpp
-@@ -1400,9 +1400,13 @@
+@@ -30,6 +30,9 @@
+ #include "Bike.h"
+ #include "Pickups.h"
+ 
++int XboxFlyLayout(void); int16 XboxStick(int axis); int16 XboxTriggerX(void); int XboxLookDir(int16 x, int16 y);	// (core/Pad.cpp)
++
++
+ bool PrintDebugCode = false;
+ int16 DebugCamMode;
+ 
+@@ -318,7 +321,24 @@
+ 		   CamTargetEntity->IsVehicle()){
+ 			bool bDisableLR = CamTargetEntity &&
+ 				(((CVehicle*)CamTargetEntity)->GetVehicleAppearance() == VEHICLE_APPEARANCE_HELI || CamTargetEntity->GetModelIndex() == MI_RCBARON);
+-			if(CPad::GetPad(0)->GetLookBehindForCar()){
++			// revc: the Xbox's air vehicles look with the right stick: behind = pulled back past half,
++			// in both layouts; the Skimmer also looks left/right with it. Other vehicles (the Police
++			// Maverick too: not in the Xbox's heli list) keep the car rules (research)
++			bool lookBehind = CPad::GetPad(0)->GetLookBehindForCar();
++			bool lookLeft = CPad::GetPad(0)->GetLookLeft(), lookRight = CPad::GetPad(0)->GetLookRight();
++			if (XboxFlyLayout() >= 0) {
++				int mi = CamTargetEntity->GetModelIndex();
++				bool air = mi == MI_HUNTER || mi == MI_CHOPPER || mi == MI_SEASPAR || mi == MI_SPARROW ||
++					mi == MI_MAVERICK || mi == MI_VCNMAV || mi == MI_RCRAIDER || mi == MI_RCGOBLIN || mi == MI_RCBARON;
++				if (air || mi == MI_SKIMMER) {
++					int16 rx = XboxStick(2), ry = XboxStick(3);
++					lookBehind = XboxLookDir(0, ry) == 3;
++					int dir = mi == MI_SKIMMER ? XboxLookDir(rx, ry) : 2;
++					lookLeft = dir == 0;
++					lookRight = dir == 1;
++				}
++			}
++			if(lookBehind){
+ 				LookBehind();
+ 				if(DirectionWasLooking != LOOKING_BEHIND)
+ 					TheCamera.m_bJust_Switched = true;
+@@ -327,12 +347,12 @@
+ 				if(DirectionWasLooking != LOOKING_FORWARD)
+ 					TheCamera.m_bJust_Switched = true;
+ 				DirectionWasLooking = LOOKING_FORWARD;
+-			}else if(CPad::GetPad(0)->GetLookLeft()){
++			}else if(lookLeft){
+ 				LookLeft();
+ 				if(DirectionWasLooking != LOOKING_LEFT)
+ 					TheCamera.m_bJust_Switched = true;
+ 				DirectionWasLooking = LOOKING_LEFT;
+-			}else if(CPad::GetPad(0)->GetLookRight()){
++			}else if(lookRight){
+ 				LookRight();
+ 				if(DirectionWasLooking != LOOKING_RIGHT)
+ 					TheCamera.m_bJust_Switched = true;
+@@ -1400,9 +1420,13 @@
  		}
  	}
  
@@ -16,7 +67,7 @@
  		if(Alpha < fDefaultAlphaOrient-0.05f)
  			AlphaOffset = 0.05f;
  		else if(Alpha < fDefaultAlphaOrient)
-@@ -2500,6 +2504,44 @@
+@@ -2500,6 +2524,44 @@
  
  float fBike1stPersonOffsetZ = 0.15f;
  
@@ -61,7 +112,7 @@
  void
  CCam::Process_1stPerson(const CVector &CameraTarget, float TargetOrientation, float SpeedVar, float TargetSpeedVar)
  {
-@@ -2564,8 +2606,18 @@
+@@ -2564,8 +2626,18 @@
  		LookUpDown = CPad::GetPad(0)->LookAroundUpDown();
  		float xdir = LookLeftRight < 0.0f ? -1.0f : 1.0f;
  		float ydir = LookUpDown < 0.0f ? -1.0f : 1.0f;
@@ -389,7 +440,7 @@
  	if (m_NewState.isGamepad) {
  		for (int32 i = 0; i < MAX_BUTTONS; i++) {
  			if (m_NewState.mappedButtons[i] && !(m_OldState.mappedButtons[i]))
-@@ -342,6 +342,20 @@
+@@ -342,6 +342,28 @@
  uint32 CControllerConfigManager::ms_padButtonsInited = 0;
  #endif
  
@@ -407,10 +458,18 @@
 +	return gUiStyle == 1 && gPs2Setup >= 0;
 +}
 +
++#ifdef BUTTON_ICONS
++// revc: a pad button's glyph token by the PS2-style number MapIdToButtonId gives: 1 circle, 2 cross,
++// 3 square, 4 triangle, 5/6 L2/R2, 7/8 L1/R1, 9 select, 10/11 L3/R3, 12 start, 13-16 D-pad
++// up/right/down/left (the font draws the current pad's own button for each).
++static const char *JoyGlyphTokens[17] = { nil, "~O~", "~X~", "~Q~", "~T~", "~M~", "~V~", "~K~", "~J~",
++	"~S~", "~A~", "~C~", "~P~", "~E~", "~F~", "~G~", "~I~" };
++#endif
++
  void CControllerConfigManager::InitDefaultControlConfigJoyPad(uint32 buttons)
  {
  #ifdef XINPUT
-@@ -362,6 +376,16 @@
+@@ -362,6 +384,16 @@
  
  	ms_padButtonsInited = btn;
  
@@ -427,7 +486,7 @@
  	#define IF_BTN_IN_RANGE(n) \
  		case n: \
  		if (n <= buttonMin) \
-@@ -647,6 +671,8 @@
+@@ -647,6 +679,8 @@
  		process = false;
  	if (type == JOYSTICK && button == 0)
  		process = false;
@@ -436,7 +495,7 @@
  	if (type == MOUSE && button == 0)
  		process = false;
  
-@@ -723,6 +749,18 @@
+@@ -723,6 +757,18 @@
  	}
  }
  
@@ -455,7 +514,7 @@
  void CControllerConfigManager::AffectControllerStateOn_ButtonDown_Driving(int32 button, eControllerType type, CControllerState &state)
  {
  #ifdef BIND_VEHICLE_FIREWEAPON
-@@ -744,11 +782,11 @@
+@@ -744,11 +790,11 @@
  	if (button == GetControllerKeyAssociatedWithAction(VEHICLE_HANDBRAKE, type))
  		state.RightShoulder1 = 255;
  	if (button == GetControllerKeyAssociatedWithAction(VEHICLE_ACCELERATE, type))
@@ -469,7 +528,7 @@
  	if (button == GetControllerKeyAssociatedWithAction(TOGGLE_SUBMISSIONS, type))
  		state.RightShock = 255;
  	
-@@ -1108,6 +1146,8 @@
+@@ -1108,6 +1154,8 @@
  		process = false;
  	if (type == JOYSTICK && button == 0)
  		process = false;
@@ -478,7 +537,7 @@
  	if (type == MOUSE && button == 0)
  		process = false;
  
-@@ -2407,6 +2447,86 @@
+@@ -2407,6 +2455,86 @@
  	return NULL;
  }
  
@@ -565,19 +624,15 @@
  wchar *CControllerConfigManager::GetControllerSettingTextJoystick(e_ControllerAction action)
  {
  	if (m_aSettings[action][JOYSTICK].m_Key == 0) 
-@@ -2414,6 +2534,19 @@
+@@ -2414,6 +2542,15 @@
  
  	static wchar NewStringWithNumber[30];
  
 +#if defined LIBRW_HOST && defined BUTTON_ICONS
-+	// revc: while a controller is in use, the button's glyph instead of "JOY n" (n is the
-+	// PS2-style number MapIdToButtonId gives: 1 circle, 2 cross, 3 square, 4 triangle, 5/6 L2/R2,
-+	// 7/8 L1/R1, 9 select, 10/11 L3/R3, 12 start, 13-16 D-pad up/right/down/left).
-+	static const char *glyphTokens[17] = { nil, "~O~", "~X~", "~Q~", "~T~", "~M~", "~V~", "~K~", "~J~",
-+		"~S~", "~A~", "~C~", "~P~", "~E~", "~F~", "~G~", "~I~" };
++	// revc: while a controller is in use, the button's glyph instead of "JOY n" (JoyGlyphTokens)
 +	int key = m_aSettings[action][JOYSTICK].m_Key;
 +	if (hostActiveInputKind() != 0 && key > 0 && key < 17) {
-+		AsciiToUnicode(glyphTokens[key], NewStringWithNumber);
++		AsciiToUnicode(JoyGlyphTokens[key], NewStringWithNumber);
 +		return NewStringWithNumber;
 +	}
 +#endif
@@ -585,7 +640,27 @@
  	CMessages::InsertNumberInString(TheText.Get("FEC_JBO"),		// JOY ~1~
  		m_aSettings[action][JOYSTICK].m_Key, -1, -1, -1, -1, -1,
  		NewStringWithNumber);
-@@ -2802,7 +2935,7 @@
+@@ -2733,6 +2870,19 @@
+ 		}
+ #endif
+ 
++#ifdef BUTTON_ICONS
++		// revc: the prompt follows the action's pad binding (the Xbox layouts and the player's own are
++		// bindings; the Xbox prints the live binding too, in words: research); the fixed table, by pad
++		// mode, stays for the PS2 setups and for actions on no button (the sticks)
++		if (!Ps2SetupActive() && CFont::ButtonsSlot != -1) {
++			int key = GetControllerKeyAssociatedWithAction((e_ControllerAction)action, JOYSTICK);
++			if (key > 0 && key < 17) {
++				AsciiToUnicode(JoyGlyphTokens[key], wstr);
++				CMessages::WideStringCopy(text, wstr, leight);
++				return;
++			}
++		}
++#endif
+ 		assert(Buttons[CPad::GetPad(0)->Mode][action] != nil); // we cannot use these
+ 		AsciiToUnicode(Buttons[CPad::GetPad(0)->Mode][action], wstr);
+ 
+@@ -2802,7 +2952,7 @@
  		else
  			m_aButtonStates[i] = false;
  	}
@@ -5004,12 +5079,75 @@
  #include "Game.h"
  #include "CutsceneMgr.h"
  #include "Font.h"
-@@ -1710,9 +1713,20 @@
+@@ -1710,9 +1713,83 @@
  	;
  }
  
 +extern "C" int revc_pad_menu_nintendo(void);
 +extern int8 gUiStyle;
++
++// revc: the Xbox version's flying controls (research on the Xbox build).
++// -1: PC rules (not the Xbox style, the "Original PC" layout, or keyboard and mouse);
++// 0: Xbox Standard (also the player's own bindings: the sticks aren't bindings); 1: Xbox Classic.
++extern "C" int PadLayoutCurrent(void);
++int
++XboxFlyLayout(void)
++{
++	if (gUiStyle != 2)
++		return -1;
++#ifdef LIBRW_HOST
++	extern bool gRevcTestPadOn;
++	if (!gRevcTestPadOn && hostActiveInputKind() == 0)
++		return -1;
++#endif
++	int layout = PadLayoutCurrent();
++	return layout == 1 ? 1 : layout == 2 ? -1 : 0;
++}
++
++// A stick axis as the Xbox's flying actions read it: the stick alone (no D-pad, no drunk buffer),
++// -128..128, y > 0 = pulled back. axis: 0 LX, 1 LY, 2 RX, 3 RY.
++int16
++XboxStick(int axis)
++{
++	CPad *pad = CPad::GetPad(0);
++	if (pad->ArePlayerControlsDisabled())
++		return 0;
++	switch (axis) {
++	case 0: return pad->NewState.LeftStickX;
++	case 1: return pad->NewState.LeftStickY;
++	case 2: return pad->NewState.RightStickX;
++	default: return pad->NewState.RightStickY;
++	}
++}
++
++// The Xbox's trigger axis: right trigger minus left trigger, -255..255 (Classic heli yaw and RC
++// Baron roll), from the raw triggers whatever the driving bindings put on them.
++int16
++XboxTriggerX(void)
++{
++	CPad *pad = CPad::GetPad(0);
++	if (pad->ArePlayerControlsDisabled())
++		return 0;
++#ifdef LIBRW_HOST
++	extern bool gRevcTestPadOn;
++	if (gRevcTestPadOn)	// (pad scripts give raw L2/R2 in NewState)
++		return pad->NewState.RightShoulder2 - pad->NewState.LeftShoulder2;
++#endif
++	extern uint8 gPadTriggerAnalog[2];
++	return (int16)gPadTriggerAnalog[1] - (int16)gPadTriggerAnalog[0];
++}
++
++// The Xbox's stick-direction test: 0 left, 1 right, 2 none, 3 behind. Below |x| + |y| = 64 (half
++// a stick) it is none; the larger axis decides.
++int
++XboxLookDir(int16 x, int16 y)
++{
++	if (Abs(x) + Abs(y) < 64)
++		return 2;
++	if (Abs(x) > Abs(y))
++		return x > 0 ? 1 : 0;
++	return y > 0 ? 3 : 2;
++}
 +
  void CPad::Update(int16 pad)
  {
@@ -5025,7 +5163,7 @@
  
  #ifdef GTA_PS2
  	bObsoleteControllerMessage = false;
-@@ -1978,6 +1992,32 @@
+@@ -1978,6 +2055,32 @@
  		NewState = ReconcileTwoControllersInput(PCTempKeyState, PCTempJoyState);
  		NewState = ReconcileTwoControllersInput(PCTempMouseState, NewState);
  	}
@@ -5058,7 +5196,7 @@
  
  	PCTempJoyState.Clear();
  	PCTempKeyState.Clear();
-@@ -3293,11 +3333,17 @@
+@@ -3293,11 +3396,17 @@
  	return 0;
  }
  

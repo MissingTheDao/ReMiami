@@ -1,14 +1,15 @@
 --- a/src/vehicles/Automobile.cpp
 +++ b/src/vehicles/Automobile.cpp
-@@ -51,6 +51,7 @@
+@@ -51,6 +51,8 @@
  #include "Bike.h"
  #include "Wanted.h"
  #include "SaveBuf.h"
 +extern int8 gUiStyle;
++int XboxFlyLayout(void); int16 XboxStick(int axis); int16 XboxTriggerX(void); int XboxLookDir(int16 x, int16 y);	// (core/Pad.cpp)
  
  bool bAllCarCheat;
  
-@@ -352,7 +353,8 @@
+@@ -352,7 +354,8 @@
  	// Set Center of Mass to make car more stable
  	if(strongGrip1 || bCheat3)
  		m_vecCentreOfMass.z = 0.3f*m_aSuspensionSpringLength[0] + -1.0f*m_fHeightAboveRoad;
@@ -18,6 +19,54 @@
  		m_vecCentreOfMass.z = pHandling->CentreOfMass.z - 0.2f*pHandling->Dimension.z;
  	else
  		m_vecCentreOfMass = pHandling->CentreOfMass;
+@@ -1431,9 +1434,10 @@
+ 					else if (m_nWheelsOnGround < 4 && !(GetModelIndex() == MI_SEASPAR && bTouchingWater) ||
+ 						CPad::GetPad(0)->GetAccelerate() != 0 ||
+ #ifndef FREE_CAM
+-						CPad::GetPad(0)->GetCarGunUpDown() > 1.0f ||
++						(XboxFlyLayout() >= 0 ? XboxStick(1) > 1 : CPad::GetPad(0)->GetCarGunUpDown() > 1.0f) ||
+ #else
+-						((!CCamera::bFreeCam || (CCamera::bFreeCam && !CPad::IsAffectedByController)) && CPad::GetPad(0)->GetCarGunUpDown() > 1.0f) ||
++						((!CCamera::bFreeCam || (CCamera::bFreeCam && !CPad::IsAffectedByController)) &&
++						 (XboxFlyLayout() >= 0 ? XboxStick(1) > 1 : CPad::GetPad(0)->GetCarGunUpDown() > 1.0f)) ||	// (revc: the Xbox wakes a landed heli with the left stick pulled back; research)
+ #endif
+ 						Abs(m_vecMoveSpeed.x) > 0.02f ||
+ 						Abs(m_vecMoveSpeed.y) > 0.02f ||
+@@ -1457,9 +1461,15 @@
+ 			}
+ 
+ 			// Heli weapons
++			// revc: the Xbox's heli fire buttons (research): rockets repeat while held, on B (Standard:
++			// our handbrake) or L3 (Classic: our horn); the guns on R3 / B, our vehicle fire in both
++			int xboxFly = XboxFlyLayout();
++			bool heliRockets = xboxFly < 0 ? CPad::GetPad(0)->CarGunJustDown() :
++				xboxFly == 1 ? CPad::GetPad(0)->GetHorn() : CPad::GetPad(0)->GetHandBrake() != 0;
++			bool heliGun = xboxFly < 0 ? CPad::GetPad(0)->GetHandBrake() != 0 : CPad::GetPad(0)->GetCarGunFired();
+ 			if(GetModelIndex() == MI_HUNTER && GetStatus() == STATUS_PLAYER){
+ 				// Hunter rockets
+-				if(CPad::GetPad(0)->CarGunJustDown() && CTimer::GetTimeInMilliseconds() > m_nGunFiringTime+350){
++				if(heliRockets && CTimer::GetTimeInMilliseconds() > m_nGunFiringTime+350){
+ 					CWeapon gun(WEAPONTYPE_ROCKETLAUNCHER, 100);
+ 					CVector source = vecHunterRocketPos;
+ 					source = GetMatrix()*source + Max(DotProduct(m_vecMoveSpeed, GetForward()), 0.0f)*GetForward()*CTimer::GetTimeStep();
+@@ -1474,7 +1484,7 @@
+ 					DMAudio.PlayOneShot(m_audioEntityId, SOUND_WEAPON_SHOT_FIRED, 0.0f);
+ 					m_nGunFiringTime = CTimer::GetTimeInMilliseconds();
+ 				// Hunter gun
+-				}else if(CPad::GetPad(0)->GetHandBrake() && CTimer::GetTimeInMilliseconds() > m_nGunFiringTime+60){
++				}else if(heliGun && CTimer::GetTimeInMilliseconds() > m_nGunFiringTime+60){
+ 					CWeapon gun(WEAPONTYPE_HELICANNON, 5000);
+ 					CVector source = vecHunterGunPos;
+ 					source = GetMatrix()*source + m_vecMoveSpeed*CTimer::GetTimeStep();
+@@ -1486,7 +1496,7 @@
+ 				}
+ 			}else if(GetModelIndex() == MI_SEASPAR && GetStatus() == STATUS_PLAYER){
+ 				// Sea sparrow gun
+-				if(CPad::GetPad(0)->GetHandBrake() && CTimer::GetTimeInMilliseconds() > m_nGunFiringTime+40){
++				if(heliGun && CTimer::GetTimeInMilliseconds() > m_nGunFiringTime+40){
+ 					CWeapon gun(WEAPONTYPE_M4, 5000);
+ 					CVector source = vecSeaSparrowGunPos;
+ 					source = GetMatrix()*source + m_vecMoveSpeed*CTimer::GetTimeStep();
 --- a/src/vehicles/Bike.cpp
 +++ b/src/vehicles/Bike.cpp
 @@ -37,6 +37,7 @@
@@ -392,24 +441,56 @@
  void
 --- a/src/vehicles/Vehicle.cpp
 +++ b/src/vehicles/Vehicle.cpp
-@@ -33,6 +33,7 @@
+@@ -33,6 +33,8 @@
  #include "Weather.h"
  #include "Coronas.h"
  #include "SaveBuf.h"
 +extern int8 gUiStyle;
++int XboxFlyLayout(void); int16 XboxStick(int axis); int16 XboxTriggerX(void); int XboxLookDir(int16 x, int16 y);	// (core/Pad.cpp)
  
  bool CVehicle::bWheelsOnlyCheat;
  bool CVehicle::bAllDodosCheat;
-@@ -336,7 +337,7 @@
+@@ -330,13 +332,15 @@
+ 	case FLIGHT_MODEL_PLANE_UNUSED:
+ 	case FLIGHT_MODEL_PLANE:
+ 	{
+-		float fSteerLR = CPad::GetPad(0)->GetSteeringLeftRight() / 128.0f;
+-		float fSteerUD = CPad::GetPad(0)->GetSteeringUpDown() / 128.0f;
++		int xboxFly = XboxFlyLayout();
++		// revc: the Xbox's planes and RC Baron steer and pitch with the left stick alone (research)
++		float fSteerLR = (xboxFly >= 0 ? XboxStick(0) : CPad::GetPad(0)->GetSteeringLeftRight()) / 128.0f;
++		float fSteerUD = (xboxFly >= 0 ? XboxStick(1) : CPad::GetPad(0)->GetSteeringUpDown()) / 128.0f;
+ 		float fGunUD = Abs(CPad::GetPad(0)->GetCarGunUpDown());
  #ifdef FREE_CAM
  		if(!CCamera::bFreeCam || (CCamera::bFreeCam && !CPad::IsAffectedByController))
  #endif
 -		if(fGunUD > 1.0f)
-+		if(fGunUD > 1.0f && gUiStyle != 1)	// (revc: the PS2's planes pitch with the left stick only; research)
++		if(fGunUD > 1.0f && gUiStyle != 1 && xboxFly < 0)	// (revc: the PS2's and the Xbox's planes pitch with the left stick only; research)
  			fSteerUD = -CPad::GetPad(0)->GetCarGunUpDown() / 128.0f;
  
  		float fSteerAngle = Atan2(fSteerUD, fSteerLR);
-@@ -464,6 +465,9 @@
+@@ -393,9 +397,17 @@
+ 
+ 		float fRollAccel;
+ 		if (flightModel == FLIGHT_MODEL_RCPLANE) {
+-			float fDirectionMultiplier = CPad::GetPad(0)->GetLookRight();
+-			if (CPad::GetPad(0)->GetLookLeft())
+-				fDirectionMultiplier = -1;
++			float fDirectionMultiplier;
++			if (xboxFly >= 0) {
++				// revc: the Xbox's RC Baron rolls further with the right stick's X (Standard) or the
++				// triggers (Classic), by sign (research)
++				int16 r = xboxFly == 1 ? XboxTriggerX() : XboxStick(2);
++				fDirectionMultiplier = r > 0 ? 1.0f : r < 0 ? -1.0f : 0.0f;
++			} else {
++				fDirectionMultiplier = CPad::GetPad(0)->GetLookRight();
++				if (CPad::GetPad(0)->GetLookLeft())
++					fDirectionMultiplier = -1;
++			}
+ 			fRollAccel = (0.5f * fDirectionMultiplier + fSteerLR) * pFlyingHandling->fRoll;
+ 		}
+ 		else
+@@ -464,6 +476,9 @@
  			return;
  		float fUpSpeed = DotProduct(m_vecMoveSpeed, GetUp());
  		float fThrust = (CPad::GetPad(0)->GetAccelerate() - CPad::GetPad(0)->GetBrake()) / 255.0f;
@@ -419,12 +500,41 @@
  		if(fThrust < 0.0f)
  			fThrust *= 2.0f;
  		if(flightModel == FLIGHT_MODEL_RCHELI){
-@@ -518,7 +522,7 @@
+@@ -497,12 +512,24 @@
+ 		}
+ 
+ 		float fRoll, fPitch, fYaw;
++		int xboxFly = XboxFlyLayout();
+ 		if (bCheat5) {
+ 			fPitch = CPad::GetPad(0)->GetSteeringUpDown() / 128.0f;
+ 			fRoll = CPad::GetPad(0)->GetLookLeft();
+ 			if (CPad::GetPad(0)->GetLookRight())
+ 				fRoll = -1.0f;
+ 			fYaw = CPad::GetPad(0)->GetSteeringLeftRight() / 128.0f;
++		} else if (xboxFly >= 0) {
++			// revc: the Xbox version: pitch and roll on the left stick; yaw at full rate by the sign of
++			// the right stick's X (Standard) or the triggers (Classic); the left stick's X overrides
++			// that yaw, so banking also turns (research)
++			int16 lx = XboxStick(0), ly = XboxStick(1);
++			int16 yawAxis = xboxFly == 1 ? XboxTriggerX() : XboxStick(2);
++			fPitch = ly / 128.0f;
++			fRoll = -lx / 128.0f;
++			fYaw = yawAxis > 0 ? 1.0f : yawAxis < 0 ? -1.0f : 0.0f;
++			if (Abs(lx) > 1)
++				fYaw = lx / 128.0f;
+ 		} else {
+ 			fPitch = CPad::GetPad(0)->GetSteeringUpDown() / 128.0f;
+ 			fRoll = -CPad::GetPad(0)->GetSteeringLeftRight() / 128.0f;
+@@ -518,9 +545,10 @@
  #ifdef FREE_CAM
  		if(!CCamera::bFreeCam || (CCamera::bFreeCam && !CPad::IsAffectedByController))
  #endif
 -		if(Abs(CPad::GetPad(0)->GetCarGunUpDown()) > 1.0f)
-+		if(Abs(CPad::GetPad(0)->GetCarGunUpDown()) > 1.0f && gUiStyle != 1)	// (revc: not on the PS2, where it is the collective)
++		if(Abs(CPad::GetPad(0)->GetCarGunUpDown()) > 1.0f && gUiStyle != 1 && xboxFly < 0)	// (revc: not on the PS2, where it is the collective, nor on the Xbox, where it is the camera)
  			fPitch = -CPad::GetPad(0)->GetCarGunUpDown() / 128.0f;
- 		if (CPad::GetPad(0)->GetHorn()) {
+-		if (CPad::GetPad(0)->GetHorn()) {
++		// revc: on the Xbox only RC helis stabilise (L3); a full-size heli has no stabilise (research)
++		if (CPad::GetPad(0)->GetHorn() && (xboxFly < 0 || flightModel == FLIGHT_MODEL_RCHELI)) {
  			fYaw = 0.0f;
+ 			fPitch = Clamp(flyingHandling->fPitchStab * DotProduct(m_vecMoveSpeed, GetForward()), -200.0f, 1.3f);
+ 			fRoll = Clamp(flyingHandling->fRollStab * DotProduct(m_vecMoveSpeed, GetRight()), -200.0f, 1.3f);
