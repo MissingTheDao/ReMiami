@@ -8,6 +8,7 @@
 // re3's Frontend_PS2.cpp is GTA III's PS2 menu and is not used.
 #include "common.h"
 #include "Frontend.h"
+#include "DMAudio.h"
 #include "Font.h"
 #include "Sprite2d.h"
 #include "Text.h"
@@ -467,10 +468,15 @@ MenuSkinPS2Input(CMenuManager *m)
 	const bool tri = pad->GetTriangleJustDown() || pad->GetEscapeJustDown();
 	const bool cross = pad->GetCrossJustDown() || pad->GetEnterJustDown();
 	const bool up = pad->GetDPadUpJustDown() || pad->GetUpJustDown(), down = pad->GetDPadDownJustDown() || pad->GetDownJustDown();
+	// The PS2's menu sounds for what the skin handles itself (research PS2_MENU_SOUNDS.md, v1.40;
+	// the PC's ids and recordings): moves the highlight sound (195), cross into a list select
+	// (196), cross into an edit mode the highlight sound, triangle back (197).
+	auto sound = [](int s) { DMAudio.PlayFrontEndSound(s, 0); };
 	if (pageFocus && m->m_nCurrScreen == MENUPAGE_CHOOSE_LOAD_SLOT) {
 		int rows = aScreens[MENUPAGE_CHOOSE_LOAD_SLOT].m_aEntries[9].m_Action == MENUACTION_NOTHING ? 2 : 3;
 		if (!loadColumn) {	// the slots
 			if (tri) {
+				sound(SOUND_FRONTEND_BACK);
 				loadColumn = true;
 				loadRow = 0;
 				return true;
@@ -478,18 +484,21 @@ MenuSkinPS2Input(CMenuManager *m)
 			return false;
 		}
 		if (tri) {
+			sound(SOUND_FRONTEND_BACK);
 			pageFocus = false;
 			loadColumn = false;
 			MenuSkinPS2GlideSeed(0, gRowRect);
 			return true;
 		}
 		if (up || down) {
+			sound(SOUND_FRONTEND_HIGHLIGHT_OPTION);
 			loadRow = (loadRow + (down ? 1 : rows - 1)) % rows;
 			if (loadRow > 0)
 				m->m_nCurrOption = 7 + loadRow;
 			return true;
 		}
-		if (cross && loadRow == 0) {	// into the slots
+		if (cross && loadRow == 0) {	// into the slots (the PS2: the highlight sound)
+			sound(SOUND_FRONTEND_HIGHLIGHT_OPTION);
 			loadColumn = false;
 			m->m_nCurrOption = 0;
 			return true;
@@ -514,6 +523,7 @@ MenuSkinPS2Input(CMenuManager *m)
 		}
 		if (audioEdit) {
 			if (tri) {
+				sound(SOUND_FRONTEND_BACK);
 				audioEdit = false;
 				pageFocus = false;
 				MenuSkinPS2GlideSeed(0, gRowRect);
@@ -523,7 +533,8 @@ MenuSkinPS2Input(CMenuManager *m)
 				return false;	// the PC menu changes the volume / station
 			return true;
 		}
-		if (cross) {
+		if (cross) {	// (into a slider's or the station's edit mode: the highlight sound)
+			sound(SOUND_FRONTEND_HIGHLIGHT_OPTION);
 			audioEdit = true;
 			return true;
 		}
@@ -535,6 +546,7 @@ MenuSkinPS2Input(CMenuManager *m)
 				cell ^= 2;
 			audioOutput = cell == 3;
 			m->m_nCurrOption = cell == 0 ? music : cell == 1 ? sfx : radio;
+			sound(SOUND_FRONTEND_HIGHLIGHT_OPTION);
 			return true;
 		}
 	}
@@ -549,6 +561,7 @@ MenuSkinPS2Input(CMenuManager *m)
 		if (row == 0) {
 			if (controlsEdit) {
 				if (tri) {
+					sound(SOUND_FRONTEND_BACK);
 					controlsEdit = false;
 					pageFocus = false;
 					MenuSkinPS2GlideSeed(0, gRowRect);
@@ -558,7 +571,8 @@ MenuSkinPS2Input(CMenuManager *m)
 					controlsEdit = false;	// (and the PC menu moves)
 				return false;
 			}
-			if (cross) {
+			if (cross) {	// (into its edit mode: the highlight sound)
+				sound(SOUND_FRONTEND_HIGHLIGHT_OPTION);
 				controlsEdit = true;
 				return true;
 			}
@@ -575,6 +589,7 @@ MenuSkinPS2Input(CMenuManager *m)
 		return true;	// (the PC's "back" rows: the PS2 goes back with triangle only; Brief/Stats have nothing to select)
 	if (pageFocus) {
 		if (IsTabPage(m->m_nCurrScreen) && tri) {
+			sound(SOUND_FRONTEND_BACK);
 			pageFocus = false;
 			MenuSkinPS2GlideSeed(0, gRowRect);	// the box glides from the row back to the tab
 			return true;
@@ -583,6 +598,7 @@ MenuSkinPS2Input(CMenuManager *m)
 		if (tri && tab >= 0 && !IsTabPage(m->m_nCurrScreen)) {
 			// a confirmation or sub-page: back to its tab's page, the tab bar focused (the PC's
 			// "previous page" of the confirmations is its own New Game page)
+			sound(SOUND_FRONTEND_BACK);
 			m->SwitchToNewScreen(SWITCH_TO_PAGE(tabs[tab].page));
 			return true;
 		}
@@ -597,6 +613,7 @@ MenuSkinPS2Input(CMenuManager *m)
 	}
 	if (cross) {
 		// the box leaves the tab and glides to the list's first item
+		sound(SOUND_FRONTEND_ENTER_OR_ADJUST);
 		MenuSkinPS2GlideSeed(1, gTabRect);
 		MenuSkinPS2GlideSeed(2, gTabRect);
 		gTabSweep = true;
@@ -623,6 +640,7 @@ MenuSkinPS2Input(CMenuManager *m)
 		return true;	// nothing else acts on the tab bar
 	int next = row * perRow + col;
 	if (next != cur) {
+		sound(SOUND_FRONTEND_HIGHLIGHT_OPTION);
 		m->SwitchToNewScreen(SWITCH_TO_PAGE(tabs[next].page));
 		focusPage = m->m_nCurrScreen;
 		pageFocus = false;

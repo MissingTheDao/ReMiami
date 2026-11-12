@@ -9,6 +9,7 @@
 // in those pixels; the Xbox UI style lays out in 480 lines.
 #include "common.h"
 #include "Frontend.h"
+#include "DMAudio.h"
 #include "Font.h"
 #include "Sprite2d.h"
 #include "Text.h"
@@ -901,6 +902,10 @@ EnterPage(CMenuManager *m)
 bool
 MenuSkinXboxInput(CMenuManager *m)
 {
+	// The Xbox's menu sounds for what the skin handles itself (research XBOX_MENU_SOUNDS.md: the
+	// same ids and recordings as the PC's): item moves and page changes the highlight sound (195),
+	// A select (196), B back (197); no error sound anywhere.
+	auto sound = [](int s) { DMAudio.PlayFrontEndSound(s, 0); };
 	if (!MenuSkinXboxActive(m->m_nCurrScreen, m->m_bGameNotLoaded))
 		return false;
 	CPad *pad = CPad::GetPad(0);
@@ -912,16 +917,20 @@ MenuSkinXboxInput(CMenuManager *m)
 	int n = ARRAY_SIZE(tabs), cur = CurrentTab(m->m_nCurrScreen);
 	if (barFocus && !MenuSkinXboxDialog(m->m_nCurrScreen)) {
 		if (b) {
+			sound(SOUND_FRONTEND_BACK);
 			m->m_bShutDownFrontEndRequested = true;
 			return true;
 		}
 		if (a) {
 			if (!IsTabPage(m->m_nCurrScreen))
 				return false;	// (a sub-page: as on the PC)
+			// (entering Controls or Display: the Xbox's "info" bip, SOUND_HUD, 179)
+			sound(m->m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS || m->m_nCurrScreen == MENUPAGE_CONSOLE_DISPLAY ? SOUND_HUD : SOUND_FRONTEND_ENTER_OR_ADJUST);
 			EnterPage(m);
 			return true;
 		}
 		if ((left || right) && cur >= 0) {
+			sound(SOUND_FRONTEND_HIGHLIGHT_OPTION);
 			m->SwitchToNewScreen(SWITCH_TO_PAGE(tabs[(cur + (right ? 1 : -1) + n) % n].page));
 			barFocus = true;
 		}
@@ -929,9 +938,12 @@ MenuSkinXboxInput(CMenuManager *m)
 	}
 	// inside a page
 	if (dropOpen && dropConfirm) {
-		if (left || right)
+		if (left || right) {
+			sound(SOUND_FRONTEND_HIGHLIGHT_OPTION);
 			dropConfirmSel = 1 - dropConfirmSel;
+		}
 		if (a) {
+			sound(SOUND_FRONTEND_ENTER_OR_ADJUST);
 			if (dropConfirmSel == 0) {
 				extern int8 gPs2Setup;
 				PadLayoutApply(dropSel);
@@ -944,17 +956,23 @@ MenuSkinXboxInput(CMenuManager *m)
 	}
 	if (dropOpen) {	// the Controls drop-down: up/down choose, A asks to apply, B closes it
 		const bool up = pad->GetDPadUpJustDown() || pad->GetUpJustDown(), down = pad->GetDPadDownJustDown() || pad->GetDownJustDown();
-		if (up || down)
+		if (up || down) {
+			sound(SOUND_FRONTEND_HIGHLIGHT_OPTION);
 			dropSel = (dropSel + (down ? 1 : NUM_DROP - 1)) % NUM_DROP;
+		}
 		if (a) {
+			sound(SOUND_FRONTEND_ENTER_OR_ADJUST);
 			dropConfirm = true;
 			dropConfirmSel = 1;
 		}
+		if (b)
+			sound(SOUND_FRONTEND_BACK);
 		if (b || m->m_nCurrScreen != MENUPAGE_CONSOLE_CONTROLS)
 			dropOpen = false;
 		return true;
 	}
 	if (a && m->m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS && m->m_nCurrOption == 0) {
+		sound(SOUND_FRONTEND_ENTER_OR_ADJUST);
 		dropOpen = true;
 		dropConfirm = false;
 		dropSel = Max(PadLayoutCurrent(), 0);
@@ -962,15 +980,18 @@ MenuSkinXboxInput(CMenuManager *m)
 	}
 	int step = pad->GetRightShoulder2JustDown() ? 1 : pad->GetLeftShoulder2JustDown() ? -1 : 0;
 	if (step != 0 && cur >= 0) {
+		sound(SOUND_FRONTEND_HIGHLIGHT_OPTION);
 		m->SwitchToNewScreen(SWITCH_TO_PAGE(tabs[(cur + step + n) % n].page));
 		EnterPage(m);
 		return true;
 	}
 	if (b && IsTabPage(m->m_nCurrScreen)) {
+		sound(SOUND_FRONTEND_BACK);
 		barFocus = true;
 		return true;
 	}
 	if (b && pad->GetCircleJustDown()) {	// B on a sub-page or dialog: back, the row it came from selected (the PC menu goes back on triangle)
+		sound(SOUND_FRONTEND_BACK);
 		for (int i = 0; i < n; i++)
 			if (tabs[i].alt == m->m_nCurrScreen && tabs[i].alt != tabs[0].alt) {	// a tab's second page (the controller picture): to the tab's page
 				int from = m->m_nCurrScreen;
@@ -989,12 +1010,14 @@ MenuSkinXboxInput(CMenuManager *m)
 		optionsOrigin = m->m_nCurrScreen;
 		gConsoleOptionsSection = optionsOrigin == MENUPAGE_SOUND_SETTINGS ? 1 : optionsOrigin == MENUPAGE_CONSOLE_CONTROLS ? 2 : 0;
 		ConsoleAudioRows(true);
+		sound(SOUND_FRONTEND_ENTER_OR_ADJUST);
 		aScreens[MENUPAGE_CONSOLE_OPTIONS].m_PreviousPage = optionsOrigin;
 		m->SwitchToNewScreen(MENUPAGE_CONSOLE_OPTIONS);
 		return true;
 	}
 	if (HasSubTabs(m->m_nCurrScreen) && !SettingsSubTabs(m->m_nCurrScreen)) {
 		if (left || right) {
+			sound(SOUND_FRONTEND_HIGHLIGHT_OPTION);
 			// a hard cut: the content and the sub-tab highlight switch in one frame (research,
 			// autopad set 2 at 3888: no fade, slide or glide)
 			MenuSkinXboxSetSubTab(m->m_nCurrScreen, 1 - MenuSkinXboxSubTab(m->m_nCurrScreen));
