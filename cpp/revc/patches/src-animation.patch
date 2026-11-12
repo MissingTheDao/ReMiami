@@ -93,3 +93,23 @@
  	static void LoadAnimFile(const char *filename);
  	static void LoadAnimFile(RwStream *stream, bool compress, char (*uncompressedAnims)[32] = nil);
  	static void CreateAnimAssocGroups(void);
+--- a/src/animation/CutsceneMgr.cpp
++++ b/src/animation/CutsceneMgr.cpp
+@@ -23,6 +23,9 @@
+ #include "Radar.h"
+ #include "Pools.h"
+ 
++int XboxFlyLayout(void); bool XboxRawJustDown(int joy);	// (core/Pad.cpp: the Xbox style with a pad on its layouts, raw buttons)
++
++
+ const struct {
+ 	const char *szTrackName;
+ 	int iTrackId;
+@@ -540,6 +543,7 @@
+ 	if (bCamLoaded)
+ 		if (CGeneral::faststricmp(ms_cutsceneName, "finale") && TheCamera.Cams[TheCamera.ActiveCam].Mode == CCam::MODE_FLYBY && ms_cutsceneLoadStatus == CUTSCENE_LOADING_0) {
+ 			if (CPad::GetPad(0)->GetCrossJustDown()
++				|| (XboxFlyLayout() >= 0 && (XboxRawJustDown(1) || XboxRawJustDown(2)))	// (revc: the Xbox skips with A or B; research)
+ 				|| (CGame::playingIntro && CPad::GetPad(0)->GetStartJustDown())
+ 				|| CPad::GetPad(0)->GetLeftMouseJustDown()
+ 				|| CPad::GetPad(0)->GetEnterJustDown()

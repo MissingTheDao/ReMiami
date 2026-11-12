@@ -27,7 +27,7 @@ the Xbox release's two presets assign (its `neo/ControlMapping1.txt` = STANDARD,
 | Horn | L3 | L3 | L3 |
 | Sub-mission (hydraulics) | X | R3 | R3 |
 | Radio station | RB (Xbox Black) | RB | LB |
-| Car look left / right | right stick | D-pad left / right | LT / RT |
+| Car look left / right / behind (and drive-by) | right stick (pulled back = behind) | D-pad left / right / down | LT / RT / both |
 | Movement | left stick | left stick | D-pad and left stick |
 
 ## Checked against the disc
@@ -37,14 +37,25 @@ mechanically on 2026-11-10: the disc files' `@alias` lines resolved, each Xbox c
 the game's button number, then compared action by action). Bikes, boats, helicopters and planes
 share the car's bindings on PC, and the disc gives them the same buttons as cars, so they match too.
 
-Xbox controls with no PC action (would need new game actions):
+Xbox controls with no PC action, done in the Xbox UI style with a pad on the Standard or Classic
+layout by reading the stick or the raw button (core/Pad.cpp XboxFlyLayout, XboxRawJustDown):
 
-- holster weapon (D-pad down)
+- holster weapon (D-pad down, not while aiming at someone)
+- car look and drive-by on the right stick (Standard) / D-pad down = look behind (Classic)
+- flying: pitch and roll on the left stick only, heli yaw at full rate on the right stick's X
+  (Standard) or the triggers (Classic), the left stick's X overriding it; look behind with the right
+  stick in the air; no stabilise on full-size helis (RC helis: L3); Hunter rockets repeat while
+  held
+- hydraulics on the sub-mission button (X / R3) instead of the horn
+- cutscene skip with A or B
+
+Still missing (research: xbox_controls_full.md §D.2):
+
 - radio next/previous song and soundtrack (D-pad)
 - digital steering on the D-pad (Standard)
-- helicopter yaw on the triggers (Classic)
 - bike wheelie / first-person view (RB)
 - tank and fire truck special fire on LT (Classic; ours stays on B, the car's fire)
+- siren toggle by a tap shorter than 300 ms
 
 ## Feel (from the Xbox executable)
 
@@ -54,5 +65,6 @@ Xbox controls with no PC action (would need new game actions):
   game already reads, as the PS2's buttons).
 - Rumble: heavy motor shake strength * 64, light motor * 256.
 
-Mission scripts read buttons through the same action-to-PS2-state layer, so they need no
-per-script remapping (the Xbox shipped `ScriptControls.txt` for that).
+Mission scripts read buttons through the same action-to-PS2-state layer. The Xbox remapped some
+per script instead (`ScriptControls.txt`: the phone on LT, Pizza Boy, shop and race menus on the
+D-pad); revc doesn't yet (research: xbox_controls_full.md §D.2 gap 3).

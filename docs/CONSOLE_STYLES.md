@@ -16,8 +16,21 @@ content and stay outside the repo; this file records what the code does and why.
 | 13e | HUD per style (Xbox safe-area shift and rounder radar), console UI scaled by screen height | done (measured elements) |
 | 13f | Button glyph variants per UI style | done |
 | 13g | PS2 menu look and animations | done |
-| 13h | Xbox menu (Maestro) look and animations, controller page | in progress: layout, icon bar, help line, selection pulse |
+| 13h | Xbox menu (Maestro) look and animations, controller page | done: layout per the Xbox's data, save screen and dialogs, controller page; Xbox flying controls and vehicle look |
 | 13i | Console data from an imported disc (Xbox maps and flames, PS2 animations, PS2 world textures as a style pack), texture packs from zips | zip packs and per-style packs done |
+
+## Styles need their disc
+
+The PS2 and Xbox styles (the Visual Style presets and the UI style option) are offered only when
+that console's disc is imported (Options > CONSOLE DISCS): the pickers skip them otherwise, and a
+saved console style whose import is gone falls back to PC at start (MenuScreensCustom.cpp
+UiStyleAvailable / ConsoleStyleCheck; test runs keep any style). An import makes them selectable
+again. What each style takes from its disc:
+
+| Style | From the disc |
+|---|---|
+| Xbox | menu sprites, fonts, the menu's animation data (bar outlines), the controller page's pad and button sprites, the logo and glints, radio station logos, the map, flames, vehicle lightmaps |
+| PS2 | menu textures and fonts, the controller picture, the time cycle, animations (ped.ifp), world textures as a style pack |
 
 ## 13a: reference scenes
 

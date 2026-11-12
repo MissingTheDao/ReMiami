@@ -2993,8 +2993,16 @@
  	return Min(m_nMenuFadeAlpha, alpha);
  }
  
-@@ -3183,7 +4664,7 @@
+@@ -3181,9 +4662,15 @@
+ 		LoadINIControllerSettings();
+ 	}
  #endif
++#ifdef EXTENDED_COLOURFILTER
++	{
++		void ConsoleStyleCheck(void);	// (core/MenuScreensCustom.cpp: console styles need their disc)
++		ConsoleStyleCheck();
++	}
++#endif
  
  #ifdef FIX_BUGS
 -	TheCamera.m_fMouseAccelVertical = TheCamera.m_fMouseAccelHorzntl + 0.0005f;
@@ -3002,7 +3010,7 @@
  #endif
  #ifdef PC_PLAYER_CONTROLS
  	CCamera::m_bUseMouse3rdPerson = m_ControlMethod == CONTROL_STANDARD;
-@@ -3349,14 +4830,45 @@
+@@ -3349,14 +4836,45 @@
  	CFont::PrintString(SCREEN_WIDTH / 2.f, y, TheText.Get(text));
  }
  
@@ -3050,7 +3058,7 @@
  	CFont::SetDropShadowPosition(0);
  
  	float nextY = BRIEFS_BOTTOM_MARGIN;
-@@ -3375,7 +4887,7 @@
+@@ -3375,7 +4893,7 @@
  			CFont::FilterOutTokensFromString(gUString);
  
  			nextY -= CFont::GetNumberLines(MENU_X_LEFT_ALIGNED(BRIEFS_LINE_X), nextY, gUString) * BRIEFS_LINE_HEIGHT + BRIEFS_LINE_SPACING;
@@ -3059,7 +3067,7 @@
  		}
  	}
  }
-@@ -3389,6 +4901,14 @@
+@@ -3389,6 +4907,14 @@
  	static float scrollY = 0;
  
  	int rowNum = CStats::ConstructStatLine(99999);
@@ -3074,7 +3082,7 @@
  	CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(90.0f), MENU_Y(142.0f),
  		MENU_X_LEFT_ALIGNED(543.0f), MENU_Y(142.f),
  		MENU_X_LEFT_ALIGNED(107.0f), MENU_Y(316.f),
-@@ -3413,13 +4933,21 @@
+@@ -3413,13 +4939,21 @@
  
  	static uint32 lastCheck = 0;
  
@@ -3099,7 +3107,7 @@
  		}
  		lastCheck = CTimer::GetTimeInMillisecondsPauseMode();
  	}
-@@ -3444,6 +4972,11 @@
+@@ -3444,6 +4978,11 @@
  		}
  		alpha = 0.f;
  
@@ -3111,7 +3119,7 @@
  		// If it's still on screen
  		if (y > MENU_Y(STATS_VISIBLE_START_Y) && y < MENU_Y(STATS_VISIBLE_END_Y)) {
  			CStats::ConstructStatLine(row);
-@@ -3464,27 +4997,49 @@
+@@ -3464,27 +5003,49 @@
  			if (y >= MENU_Y(STATS_TOP_Y + STATS_FADING_AREA_LENGTH) && y <= MENU_Y(STATS_BOTTOM_Y - STATS_FADING_AREA_LENGTH))
  				alpha = 255.0f;
  
@@ -3165,7 +3173,7 @@
  	AsciiToUnicode(gString, gUString);
  
  	UnicodeStrcpy(gUString2, CStats::FindCriminalRatingString());
-@@ -3496,18 +5051,22 @@
+@@ -3496,18 +5057,22 @@
  #else
  	CFont::SetScale(MENU_X(SMALLTEXT_X_SCALE), MENU_Y(SMALLTEXT_Y_SCALE));
  #endif
@@ -3192,7 +3200,7 @@
  
  	if (TheCamera.GetScreenFadeStatus() != FADE_0)
  		return;
-@@ -3597,11 +5156,42 @@
+@@ -3597,11 +5162,42 @@
  						float x = ((mapCrosshair.x - diffX) / (m_fMapSize * 2)) * (WORLD_SIZE_X / MENU_MAP_WIDTH_SCALE) - (WORLD_SIZE_X / 2 + MENU_MAP_LEFT_OFFSET * MENU_MAP_LENGTH_UNIT);
  						float y = (WORLD_SIZE_Y / 2 - MENU_MAP_TOP_OFFSET * MENU_MAP_LENGTH_UNIT) - ((mapCrosshair.y - diffY) / (m_fMapSize * 2)) * (WORLD_SIZE_Y / MENU_MAP_HEIGHT_SCALE);
  						CRadar::ToggleTargetMarker(x, y);
@@ -3236,7 +3244,7 @@
  			if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
  				if (CPad::GetPad(0)->GetMouseWheelDown() && m_fMapSize > MENU_X(MAP_SIZE_TO_ALLOW_X_MOVE))
  					ZOOM(mapCrosshair.x, mapCrosshair.y, false);
-@@ -3715,11 +5305,11 @@
+@@ -3715,11 +5311,11 @@
  			break;
  		}
  		case MENUPAGE_SOUND_SETTINGS:
@@ -3250,7 +3258,7 @@
  					m_nHoverOption = HOVEROPTION_NEXT_RADIO;
  			}
  			break;
-@@ -3882,6 +5472,7 @@
+@@ -3882,6 +5478,7 @@
  CMenuManager::PrintRadioSelector(void)
  {
  	static uint32 lastRadioChange = 0;
@@ -3258,7 +3266,7 @@
  
  	CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(418.f), MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT),
  		MENU_X_LEFT_ALIGNED(228.f), MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT),
-@@ -3994,7 +5585,9 @@
+@@ -3994,7 +5591,9 @@
  
  	// Middle one(third) is colored differently depending on if it's in transition.
  	// If not in transition then this icon indicates selected radio, and should be on top of all icons. thus drawn last
@@ -3269,7 +3277,7 @@
  		m_aFrontEndSprites[third + MENUSPRITE_WILDSTYLE].Draw(m_LeftMostRadioX + MENU_X(MENURADIO_ICON_SIZE * 2), MENU_Y(MENURADIO_ICON_Y), MENU_X(MENURADIO_ICON_SIZE), MENU_Y(MENURADIO_ICON_SIZE),
  			CRGBA(INACTIVE_RADIO_COLOR.r, INACTIVE_RADIO_COLOR.g, INACTIVE_RADIO_COLOR.b, FadeIn(INACTIVE_RADIO_COLOR.a)));		
  	} else {
-@@ -4005,13 +5598,15 @@
+@@ -4005,13 +5604,15 @@
  
  	static bool radioChangeRequested = false;
  	static uint32 lastScrollCheck = 0;
@@ -3287,7 +3295,7 @@
  				radioChangeRequested = true;
  			}
  		}
-@@ -4020,7 +5615,7 @@
+@@ -4020,7 +5621,7 @@
  				m_LeftMostRadioX += MENU_X(6.f);
  			} else {
  				m_ScrollRadioBy = 0;
@@ -3296,7 +3304,7 @@
  				radioChangeRequested = true;
  			}
  		}
-@@ -4100,7 +5695,7 @@
+@@ -4100,7 +5701,7 @@
  	}
  
  	if (CPad::GetPad(0)->GetTabJustDown()) {
@@ -3305,7 +3313,7 @@
  		m_bShowMouse = false;
  		switch (m_nCurrExLayer) {
  		case HOVEROPTION_BACK:
-@@ -4136,7 +5731,7 @@
+@@ -4136,7 +5737,7 @@
  		if (!m_bPressedUpOnList) {
  			m_bPressedUpOnList = true;
  			lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
@@ -3314,7 +3322,7 @@
  			ScrollUpListByOne();
  		}
  	} else {
-@@ -4158,7 +5753,7 @@
+@@ -4158,7 +5759,7 @@
  		if (!m_bPressedDownOnList) {
  			m_bPressedDownOnList = true;
  			lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
@@ -3323,7 +3331,7 @@
  			ScrollDownListByOne();
  		}
  	} else {
-@@ -4174,7 +5769,7 @@
+@@ -4174,7 +5775,7 @@
  				m_bPressedPgUpOnList = true;
  				lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
  				m_bShowMouse = false;
@@ -3332,7 +3340,7 @@
  				PageUpList(false);
  			}
  		}
-@@ -4186,14 +5781,14 @@
+@@ -4186,14 +5787,14 @@
  				m_bPressedPgDnOnList = true;
  				lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
  				m_bShowMouse = false;
@@ -3349,7 +3357,7 @@
  			if (m_nTotalListRow >= MAX_VISIBLE_OPTION_ON_SCREEN) {
  				m_nFirstVisibleRowOnList = 0;
  			}
-@@ -4203,7 +5798,7 @@
+@@ -4203,7 +5804,7 @@
  		if (CPad::GetPad(0)->GetEnd()) {
  			m_nCurrExLayer = HOVEROPTION_LIST;
  			m_bShowMouse = false;
@@ -3358,7 +3366,7 @@
  			if (m_nTotalListRow >= MAX_VISIBLE_OPTION_ON_SCREEN) {
  				m_nFirstVisibleRowOnList = m_nTotalListRow - MAX_VISIBLE_OPTION_ON_SCREEN;
  			}
-@@ -4297,6 +5892,8 @@
+@@ -4297,6 +5898,8 @@
  
  	if (!m_AllowNavigation && m_firstStartCounter == 255)
  		m_AllowNavigation = true;
@@ -3367,7 +3375,7 @@
  	if (!m_bShowMouse && m_nCurrScreen != MENUPAGE_MAP && (m_nMouseOldPosX != m_nMousePosX || m_nMouseOldPosY != m_nMousePosY)) {
  		m_bShowMouse = true;
  	}
-@@ -4351,7 +5948,7 @@
+@@ -4351,7 +5954,7 @@
  				++m_nOptionMouseHovering;
  			}
  			m_nOptionHighlightTransitionBlend = 0;
@@ -3376,7 +3384,7 @@
  		}
  	}
  
-@@ -4458,16 +6055,21 @@
+@@ -4458,16 +6061,21 @@
  			|| CPad::GetPad(0)->GetAnaloguePadLeftJustUp() || CPad::GetPad(0)->GetAnaloguePadRightJustUp()
  			|| CPad::GetPad(0)->GetMouseWheelUpJustDown() || CPad::GetPad(0)->GetMouseWheelDownJustDown()) {
  			int option = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action;
@@ -3402,7 +3410,7 @@
  
  		}
  		if (CPad::GetPad(0)->GetBackJustDown() || CPad::GetPad(0)->GetEscapeJustDown()) {
-@@ -4547,7 +6149,8 @@
+@@ -4547,7 +6155,8 @@
  		}
  	}
  	if (changeValueBy != 0) {
@@ -3412,7 +3420,7 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_NOTHING
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_LABEL
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_YES
-@@ -4558,8 +6161,14 @@
+@@ -4558,8 +6167,14 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_RESTOREDEF
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_DRAWDIST
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_MOUSESENS
@@ -3429,7 +3437,7 @@
  		}
  	}
  	ProcessUserInput(goDown, goUp, optionSelected, goBack, changeValueBy);
-@@ -4661,7 +6270,7 @@
+@@ -4661,7 +6276,7 @@
  	int oldOption = m_nCurrOption;
  	if (goDown) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -3438,7 +3446,7 @@
  
  		m_nCurrOption++;
  		if (m_nCurrOption == NUM_MENUROWS || (aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_NOTHING)) {
-@@ -4672,7 +6281,7 @@
+@@ -4672,7 +6287,7 @@
  	}
  	if (goUp) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -3447,7 +3455,7 @@
  
  		if (m_nCurrOption == (aScreens[m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL)) {
  			while (m_nCurrOption != NUM_MENUROWS - 1
-@@ -4957,7 +6566,7 @@
+@@ -4957,7 +6572,7 @@
  					ControlsManager.MakeControllerActionsBlank();
  					ControlsManager.InitDefaultControlConfiguration();
  					ControlsManager.InitDefaultControlConfigMouse(MousePointerStateHelper.GetMouseSetUp());
@@ -3456,7 +3464,7 @@
  					if (AllValidWinJoys.m_aJoys[JOYSTICK1].m_bInitialised) {
  						DIDEVCAPS devCaps;
  						devCaps.dwSize = sizeof(DIDEVCAPS);
-@@ -5042,21 +6651,21 @@
+@@ -5042,21 +6657,21 @@
  			int saveSlot = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_SaveSlot;
  			if (saveSlot >= SAVESLOT_1 && saveSlot <= SAVESLOT_8 && Slots[m_nCurrOption] != SLOT_OK)
  #endif
@@ -3482,7 +3490,7 @@
  			m_ShowEmptyBindingError = true;
  		}
  	}
-@@ -5342,7 +6951,6 @@
+@@ -5342,7 +6957,6 @@
  		return SCREEN_STRETCH_Y(y);
  }
  
@@ -3490,7 +3498,7 @@
  void
  CMenuManager::CloseDialog(void)
  {
-@@ -5438,6 +7046,30 @@
+@@ -5438,6 +7052,30 @@
  
  	DefinedState();
  
@@ -3521,7 +3529,7 @@
  	CSprite2d::DrawRect(CRect(0, SCREEN_HEIGHT, SCREEN_WIDTH, 0), CRGBA(0, 0, 0, 160));
  
  	// Ofc this is not hardcoded like that on Xbox, it should be a texture
-@@ -5463,7 +7095,6 @@
+@@ -5463,7 +7101,6 @@
  	CFont::PrintString(x, y - SCREEN_SCALE_Y(numOfLines / 2.f), m_pDialogText);
  	CFont::DrawFonts();
  }
@@ -3529,7 +3537,7 @@
  
  void
  CMenuManager::ProcessFileActions()
-@@ -5488,13 +7119,11 @@
+@@ -5488,13 +7125,11 @@
  				CTheScripts::ScriptToLoad = 0;
  #endif
  
@@ -3547,7 +3555,7 @@
  				DoSettingsBeforeStartingAGame();
  				m_bWantToLoad = true;
  			} else
-@@ -5527,7 +7156,7 @@
+@@ -5527,7 +7162,7 @@
  		}
  		case MENUPAGE_SAVING_IN_PROGRESS:
  		{
@@ -3556,7 +3564,7 @@
  			if (m_bDialogOpen && DialogTextCmp("FESZ_WR")) {
  				uint32 startTime = CTimer::GetTimeInMillisecondsPauseMode();
  				int8 SaveSlot = PcSaveHelper.SaveSlot(m_nCurrSaveSlot);
-@@ -5561,7 +7190,7 @@
+@@ -5561,7 +7196,7 @@
  				SetDialogText("FESZ_WR");
  				ToggleDialog(true);
  			}
@@ -3565,7 +3573,7 @@
  			static bool waitedForScreen = false;
  
  			if (waitedForScreen) {
-@@ -5577,7 +7206,7 @@
+@@ -5577,7 +7212,7 @@
  				waitedForScreen = false;
  			} else if (m_nMenuFadeAlpha >= 255)
  				waitedForScreen = true;
@@ -3574,7 +3582,7 @@
  			break;
  		}
  	}
-@@ -5590,7 +7219,8 @@
+@@ -5590,7 +7225,8 @@
  
  		// Reminder: You need REGISTER_START_BUTTON defined to make it work.
  		if ((CPad::GetPad(0)->GetStartJustDown() || CPad::GetPad(0)->GetEscapeJustDown())
@@ -3584,7 +3592,7 @@
  			|| m_bShutDownFrontEndRequested || m_bStartUpFrontEndRequested
  #ifdef REGISTER_START_BUTTON
  			|| CPad::GetPad(0)->GetStartJustDown() && !m_bGameNotLoaded
-@@ -5598,9 +7228,7 @@
+@@ -5598,9 +7234,7 @@
  			) {
  
  			if (m_nCurrScreen != MENUPAGE_LOADING_IN_PROGRESS
@@ -3595,7 +3603,7 @@
  				) {
  				DoRWStuffStartOfFrame(0, 0, 0, 0, 0, 0, 255);
  				DoRWStuffEndOfFrame();
-@@ -5608,6 +7236,8 @@
+@@ -5608,6 +7242,8 @@
  				DoRWStuffEndOfFrame();
  			}
  
@@ -3604,7 +3612,7 @@
  			if (m_bShutDownFrontEndRequested)
  				m_bMenuActive = false;
  			else if (m_bStartUpFrontEndRequested)
-@@ -5626,6 +7256,11 @@
+@@ -5626,6 +7262,11 @@
  				CPad::StopPadsShaking();
  #endif
  			} else {
@@ -3616,7 +3624,7 @@
  #ifdef EXTENDED_COLOURFILTER
  				// we always expect CPostFX to be open
  				CMBlur::BlurOn = true;
-@@ -5708,22 +7343,22 @@
+@@ -5708,22 +7349,22 @@
  	m_bStartUpFrontEndRequested = false;
  	m_bShutDownFrontEndRequested = false;
  
@@ -3643,7 +3651,7 @@
  	DMAudio.ChangeMusicMode(MUSICMODE_GAME);
  	if (m_bSpritesLoaded) {
  		printf("REMOVE frontend\n");
-@@ -5827,52 +7462,56 @@
+@@ -5827,52 +7468,56 @@
  
  	// Because m_fMapSize is half of the map length(hence * 2), and map consists of 3x3 tiles(hence / 3).
  	float halfTile = m_fMapSize * 2.f / 3.f / 2.f;
@@ -3727,7 +3735,7 @@
  	}
  
  	CRadar::DrawBlips();
-@@ -5933,12 +7572,15 @@
+@@ -5933,12 +7578,15 @@
  		mapCrosshair.y = m_nMousePosY;
  	}
  
@@ -3743,7 +3751,7 @@
  
  #endif
  	m_bMenuMapActive = false;
-@@ -5957,10 +7599,10 @@
+@@ -5957,10 +7605,10 @@
  	m_PrefsRadioStation += increaseBy;
  	m_ScrollRadioBy = increaseBy;
  	if (m_ScrollRadioBy == 1) {
@@ -4316,7 +4324,7 @@
  #else
  	#define DUALPASS_SELECTOR 
  #endif
-@@ -88,10 +95,24 @@
+@@ -88,10 +95,27 @@
  #endif
  
  #ifdef EXTENDED_COLOURFILTER
@@ -4330,8 +4338,11 @@
 +	// revc: one choice for the platform look (plan task 13); see VisualStyleButtonPress.
 +	wchar *VisualStyleDraw(bool *disabled, bool userHovering);
 +	void VisualStyleButtonPress(int8 action);
++	// the console UI styles need their console's disc imported (UiStyleAfterChange)
++	void UiStyleAfterChange(int8 before, int8 after);
++	CCFOSelect *uiStyleSelect;
 +	#define VISUAL_STYLE_SELECTOR MENUACTION_CFO_DYNAMIC, "RVC_VST", { new CCFODynamic(nil, nil, nil, VisualStyleDraw, VisualStyleButtonPress) }, 0, 0, MENUALIGN_LEFT, \
-+		MENUACTION_CFO_SELECT, "RVC_UIS", { new CCFOSelect(&gUiStyle, "Graphics", "UiStyle", uiStyleOpts, ARRAY_SIZE(uiStyleOpts), false) }, 0, 0, MENUALIGN_LEFT, \
++		MENUACTION_CFO_SELECT, "RVC_UIS", { uiStyleSelect = new CCFOSelect(&gUiStyle, "Graphics", "UiStyle", uiStyleOpts, ARRAY_SIZE(uiStyleOpts), false, UiStyleAfterChange) }, 0, 0, MENUALIGN_LEFT, \
 +		MENUACTION_CFO_SELECT, "RVC_HUA", { new CCFOSelect(&gConsoleHudArea, "Graphics", "HudArea", hudAreaOpts, ARRAY_SIZE(hudAreaOpts), false) }, 0, 0, MENUALIGN_LEFT,
  	#define POSTFX_SELECTORS \
  		MENUACTION_CFO_SELECT, "FED_CLF", { new CCFOSelect((int8*)&CPostFX::EffectSwitch, "Graphics", "ColourFilter", filterNames, ARRAY_SIZE(filterNames), false) }, 0, 0, MENUALIGN_LEFT, \
@@ -4341,7 +4352,7 @@
  	#define POSTFX_SELECTORS
  #endif	
  
-@@ -107,31 +128,293 @@
+@@ -107,31 +131,340 @@
  	#define SELECT_CONTROLLER_TYPE
  #endif
  
@@ -4588,6 +4599,51 @@
 +#endif
 +}
 +
++// revc (user 2026-11-12): the PS2 and Xbox styles only with that console's disc imported (Options >
++// CONSOLE DISCS): without it their menus, fonts and textures would fall back to a half-PC mix.
++// Test runs (REVC_TEST) keep any style.
++extern "C" int revc_import_status(int kind);
++static bool
++UiStyleAvailable(int ui)
++{
++	static bool test = getenv("REVC_TEST") != nil;
++	if (ui == 1)
++		return test || revc_import_status(1);
++	if (ui == 2)
++		return test || revc_import_status(0);
++	return true;
++}
++
++void
++UiStyleAfterChange(int8 before, int8 after)
++{
++	if (UiStyleAvailable(after))
++		return;
++	// on past the console styles without a disc, the way the option was moving
++	const int n = ARRAY_SIZE(uiStyleOpts);
++	const int step = after == (before + 1) % n ? 1 : n - 1;
++	int ui = after;
++	while (!UiStyleAvailable(ui))
++		ui = (ui + step) % n;
++	gUiStyle = ui;
++	if (uiStyleSelect)
++		uiStyleSelect->displayedValue = uiStyleSelect->lastSavedValue = ui;
++	FrontEndMenuManager.SaveSettings();
++}
++
++// At start: a saved console style whose disc is gone goes back to PC.
++void
++ConsoleStyleCheck(void)
++{
++	if (UiStyleAvailable(gUiStyle))
++		return;
++	if (CurrentVisualStyle() == gUiStyle)	// (the PS2 / Xbox preset as a whole)
++		ApplyVisualStyle(0);
++	gUiStyle = 0;
++	if (uiStyleSelect)
++		uiStyleSelect->displayedValue = uiStyleSelect->lastSavedValue = 0;
++}
++
 +void
 +VisualStyleButtonPress(int8 action)
 +{
@@ -4600,6 +4656,8 @@
 +		next = cur < 0 ? n - 1 : (cur + n - 1) % n;
 +	else
 +		next = cur < 0 ? 0 : (cur + 1) % n;
++	for (int i = 0; i < n && !UiStyleAvailable(visualStyles[next].ui); i++)	// (skip the consoles without a disc)
++		next = action == FEOPTION_ACTION_LEFT ? (next + n - 1) % n : (next + 1) % n;
 +	ApplyVisualStyle(next);
 +	FrontEndMenuManager.SaveSettings();
 +}
@@ -4646,7 +4704,7 @@
  		FrontEndMenuManager.m_PrefsVsyncDisp = true;
  		#ifdef LEGACY_MENU_OPTIONS
  			FrontEndMenuManager.m_PrefsVsync = true;
-@@ -306,7 +589,7 @@
+@@ -306,7 +639,7 @@
  
  wchar* DetectJoystickDraw(bool* disabled, bool userHovering) {
  
@@ -4655,7 +4713,7 @@
  	int numButtons;
  	int found = -1;
  	const char *joyname;
-@@ -420,13 +703,11 @@
+@@ -420,13 +753,11 @@
  		MENUACTION_MUSICVOLUME,		"FEA_MUS", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 40, 76, MENUALIGN_LEFT,
  		MENUACTION_SFXVOLUME,		"FEA_SFX", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		MENUACTION_MP3VOLUMEBOOST,	"FEA_MPB", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
@@ -4672,7 +4730,7 @@
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 367, MENUALIGN_CENTER,
  #else
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 327, MENUALIGN_CENTER,
-@@ -441,9 +722,8 @@
+@@ -441,9 +772,8 @@
  		MENUACTION_DRAWDIST,	"FEM_LOD", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		DENSITY_SLIDERS
  #ifdef LEGACY_MENU_OPTIONS
@@ -4683,7 +4741,7 @@
  #if defined LEGACY_MENU_OPTIONS && !defined EXTENDED_COLOURFILTER
  		MENUACTION_TRAILS,		"FED_TRA", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  #endif
-@@ -455,7 +735,6 @@
+@@ -455,7 +785,6 @@
  		MENUACTION_SCREENRES,	"FED_RES", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  		MULTISAMPLING_SELECTOR
@@ -4691,7 +4749,7 @@
  		DUALPASS_SELECTOR
  		CUTSCENE_BORDERS_TOGGLE
  		FREE_CAM_TOGGLE
-@@ -492,7 +771,7 @@
+@@ -492,7 +821,7 @@
  
  	// MENUPAGE_MAP = 6
  	{ "FEH_MAP", MENUPAGE_NONE, nil, nil,
@@ -4700,7 +4758,7 @@
  	},
  
  	// MENUPAGE_NEW_GAME_RELOAD = 7
-@@ -640,6 +919,8 @@
+@@ -640,6 +969,8 @@
  #ifdef DETECT_JOYSTICK_MENU
  		MENUACTION_CHANGEMENU,	"FEC_JOD", {nil, SAVESLOT_NONE, MENUPAGE_DETECT_JOYSTICK}, 0, 0, MENUALIGN_CENTER,
  #endif
@@ -4709,7 +4767,7 @@
  		MENUACTION_CHANGEMENU,	"FEC_MOU", {nil, SAVESLOT_NONE, MENUPAGE_MOUSE_CONTROLS}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_RESTOREDEF,	"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_CONTROLLER_PC}, 320, 0, MENUALIGN_CENTER,
  		MENUACTION_GOBACK,		"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 320, 0, MENUALIGN_CENTER,
-@@ -659,6 +940,7 @@
+@@ -659,6 +990,7 @@
  #endif
  		 MENUACTION_CHANGEMENU,		"FEO_LAN", {nil, SAVESLOT_NONE, MENUPAGE_LANGUAGE_SETTINGS}, 0, 0, MENUALIGN_CENTER,
  		 MENUACTION_PLAYERSETUP,	"FET_PS", {nil, SAVESLOT_NONE, MENUPAGE_SKIN_SELECT}, 0, 0, MENUALIGN_CENTER,
@@ -4717,7 +4775,7 @@
  		 MENUACTION_GOBACK,			"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -673,6 +955,7 @@
+@@ -673,6 +1005,7 @@
  	{ "FEM_MM", MENUPAGE_DISABLED, nil, nil,
  		  MENUACTION_CHANGEMENU,	"FEP_STG",	{nil, SAVESLOT_NONE,	MENUPAGE_NEW_GAME}, 320, 170, MENUALIGN_CENTER,
  		  MENUACTION_CHANGEMENU,	"FEP_OPT",	{nil, SAVESLOT_NONE,	MENUPAGE_OPTIONS}, 0, 0, MENUALIGN_CENTER,
@@ -4725,7 +4783,7 @@
  		  MENUACTION_CHANGEMENU,	"FEP_QUI",	{nil, SAVESLOT_NONE,	MENUPAGE_EXIT}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -699,7 +982,7 @@
+@@ -699,7 +1032,7 @@
  		MENUACTION_CHANGEMENU,	"FEH_MAP",	{nil, SAVESLOT_NONE, MENUPAGE_MAP}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_CHANGEMENU,	"FEP_STA",	{nil, SAVESLOT_NONE, MENUPAGE_STATS}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_CHANGEMENU,	"FEH_BRI",	{nil, SAVESLOT_NONE, MENUPAGE_BRIEFS}, 0, 0, MENUALIGN_CENTER,
@@ -4734,7 +4792,7 @@
  		MENUACTION_CHANGEMENU,	"FEP_QUI",	{nil, SAVESLOT_NONE, MENUPAGE_EXIT}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -783,13 +1066,12 @@
+@@ -783,13 +1116,12 @@
  		MENUACTION_WIDESCREEN,	"FED_WIS", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  #ifdef LEGACY_MENU_OPTIONS
@@ -4750,7 +4808,7 @@
  		POSTFX_SELECTORS
  #elif defined LEGACY_MENU_OPTIONS
  		MENUACTION_TRAILS,		"FED_TRA", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
-@@ -809,6 +1091,46 @@
+@@ -809,6 +1141,46 @@
  	},
  #endif
  
@@ -4797,7 +4855,7 @@
  		
  #ifdef MISSION_REPLAY
  	// MENUPAGE_MISSION_RETRY = 57 on mobile
-@@ -826,3 +1148,269 @@
+@@ -826,3 +1198,269 @@
  
  #endif
  #endif
@@ -5079,14 +5137,14 @@
  #include "Game.h"
  #include "CutsceneMgr.h"
  #include "Font.h"
-@@ -1710,9 +1713,83 @@
+@@ -1710,9 +1713,110 @@
  	;
  }
  
 +extern "C" int revc_pad_menu_nintendo(void);
 +extern int8 gUiStyle;
 +
-+// revc: the Xbox version's flying controls (research on the Xbox build).
++// revc: the Xbox version's flying controls and vehicle look (research on the Xbox build).
 +// -1: PC rules (not the Xbox style, the "Original PC" layout, or keyboard and mouse);
 +// 0: Xbox Standard (also the player's own bindings: the sticks aren't bindings); 1: Xbox Classic.
 +extern "C" int PadLayoutCurrent(void);
@@ -5137,6 +5195,31 @@
 +	return (int16)gPadTriggerAnalog[1] - (int16)gPadTriggerAnalog[0];
 +}
 +
++// The pad's buttons as pressed, whatever they are bound to (the Xbox reads some actions from the
++// raw buttons: holster, cutscene skip, look behind in Classic; research), by the PS2-style
++// numbers: 1 B, 2 A, 3 X, 4 Y, 5/6 LT/RT, 7/8 white/black (LB/RB), 9 back, 10/11 LS/RS, 12 start,
++// 13-16 D-pad up/right/down/left. Sampled once per pad update.
++static bool rawNow[16], rawBefore[16];
++static void
++SampleRawButtons(const CControllerState &s)
++{
++	memcpy(rawBefore, rawNow, sizeof(rawNow));
++#ifdef LIBRW_HOST
++	extern bool gRevcTestPadOn;
++	if (gRevcTestPadOn) {	// (pad scripts set the PS2-style state directly)
++		const int16 v[16] = { s.Circle, s.Cross, s.Square, s.Triangle, s.LeftShoulder2, s.RightShoulder2, s.LeftShoulder1,
++			s.RightShoulder1, s.Select, s.LeftShock, s.RightShock, s.Start, s.DPadUp, s.DPadRight, s.DPadDown, s.DPadLeft };
++		for (int i = 0; i < 16; i++)
++			rawNow[i] = v[i] != 0;
++		return;
++	}
++#endif
++	for (int i = 0; i < 16; i++)
++		rawNow[i] = ControlsManager.m_aButtonStates[i];
++}
++bool XboxRawDown(int joy) { return joy >= 1 && joy <= 16 && rawNow[joy - 1]; }
++bool XboxRawJustDown(int joy) { return joy >= 1 && joy <= 16 && rawNow[joy - 1] && !rawBefore[joy - 1]; }
++
 +// The Xbox's stick-direction test: 0 left, 1 right, 2 none, 3 behind. Below |x| + |y| = 64 (half
 +// a stick) it is none; the larger axis decides.
 +int
@@ -5152,6 +5235,8 @@
  void CPad::Update(int16 pad)
  {
  	OldState = NewState;
++	if (pad == 0)
++		SampleRawButtons(NewState);	// (the last update's state: raw buttons for the Xbox style)
 +#ifdef LIBRW_HOST
 +	// revc: the PS2 UI style's controller setup 1-4 is the PS2's Mode 0-3 (ControllerConfig.cpp)
 +	if (pad == 0) {
@@ -5163,7 +5248,7 @@
  
  #ifdef GTA_PS2
  	bObsoleteControllerMessage = false;
-@@ -1978,6 +2055,32 @@
+@@ -1978,6 +2082,32 @@
  		NewState = ReconcileTwoControllersInput(PCTempKeyState, PCTempJoyState);
  		NewState = ReconcileTwoControllersInput(PCTempMouseState, NewState);
  	}
@@ -5196,7 +5281,65 @@
  
  	PCTempJoyState.Clear();
  	PCTempKeyState.Clear();
-@@ -3293,11 +3396,17 @@
+@@ -2341,11 +2471,37 @@
+ 	return 0;
+ }
+ 
++// revc: the Xbox's look in a vehicle (and the drive-by aim that follows it; research on the Xbox
++// build): Standard looks with the right stick's direction (XboxLookDir: left, right, pulled back =
++// behind), Classic with the D-pad, down = behind. -1: not the Xbox style with a pad in a vehicle
++// (the PC's L2/R2 rule); else 0 left, 1 right, 2 none, 3 behind.
++static int
++XboxCarLook(CPad *pad)
++{
++	int layout = XboxFlyLayout();
++	if (layout < 0 || pad != CPad::GetPad(0) || FindPlayerVehicle() == nil)
++		return -1;
++	if (layout == 0)
++		return XboxLookDir(pad->NewState.RightStickX, pad->NewState.RightStickY);
++	// Classic: left/right are the D-pad's bindings (they set L2/R2); behind is D-pad down, read raw
++	// (unbound in a vehicle)
++	if (XboxRawDown(15))
++		return 3;
++	if (pad->NewState.LeftShoulder2 && !pad->NewState.RightShoulder2)
++		return 0;
++	if (pad->NewState.RightShoulder2 && !pad->NewState.LeftShoulder2)
++		return 1;
++	return 2;
++}
++
+ bool CPad::GetLookLeft(void)
+ {
+ 	if ( ArePlayerControlsDisabled() )
+ 		return false;
+ 
++	int xbox = XboxCarLook(this);
++	if (xbox >= 0)
++		return xbox == 0;
+ 	return !!(NewState.LeftShoulder2 && !NewState.RightShoulder2);
+ }
+ 
+@@ -2354,6 +2510,9 @@
+ 	if ( ArePlayerControlsDisabled() )
+ 		return false;
+ 
++	int xbox = XboxCarLook(this);
++	if (xbox >= 0)
++		return xbox == 1;
+ 	return !!(NewState.RightShoulder2 && !NewState.LeftShoulder2);
+ }
+ 
+@@ -2363,6 +2522,9 @@
+ 	if ( ArePlayerControlsDisabled() )
+ 		return false;
+ 
++	int xbox = XboxCarLook(this);
++	if (xbox >= 0)
++		return xbox == 3;
+ 	return !!(NewState.RightShoulder2 && NewState.LeftShoulder2);
+ }
+ 
+@@ -3293,11 +3455,17 @@
  	return 0;
  }
  

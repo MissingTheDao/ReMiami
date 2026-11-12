@@ -67,6 +67,17 @@
  					CWeapon gun(WEAPONTYPE_M4, 5000);
  					CVector source = vecSeaSparrowGunPos;
  					source = GetMatrix()*source + m_vecMoveSpeed*CTimer::GetTimeStep();
+@@ -3511,7 +3521,9 @@
+ 		}
+ 	}
+ 
+-	if(CPad::GetPad(0)->HornJustDown()){
++	// revc: the Xbox toggles hydraulics with the sub-mission button (X / R3: our TOGGLE_SUBMISSIONS,
++	// which writes RightShock while driving; research)
++	if(XboxFlyLayout() >= 0 ? CPad::GetPad(0)->GetRightShockJustDown() : CPad::GetPad(0)->HornJustDown()){
+ 		// Switch between normal and extended
+ 
+ 		if(m_hydraulicState < 100)
 --- a/src/vehicles/Bike.cpp
 +++ b/src/vehicles/Bike.cpp
 @@ -37,6 +37,7 @@

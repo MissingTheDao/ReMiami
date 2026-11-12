@@ -273,6 +273,30 @@
  	delete[] buf;
  }
  
+--- a/src/peds/PlayerPed.cpp
++++ b/src/peds/PlayerPed.cpp
+@@ -25,6 +25,9 @@
+ #include "VarConsole.h"
+ #include "SaveBuf.h"
+ 
++int XboxFlyLayout(void); bool XboxRawJustDown(int joy);	// (core/Pad.cpp: the Xbox style with a pad on its layouts, raw buttons)
++
++
+ #define PAD_MOVE_TO_GAME_WORLD_MOVE 60.0f
+ 
+ bool CPlayerPed::bDontAllowWeaponChange;
+@@ -717,6 +720,11 @@
+ 		goto switchDetectDone;
+ 
+ 	if (!m_pPointGunAt && !bDontAllowWeaponChange && GetWeapon()->m_eWeaponType != WEAPONTYPE_DETONATOR) {
++		// revc: the Xbox puts the weapon away with D-pad down (not while aiming at someone; research)
++		if (XboxFlyLayout() >= 0 && padUsed == CPad::GetPad(0) && XboxRawJustDown(15)) {
++			m_nSelectedWepSlot = WEAPONSLOT_UNARMED;
++			goto switchDetectDone;
++		}
+ 		if (padUsed->CycleWeaponRightJustDown()) {
+ 
+ 			if (TheCamera.PlayerWeaponMode.Mode != CCam::MODE_M16_1STPERSON
 --- a/src/peds/Population.cpp
 +++ b/src/peds/Population.cpp
 @@ -545,7 +545,7 @@
