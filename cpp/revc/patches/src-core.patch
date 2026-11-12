@@ -2746,7 +2746,7 @@
  	CFont::PrintString(MENU_X_LEFT_ALIGNED(STATS_RATING_X) - CFont::GetStringWidth(gUString2, true) / 2.f, MENU_Y(STATS_RATING_Y_2), gUString2);
  }
  
-@@ -3597,11 +4904,35 @@
+@@ -3597,11 +4904,42 @@
  						float x = ((mapCrosshair.x - diffX) / (m_fMapSize * 2)) * (WORLD_SIZE_X / MENU_MAP_WIDTH_SCALE) - (WORLD_SIZE_X / 2 + MENU_MAP_LEFT_OFFSET * MENU_MAP_LENGTH_UNIT);
  						float y = (WORLD_SIZE_Y / 2 - MENU_MAP_TOP_OFFSET * MENU_MAP_LENGTH_UNIT) - ((mapCrosshair.y - diffY) / (m_fMapSize * 2)) * (WORLD_SIZE_Y / MENU_MAP_HEIGHT_SCALE);
  						CRadar::ToggleTargetMarker(x, y);
@@ -2756,34 +2756,41 @@
  				}
  			}
  
-+			// revc: the PS2 zooms smoothly while R1 (in) or R2 (out) is held: the scale eases toward
-+			// 10x the overview (or back to it) in log scale, time constant 1.2 s (measured: about
-+			// 1.2x per 0.1 s at first, 4.8x after a 1.4 s hold), around the screen's centre
++			// revc: the PS2 zooms while R1 (in) or R2 (out) is held: the map's half size +-15 per 30 Hz
++			// menu update, linear, 162 to 1000 (here scaled to revc's measured overview size); zooming
++			// in keeps the map's centre, zooming out first pulls the centre 1/n of the way back to its
++			// default (n: the steps left), then clamps it to default +- (size - overview) (PS2 v1.40,
++			// research)
 +			static uint32 lastZoomTick = 0;
 +			uint32 zoomNow = CTimer::GetTimeInMillisecondsPauseMode();
-+			float zoomDt = Min(100u, zoomNow - lastZoomTick) / 1000.0f;
++			int zoomSteps = Min(3, (int)(zoomNow / 33 - lastZoomTick / 33));
 +			lastZoomTick = zoomNow;
 +			extern int gRevcTestMapZoom;	// (skel/host/testhooks.cpp: 1 holds R1, -1 R2, for clips)
 +			const bool zoomIn = CPad::GetPad(0)->GetRightShoulder1() || gRevcTestMapZoom > 0;
 +			const bool ps2Zoom = PS2_SKIN_ON && (zoomIn || CPad::GetPad(0)->GetRightShoulder2() || gRevcTestMapZoom < 0) &&
 +				!CPad::GetPad(0)->GetMouseWheelUp() && !CPad::GetPad(0)->GetMouseWheelDown();
 +			if (ps2Zoom) {
-+				float base = MENU_Y(150.0f), target = zoomIn ? base * 10.0f : base;
-+				float ls = logf(m_fMapSize);
-+				// time constant 0.88 s: calibrated on the clip against the console's 1.18x per 0.1 s
-+				// and 4.8x after 1.4 s (1.2 s on paper came out 30 % slow in revc's clip)
-+				ls += (logf(target) - ls) * (1.0f - expf(-zoomDt / 0.88f));
-+				float z2 = Max(expf(ls), base) / m_fMapSize;	// never below the overview
-+				m_fMapCenterX += (SCREEN_WIDTH / 2 - m_fMapCenterX) * (1.0f - z2);
-+				m_fMapCenterY += (SCREEN_HEIGHT / 2 - m_fMapCenterY) * (1.0f - z2);
-+				m_fMapSize *= z2;
-+				m_fMapCenterX = Clamp(m_fMapCenterX, SCREEN_WIDTH/2 - (m_fMapSize - MENU_X(MAP_MIN_SIZE)), m_fMapSize - MENU_X(MAP_MIN_SIZE) + SCREEN_WIDTH/2);
-+				m_fMapCenterY = Clamp(m_fMapCenterY, SCREEN_HEIGHT/2 - (m_fMapSize - MENU_Y(MAP_MIN_SIZE)), m_fMapSize - MENU_Y(MAP_MIN_SIZE) + SCREEN_HEIGHT/2);
++				const float base = MENU_Y(150.0f), unit = base / 162.0f, step = 15.0f * unit, top = 1000.0f * unit;
++				const float cx0 = MENU_X_LEFT_ALIGNED(320.0f), cy0 = MENU_Y(197.0f);
++				for (int i = 0; i < zoomSteps; i++) {
++					if (zoomIn) {
++						m_fMapSize = Min(top, m_fMapSize + step);
++					} else if (m_fMapSize > base) {
++						float n = (m_fMapSize - base) / step;
++						if (n >= 1.0f) {
++							m_fMapCenterX -= (m_fMapCenterX - cx0) / n;
++							m_fMapCenterY -= (m_fMapCenterY - cy0) / n;
++						}
++						m_fMapSize = Max(base, m_fMapSize - step);
++						m_fMapCenterX = Clamp(m_fMapCenterX, cx0 - (m_fMapSize - base), cx0 + (m_fMapSize - base));
++						m_fMapCenterY = Clamp(m_fMapCenterY, cy0 - (m_fMapSize - base), cy0 + (m_fMapSize - base));
++					}
++				}
 +			} else
  			if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
  				if (CPad::GetPad(0)->GetMouseWheelDown() && m_fMapSize > MENU_X(MAP_SIZE_TO_ALLOW_X_MOVE))
  					ZOOM(mapCrosshair.x, mapCrosshair.y, false);
-@@ -3715,11 +5046,11 @@
+@@ -3715,11 +5053,11 @@
  			break;
  		}
  		case MENUPAGE_SOUND_SETTINGS:
@@ -2797,7 +2804,7 @@
  					m_nHoverOption = HOVEROPTION_NEXT_RADIO;
  			}
  			break;
-@@ -3882,6 +5213,7 @@
+@@ -3882,6 +5220,7 @@
  CMenuManager::PrintRadioSelector(void)
  {
  	static uint32 lastRadioChange = 0;
@@ -2805,7 +2812,7 @@
  
  	CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(418.f), MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT),
  		MENU_X_LEFT_ALIGNED(228.f), MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT),
-@@ -3994,7 +5326,9 @@
+@@ -3994,7 +5333,9 @@
  
  	// Middle one(third) is colored differently depending on if it's in transition.
  	// If not in transition then this icon indicates selected radio, and should be on top of all icons. thus drawn last
@@ -2816,7 +2823,7 @@
  		m_aFrontEndSprites[third + MENUSPRITE_WILDSTYLE].Draw(m_LeftMostRadioX + MENU_X(MENURADIO_ICON_SIZE * 2), MENU_Y(MENURADIO_ICON_Y), MENU_X(MENURADIO_ICON_SIZE), MENU_Y(MENURADIO_ICON_SIZE),
  			CRGBA(INACTIVE_RADIO_COLOR.r, INACTIVE_RADIO_COLOR.g, INACTIVE_RADIO_COLOR.b, FadeIn(INACTIVE_RADIO_COLOR.a)));		
  	} else {
-@@ -4005,13 +5339,15 @@
+@@ -4005,13 +5346,15 @@
  
  	static bool radioChangeRequested = false;
  	static uint32 lastScrollCheck = 0;
@@ -2834,7 +2841,7 @@
  				radioChangeRequested = true;
  			}
  		}
-@@ -4020,7 +5356,7 @@
+@@ -4020,7 +5363,7 @@
  				m_LeftMostRadioX += MENU_X(6.f);
  			} else {
  				m_ScrollRadioBy = 0;
@@ -2843,7 +2850,7 @@
  				radioChangeRequested = true;
  			}
  		}
-@@ -4100,7 +5436,7 @@
+@@ -4100,7 +5443,7 @@
  	}
  
  	if (CPad::GetPad(0)->GetTabJustDown()) {
@@ -2852,7 +2859,7 @@
  		m_bShowMouse = false;
  		switch (m_nCurrExLayer) {
  		case HOVEROPTION_BACK:
-@@ -4136,7 +5472,7 @@
+@@ -4136,7 +5479,7 @@
  		if (!m_bPressedUpOnList) {
  			m_bPressedUpOnList = true;
  			lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
@@ -2861,7 +2868,7 @@
  			ScrollUpListByOne();
  		}
  	} else {
-@@ -4158,7 +5494,7 @@
+@@ -4158,7 +5501,7 @@
  		if (!m_bPressedDownOnList) {
  			m_bPressedDownOnList = true;
  			lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
@@ -2870,7 +2877,7 @@
  			ScrollDownListByOne();
  		}
  	} else {
-@@ -4174,7 +5510,7 @@
+@@ -4174,7 +5517,7 @@
  				m_bPressedPgUpOnList = true;
  				lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
  				m_bShowMouse = false;
@@ -2879,7 +2886,7 @@
  				PageUpList(false);
  			}
  		}
-@@ -4186,14 +5522,14 @@
+@@ -4186,14 +5529,14 @@
  				m_bPressedPgDnOnList = true;
  				lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
  				m_bShowMouse = false;
@@ -2896,7 +2903,7 @@
  			if (m_nTotalListRow >= MAX_VISIBLE_OPTION_ON_SCREEN) {
  				m_nFirstVisibleRowOnList = 0;
  			}
-@@ -4203,7 +5539,7 @@
+@@ -4203,7 +5546,7 @@
  		if (CPad::GetPad(0)->GetEnd()) {
  			m_nCurrExLayer = HOVEROPTION_LIST;
  			m_bShowMouse = false;
@@ -2905,7 +2912,7 @@
  			if (m_nTotalListRow >= MAX_VISIBLE_OPTION_ON_SCREEN) {
  				m_nFirstVisibleRowOnList = m_nTotalListRow - MAX_VISIBLE_OPTION_ON_SCREEN;
  			}
-@@ -4297,6 +5633,8 @@
+@@ -4297,6 +5640,8 @@
  
  	if (!m_AllowNavigation && m_firstStartCounter == 255)
  		m_AllowNavigation = true;
@@ -2914,7 +2921,7 @@
  	if (!m_bShowMouse && m_nCurrScreen != MENUPAGE_MAP && (m_nMouseOldPosX != m_nMousePosX || m_nMouseOldPosY != m_nMousePosY)) {
  		m_bShowMouse = true;
  	}
-@@ -4351,7 +5689,7 @@
+@@ -4351,7 +5696,7 @@
  				++m_nOptionMouseHovering;
  			}
  			m_nOptionHighlightTransitionBlend = 0;
@@ -2923,7 +2930,7 @@
  		}
  	}
  
-@@ -4458,16 +5796,21 @@
+@@ -4458,16 +5803,21 @@
  			|| CPad::GetPad(0)->GetAnaloguePadLeftJustUp() || CPad::GetPad(0)->GetAnaloguePadRightJustUp()
  			|| CPad::GetPad(0)->GetMouseWheelUpJustDown() || CPad::GetPad(0)->GetMouseWheelDownJustDown()) {
  			int option = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action;
@@ -2949,7 +2956,7 @@
  
  		}
  		if (CPad::GetPad(0)->GetBackJustDown() || CPad::GetPad(0)->GetEscapeJustDown()) {
-@@ -4547,7 +5890,8 @@
+@@ -4547,7 +5897,8 @@
  		}
  	}
  	if (changeValueBy != 0) {
@@ -2959,7 +2966,7 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_NOTHING
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_LABEL
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_YES
-@@ -4559,7 +5903,7 @@
+@@ -4559,7 +5910,7 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_DRAWDIST
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_MOUSESENS
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_MP3VOLUMEBOOST) {
@@ -2968,7 +2975,7 @@
  		}
  	}
  	ProcessUserInput(goDown, goUp, optionSelected, goBack, changeValueBy);
-@@ -4661,7 +6005,7 @@
+@@ -4661,7 +6012,7 @@
  	int oldOption = m_nCurrOption;
  	if (goDown) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -2977,7 +2984,7 @@
  
  		m_nCurrOption++;
  		if (m_nCurrOption == NUM_MENUROWS || (aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_NOTHING)) {
-@@ -4672,7 +6016,7 @@
+@@ -4672,7 +6023,7 @@
  	}
  	if (goUp) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -2986,7 +2993,7 @@
  
  		if (m_nCurrOption == (aScreens[m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL)) {
  			while (m_nCurrOption != NUM_MENUROWS - 1
-@@ -4957,7 +6301,7 @@
+@@ -4957,7 +6308,7 @@
  					ControlsManager.MakeControllerActionsBlank();
  					ControlsManager.InitDefaultControlConfiguration();
  					ControlsManager.InitDefaultControlConfigMouse(MousePointerStateHelper.GetMouseSetUp());
@@ -2995,7 +3002,7 @@
  					if (AllValidWinJoys.m_aJoys[JOYSTICK1].m_bInitialised) {
  						DIDEVCAPS devCaps;
  						devCaps.dwSize = sizeof(DIDEVCAPS);
-@@ -5042,21 +6386,21 @@
+@@ -5042,21 +6393,21 @@
  			int saveSlot = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_SaveSlot;
  			if (saveSlot >= SAVESLOT_1 && saveSlot <= SAVESLOT_8 && Slots[m_nCurrOption] != SLOT_OK)
  #endif
@@ -3021,7 +3028,7 @@
  			m_ShowEmptyBindingError = true;
  		}
  	}
-@@ -5590,7 +6934,8 @@
+@@ -5590,7 +6941,8 @@
  
  		// Reminder: You need REGISTER_START_BUTTON defined to make it work.
  		if ((CPad::GetPad(0)->GetStartJustDown() || CPad::GetPad(0)->GetEscapeJustDown())
@@ -3031,7 +3038,7 @@
  			|| m_bShutDownFrontEndRequested || m_bStartUpFrontEndRequested
  #ifdef REGISTER_START_BUTTON
  			|| CPad::GetPad(0)->GetStartJustDown() && !m_bGameNotLoaded
-@@ -5608,6 +6953,8 @@
+@@ -5608,6 +6960,8 @@
  				DoRWStuffEndOfFrame();
  			}
  
@@ -3040,7 +3047,7 @@
  			if (m_bShutDownFrontEndRequested)
  				m_bMenuActive = false;
  			else if (m_bStartUpFrontEndRequested)
-@@ -5626,6 +6973,11 @@
+@@ -5626,6 +6980,11 @@
  				CPad::StopPadsShaking();
  #endif
  			} else {
@@ -3052,7 +3059,7 @@
  #ifdef EXTENDED_COLOURFILTER
  				// we always expect CPostFX to be open
  				CMBlur::BlurOn = true;
-@@ -5708,22 +7060,22 @@
+@@ -5708,22 +7067,22 @@
  	m_bStartUpFrontEndRequested = false;
  	m_bShutDownFrontEndRequested = false;
  
@@ -3079,7 +3086,7 @@
  	DMAudio.ChangeMusicMode(MUSICMODE_GAME);
  	if (m_bSpritesLoaded) {
  		printf("REMOVE frontend\n");
-@@ -5827,52 +7179,54 @@
+@@ -5827,52 +7186,54 @@
  
  	// Because m_fMapSize is half of the map length(hence * 2), and map consists of 3x3 tiles(hence / 3).
  	float halfTile = m_fMapSize * 2.f / 3.f / 2.f;
@@ -3161,7 +3168,7 @@
  	}
  
  	CRadar::DrawBlips();
-@@ -5933,12 +7287,15 @@
+@@ -5933,12 +7294,15 @@
  		mapCrosshair.y = m_nMousePosY;
  	}
  
@@ -3177,7 +3184,7 @@
  
  #endif
  	m_bMenuMapActive = false;
-@@ -5957,10 +7314,10 @@
+@@ -5957,10 +7321,10 @@
  	m_PrefsRadioStation += increaseBy;
  	m_ScrollRadioBy = increaseBy;
  	if (m_ScrollRadioBy == 1) {
