@@ -192,7 +192,9 @@ CurrentTab(int page)
 // The tab bar: two rows under the panel, the current tab on a green box just around its label,
 // slightly tilted. revc keeps the EU's eight tabs (language too), so the EU v3.00 layout (US v1.40
 // has seven, x about 158-453, y 404 / 426).
-static const float tabCX[8] = { 178, 256, 336, 420, 148, 252, 349, 464 };	// EU v3.00 (8 tabs)
+// US v1.40 (the PS2 reference): map brief load stats / controls audio display, measured on the
+// v1.40 capture (row 2 sits further right than EU v3.00's four tabs); revc's "options" after display
+static const float tabCX[8] = { 178.5f, 256.5f, 335.5f, 420.5f, 206.5f, 312.0f, 407.5f, 505.0f };
 static const float tabRowY[2] = { 392, 414 };
 
 static void
