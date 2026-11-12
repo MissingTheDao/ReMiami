@@ -62,15 +62,14 @@ MenuSkinPS2GlideT(uint32 ms)
 	return step == 0 ? 0.0f : frac[step - 1];
 }
 
-// Focus from the tab into the list: one step with no box at all, then near-equal steps from the
-
-// tab to row 0 for the Controls and Audio boxes (measured: 8, 33, 57, 79, 100 %), 167 ms after a
-// blank step. Negative: no box this step.
+// Focus from the tab into the list: one 30 Hz step with no box at all, then near-equal steps from
+// the tab to row 0 for the Controls and Audio boxes, no easing (v1.40 autopad, focus into Controls:
+// 19, 38, 60, 77, 98, 100 %), 200 ms after the blank step. Negative: no box this step.
 float
 MenuSkinPS2GlideTTab(uint32 ms)
 {
-	static const float frac[5] = { 0.08f, 0.33f, 0.57f, 0.79f, 1.0f };
-	int step = Min(5, (int)(ms / 33));
+	static const float frac[6] = { 0.19f, 0.38f, 0.60f, 0.77f, 0.98f, 1.0f };
+	int step = Min(6, (int)(ms / 33));
 	return step == 0 ? -1.0f : frac[step - 1];
 }
 
@@ -115,12 +114,15 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 		s.from.bottom += SY(190.0f);
 		s.to = target;
 		s.start = now;
+		s.tab = false;	// (a seed for another page)
 	} else if (target.left != s.to.left || target.top != s.to.top || target.right != s.to.right || target.bottom != s.to.bottom) {
-		if (s.tab && s.to.left != s.from.left)
-			s.tab = false;	// (a later move: a normal glide)
-		s.from = s.cur;
-		s.to = target;
-		s.start = now;
+		if (s.tab) {
+			s.to = target;	// (the row's box changing during the focus glide: keep its curve)
+		} else {
+			s.from = s.cur;
+			s.to = target;
+			s.start = now;
+		}
 	}
 	float t;
 	if (s.tab) {	// (before the sweep: from the tab bar into the list is a long move up too)
