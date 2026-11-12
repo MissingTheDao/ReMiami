@@ -119,6 +119,9 @@ for s in "${SCENARIOS[@]}"; do
   # Real controllers plugged in would take player slots from the virtual pads: SDL ignores every
   # pad except the virtual ones' models (DualSense, Steam Deck).
   [[ "$s" == gamepad ]] && envs+=(SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x054c/0x0ce6,0x28de/0x1205)
+  # Menu captures (motion tests, the menu sweep) play their own pad script: no real controller may
+  # add input (a pad's stick drift moved the map in long batches).
+  [[ "$s" == menus || "$s" == menusweep ]] && envs+=(SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 SDL_JOYSTICK_HIDAPI=0)
   [[ "$s" == boot ]] && envs+=(REVC_TEST_SHOT="$OUT/$s.png")
   if [[ "$s" == motion ]]; then
     rm -rf "$OUT/motion-frames"; mkdir -p "$OUT/motion-frames"
