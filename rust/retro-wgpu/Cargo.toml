@@ -13,4 +13,14 @@ wgpu = "30.0.1"
 pollster = "1.0.1"
 # Texture packs and dumps (PNG).
 png = "0.18"
+# Stage 3: RetroArch slang presets on the final image (feature "slang"). MPL-2.0 OR GPL-3.0-only;
+# used under MPL-2.0 (see NOTICE.md).
+librashader-runtime-wgpu = { version = "0.12.1", optional = true }
+librashader-presets = { version = "0.12", optional = true }
+librashader-common = { version = "0.12", optional = true }
+librashader-runtime = { version = "0.12", optional = true }
+
+[features]
+default = []
+slang = ["dep:librashader-runtime-wgpu", "dep:librashader-presets", "dep:librashader-common", "dep:librashader-runtime"]
 

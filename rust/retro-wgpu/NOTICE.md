@@ -54,6 +54,24 @@ applies. Attribution is kept as a courtesy.
 | pollster 1.0 | MIT OR Apache-2.0 | blocking on adapter/device requests |
 | png 0.18 | MIT OR Apache-2.0 | texture packs and dumps, golden images in tests |
 
+### Feature `slang`: librashader and its native dependencies
+
+Only built with `--features slang`.
+
+| crate | licence | notes |
+|---|---|---|
+| librashader-runtime-wgpu, -presets, -common, -runtime (+ -reflect, -preprocess, -pack, -cache) 0.12.1 | MPL-2.0 OR GPL-3.0-only | used under **MPL-2.0**: file-level copyleft; ship the MPL-2.0 text and point to the source (https://github.com/SnowflakePowered/librashader). retro-wgpu's own files are not affected. |
+| glslang / glslang-sys 0.8 | MIT OR Apache-2.0 (crate); bundles Khronos glslang (BSD-3-Clause, MIT, Apache-2.0 and Khronos licences, mixed per file) | C++ compiled from source |
+| spirv-cross2 / spirv-cross-sys 0.7 | MIT OR Apache-2.0 (crate); bundles SPIRV-Cross (Apache-2.0) | C++ compiled from source |
+| persy 1.8 | MPL-2.0 | shader cache (disabled at run time) |
+| smartstring 1.0 | MPL-2.0+ | |
+| rspirv 0.13 | Apache-2.0 | |
+| encoding_rs 0.8 | (Apache-2.0 OR MIT) AND BSD-3-Clause | |
+| others (rayon, image, regex, blake3, bincode, nom, ...) | permissive (MIT / Apache-2.0 / Zlib / CC0 / Unlicense / BSD) | `cargo metadata --features slang` lists them |
+
+The test presets in `tests/slang/` were written for retro-wgpu's tests. **No preset packs are
+included**; Mega Bezel and other (often GPL) packs are user-supplied and only loaded at run time.
+
 ### Not included
 
 - The CRT/VHS shaders in `~/claude-n150/work/43mode` (crt-lottes, cathode-retro, vhs_and_crt)

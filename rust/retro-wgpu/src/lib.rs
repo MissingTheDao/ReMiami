@@ -11,6 +11,8 @@
 //! - [`texture`]: RGBA8/BGRA8, 16-bit packed, paletted 4/8-bit (PS2 CLUT), BC1-3/BC7.
 //! - [`replace`]: high-resolution texture packs keyed by a hash of the original data.
 //! - [`readback`]: screenshots.
+//! - `slang` (feature "slang"): RetroArch .slangp presets (CRT, Mega Bezel-style overlays)
+//!   as the output stage, through librashader.
 //!
 //! Nothing here is derived from librw or RenderWare; see NOTICE.md for provenance.
 
@@ -22,6 +24,8 @@ pub mod readback;
 pub mod renderer;
 pub mod replace;
 pub(crate) mod shader;
+#[cfg(feature = "slang")]
+pub mod slang;
 pub mod state;
 pub mod texture;
 
