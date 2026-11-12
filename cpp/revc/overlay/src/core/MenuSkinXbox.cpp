@@ -49,7 +49,7 @@ static const XboxTab tabs[] = {
 // icon centres on the bar (measured: the selection square's centre, which sits on its icon, on
 // autopad sets 2-3, 0.5 left of it; uneven spacing as on the console)
 static const float iconX[7] = { 112.0f, 176.5f, 258.5f, 323.0f, 395.0f, 466.5f, 530.0f };
-static const float ICON_Y = 395.0f, ICON_SIZE = 50.0f, ICON_SELECTED = 80.0f;
+static const float ICON_Y = 395.0f, ICON_SIZE = 48.0f, ICON_SELECTED = 80.0f;	// (64 x 0.75 and x 1.25; research on the Xbox build)
 
 // Heap-allocated so nothing runs at program exit (after RenderWare is gone); freed with the menu's
 // own textures by MenuSkinXboxUnload.
@@ -350,8 +350,8 @@ DrawIconBar(CMenuManager *m, uint8 alpha)
 		if (i == cur)
 			continue;
 		float s = ICON_SIZE;
-		// the other pages' icons in grey, about 55 % (measured)
-		icons[i].Draw(CRect(X(iconX[i]) - W(s / 2), Y(ICON_Y) - H(s / 2), X(iconX[i]) + W(s / 2), Y(ICON_Y) + H(s / 2)), CRGBA(140, 140, 140, alpha));
+		// the other pages' icons at half colour (research on the Xbox build)
+		icons[i].Draw(CRect(X(iconX[i]) - W(s / 2), Y(ICON_Y) - H(s / 2), X(iconX[i]) + W(s / 2), Y(ICON_Y) + H(s / 2)), CRGBA(128, 128, 128, alpha));
 	}
 	// a page change (Xbox autopad set 2, Brief -> Stats): the mint box moves to the new icon at
 	// once while the old icon stays enlarged and white and the new one stays small for one 30 Hz
@@ -710,19 +710,30 @@ MenuSkinXboxDialogBack(uint8 alpha)
 	CSprite2d::Draw2DPolygon(X(85.0f), Y(138.0f), X(520.0f), Y(118.0f), X(100.0f), Y(337.0f), X(505.0f), Y(333.0f), CRGBA(105, 198, 247, alpha));
 }
 
-// The Xbox's slider: a rising wedge from x 325 to 485 (12 px tall at the left, 33 at the right,
-// bottom 21 px under the row's top), faint where empty, with bright bars up to the value
-// (measured on the Display page). Returns the right end of the filled part (the PC slider's
-// "last active bar", used for mouse hover).
+// The Xbox's slider (research on the Xbox build, its menu animation data): a wedge (rgb 51,98,128)
+// from x 329.75 over 155 px, 11.25 px tall at the left to 37.46 at the right, its bottom 21 px under
+// the row's top (measured); the level (0-16, in whole steps) shows that many bars (rgb 97,194,247),
+// bar i 5 px wide at x 324.75 + 10 i, its bottom 2.5 px above the wedge's, 13.75 px tall rising to
+// 39.95 for the last. The whole slider at half alpha unless its row is selected. Returns the right
+// end of the lit part (the PC slider's "last active bar", used for mouse hover).
+// The bottoms are the Xbox's own per slider (gXboxSliderBottom: music 169.8, SFX 215, brightness
+// 168.1 in 640x480); other sliders 21 px under the row's top.
+bool gXboxSliderSelected = true;
+float gXboxSliderBottom = -1.0f;
 float
 MenuSkinXboxWedge(float y, float progress, uint8 alpha)
 {
-	const float x0 = X(325.0f), x1 = X(485.0f), bottom = y + H(21.0f);
-	auto top = [&](float x) { return bottom - H(12.0f) - (x - x0) / (x1 - x0) * H(21.0f); };
-	CSprite2d::Draw2DPolygon(x0, top(x0), x1, top(x1), x0, bottom, x1, bottom, CRGBA(120, 170, 220, alpha * 90 / 255));
-	float filled = x0 + (x1 - x0) * Clamp(progress, 0.0f, 1.0f);
-	for (float x = x0; x + W(3.0f) <= filled; x += W(6.0f))
-		CSprite2d::DrawRect(CRect(x, top(x + W(1.5f)), x + W(3.0f), bottom), CRGBA(110, 190, 245, alpha));
+	const float gx = 329.75f, bottom = gXboxSliderBottom >= 0.0f ? Y(gXboxSliderBottom) : y + H(21.0f);
+	const uint8 a = gXboxSliderSelected ? alpha : alpha / 2;
+	CSprite2d::Draw2DPolygon(X(gx), bottom - H(11.25f), X(gx + 155.0f), bottom - H(37.46f), X(gx), bottom, X(gx + 155.0f), bottom,
+		CRGBA(51, 98, 128, a));
+	int level = Clamp((int)(progress * 16.0f + 0.5f), 0, 16);
+	float filled = X(gx);
+	for (int i = 0; i < level; i++) {
+		float x0 = gx - 5.0f + 10.0f * i, h = 13.75f + (39.95f - 13.75f) * i / 15.0f;
+		CSprite2d::DrawRect(CRect(X(x0), bottom - H(2.5f + h), X(x0 + 5.0f), bottom - H(2.5f)), CRGBA(97, 194, 247, a));
+		filled = X(x0 + 5.0f);
+	}
 	return filled;
 }
 
