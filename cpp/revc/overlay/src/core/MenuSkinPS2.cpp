@@ -53,36 +53,22 @@ static const Ps2Tab tabs[] = {
 	{ MENUPAGE_CONSOLE_OPTIONS, MENUPAGE_LANGUAGE_SETTINGS, 1043.0f, 995.0f, "RVC_PT8" },	// revc: "options" in the EU discs' "language" place
 };
 
-// The PS2's glides take the same time whatever the distance: 5 steps at its 30 Hz menu rate
-// (167 ms), big steps first and last and small ones in the middle while the box changes width
-// (measured on v1.40: one row, wraps, Audio, Load column -> slot all 167 ms). Fraction of the way
-// after `ms`.
+// The PS2's highlight glide (one green quad for the rows and the tab bar; PS2 v1.40, research): a
+// counter from 0 adding 50 per 30 Hz game frame, the box at from + (to - from) * min(50k, 255) / 255,
+// linear whatever the distance: 0, 0.196, 0.392, 0.588, 0.784, 0.980, 1. Fraction after `ms`.
 float
 MenuSkinPS2GlideT(uint32 ms)
 {
-	static const float frac[5] = { 0.285f, 0.514f, 0.592f, 0.707f, 1.0f };
-	int step = Min(5, (int)(ms / 33));
-	return step == 0 ? 0.0f : frac[step - 1];
+	return Min(50 * (int)(ms / 33), 255) / 255.0f;
 }
 
-// Focus from the tab into the list: one 30 Hz step with no box at all, then near-equal steps from
-// the tab to row 0 for the Controls and Audio boxes, no easing (v1.40 autopad, focus into Controls:
-// 19, 38, 60, 77, 98, 100 %), 200 ms after the blank step. Negative: no box this step.
+// Focus from the tab into the list: one 30 Hz step with no box at all, then the same steps (the
+// Controls and Audio boxes; v1.40 autopad, focus into Controls: 19, 38, 60, 77, 98, 100 %).
+// Negative: no box this step.
 float
 MenuSkinPS2GlideTTab(uint32 ms)
 {
-	static const float frac[6] = { 0.19f, 0.38f, 0.60f, 0.77f, 0.98f, 1.0f };
-	int step = Min(6, (int)(ms / 33));
-	return step == 0 ? -1.0f : frac[step - 1];
-}
-
-// A short move (one row) first morphs the box a little for one step, then glides: 200 ms in all
-// (measured: ~10 % one step ahead of the travel).
-float
-MenuSkinPS2GlideTLead(uint32 ms)
-{
-	int step = (int)(ms / 33);
-	return step == 0 ? 0.0f : step == 1 ? 0.1f : 0.1f + 0.9f * MenuSkinPS2GlideT(ms - 66);
+	return ms < 33 ? -1.0f : MenuSkinPS2GlideT(ms);
 }
 
 // The PS2's highlight boxes glide: to a new item in 167 ms (the label's size morphing on the way),
