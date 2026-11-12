@@ -32,5 +32,6 @@ pub use readback::Image;
 pub use renderer::{BufferId, DEPTH_FORMAT, Draw, Indices, LayoutId, OutputStage, Renderer, SceneSettings, Target, TextureDesc, TextureId, Topology, VertexWriter, Vertices};
 pub use shader::MAX_BONES;
 pub use state::*;
+pub use replace::{ReplaceConfig, texture_key};
 pub use texture::{ClutLayout, Palette, TexFormat};
 pub use wgpu;

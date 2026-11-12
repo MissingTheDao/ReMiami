@@ -11,6 +11,6 @@ rust-version.workspace = true
 # Same wgpu version and features as revc-rw.
 wgpu = "30.0.1"
 pollster = "1.0.1"
-
-[dev-dependencies]
+# Texture packs and dumps (PNG).
 png = "0.18"
+

@@ -601,10 +601,16 @@ impl Renderer {
                 return Ok(());
             }
         }
-        let t = &self.textures[&id];
-        if t.replaced {
-            return Ok(());
+        if self.textures[&id].replaced {
+            if level != 0 || self.replacer.as_ref().is_some_and(|r| r.replaced.contains(&id)) {
+                return Ok(());
+            }
+            // The texture got new contents without a replacement: back to the original storage.
+            let t = self.make_texture(gpu, desc, None);
+            self.textures.insert(id, t);
+            self.bind_groups.retain(|k, _| !k.iter().any(|(t, _)| *t == Some(id)));
         }
+        let t = &self.textures[&id];
         if level >= t.levels {
             return Ok(());
         }
@@ -860,7 +866,12 @@ impl Renderer {
         let binds: BindKey = std::array::from_fn(|s| {
             let st = &d.state.stages[s];
             let tex = st.texture.filter(|t| self.textures.contains_key(t) && Target::Texture(*t) != self.target);
-            (tex, if tex.is_some() { st.sampler } else { Sampler::POINT_CLAMP })
+            let sampler = match (tex, &self.replacer) {
+                (Some(t), Some(r)) if r.replaced.contains(&t) => crate::replace::upgrade_sampler(&r.config, st.sampler),
+                (Some(_), _) => st.sampler,
+                (None, _) => Sampler::POINT_CLAMP,
+            };
+            (tex, sampler)
         });
         let block = shader::draw_block(d.state, d.params);
         if self.draw_blocks.last() != Some(&block) {

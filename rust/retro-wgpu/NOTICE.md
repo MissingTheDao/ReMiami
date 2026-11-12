@@ -52,7 +52,7 @@ applies. Attribution is kept as a courtesy.
 | wgpu 30.0.1 (+ wgpu-core/hal/types, naga) | MIT OR Apache-2.0 | GPU API |
 | raw-window-handle 0.6 (via wgpu) | MIT OR Apache-2.0 OR Zlib | window handles |
 | pollster 1.0 | MIT OR Apache-2.0 | blocking on adapter/device requests |
-| png 0.18 (dev-dependency) | MIT OR Apache-2.0 | golden images in tests |
+| png 0.18 | MIT OR Apache-2.0 | texture packs and dumps, golden images in tests |
 
 ### Not included
 
