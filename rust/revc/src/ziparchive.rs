@@ -67,9 +67,20 @@ fn list_bytes(data: &[u8], path: &Path) -> Result<Vec<Entry>, String> {
 
 impl Entry {
     /// The file's contents.
+    /// Reads only this entry's bytes: whole-archive reads made big packs (hundreds of MB, thousands
+    /// of textures) take minutes to load.
     pub fn read(&self) -> Result<Vec<u8>, String> {
-        let data = std::fs::read(&self.archive).map_err(|e| e.to_string())?;
-        self.read_from(&data)
+        use std::io::{Read, Seek, SeekFrom};
+        let io = |e: std::io::Error| format!("{}: {e}", self.name);
+        let mut f = std::fs::File::open(&self.archive).map_err(|e| e.to_string())?;
+        f.seek(SeekFrom::Start(self.local_offset as u64)).map_err(io)?;
+        let mut data = vec![0u8; 30];
+        f.read_exact(&mut data).map_err(io)?;
+        let name_len = u16_at(&data, 26).unwrap_or(0) as usize;
+        let extra_len = u16_at(&data, 28).unwrap_or(0) as usize;
+        let rest = name_len + extra_len + self.compressed_size as usize;
+        f.take(rest as u64).read_to_end(&mut data).map_err(io)?;
+        Entry { local_offset: 0, ..self.clone() }.read_from(&data)
     }
 
     fn read_from(&self, data: &[u8]) -> Result<Vec<u8>, String> {
