@@ -49,6 +49,10 @@ for id in "${IDS[@]}"; do
       -e "s/^Radio=.*/Radio=$radio/" -e "s/^InvertPad=.*/InvertPad=1/" -e "s/^Vibration=.*/Vibration=0/" -e "s/^Brightness=.*/Brightness=384/"
       -e "s/^Subtitles=.*/Subtitles=0/" -e "s/^\[Controller\]/[Controller]\nPS2Setup=0/")
   fi
+  # the PS2's own glyphs in its help box, whatever pad the test machine has (ButtonPrompts 2:
+  # PlayStation). (The Xbox style stays on the pad: forcing Xbox prompts would name the Series pad's
+  # MENU, not the original Xbox's START.)
+  [[ $st == 1 ]] && state+=(-e "s/^\[Controller\]/[Controller]\nButtonPrompts=2/")
   sed -e "s/^\[Graphics\]/[Graphics]\nUiStyle=$st/" -e "s/^Width=.*/Width=640/" -e "s/^Height=.*/Height=480/" "${state[@]}" \
     "$ROOT/tests/config/reVC.ini" > "$cfg"
   rm -rf "${OUT:?}/$id"; mkdir -p "$OUT/$id"

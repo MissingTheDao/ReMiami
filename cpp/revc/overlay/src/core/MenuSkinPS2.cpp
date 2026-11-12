@@ -63,7 +63,9 @@ MenuSkinPS2GlideT(uint32 ms)
 }
 
 // Focus from the tab into the list: one step with no box at all, then near-equal steps from the
-// tab to row 0 (measured: 8, 33, 57, 79, 100 %), 167 ms. Negative: no box this step.
+
+// tab to row 0 for the Controls and Audio boxes (measured: 8, 33, 57, 79, 100 %), 167 ms after a
+// blank step. Negative: no box this step.
 float
 MenuSkinPS2GlideTTab(uint32 ms)
 {
@@ -85,8 +87,8 @@ MenuSkinPS2GlideTLead(uint32 ms)
 // and in from 190 px below when a page opens (measured on the v3.00 video). id: one box kind
 // (0 the tab bar, 1 the slot lists); returns the box to draw this frame.
 static struct { CRect from, to, cur; uint32 start; int page; bool init, tab; } glides[4];
-float MenuSkinPS2GlideTTab(uint32 ms);
 float MenuSkinPS2GlideT(uint32 ms);
+float MenuSkinPS2GlideTTab(uint32 ms);
 
 // Start glide box `id` at r (its next target glides from there), on whatever page comes next.
 void
@@ -114,19 +116,16 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 		s.to = target;
 		s.start = now;
 	} else if (target.left != s.to.left || target.top != s.to.top || target.right != s.to.right || target.bottom != s.to.bottom) {
-		// (the first target after a seed keeps the seed's start: the list's box is first drawn a
-		// frame after the cross, and the console's glide starts on the cross; research,
-		// ps2_focus_tabs_to_list_display_v140)
-		bool seeded = s.tab && s.to.left == s.from.left && s.to.top == s.from.top && s.to.right == s.from.right && s.to.bottom == s.from.bottom;
 		if (s.tab && s.to.left != s.from.left)
 			s.tab = false;	// (a later move: a normal glide)
 		s.from = s.cur;
 		s.to = target;
-		if (!seeded)
-			s.start = now;
+		s.start = now;
 	}
 	float t;
 	if (s.tab) {	// (before the sweep: from the tab bar into the list is a long move up too)
+		// (the Controls and Audio boxes: their own measured curve; the generic lists use a
+		// constant speed, Frontend.cpp)
 		t = MenuSkinPS2GlideTTab(now - s.start);
 		if (t < 0.0f) {	// the blank step: nothing drawn
 			s.cur = s.from;
