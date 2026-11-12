@@ -14,6 +14,7 @@
 #include "Text.h"
 #include "Timer.h"
 #include "Pad.h"
+#include "General.h"
 #ifdef LIBRW_HOST
 #include "TexMods.h"
 #endif
@@ -74,7 +75,30 @@ MenuSkinPS2GlideTTab(uint32 ms)
 // The PS2's highlight boxes glide: to a new item in 167 ms (the label's size morphing on the way),
 // and in from 190 px below when a page opens (measured on the v3.00 video). id: one box kind
 // (0 the tab bar, 1 the slot lists); returns the box to draw this frame.
-static struct { CRect from, to, cur; uint32 start; int page; bool init, tab; } glides[4];
+static struct { CRect from, to, cur; uint32 start; int page; bool init, tab; float jFrom[8], jTo[8], jCur[8]; } glides[4];
+// The console pushes each corner of the box outward by a fresh random amount whenever it gets a new
+// target (x 0-9; y 0-9 on the tab bar, 0-6 for rows; PS2 v1.40, research), and the jitter glides
+// with the box. In PS2 pixels; TL, TR, BL, BR (x, y), outward.
+static void
+GlideRollJitter(int id, float *j)
+{
+	int ry = id == 0 ? 10 : 7;
+	for (int i = 0; i < 4; i++) {
+		j[i * 2] = (float)(CGeneral::GetRandomNumber() % 10);
+		j[i * 2 + 1] = (float)(CGeneral::GetRandomNumber() % ry);
+	}
+}
+
+// The box's corners with its jitter, in screen pixels (TL, TR, BL, BR as x, y).
+void
+MenuSkinPS2GlideQuad(int id, const CRect &r, float *q)
+{
+	const float *j = glides[id].jCur;
+	q[0] = r.left - SX(j[0]); q[1] = r.top - SY(j[1]);
+	q[2] = r.right + SX(j[2]); q[3] = r.top - SY(j[3]);
+	q[4] = r.left - SX(j[4]); q[5] = r.bottom + SY(j[5]);
+	q[6] = r.right + SX(j[6]); q[7] = r.bottom + SY(j[7]);
+}
 float MenuSkinPS2GlideT(uint32 ms);
 float MenuSkinPS2GlideTTab(uint32 ms);
 
@@ -104,7 +128,11 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 		s.to = target;
 		s.start = now;
 		s.tab = false;	// (a seed for another page)
+		GlideRollJitter(id, s.jTo);
+		for (int i = 0; i < 8; i++) s.jFrom[i] = s.jCur[i] = s.jTo[i];
 	} else if (target.left != s.to.left || target.top != s.to.top || target.right != s.to.right || target.bottom != s.to.bottom) {
+		for (int i = 0; i < 8; i++) s.jFrom[i] = s.jCur[i];
+		GlideRollJitter(id, s.jTo);
 		if (s.tab) {
 			s.to = target;	// (the row's box changing during the focus glide: keep its curve)
 		} else {
@@ -132,6 +160,8 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 		t = MenuSkinPS2GlideT(now - s.start);
 	s.cur = CRect(s.from.left + (s.to.left - s.from.left) * t, s.from.top + (s.to.top - s.from.top) * t,
 		s.from.right + (s.to.right - s.from.right) * t, s.from.bottom + (s.to.bottom - s.from.bottom) * t);
+	for (int i = 0; i < 8; i++)
+		s.jCur[i] = s.jFrom[i] + (s.jTo[i] - s.jFrom[i]) * t;
 	return s.cur;
 }
 
@@ -186,8 +216,11 @@ CurrentTab(int page)
 // has seven, x about 158-453, y 404 / 426).
 // US v1.40 (the PS2 reference): map brief load stats / controls audio display, measured on the
 // v1.40 capture (row 2 sits further right than EU v3.00's four tabs); revc's "options" after display
-static const float tabCX[8] = { 178.5f, 256.5f, 335.5f, 420.5f, 206.5f, 312.0f, 407.5f, 505.0f };
-static const float tabRowY[2] = { 392, 414 };
+// The tab bar (PS2 v1.40, research): labels at scale 0.64 x 1, tops at y 381 and 403, their centres
+// below (the bottom row centred with the hidden language tab's width counted; revc's extra options
+// tab after it); the box (w + 10) x 25 around the label, its corners jittered outward.
+static const float tabCX[8] = { 179.04f, 256.72f, 336.0f, 420.72f, 207.36f, 312.56f, 408.16f, 505.0f };
+static const float tabRowY[2] = { 381.0f, 403.0f };
 
 static void
 DrawTabs(CMenuManager *m, uint8 alpha)
@@ -196,7 +229,7 @@ DrawTabs(CMenuManager *m, uint8 alpha)
 	if (cur < 0)
 		return;
 	CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
-	CFont::SetScale(SX(0.68f), SY(0.92f));
+	CFont::SetScale(SX(0.64f), SY(1.0f));
 	CFont::SetCentreOn();
 	CFont::SetCentreSize(SCREEN_WIDTH);
 	CFont::SetPropOn();
@@ -207,22 +240,20 @@ DrawTabs(CMenuManager *m, uint8 alpha)
 		m->m_nCurrScreen == MENUPAGE_DELETE_SLOT_CONFIRM;
 	if (!confirm && !pageFocus) {	// (the tab loses its box when focus goes into the list)
 		float w = CFont::GetStringWidth(TheText.Get(tabs[cur].name), true);
-		float cx = SCALE_AND_CENTER_X(tabCX[cur]), cy = SCREEN_SCALE_Y(tabRowY[cur / 4]);
-		float hw = w / 2.0f + SX(8.0f), h0 = SY(13.0f), t = SY(2.0f);
+		float cx = SCALE_AND_CENTER_X((float)(int)tabCX[cur]), top = SCREEN_SCALE_Y(tabRowY[cur / 4]);
+		float hw = w / 2.0f + SX(5.0f);
 		// gliding from tab to tab (one box for the bar: no sweep on page changes)
-		CRect r = MenuSkinPS2Glide(0, 0, CRect(cx - hw, cy - h0, cx + hw, cy + h0));
+		CRect r = MenuSkinPS2Glide(0, 0, CRect(cx - hw, top, cx + hw, top + SY(25.0f)));
 		gTabRect = r;
-		cx = (r.left + r.right) / 2.0f;
-		hw = (r.right - r.left) / 2.0f;
-		cy = (r.top + r.bottom) / 2.0f;
-		CSprite2d::Draw2DPolygon(cx - hw, cy - h0 + t, cx + hw, cy - h0 - t, cx - hw, cy + h0 + t, cx + hw, cy + h0 - t,
-			CRGBA(PS2_GREEN.r, PS2_GREEN.g, PS2_GREEN.b, alpha));
+		float q[8];
+		MenuSkinPS2GlideQuad(0, r, q);
+		CSprite2d::Draw2DPolygon(q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7], CRGBA(PS2_GREEN.r, PS2_GREEN.g, PS2_GREEN.b, alpha));
 	}
 	CFont::SetDropShadowPosition(2);
 	CFont::SetDropColor(CRGBA(0, 0, 0, alpha));
 	CFont::SetColor(CRGBA(PS2_TAB_TEXT.r, PS2_TAB_TEXT.g, PS2_TAB_TEXT.b, alpha));
 	for (int i = 0; i < (int)ARRAY_SIZE(tabs); i++)
-		CFont::PrintString(SCALE_AND_CENTER_X(tabCX[i]), SCREEN_SCALE_Y(tabRowY[i / 4] - 9.0f), TheText.Get(tabs[i].name));
+		CFont::PrintString(SCALE_AND_CENTER_X(tabCX[i]), SCREEN_SCALE_Y(tabRowY[i / 4]), TheText.Get(tabs[i].name));
 	CFont::SetCentreOff();
 	CFont::SetDropShadowPosition(0);
 }
