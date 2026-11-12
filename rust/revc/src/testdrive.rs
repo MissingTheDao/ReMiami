@@ -387,6 +387,8 @@ const MOTION_ROUTES: &[MotionRoute] = &[
     ("ps2_menu_close", "start", "start", 60),
     ("ps2_page_change_right", "start down right", "right", 60),
     ("ps2_page_change_left", "start down right right", "left", 60),
+    ("ps2_page_change_right_v140", "start", "right", 60),	// (the v1.40 retakes: Map -> Brief and back)
+    ("ps2_page_change_left_v140", "start right", "left", 60),
     ("ps2_page_change_to_map", "start right", "left", 60),
     ("ps2_page_change_from_map", "start", "right", 60),
     ("ps2_tab_brief_to_load", "start right", "right", 60),
@@ -503,6 +505,10 @@ fn motion_route() -> Option<&'static MotionRoute> {
     let id = std::env::var("REVC_TEST_MOTION").ok()?;
     // (the research catalogue's newer references carry a version suffix: same motion, same route)
     // ("_2": a second sample of the same motion)
+    // (a retake that recorded other pages has its own route under its full id)
+    if let Some(r) = MOTION_ROUTES.iter().find(|m| m.0 == id) {
+        return Some(r);
+    }
     let base = id.strip_suffix("_v140").or_else(|| id.strip_suffix("_v2")).or_else(|| id.strip_suffix("_2")).unwrap_or(&id);
     MOTION_ROUTES.iter().find(|m| m.0 == base)
 }

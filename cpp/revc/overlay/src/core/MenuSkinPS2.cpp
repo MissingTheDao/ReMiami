@@ -156,7 +156,12 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 			s.tab = false;
 	} else if (s.from.top - s.to.top > SY(100.0f))
 		t = Min(1.0f, (now - s.start) / 100.0f);	// (the page-open sweep: 3 frames)
-	else
+	else if (id == 0 && FrontEndMenuManager.Ps2AccumActive()) {
+		// a tab change: the console draws the page twice per update while it fades (old and new)
+		// and the tab box steps on each draw, so it glides twice as fast: 50, 150, 250 (PS2 v1.40,
+		// research)
+		t = Min(255, 50 * (2 * (int)((now - s.start) / 33) + 1)) / 255.0f;
+	} else
 		t = MenuSkinPS2GlideT(now - s.start);
 	s.cur = CRect(s.from.left + (s.to.left - s.from.left) * t, s.from.top + (s.to.top - s.from.top) * t,
 		s.from.right + (s.to.right - s.from.right) * t, s.from.bottom + (s.to.bottom - s.from.bottom) * t);

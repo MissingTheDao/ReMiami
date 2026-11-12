@@ -2436,8 +2436,8 @@
 +
 +		if (m_nMenuFadeAlpha < 255) {
 +
-+			if (!xboxPanel)
-+				menuBg.Translate(m_nMenuFadeAlpha);
++			if (!xboxPanel)	// (the PS2's page change moves the panel with the fade value, the camo's: PS2 v1.40, research)
++				menuBg.Translate(Ps2AccumActive() ? Min(250, ps2CamoAlpha) : m_nMenuFadeAlpha);
 +			SetFrontEndRenderStates();
 +			if (Ps2AccumActive()) {
 +				// the PS2 page change over the last picture (Ps2AccumBegin): the old page's content
