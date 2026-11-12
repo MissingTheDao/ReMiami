@@ -879,21 +879,32 @@
  }
  
  /*
-@@ -1841,6 +1929,13 @@
+@@ -1836,11 +1924,22 @@
  
- 		if (rt != 0.0f)
- 			ControlsManager.m_NewState.mappedButtons[16] = rt > -0.8f;
+ 		// the host (like glfw) returns 0.0 for non-existent axes(which is bullocks) so we treat it as deadzone, and keep value of previous frame.
+ 		// otherwise if this axis is present, -1 = released, 1 = pressed
++		// revc: the Xbox counts a trigger as pressed from its first steps up (a small noise floor here,
++		// about 1 %; research on the Xbox build), the PC from 10 %
++		extern int8 gUiStyle;
++		const float pressedAt = gUiStyle == 2 ? -0.98f : -0.8f;
+ 		if (lt != 0.0f)
+-			ControlsManager.m_NewState.mappedButtons[15] = lt > -0.8f;
++			ControlsManager.m_NewState.mappedButtons[15] = lt > pressedAt;
 +
++		if (rt != 0.0f)
++			ControlsManager.m_NewState.mappedButtons[16] = rt > pressedAt;
+ 
 +		// revc: analog trigger values (0..255) for accelerate/brake bound to a trigger.
 +		extern uint8 gPadTriggerAnalog[2];
 +		if (lt != 0.0f)
 +			gPadTriggerAnalog[0] = (uint8)Clamp((lt + 1.0f) * 127.5f, 0.0f, 255.0f);
-+		if (rt != 0.0f)
+ 		if (rt != 0.0f)
+-			ControlsManager.m_NewState.mappedButtons[16] = rt > -0.8f;
 +			gPadTriggerAnalog[1] = (uint8)Clamp((rt + 1.0f) * 127.5f, 0.0f, 255.0f);
  	}
  	// TODO? L2-R2 axes(not buttons-that's fine) on joysticks that don't have SDL gamepad mapping AREN'T handled, and I think it's impossible to do without mapping.
  
-@@ -1879,20 +1974,49 @@
+@@ -1879,20 +1978,49 @@
  		
  		CPad *pad = CPad::GetPad(bs.padID);
  
@@ -953,7 +964,7 @@
  
  	return;
  }
-@@ -1924,4 +2048,4 @@
+@@ -1924,4 +2052,4 @@
  	}
  }
  

@@ -1,15 +1,16 @@
 --- a/src/vehicles/Automobile.cpp
 +++ b/src/vehicles/Automobile.cpp
-@@ -51,6 +51,8 @@
+@@ -51,6 +51,9 @@
  #include "Bike.h"
  #include "Wanted.h"
  #include "SaveBuf.h"
 +extern int8 gUiStyle;
 +int XboxFlyLayout(void); int16 XboxStick(int axis); int16 XboxTriggerX(void); int XboxLookDir(int16 x, int16 y);	// (core/Pad.cpp)
++bool XboxRawDown(int joy); bool XboxRawJustDown(int joy);
  
  bool bAllCarCheat;
  
-@@ -352,7 +354,8 @@
+@@ -352,7 +355,8 @@
  	// Set Center of Mass to make car more stable
  	if(strongGrip1 || bCheat3)
  		m_vecCentreOfMass.z = 0.3f*m_aSuspensionSpringLength[0] + -1.0f*m_fHeightAboveRoad;
@@ -19,7 +20,33 @@
  		m_vecCentreOfMass.z = pHandling->CentreOfMass.z - 0.2f*pHandling->Dimension.z;
  	else
  		m_vecCentreOfMass = pHandling->CentreOfMass;
-@@ -1431,9 +1434,10 @@
+@@ -1364,7 +1368,24 @@
+ 			if(!IsAlarmOn())
+ 				ReduceHornCounter();
+ 		}else{
+-			if(UsesSiren()){
++			if(UsesSiren() && XboxFlyLayout() >= 0){
++				// revc: the Xbox's siren button: released within 300 ms it toggles the siren, held
++				// longer it sounds the horn (research on the Xbox build)
++				static uint32 hornDownAt;
++				static bool hornWas;
++				bool horn = Pads[0].GetHorn();
++				uint32 now = CTimer::GetTimeInMilliseconds();
++				if(horn && !hornWas)
++					hornDownAt = now;
++				if(horn)
++					m_nCarHornTimer = now - hornDownAt >= 300 ? 1 : 0;
++				else{
++					if(hornWas && now - hornDownAt < 300)
++						m_bSirenOrAlarm = !m_bSirenOrAlarm;
++					m_nCarHornTimer = 0;
++				}
++				hornWas = horn;
++			}else if(UsesSiren()){
+ 				if(Pads[0].bHornHistory[Pads[0].iCurrHornHistory]){
+ 					if(Pads[0].bHornHistory[(Pads[0].iCurrHornHistory+CPad::HORNHISTORY_SIZE-1) % CPad::HORNHISTORY_SIZE] &&
+ 					   Pads[0].bHornHistory[(Pads[0].iCurrHornHistory+CPad::HORNHISTORY_SIZE-2) % CPad::HORNHISTORY_SIZE])
+@@ -1431,9 +1452,10 @@
  					else if (m_nWheelsOnGround < 4 && !(GetModelIndex() == MI_SEASPAR && bTouchingWater) ||
  						CPad::GetPad(0)->GetAccelerate() != 0 ||
  #ifndef FREE_CAM
@@ -32,7 +59,7 @@
  #endif
  						Abs(m_vecMoveSpeed.x) > 0.02f ||
  						Abs(m_vecMoveSpeed.y) > 0.02f ||
-@@ -1457,9 +1461,15 @@
+@@ -1457,9 +1479,15 @@
  			}
  
  			// Heli weapons
@@ -49,7 +76,7 @@
  					CWeapon gun(WEAPONTYPE_ROCKETLAUNCHER, 100);
  					CVector source = vecHunterRocketPos;
  					source = GetMatrix()*source + Max(DotProduct(m_vecMoveSpeed, GetForward()), 0.0f)*GetForward()*CTimer::GetTimeStep();
-@@ -1474,7 +1484,7 @@
+@@ -1474,7 +1502,7 @@
  					DMAudio.PlayOneShot(m_audioEntityId, SOUND_WEAPON_SHOT_FIRED, 0.0f);
  					m_nGunFiringTime = CTimer::GetTimeInMilliseconds();
  				// Hunter gun
@@ -58,7 +85,7 @@
  					CWeapon gun(WEAPONTYPE_HELICANNON, 5000);
  					CVector source = vecHunterGunPos;
  					source = GetMatrix()*source + m_vecMoveSpeed*CTimer::GetTimeStep();
-@@ -1486,7 +1496,7 @@
+@@ -1486,7 +1514,7 @@
  				}
  			}else if(GetModelIndex() == MI_SEASPAR && GetStatus() == STATUS_PLAYER){
  				// Sea sparrow gun
@@ -67,7 +94,25 @@
  					CWeapon gun(WEAPONTYPE_M4, 5000);
  					CVector source = vecSeaSparrowGunPos;
  					source = GetMatrix()*source + m_vecMoveSpeed*CTimer::GetTimeStep();
-@@ -3511,7 +3521,9 @@
+@@ -3230,7 +3258,7 @@
+ CAutomobile::FireTruckControl(void)
+ {
+ 	if(this == FindPlayerVehicle()){
+-		if(!CPad::GetPad(0)->GetCarGunFired())
++		if(!(XboxFlyLayout() == 1 ? XboxRawDown(5) : CPad::GetPad(0)->GetCarGunFired()))	// (revc: the Xbox's Classic fires the cannon with LT; research)
+ 			return;
+ #ifdef FREE_CAM
+ 		if (!CCamera::bFreeCam)
+@@ -3320,7 +3348,7 @@
+ 		DMAudio.PlayOneShot(m_audioEntityId, SOUND_CAR_TANK_TURRET_ROTATE, Abs(m_fCarGunLR - prevAngle));
+ 
+ 	// Shoot
+-	if(CPad::GetPad(0)->CarGunJustDown() &&
++	if((XboxFlyLayout() == 1 ? XboxRawJustDown(5) : CPad::GetPad(0)->CarGunJustDown()) &&	// (revc: the Xbox's Classic fires the Rhino with LT; research)
+ 	   CTimer::GetTimeInMilliseconds() > CWorld::Players[CWorld::PlayerInFocus].m_nTimeTankShotGun + 800){
+ 		CWorld::Players[CWorld::PlayerInFocus].m_nTimeTankShotGun = CTimer::GetTimeInMilliseconds();
+ 
+@@ -3511,7 +3539,9 @@
  		}
  	}
  

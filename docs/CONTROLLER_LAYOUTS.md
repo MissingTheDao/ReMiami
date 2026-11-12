@@ -48,14 +48,17 @@ layout by reading the stick or the raw button (core/Pad.cpp XboxFlyLayout, XboxR
   held
 - hydraulics on the sub-mission button (X / R3) instead of the horn
 - cutscene skip with A or B
+- the siren: a tap shorter than 300 ms toggles it, holding longer sounds the horn
+- tank and fire truck fire on LT in Classic
+- triggers count as pressed from their first steps (the PC: 10 %)
+- pad cheats: Vice City's console sequences (PS2 and Xbox alike), read from the buttons
+  themselves in the Xbox style (LT, White = LB, RT, Black = RB for the PS2's L1, L2, R1, R2)
 
 Still missing (research: xbox_controls_full.md §D.2):
 
 - radio next/previous song and soundtrack (D-pad)
 - digital steering on the D-pad (Standard)
 - bike wheelie / first-person view (RB)
-- tank and fire truck special fire on LT (Classic; ours stays on B, the car's fire)
-- siren toggle by a tap shorter than 300 ms
 
 ## Feel (from the Xbox executable)
 

@@ -5137,7 +5137,309 @@
  #include "Game.h"
  #include "CutsceneMgr.h"
  #include "Font.h"
-@@ -1710,9 +1713,110 @@
+@@ -1110,93 +1113,217 @@
+ 	CheatString[0] = c;
+ 
+ #define _CHEATCMP(str)	strncmp(str, CheatString, sizeof(str)-1)
+-	// "4414LDRULDRU"	-	R2 R2 L1 R2 LEFT DOWN RIGHT UP LEFT DOWN RIGHT UP
+-	if ( !_CHEATCMP("URDLURDL4144") )
+-		WeaponCheat1();
+-
+-	// "4411LDRULDRU"	-	R2 R2 L1 L1 LEFT DOWN RIGHT UP LEFT DOWN RIGHT UP
+-	else if ( !_CHEATCMP("URDLURDL1144") )
+-		MoneyCheat();
+-
+-	// "4412LDRULDRU"	-	R2 R2 L1 L2 LEFT DOWN RIGHT UP LEFT DOWN RIGHT UP
+-	else if ( !_CHEATCMP("URDLURDL2144") )
+-		ArmourCheat();
+-
+-	// "4413LDRULDRU"	-	R2 R2 L1 R1 LEFT DOWN RIGHT UP LEFT DOWN RIGHT UP
+-	else if ( !_CHEATCMP("URDLURDL3144") )
+-		HealthCheat();
+-
+-	// "4414LRLRLR"		-	R2 R2 L1 R2 LEFT RIGHT LEFT RIGHT LEFT RIGHT
+-	else if ( !_CHEATCMP("RLRLRL4144") )
+-		WantedLevelUpCheat();
+-
+-	// "4414UDUDUD"		-	R2 R2 L1 R2 UP DOWN UP DOWN UP DOWN
+-	else if ( !_CHEATCMP("DUDUDU4144") )
+-		WantedLevelDownCheat();
+-
+-	// "1234432T"		-	L1 L2 R1 R2 R2 R1 L2 TRIANGLE
+-	else if ( !_CHEATCMP("T2344321") )
+-		SunnyWeatherCheat();
+-
+-	// "1234432S"		-	L1 L2 R1 R2 R2 R1 L2 SQUARE
+-	else if ( !_CHEATCMP("S2344321") )
+-		CloudyWeatherCheat();
+-
+-	// "1234432C"		-	L1 L2 R1 R2 R2 R1 L2 CIRCLE
+-	else if ( !_CHEATCMP("C2344321") )
+-		RainyWeatherCheat();
+-
+-	// "1234432X"		-	L1 L2 R1 R2 R2 R1 L2 CROSS
+-	else if ( !_CHEATCMP("X2344321") )
+-		FoggyWeatherCheat();
+-
+-	// "CCCCCC321TCT"	-	CIRCLE CIRCLE CIRCLE CIRCLE CIRCLE CIRCLE R1 L2 L1 TRIANGLE CIRCLE TRIANGLE
+-	else if ( !_CHEATCMP("TCT123CCCCCC") )
+-		VehicleCheat(MI_RHINO);
+-
+-	// "CCCSSSSS1TCT"	-	CIRCLE CIRCLE CIRCLE SQUARE SQUARE SQUARE SQUARE SQUARE L1 TRIANGLE CIRCLE TRIANGLE
+-	else if ( !_CHEATCMP("TCT1SSSSSCCC") )
+-		FastWeatherCheat();
+-
+-	// "241324TSCT21"	-	L2 R2 L1 R1 L2 R2 TRIANGLE SQUARE CIRCLE TRIANGLE L2 L1
+-	else if ( !_CHEATCMP("12TCST423142") )
+-		BlowUpCarsCheat();
+-
+-	// "RDLU12ULDR"		-	RIGHT DOWN LEFT UP L1 L2 UP LEFT DOWN RIGHT
+-	else if ( !_CHEATCMP("RDLU21ULDR") )
+-		ChangePlayerCheat();
+-
+-	// "DULUX3421"		-	DOWN UP LEFT UP CROSS R1 R2 L2 L1
+-	else if ( !_CHEATCMP("1243XULUD") )
+-		MayhemCheat();
+-
+-	// "DULUX3412"		-	DOWN UP LEFT UP CROSS R1 R2 L1 L2
+-	else if ( !_CHEATCMP("2143XULUD") )
+-		EverybodyAttacksPlayerCheat();
+-
+-	// "43TX21UD"		-	R2 R1 TRIANGLE CROSS L2 L1 UP DOWN
+-	else if ( !_CHEATCMP("DU12XT34") )
+-		WeaponsForAllCheat();
+-
+-	// "TURDS12"		-	TRIANGLE UP RIGHT DOWN SQUARE L1 L2
+-	else if ( !_CHEATCMP("21SDRUT") )
+-		FastTimeCheat();
++	// revc: Vice City's own console sequences (GTA III's were here; research on the PS2 and Xbox
++	// builds): the strings hold the newest press first; T triangle/Y, C circle/B, X cross/A,
++	// S square/X, U D L R the D-pad, 1 L1/LT, 2 L2/White, 3 R1/RT, 4 R2/Black. A match blanks the
++	// newest press, as on the consoles.
++	// weapons 1: R1 R2 L1 R2 LEFT DOWN RIGHT UP LEFT DOWN RIGHT UP
++	if ( !_CHEATCMP("URDLURDL4143") )
++		{ CheatString[0] = ' '; WeaponCheat1(); }
++
++	// weapons 2: R1 R2 L1 R2 LEFT DOWN RIGHT UP LEFT DOWN DOWN LEFT
++	else if ( !_CHEATCMP("LDDLURDL4143") )
++		{ CheatString[0] = ' '; WeaponCheat2(); }
++
++	// weapons 3: R1 R2 L1 R2 LEFT DOWN RIGHT UP LEFT DOWN DOWN DOWN
++	else if ( !_CHEATCMP("DDDLURDL4143") )
++		{ CheatString[0] = ' '; WeaponCheat3(); }
++
++	// armour: R1 R2 L1 CROSS LEFT DOWN RIGHT UP LEFT DOWN RIGHT UP
++	else if ( !_CHEATCMP("URDLURDLX143") )
++		{ CheatString[0] = ' '; ArmourCheat(); }
++
++	// health: R1 R2 L1 CIRCLE LEFT DOWN RIGHT UP LEFT DOWN RIGHT UP
++	else if ( !_CHEATCMP("URDLURDLC143") )
++		{ CheatString[0] = ' '; HealthCheat(); }
++
++	// wanted level up: R1 R1 CIRCLE R2 LEFT RIGHT LEFT RIGHT LEFT RIGHT
++	else if ( !_CHEATCMP("RLRLRL4C33") )
++		{ CheatString[0] = ' '; WantedLevelUpCheat(); }
++
++	// wanted level down: R1 R1 CIRCLE R2 UP DOWN UP DOWN UP DOWN
++	else if ( !_CHEATCMP("DUDUDU4C33") )
++		{ CheatString[0] = ' '; WantedLevelDownCheat(); }
++
++	// sunny: R2 CROSS L1 L1 L2 L2 L2 DOWN
++	else if ( !_CHEATCMP("D22211X4") )
++		{ CheatString[0] = ' '; SunnyWeatherCheat(); }
++
++	// extra sunny: R2 CROSS L1 L1 L2 L2 L2 TRIANGLE
++	else if ( !_CHEATCMP("T22211X4") )
++		{ CheatString[0] = ' '; ExtraSunnyWeatherCheat(); }
++
++	// cloudy: R2 CROSS L1 L1 L2 L2 L2 SQUARE
++	else if ( !_CHEATCMP("S22211X4") )
++		{ CheatString[0] = ' '; CloudyWeatherCheat(); }
++
++	// rainy: R2 CROSS L1 L1 L2 L2 L2 CIRCLE
++	else if ( !_CHEATCMP("C22211X4") )
++		{ CheatString[0] = ' '; RainyWeatherCheat(); }
++
++	// foggy: R2 CROSS L1 L1 L2 L2 L2 CROSS
++	else if ( !_CHEATCMP("X22211X4") )
++		{ CheatString[0] = ' '; FoggyWeatherCheat(); }
++
++	// Rhino: CIRCLE CIRCLE L1 CIRCLE CIRCLE CIRCLE L1 L2 R1 TRIANGLE CIRCLE TRIANGLE
++	else if ( !_CHEATCMP("TCT321CCC1CC") )
++		{ CheatString[0] = ' '; VehicleCheat(MI_RHINO); }
++
++	// faster clock: CIRCLE CIRCLE L1 SQUARE L1 SQUARE SQUARE SQUARE L1 TRIANGLE CIRCLE TRIANGLE
++	else if ( !_CHEATCMP("TCT1SSS1S1CC") )
++		{ CheatString[0] = ' '; FastWeatherCheat(); }
++
++	// blow up cars: R2 L2 R1 L1 L2 R2 SQUARE TRIANGLE CIRCLE TRIANGLE L2 L1
++	else if ( !_CHEATCMP("12TCTS421324") )
++		{ CheatString[0] = ' '; BlowUpCarsCheat(); }
++
++	// change outfit: RIGHT RIGHT LEFT UP L1 L2 LEFT UP DOWN RIGHT
++	else if ( !_CHEATCMP("RDUL21ULRR") )
++		{ CheatString[0] = ' '; ChangePlayerCheat(); }
++
++	// peds riot: DOWN LEFT UP LEFT CROSS R2 R1 L2 L1
++	else if ( !_CHEATCMP("1234XLULD") )
++		{ CheatString[0] = ' '; MayhemCheat(); }
++
++	// everybody attacks the player: DOWN UP UP UP CROSS R2 R1 L2 L2
++	else if ( !_CHEATCMP("2234XUUUD") )
++		{ CheatString[0] = ' '; EverybodyAttacksPlayerCheat(); }
++
++	// weapons for all: R2 R1 CROSS TRIANGLE CROSS TRIANGLE UP DOWN
++	else if ( !_CHEATCMP("DUTXTX34") )
++		{ CheatString[0] = ' '; WeaponsForAllCheat(); }
++
++	// faster gameplay: TRIANGLE UP RIGHT DOWN L2 L1 SQUARE
++	else if ( !_CHEATCMP("S12DRUT") )
++		{ CheatString[0] = ' '; FastTimeCheat(); }
++
++	// slower gameplay: TRIANGLE UP RIGHT DOWN SQUARE R2 R1
++	else if ( !_CHEATCMP("34SDRUT") )
++		{ CheatString[0] = ' '; SlowTimeCheat(); }
++
++	// only wheels: TRIANGLE L1 TRIANGLE R2 SQUARE L1 L1
++	else if ( !_CHEATCMP("11S4T1T") )
++		{ CheatString[0] = ' '; OnlyRenderWheelsCheat(); }
+ 
+-	// "TURDS34"		-	TRIANGLE UP RIGHT DOWN SQUARE R1 R2
+-	else if ( !_CHEATCMP("43SDRUT") )
+-		SlowTimeCheat();
+-
+-	// "11S4T1T"		-	L1 L1 SQUARE R2 TRIANGLE L1 TRIANGLE
+-	else if ( !_CHEATCMP("T1T4S11") )
+-		OnlyRenderWheelsCheat();
+-
+-	// "R4C32D13"		-	RIGHT R2 CIRCLE R1 L2 DOWN L1 R1
++	// flying cars: RIGHT R2 CIRCLE R1 L2 DOWN L1 R1
+ 	else if ( !_CHEATCMP("31D23C4R") )
+-		ChittyChittyBangBangCheat();
++		{ CheatString[0] = ' '; ChittyChittyBangBangCheat(); }
+ 
+-	// "3141L33T"		-	R1 L1 R2 L1 LEFT R1 R1 TRIANGLE
+-	else if ( !_CHEATCMP("T33L1413") )
+-		StrongGripCheat();
++	// better handling: TRIANGLE R1 R1 LEFT R1 L1 R2 L1
++	else if ( !_CHEATCMP("1413L33T") )
++		{ CheatString[0] = ' '; StrongGripCheat(); }
++
++	// media level: CIRCLE L1 DOWN L2 LEFT CROSS R1 L1 RIGHT CROSS
++	else if ( !_CHEATCMP("XR13XL2D1C") )
++		{ CheatString[0] = ' '; DoShowChaseStatCheat(); }
++
++	// armed women: RIGHT L1 CIRCLE L2 LEFT CROSS R1 L1 L1 CROSS
++	else if ( !_CHEATCMP("X113XL2C1R") )
++		{ CheatString[0] = ' '; DoChicksWithGunsCheat(); }
++
++	// suicide: RIGHT L2 DOWN R1 LEFT LEFT R1 L1 L2 L1
++	else if ( !_CHEATCMP("1213LL3D2R") )
++		{ CheatString[0] = ' '; SuicideCheat(); }
++
++	// green lights: RIGHT R1 UP L2 L2 LEFT R1 L1 R1 R1
++	else if ( !_CHEATCMP("3313L22U3R") )
++		{ CheatString[0] = ' '; TrafficLightsCheat(); }
++
++	// aggressive traffic: R2 CIRCLE R1 L2 LEFT R1 L1 R2 L2
++	else if ( !_CHEATCMP("2413L23C4") )
++		{ CheatString[0] = ' '; MadCarsCheat(); }
++
++	// pink cars: CIRCLE L1 DOWN L2 LEFT CROSS R1 L1 RIGHT CIRCLE
++	else if ( !_CHEATCMP("CR13XL2D1C") )
++		{ CheatString[0] = ' '; PinkCarsCheat(); }
++
++	// black cars: CIRCLE L2 UP R1 LEFT CROSS R1 L1 LEFT CIRCLE
++	else if ( !_CHEATCMP("CL13XL3U2C") )
++		{ CheatString[0] = ' '; BlackCarsCheat(); }
++
++	// Bloodring Banger: DOWN R1 CIRCLE L2 L2 CROSS R1 L1 LEFT LEFT
++	else if ( !_CHEATCMP("LL13X22C3D") )
++		{ CheatString[0] = ' '; VehicleCheat(MI_BLOODRA); }
++
++	// Romero's hearse: DOWN R2 DOWN R1 L2 LEFT R1 L1 LEFT RIGHT
++	else if ( !_CHEATCMP("RL13L23D4D") )
++		{ CheatString[0] = ' '; VehicleCheat(MI_ROMERO); }
++
++	// Love Fist limo: R2 UP L2 LEFT LEFT R1 L1 CIRCLE RIGHT
++	else if ( !_CHEATCMP("RC13LL2U4") )
++		{ CheatString[0] = ' '; VehicleCheat(MI_LOVEFIST); }
++
++	// Trashmaster: CIRCLE R1 CIRCLE R1 LEFT LEFT R1 L1 CIRCLE RIGHT
++	else if ( !_CHEATCMP("RC13LL3C3C") )
++		{ CheatString[0] = ' '; VehicleCheat(MI_TRASH); }
++
++	// Sabre Turbo: RIGHT L2 DOWN L2 L2 CROSS R1 L1 CIRCLE LEFT
++	else if ( !_CHEATCMP("LC13X22D2R") )
++		{ CheatString[0] = ' '; VehicleCheat(MI_SABRETUR); }
++
++	// Caddy: CIRCLE L1 UP R1 L2 CROSS R1 L1 CIRCLE CROSS
++	else if ( !_CHEATCMP("XC13X23U1C") )
++		{ CheatString[0] = ' '; VehicleCheat(MI_CADDY); }
++
++	// Lance: CIRCLE L2 LEFT CROSS R1 L1 CROSS L1
++	else if ( !_CHEATCMP("1X13XL2C") )
++		{ CheatString[0] = ' '; ChangePlayerModel("igbuddy"); }
++
++	// Candy Suxxx: CIRCLE R2 DOWN R1 LEFT RIGHT R1 L1 CROSS L2
++	else if ( !_CHEATCMP("2X13RL3D4C") )
++		{ CheatString[0] = ' '; ChangePlayerModel("igcandy"); }
++
++	// Ken Rosenberg: RIGHT L1 UP L2 L1 RIGHT R1 L1 CROSS R1
++	else if ( !_CHEATCMP("3X13R12U1R") )
++		{ CheatString[0] = ' '; ChangePlayerModel("igken"); }
++
++	// Hilary King: R1 CIRCLE R2 L1 RIGHT R1 L1 CROSS R2
++	else if ( !_CHEATCMP("4X13R14C3") )
++		{ CheatString[0] = ' '; ChangePlayerModel("ighlary"); }
++
++	// Love Fist (Jezz): DOWN L1 DOWN L2 LEFT CROSS R1 L1 CROSS CROSS
++	else if ( !_CHEATCMP("XX13XL2D1D") )
++		{ CheatString[0] = ' '; ChangePlayerModel("igjezz"); }
++
++	// Phil Cassidy: RIGHT R1 UP R2 L1 RIGHT R1 L1 RIGHT CIRCLE
++	else if ( !_CHEATCMP("CR13R14U3R") )
++		{ CheatString[0] = ' '; ChangePlayerModel("igphil"); }
++
++	// Sonny Forelli: CIRCLE L1 CIRCLE L2 LEFT CROSS R1 L1 CROSS CROSS
++	else if ( !_CHEATCMP("XX13XL2C1C") )
++		{ CheatString[0] = ' '; ChangePlayerModel("igsonny"); }
++
++	// cars drive on water: RIGHT R2 CIRCLE R1 L2 SQUARE R1 R2
++	else if ( !_CHEATCMP("43S23C4R") )
++		{ CheatString[0] = ' '; BackToTheFuture(); }
++
++	// big wheels: R1 CROSS TRIANGLE RIGHT R2 SQUARE UP DOWN SQUARE
++	else if ( !_CHEATCMP("SDUS4RTX3") )
++		{ CheatString[0] = ' '; SpecialCarCheats(); }
++
++	// women get in: CIRCLE RIGHT UP L1 SQUARE R1
++	else if ( !_CHEATCMP("3S1URC") )
++		{ CheatString[0] = ' '; PickUpChicksCheat(); }
++
++	// flying boats: R1 CIRCLE R2 RIGHT L1 L2 CROSS CROSS SQUARE R1
++	else if ( !_CHEATCMP("3SXX21R4C3") )
++		{ CheatString[0] = ' '; FlyingFishCheat(); }
++
++	// Mercedes: R2 CIRCLE UP L1 RIGHT R1 RIGHT UP SQUARE TRIANGLE
++	else if ( !_CHEATCMP("TSUR3R1UC4") )
++		{ CheatString[0] = ' '; ChangePlayerModel("igmerc"); }
++
++	// Dick (Love Fist): R2 L1 UP L1 RIGHT R1 RIGHT UP CIRCLE TRIANGLE
++	else if ( !_CHEATCMP("TCUR3R1U14") )
++		{ CheatString[0] = ' '; ChangePlayerModel("igdick"); }
++
++	// women follow: CIRCLE CROSS L1 L1 R2 CROSS CROSS CIRCLE TRIANGLE
++	else if ( !_CHEATCMP("TCXX411XC") )
++		{ CheatString[0] = ' '; FannyMagnetCheat(); }
++
++	// Diaz: L1 L2 R1 R2 DOWN L1 R2 L2
++	else if ( !_CHEATCMP("241D4321") )
++		{ CheatString[0] = ' '; ChangePlayerModel("igdiaz"); }
+ 
+ #undef _CHEATCMP
+ }
+@@ -1710,9 +1837,110 @@
  	;
  }
  
@@ -5248,7 +5550,7 @@
  
  #ifdef GTA_PS2
  	bObsoleteControllerMessage = false;
-@@ -1978,6 +2082,32 @@
+@@ -1978,6 +2206,32 @@
  		NewState = ReconcileTwoControllersInput(PCTempKeyState, PCTempJoyState);
  		NewState = ReconcileTwoControllersInput(PCTempMouseState, NewState);
  	}
@@ -5281,7 +5583,37 @@
  
  	PCTempJoyState.Clear();
  	PCTempKeyState.Clear();
-@@ -2341,11 +2471,37 @@
+@@ -2007,14 +2261,29 @@
+ void CPad::DoCheats(void)
+ {
+ #ifdef DETECT_PAD_INPUT_SWITCH
++#ifdef LIBRW_HOST
++	extern bool gRevcTestPadOn;	// (pad scripts: no host pad to detect)
++	if (IsAffectedByController || gRevcTestPadOn)
++#else
+ 	if (IsAffectedByController)
+ #endif
++#endif
+ 		GetPad(0)->DoCheats(0);
+ }
+ 
+ void CPad::DoCheats(int16 unk)
+ {
+ #ifdef GTA_PS2_STUFF
++	// revc: the Xbox reads the cheat letters from the buttons themselves, whatever the layout
++	// binds them to: 1 LT, 2 White (LB), 3 RT, 4 Black (RB) (research on the Xbox build)
++	if (gUiStyle == 2 && this == GetPad(0)) {
++		static const struct { int joy; char c; } xbox[] = { { 4, 'T' }, { 1, 'C' }, { 2, 'X' }, { 3, 'S' }, { 13, 'U' },
++			{ 15, 'D' }, { 16, 'L' }, { 14, 'R' }, { 5, '1' }, { 7, '2' }, { 6, '3' }, { 8, '4' } };
++		for (int i = 0; i < ARRAY_SIZE(xbox); i++)
++			if (XboxRawJustDown(xbox[i].joy))
++				AddToCheatString(xbox[i].c);
++		return;
++	}
+ 	if ( GetTriangleJustDown() )
+ 		AddToCheatString('T');
+ 
+@@ -2341,11 +2610,37 @@
  	return 0;
  }
  
@@ -5319,7 +5651,7 @@
  	return !!(NewState.LeftShoulder2 && !NewState.RightShoulder2);
  }
  
-@@ -2354,6 +2510,9 @@
+@@ -2354,6 +2649,9 @@
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -5329,7 +5661,7 @@
  	return !!(NewState.RightShoulder2 && !NewState.LeftShoulder2);
  }
  
-@@ -2363,6 +2522,9 @@
+@@ -2363,6 +2661,9 @@
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -5339,7 +5671,7 @@
  	return !!(NewState.RightShoulder2 && NewState.LeftShoulder2);
  }
  
-@@ -3293,11 +3455,17 @@
+@@ -3293,11 +3594,17 @@
  	return 0;
  }
  
