@@ -310,6 +310,16 @@ pub extern "C" fn revc_texmod_active() -> c_int {
 }
 
 /// # Safety
+/// `txd` and `texture` must be NUL-terminated strings.
+/// 1 when a mod (loose file or a pack of the current UI style) replaces txd/texture: the console
+/// font atlases, for one, place some icons at other character codes than the PC's.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_texmod_has(txd: *const c_char, texture: *const c_char) -> c_int {
+    let (txd, tex) = unsafe { (CStr::from_ptr(txd).to_string_lossy(), CStr::from_ptr(texture).to_string_lossy()) };
+    lookup(&txd, &tex).is_some() as c_int
+}
+
+/// # Safety
 /// `txd` and `texture` must be NUL-terminated strings; the out pointers must be valid.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn revc_texmod_find(
