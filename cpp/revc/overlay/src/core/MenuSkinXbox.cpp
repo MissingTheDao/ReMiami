@@ -561,7 +561,7 @@ DrawHelpLine(CMenuManager *m, uint8 alpha)
 // (floats) and flags; node 5 repeats node 1.
 static float barShape[5][4][2];
 static int barShapes = -1;	// -1 not read yet, 0 none
-static int barShapeIndex;
+static int barShapeIndex = 1;	// (shape 1 after the game loads; research on the Xbox build)
 
 static void
 ReadBarShapes(void)
@@ -600,7 +600,7 @@ ReadBarShapes(void)
 // xbox_row_controls_slow: jump at 4015, next outline at 4018).
 static int selScreen = -1, selOption = -1, selSub = -1;
 static uint32 selectedAt;
-static bool outlinePending;
+static bool outlinePending, outlineReset;
 static void
 NoteSelection(void)
 {
@@ -608,13 +608,17 @@ NoteSelection(void)
 	int sub = HasSubTabs(screen) ? MenuSkinXboxSubTab(screen) : -1;
 	uint32 now = CTimer::GetTimeInMillisecondsPauseMode();
 	if (outlinePending && now - selectedAt >= 33) {
-		barShapeIndex = (barShapeIndex + 1) % 5;
+		// entering Map, Brief or Display starts again at shape 1, any other move takes the next
+		// (the menu animation's states; research on the Xbox build, autopad set 2)
+		barShapeIndex = outlineReset ? 1 : (barShapeIndex + 1) % 5;
 		outlinePending = false;
 	}
 	if (screen == selScreen && option == selOption && sub == selSub)
 		return;
-	if (selScreen >= 0)
+	if (selScreen >= 0) {
 		outlinePending = true;
+		outlineReset = screen != selScreen && (screen == MENUPAGE_MAP || screen == MENUPAGE_BRIEFS || screen == MENUPAGE_CONSOLE_DISPLAY);
+	}
 	selScreen = screen;
 	selOption = option;
 	selSub = sub;
@@ -623,7 +627,7 @@ NoteSelection(void)
 
 // Draws the current outline over x0..x1 x y0..y1 (the quad's extent mapped onto the bar's box).
 static bool
-DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col, bool advance = true)
+DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col, bool advance = true, int shape = -1)
 {
 	if (barShapes < 0)
 		ReadBarShapes();
@@ -634,7 +638,7 @@ DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col, bool adva
 	// the corners fixed within 1 px; R3_Menu.anm anim 3 just shows the next shape).
 	if (advance)
 		NoteSelection();
-	const float (*q)[2] = barShape[barShapeIndex];
+	const float (*q)[2] = barShape[shape >= 0 ? shape : barShapeIndex];
 	float minx = q[0][0], maxx = q[0][0], miny = q[0][1], maxy = q[0][1];
 	for (int k = 1; k < 4; k++) {
 		minx = Min(minx, q[k][0]); maxx = Max(maxx, q[k][0]);
@@ -643,12 +647,12 @@ DrawBarShape(float x0, float y0, float x1, float y1, const CRGBA &col, bool adva
 	float px[4], py[4];
 	for (int k = 0; k < 4; k++) {
 		px[k] = x0 + (q[k][0] - minx) / (maxx - minx) * (x1 - x0);
-		py[k] = y0 + (q[k][1] - miny) / (maxy - miny) * (y1 - y0);
+		py[k] = y0 + (maxy - q[k][1]) / (maxy - miny) * (y1 - y0);	// (the shapes' y points up; research, captures)
 	}
 	// the corners by quadrant (the five shapes list their nodes in different orders)
 	int tl = 0, tr = 0, bl = 0, br = 0;
 	for (int k = 0; k < 4; k++) {
-		bool left = q[k][0] < 0.0f, top = q[k][1] < 0.0f;
+		bool left = q[k][0] < 0.0f, top = q[k][1] > 0.0f;
 		(left ? (top ? tl : bl) : (top ? tr : br)) = k;
 	}
 	CSprite2d::Draw2DPolygon(px[tl], py[tl], px[tr], py[tr], px[bl], py[bl], px[br], py[br], col);
@@ -686,7 +690,7 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 		// centred on the whole bar (the anim's target position is the bar's own)
 		float cx = (x0 + x1) / 2.0f, cy = (y0 + y1) / 2.0f, hw = (x1 - x0) / 2.0f * sx, hh = (y1 - y0) / 2.0f * sy;
 		CRGBA glow(255, 255, 255, (uint8)(a * alpha));
-		if (!DrawBarShape(cx - hw, cy - hh, cx + hw, cy + hh, glow, false))
+		if (!DrawBarShape(cx - hw, cy - hh, cx + hw, cy + hh, glow, false, 0))	// (the glow: always shape 0)
 			CSprite2d::DrawRect(CRect(cx - hw, cy - hh, cx + hw, cy + hh), glow);
 	}
 	// The bar: the console's own outline (colour from the shape's brush: 0, 207, 133), or a tilted
