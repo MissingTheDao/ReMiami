@@ -999,6 +999,33 @@
 -	}
 +	revc_particle_cfg_load(work_buff, len < 0 ? 0 : len, m_aParticles);
  }
+--- a/src/renderer/PlayerSkin.cpp
++++ b/src/renderer/PlayerSkin.cpp
+@@ -10,6 +10,9 @@
+ #include "PlayerInfo.h"
+ #include "CdStream.h"
+ #include "FileMgr.h"
++#ifdef LIBRW_HOST
++#include "TexMods.h"
++#endif
+ #include "Directory.h"
+ #include "RwHelper.h"
+ #include "Timer.h"
+@@ -113,6 +116,14 @@
+ 		tex = RwTextureCreate(raster);
+ 		RwTextureSetName(tex, texName);
+ 		RwTextureSetFilterMode(tex, rwFILTERLINEAR);
++#ifdef LIBRW_HOST
++		// revc: texture mods for the skin: the default one is player.txd's "player" texture
++		// (mods/textures/player/player.png), a custom one skins/<name>
++		if (strcmp(DEFAULT_SKIN_NAME, texName) == 0 || texName[0] == '\0')
++			TexModsApplyTexture(tex, "player", "player");
++		else
++			TexModsApplyTexture(tex, "skins", texName);
++#endif
+ 		RwTexDictionaryAddTexture(CTxdStore::GetSlot(m_txdSlot)->texDict, tex);
+ 
+ 		RwImageDestroy(image);
 --- a/src/renderer/Renderer.cpp
 +++ b/src/renderer/Renderer.cpp
 @@ -1,5 +1,6 @@

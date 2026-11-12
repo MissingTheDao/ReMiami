@@ -53,10 +53,10 @@ DxtRaster(int w, int h, int kind, int levels, bool hasAlpha, const unsigned char
 	return ras;
 }
 
+// Replaces tex's raster with the override for txdName/texName, if there is one.
 static rw::Texture *
-ApplyOne(rw::Texture *tex, void *data)
+ApplyNamed(rw::Texture *tex, const char *txdName, const char *texName)
 {
-	const char *txdName = (const char*)data;
 	int w, h;
 	unsigned char *px;
 	rw::Raster *old = tex->raster;
@@ -69,7 +69,7 @@ ApplyOne(rw::Texture *tex, void *data)
 	int kind, levels, hasAlpha;
 	unsigned char *blocks;
 	size_t size;
-	if (revc_texmod_find_dxt(txdName, tex->name, mipmapped, &w, &h, &kind, &levels, &hasAlpha, &blocks, &size)) {
+	if (revc_texmod_find_dxt(txdName, texName, mipmapped, &w, &h, &kind, &levels, &hasAlpha, &blocks, &size)) {
 		rw::Raster *ras = DxtRaster(w, h, kind, levels, hasAlpha != 0, blocks, size);
 		revc_texmod_free_blocks(blocks, size);
 		if (ras) {
@@ -78,9 +78,9 @@ ApplyOne(rw::Texture *tex, void *data)
 			tex->raster = ras;
 			return tex;
 		}
-		debug("texmods: couldn't create a %dx%d DXT raster for %s/%s, decoding it instead\n", w, h, txdName, tex->name);
+		debug("texmods: couldn't create a %dx%d DXT raster for %s/%s, decoding it instead\n", w, h, txdName, texName);
 	}
-	if (!revc_texmod_find(txdName, tex->name, &w, &h, &px))
+	if (!revc_texmod_find(txdName, texName, &w, &h, &px))
 		return tex;
 
 	rw::Image *img = rw::Image::create(w, h, 32);
@@ -92,7 +92,7 @@ ApplyOne(rw::Texture *tex, void *data)
 			old->destroy();
 		tex->raster = ras;
 	} else {
-		debug("texmods: couldn't create a %dx%d raster for %s/%s, keeping the original\n", w, h, txdName, tex->name);
+		debug("texmods: couldn't create a %dx%d raster for %s/%s, keeping the original\n", w, h, txdName, texName);
 		if (ras)
 			ras->destroy();
 	}
@@ -100,6 +100,19 @@ ApplyOne(rw::Texture *tex, void *data)
 	img->destroy();
 	revc_texmod_free(px, w, h);
 	return tex;
+}
+
+static rw::Texture *
+ApplyOne(rw::Texture *tex, void *data)
+{
+	return ApplyNamed(tex, (const char*)data, tex->name);
+}
+
+void
+TexModsApplyTexture(RwTexture *tex, const char *txdName, const char *texName)
+{
+	if (tex && revc_texmod_active())
+		ApplyNamed(tex, txdName, texName);
 }
 
 void

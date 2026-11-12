@@ -46,6 +46,10 @@ cargo run -p revc-formats --example txdlist -- ../game/models/hud.txd
 cargo run -p revc-formats --example txdlist -- ../game/models/gta3.img:infernus.txd
 ```
 
+The player's skin is not read from a dictionary but from `models/generic/player.bmp` (or
+`skins/<name>.bmp` for a skin picked in the menu); it takes `textures/player/player.png`, or
+`textures/skins/<name>.png` for a picked skin.
+
 The mods folder is indexed once at start-up; restart the game after adding files.
 
 How it works: when a dictionary loads (streamed, from `txd.img` or a loose file), the C++ side
