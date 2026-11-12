@@ -34,10 +34,17 @@ for id in "${IDS[@]}"; do
   /usr/bin/grep -qx -- "$base" <<< "$KNOWN" || { echo "motion $id: no revc motion, using the json's revc source"; continue; }
   st=1; [[ $id == xbox_* ]] && st=2
   cfg="$OUT/$id.ini"
-  sed -e "s/^\[Graphics\]/[Graphics]\nUiStyle=$st/" -e "s/^Width=.*/Width=640/" -e "s/^Height=.*/Height=480/" \
+  # the console references' game state (research, autopad sets: a new game in the hotel). Xbox:
+  # brightness 8/16, trails on, subtitles on, radar map & blips, HUD on; music 8/16, SFX 13/16,
+  # Wildstyle; invert on, vibration off; legend on
+  state=()
+  [[ $st == 2 ]] && state=(-e "s/^MotionBlur=.*/MotionBlur=1/" -e "s/^MusicVolume=.*/MusicVolume=32/" -e "s/^SfxVolume=.*/SfxVolume=52/"
+    -e "s/^Radio=.*/Radio=0/" -e "s/^InvertPad=.*/InvertPad=1/" -e "s/^Vibration=.*/Vibration=0/" -e "s/^Brightness=.*/Brightness=256/")
+  sed -e "s/^\[Graphics\]/[Graphics]\nUiStyle=$st/" -e "s/^Width=.*/Width=640/" -e "s/^Height=.*/Height=480/" "${state[@]}" \
     "$ROOT/tests/config/reVC.ini" > "$cfg"
   rm -rf "${OUT:?}/$id"; mkdir -p "$OUT/$id"
-  if REVC_TEST_CONFIG=$cfg REVC_TEST_WINDOW=640x480 REVC_TEST_MOTION=$id REVC_TEST_PAD_OUT="$OUT" REVC_FIXED_FPS=60 \
+  # (volumes above 0 for the bars, but no sound: OpenAL's null device)
+  if ALSOFT_DRIVERS=null REVC_TEST_CONFIG=$cfg REVC_TEST_WINDOW=640x480 REVC_TEST_MOTION=$id REVC_TEST_PAD_OUT="$OUT" REVC_FIXED_FPS=60 \
       REVC_TEST_VIDEO_DIR="$OUT/$id" REVC_TEST_TIMEOUT=300 "$ROOT/scripts/test.sh" menus > "$OUT/$id.log" 2>&1; then
     RAN+=("$id"); echo "motion $id: $(ls "$OUT/$id" | wc -l) frames"
   else
