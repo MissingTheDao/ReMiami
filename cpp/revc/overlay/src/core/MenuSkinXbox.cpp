@@ -15,6 +15,7 @@
 #include "Text.h"
 #include "Timer.h"
 #include "Pad.h"
+#include "GenericGameStorage.h"
 
 extern int8 gUiStyle;
 extern "C" int revc_import_rgba(int kind, const char *rel, int *width, int *height, unsigned char **rgba);
@@ -155,7 +156,8 @@ XboxFontPrint(const XboxFont &f, float x, float y, float height, const wchar *te
 }
 
 // Text in the Xbox menu font for other menu code (the controller page's callouts): align 0 left,
-// 1 right of x; a dark drop shadow. False when the font isn't loaded (then draw as before).
+// 1 right of x, with a dark drop shadow; 2 left without one (the slot lists' black rows). False
+// when the font isn't loaded (then draw as before).
 bool
 MenuSkinXboxText(float x, float y, float height, const wchar *text, const CRGBA &col, int align)
 {
@@ -164,7 +166,8 @@ MenuSkinXboxText(float x, float y, float height, const wchar *text, const CRGBA 
 	if (align == 1)
 		x -= XboxFontWidth(fontRW, text, height);
 	float d = height / 10.0f;
-	XboxFontPrint(fontRW, x + d, y + d, height, text, CRGBA(0, 0, 0, col.a));
+	if (align != 2)
+		XboxFontPrint(fontRW, x + d, y + d, height, text, CRGBA(0, 0, 0, col.a));
 	XboxFontPrint(fontRW, x, y, height, text, col);
 	return true;
 }
@@ -709,6 +712,78 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 	(void)tailW;
 	if (!DrawBarShape(x0, y0, x1, y1, CRGBA(0, 207, 133, alpha)))
 		CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 + tilt, y0, x0, y1, x1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
+}
+
+// The Xbox's save screen (a screen of its own, not one of the pause menu's pages; research on the
+// Xbox build): the game behind dimmed to black, the light-blue card (the Load card's shape, moved),
+// "cancel" at its top left (the selection when it opens) and the eight slots in black. No title,
+// logo, icon bar or help line.
+bool
+MenuSkinXboxSave(int page, bool gameNotLoaded)
+{
+	static bool test = getenv("REVC_TEST_MENU_SKIN") != nil;
+	return gUiStyle == 2 && (!gameNotLoaded || test) && page == MENUPAGE_CHOOSE_SAVE_SLOT && LoadSprites();
+}
+
+void
+MenuSkinXboxSaveScreen(CMenuManager *m, uint8 alpha)
+{
+	CSprite2d::DrawRect(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(0, 0, 0, 255));
+	// (corners TL, TR, BL, BR; 0.6 alpha in the animation data, but it shows at 0.705 over the black
+	// on the console's capture, measured against the opaque dialog card)
+	CSprite2d::Draw2DPolygon(X(142.45f), Y(89.15f), X(479.4f), Y(102.15f), X(156.45f), Y(389.15f), X(498.4f), Y(400.15f),
+		CRGBA(97, 194, 247, alpha * 180 / 255));
+	const auto &s = aScreens[MENUPAGE_CHOOSE_SAVE_SLOT];
+	for (int i = 0; i < NUM_MENUROWS; i++) {
+		const int slot = s.m_aEntries[i].m_SaveSlot;
+		const bool sel = i == m->m_nCurrOption;
+		if (slot >= SAVESLOT_1 && slot <= SAVESLOT_8) {
+			// rows 35.15 apart, the name in black with its date under it, the mint bar (2.5 x the
+			// outline) at the Xbox's own centre for each row
+			const int k = slot - SAVESLOT_1;
+			static const float barCY[8] = { 122.95f, 156.95f, 192.95f, 226.95f, 260.95f, 297.25f, 332.55f, 367.7f };
+			if (sel) {
+				const float dx = k == 6 ? 1.0f : 0.0f;
+				MenuSkinXboxSelection(X(157.55f + dx), Y(barCY[k] - 18.9f), X(485.43f + dx), Y(barCY[k] + 17.9f), alpha, true, 150.0f);
+			}
+			static wchar name[96], date[40];
+			const wchar *l = nil, *r = nil;
+			if (Slots[k] == SLOT_OK) {
+				l = GetNameOfSavedGame(k);
+				r = GetSavedGameDateAndTime(k);
+			}
+			if (!l || l[0] == '\0') {
+				UnicodeStrcpy(name, TheText.Get("RVC_XSG"));
+				char num[8];
+				sprintf(num, " %d ", k + 1);
+				AsciiToUnicode(num, name + UnicodeStrlen(name));
+				UnicodeStrcpy(name + UnicodeStrlen(name), TheText.Get("RVC_XNP"));
+				l = name;
+				AsciiToUnicode("--:---:----, --:--:--", date);
+				r = date;
+			}
+			const float y = Y(113.0f + 35.15f * k);	// (measured against the console capture)
+			MenuSkinXboxText(X(165.6f), y, H(19.0f), l, CRGBA(0, 0, 0, alpha), 2);
+			if (r)
+				MenuSkinXboxText(X(254.85f), y + H(15.55f), H(13.0f), r, CRGBA(0, 0, 0, alpha), 2);
+		} else if (s.m_aEntries[i].m_Action == MENUACTION_RESUME_FROM_SAVEZONE) {
+			// "cancel" above the card (x 150.2) on its bar (1.25 x the outline)
+			if (sel)
+				MenuSkinXboxSelection(X(124.5f), Y(60.9f), X(288.4f), Y(106.9f), alpha, true, 0.0f);
+			CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
+			CFont::SetScale(W(BIGTEXT_X_SCALE * 1.2f), H(BIGTEXT_Y_SCALE * 1.2f * 480.0f / 448.0f));
+			CFont::SetPropOn();
+			CFont::SetCentreOff();
+			CFont::SetRightJustifyOff();
+			CFont::SetWrapx(SCREEN_WIDTH);
+			CFont::SetDropShadowPosition(2);
+			CFont::SetDropColor(CRGBA(0, 0, 0, alpha));
+			CFont::SetColor(CRGBA(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha));
+			CFont::PrintString(X(150.2f), Y(75.1f), TheText.Get("RVC_XCA"));
+			CFont::DrawFonts();
+			CFont::SetDropShadowPosition(0);
+		}
+	}
 }
 
 // A dialog's background, drawn before the page's own text (CMenuManager::DrawStandardMenus), as the
