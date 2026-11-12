@@ -36,15 +36,17 @@
  		CustomMatCtor, nil, CustomMatCopy);
 --- a/src/extras/postfx.cpp
 +++ b/src/extras/postfx.cpp
-@@ -11,6 +11,7 @@
+@@ -11,7 +11,9 @@
  #include "RwHelper.h"
  #include "Camera.h"
  #include "MBlur.h"
 +#include "Timer.h"
  #include "postfx.h"
++#include "Sprite2d.h"
  
  RwRaster *CPostFX::pFrontBuffer;
-@@ -22,28 +23,41 @@
+ RwRaster *CPostFX::pBackBuffer;
+@@ -22,28 +24,41 @@
  
  static RwIm2DVertex Vertex[4];
  static RwIm2DVertex Vertex2[4];
@@ -98,7 +100,7 @@
  }
  
  void
-@@ -108,8 +122,12 @@
+@@ -108,8 +123,12 @@
  	RwIm2DVertexSetIntRGBA(&Vertex[3], 255, 255, 255, 255);
  
  
@@ -113,7 +115,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[0], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[0], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[0], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -117,8 +135,8 @@
+@@ -117,8 +136,8 @@
  	RwIm2DVertexSetV(&Vertex2[0], 0.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[0], 255, 255, 255, 255);
  
@@ -124,7 +126,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[1], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[1], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[1], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -126,8 +144,8 @@
+@@ -126,8 +145,8 @@
  	RwIm2DVertexSetV(&Vertex2[1], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[1], 255, 255, 255, 255);
  
@@ -135,7 +137,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[2], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[2], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[2], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -135,8 +153,8 @@
+@@ -135,8 +154,8 @@
  	RwIm2DVertexSetV(&Vertex2[2], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[2], 255, 255, 255, 255);
  
@@ -146,7 +148,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[3], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[3], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[3], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -151,28 +169,6 @@
+@@ -151,28 +170,6 @@
  #include "shaders/obj/contrastPS.inc"
  	contrast_PS = rw::d3d::createPixelShader(contrastPS_cso);
  #endif
@@ -175,7 +177,7 @@
  }
  
  void
-@@ -196,16 +192,6 @@
+@@ -196,16 +193,6 @@
  		contrast_PS = nil;
  	}
  #endif
@@ -192,7 +194,7 @@
  }
  
  void
-@@ -226,7 +212,9 @@
+@@ -226,7 +213,9 @@
  	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
  
@@ -203,7 +205,7 @@
  
  
  	RwIm2DVertexSetIntRGBA(&Vertex2[0], r, g, b, a);
-@@ -242,7 +230,7 @@
+@@ -242,7 +231,7 @@
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
  
  	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
@@ -212,7 +214,7 @@
  }
  
  void
-@@ -282,11 +270,9 @@
+@@ -282,11 +271,9 @@
  
  		rw::d3d::im2dOverridePS = contrast_PS;
  #endif
@@ -227,7 +229,7 @@
  #endif
  	}else{
  		float f = Intensity;
-@@ -299,18 +285,17 @@
+@@ -299,18 +286,17 @@
  		rw::d3d::d3ddevice->SetPixelShaderConstantF(10, blurcolors, 1);
  		rw::d3d::im2dOverridePS = colourfilterVC_PS;
  #endif
@@ -251,9 +253,19 @@
  #endif
  }
  
-@@ -446,9 +431,17 @@
+@@ -445,10 +431,27 @@
+ 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
  
++#ifdef LIBRW_HOST
++	// revc: the PS2's two black frames after its menu closes go into the trails like any frame
++	// (the console's motion blur then brings the game in from black over ~100 ms; research)
++	{
++		extern bool Ps2MenuCloseBlack(void);
++		if(Ps2MenuCloseBlack())
++			CSprite2d::DrawRect(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(0, 0, 0, 255));
++	}
++#endif
  	if(NeedFrontBuffer(type)){
 -		RwRasterPushContext(pFrontBuffer);
 -		RwRasterRenderFast(RwCameraGetRaster(cam), 0, 0);
