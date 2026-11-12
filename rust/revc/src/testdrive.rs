@@ -262,6 +262,8 @@ const MENU_SHOTS_XBOX: &[MenuShot] = &[
     ("load_slots", "load", 1, -1, -1, -1, 1000),
     ("load_confirm_new_game", "new_game_confirm", 1, -1, -1, -1, 1000),
     ("save_slots", "save", 1, -1, -1, -1, 1000),
+    ("save_overwrite", "save_overwrite", 1, -1, -1, -1, 1000),
+    ("save_overwrite_yes", "save_overwrite", 2, -1, -1, -1, 1000),
 ];
 
 /// Stats with an endgame save (REVC_TEST_SAVE, set ps2_endgame / xbox_endgame): the top, then the

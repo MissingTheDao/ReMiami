@@ -717,18 +717,26 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 // The Xbox's save screen (a screen of its own, not one of the pause menu's pages; research on the
 // Xbox build): the game behind dimmed to black, the light-blue card (the Load card's shape, moved),
 // "cancel" at its top left (the selection when it opens) and the eight slots in black. No title,
-// logo, icon bar or help line.
+// logo, icon bar or help line. Overwriting a save asks in the Xbox's OK / Cancel dialog over it;
+// while saving, the black only (the message is the Xbox's dialog, CMenuManager::DrawOverlays).
+void MenuSkinXboxDialogBack(uint8 alpha);
+
 bool
 MenuSkinXboxSave(int page, bool gameNotLoaded)
 {
 	static bool test = getenv("REVC_TEST_MENU_SKIN") != nil;
-	return gUiStyle == 2 && (!gameNotLoaded || test) && page == MENUPAGE_CHOOSE_SAVE_SLOT && LoadSprites();
+	return gUiStyle == 2 && (!gameNotLoaded || test) && LoadSprites() &&
+		(page == MENUPAGE_CHOOSE_SAVE_SLOT || page == MENUPAGE_SAVE_OVERWRITE_CONFIRM || page == MENUPAGE_SAVING_IN_PROGRESS);
 }
 
 void
 MenuSkinXboxSaveScreen(CMenuManager *m, uint8 alpha)
 {
 	CSprite2d::DrawRect(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(0, 0, 0, 255));
+	const int page = m->m_nCurrScreen;
+	if (page == MENUPAGE_SAVING_IN_PROGRESS)
+		return;
+	const bool confirm = page == MENUPAGE_SAVE_OVERWRITE_CONFIRM;
 	// (corners TL, TR, BL, BR; 0.6 alpha in the animation data, but it shows at 0.705 over the black
 	// on the console's capture, measured against the opaque dialog card)
 	CSprite2d::Draw2DPolygon(X(142.45f), Y(89.15f), X(479.4f), Y(102.15f), X(156.45f), Y(389.15f), X(498.4f), Y(400.15f),
@@ -736,7 +744,7 @@ MenuSkinXboxSaveScreen(CMenuManager *m, uint8 alpha)
 	const auto &s = aScreens[MENUPAGE_CHOOSE_SAVE_SLOT];
 	for (int i = 0; i < NUM_MENUROWS; i++) {
 		const int slot = s.m_aEntries[i].m_SaveSlot;
-		const bool sel = i == m->m_nCurrOption;
+		const bool sel = confirm ? slot == SAVESLOT_1 + m->m_nCurrSaveSlot : i == m->m_nCurrOption;
 		if (slot >= SAVESLOT_1 && slot <= SAVESLOT_8) {
 			// rows 35.15 apart, the name in black with its date under it, the mint bar (2.5 x the
 			// outline) at the Xbox's own centre for each row
@@ -784,6 +792,37 @@ MenuSkinXboxSaveScreen(CMenuManager *m, uint8 alpha)
 			CFont::SetDropShadowPosition(0);
 		}
 	}
+	if (!confirm)
+		return;
+	// overwriting: the Xbox's OK / Cancel dialog (as the Load page's, Frontend.cpp)
+	MenuSkinXboxDialogBack(alpha);
+	const wchar *q = TheText.Get(Slots[m->m_nCurrSaveSlot] == SLOT_OK ? "FESZ_QO" : "FESZ_QZ");
+	CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
+	CFont::SetScale(W(0.90f), H(0.85f * 480.0f / 448.0f));
+	CFont::SetPropOn();
+	CFont::SetRightJustifyOff();
+	CFont::SetCentreOn();
+	CFont::SetCentreSize(W(380.0f));
+	CFont::SetDropShadowPosition(2);
+	CFont::SetDropColor(CRGBA(0, 0, 0, alpha));
+	CFont::SetColor(CRGBA(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha));
+	int lines = CFont::GetNumberLines(X(290.0f), Y(181.0f), (wchar *)q);
+	CFont::PrintString(X(290.0f), Y(220.0f - lines * 7.8f), (wchar *)q);
+	CFont::DrawFonts();
+	CFont::SetCentreOff();
+	CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
+	CFont::SetScale(W(BIGTEXT_X_SCALE), H(BIGTEXT_Y_SCALE * 480.0f / 448.0f));
+	for (int i = 0; i < NUM_MENUROWS; i++) {
+		const int act = aScreens[page].m_aEntries[i].m_Action;
+		if (act != MENUACTION_YES && act != MENUACTION_NO)
+			continue;
+		const bool yes = act == MENUACTION_YES;	// "OK" left, "Cancel" right
+		if (i == m->m_nCurrOption)
+			MenuSkinXboxSelection(X(yes ? 146.05f : 325.65f), Y(279.2f), X(yes ? 228.5f : 408.1f), Y(321.65f), alpha, false, 0.0f);
+		CFont::PrintString(X(yes ? 151.9f : 331.65f), Y(290.0f), TheText.Get(yes ? "RVC_XOK" : "RVC_XCA"));
+	}
+	CFont::DrawFonts();
+	CFont::SetDropShadowPosition(0);
 }
 
 // A dialog's background, drawn before the page's own text (CMenuManager::DrawStandardMenus), as the
