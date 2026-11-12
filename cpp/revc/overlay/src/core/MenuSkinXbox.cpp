@@ -46,8 +46,9 @@ static const XboxTab tabs[] = {
 	{ MENUPAGE_SOUND_SETTINGS, -1, "ui/r3_menu_252.dds" },	// boombox
 	{ MENUPAGE_CONSOLE_DISPLAY, -1, "ui/r3_menu_255.dds" },	// TV: the console's display page
 };
-// icon centres on the bar (measured)
-static const float iconX[7] = { 112.0f, 180.0f, 253.0f, 325.0f, 395.0f, 463.0f, 530.0f };
+// icon centres on the bar (measured: the selection square's centre, which sits on its icon, on
+// autopad sets 2-3, 0.5 left of it; uneven spacing as on the console)
+static const float iconX[7] = { 112.0f, 176.5f, 258.5f, 323.0f, 395.0f, 466.5f, 530.0f };
 static const float ICON_Y = 395.0f, ICON_SIZE = 50.0f, ICON_SELECTED = 80.0f;
 
 // Heap-allocated so nothing runs at program exit (after RenderWare is gone); freed with the menu's
