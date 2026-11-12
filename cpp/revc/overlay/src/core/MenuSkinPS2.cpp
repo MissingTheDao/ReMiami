@@ -114,11 +114,16 @@ MenuSkinPS2Glide(int id, int page, const CRect &target)
 		s.to = target;
 		s.start = now;
 	} else if (target.left != s.to.left || target.top != s.to.top || target.right != s.to.right || target.bottom != s.to.bottom) {
+		// (the first target after a seed keeps the seed's start: the list's box is first drawn a
+		// frame after the cross, and the console's glide starts on the cross; research,
+		// ps2_focus_tabs_to_list_display_v140)
+		bool seeded = s.tab && s.to.left == s.from.left && s.to.top == s.from.top && s.to.right == s.from.right && s.to.bottom == s.from.bottom;
 		if (s.tab && s.to.left != s.from.left)
 			s.tab = false;	// (a later move: a normal glide)
 		s.from = s.cur;
 		s.to = target;
-		s.start = now;
+		if (!seeded)
+			s.start = now;
 	}
 	float t;
 	if (s.tab) {	// (before the sweep: from the tab bar into the list is a long move up too)
