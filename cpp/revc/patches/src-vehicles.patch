@@ -1,3 +1,56 @@
+--- a/src/vehicles/Automobile.cpp
++++ b/src/vehicles/Automobile.cpp
+@@ -51,6 +51,7 @@
+ #include "Bike.h"
+ #include "Wanted.h"
+ #include "SaveBuf.h"
++extern int8 gUiStyle;
+ 
+ bool bAllCarCheat;
+ 
+@@ -352,7 +353,8 @@
+ 	// Set Center of Mass to make car more stable
+ 	if(strongGrip1 || bCheat3)
+ 		m_vecCentreOfMass.z = 0.3f*m_aSuspensionSpringLength[0] + -1.0f*m_fHeightAboveRoad;
+-	else if(pHandling->Flags & HANDLING_NONPLAYER_STABILISER && GetStatus() == STATUS_PHYSICS)
++	else if(pHandling->Flags & HANDLING_NONPLAYER_STABILISER && GetStatus() == STATUS_PHYSICS &&
++		!(gUiStyle == 1 && GetModelIndex() == MI_BFINJECT))	// (revc: the PS2's handling has no stabiliser for it; research)
+ 		m_vecCentreOfMass.z = pHandling->CentreOfMass.z - 0.2f*pHandling->Dimension.z;
+ 	else
+ 		m_vecCentreOfMass = pHandling->CentreOfMass;
+--- a/src/vehicles/Bike.cpp
++++ b/src/vehicles/Bike.cpp
+@@ -37,6 +37,7 @@
+ #include "Bike.h"
+ #include "Debug.h"
+ #include "SaveBuf.h"
++extern int8 gUiStyle;
+ 
+ const uint32 CBike::nSaveStructSize =
+ #ifdef COMPATIBLE_SAVES
+@@ -1053,11 +1054,11 @@
+ 			if(m_aSuspensionSpringRatio[BIKESUSP_R1] < 1.0f || m_aSuspensionSpringRatio[BIKESUSP_R2] < 1.0f){
+ 				// BUG: this clamp makes no sense and the arguments seem swapped too
+ 				ApplyTurnForce(contactPoints[BIKESUSP_R1],
+-					m_fTurnMass*Sin(m_fBrakeDestabilization)*Clamp(fwdSpeed, 0.5f, 0.2f)*0.013f*GetRight()*CTimer::GetTimeStep());
++					m_fTurnMass*Sin(m_fBrakeDestabilization)*Clamp(fwdSpeed, 0.5f, 0.2f)*(gUiStyle == 1 ? 0.03f : 0.013f)*GetRight()*CTimer::GetTimeStep());	// (revc: the PS2's is stronger; research)
+ 			}else{
+ 				// BUG: this clamp makes no sense and the arguments seem swapped too
+ 				ApplyTurnForce(contactPoints[BIKESUSP_R1],
+-					m_fTurnMass*Sin(m_fBrakeDestabilization)*Clamp(fwdSpeed, 0.5f, 0.2f)*0.003f*GetRight()*CTimer::GetTimeStep());
++					m_fTurnMass*Sin(m_fBrakeDestabilization)*Clamp(fwdSpeed, 0.5f, 0.2f)*(gUiStyle == 1 ? 0.007f : 0.003f)*GetRight()*CTimer::GetTimeStep());
+ 			}
+ 		}else
+ 			m_fBrakeDestabilization = 0.0f;
+@@ -1848,7 +1849,7 @@
+ 	if (CCamera::bFreeCam) updown = CPad::IsAffectedByController ? -CPad::GetPad(pad)->GetSteeringUpDown()/128.0f : CPad::GetPad(pad)->GetCarGunUpDown()/128.0f;
+ 	else
+ #endif
+-	updown = -CPad::GetPad(pad)->GetSteeringUpDown()/128.0f + CPad::GetPad(pad)->GetCarGunUpDown()/128.0f;
++	updown = -CPad::GetPad(pad)->GetSteeringUpDown()/128.0f + (gUiStyle != 0 ? 0.0f : CPad::GetPad(pad)->GetCarGunUpDown()/128.0f);	// (revc: the consoles lean with the left stick only; research)
+ 	m_fLeanInput += (updown - m_fLeanInput)*0.2f*CTimer::GetTimeStep();
+ 	m_fLeanInput = Clamp(m_fLeanInput, -1.0f, 1.0f);
+ 
 --- a/src/vehicles/HandlingMgr.cpp
 +++ b/src/vehicles/HandlingMgr.cpp
 @@ -134,199 +134,21 @@
@@ -337,3 +390,41 @@
  }
  
  void
+--- a/src/vehicles/Vehicle.cpp
++++ b/src/vehicles/Vehicle.cpp
+@@ -33,6 +33,7 @@
+ #include "Weather.h"
+ #include "Coronas.h"
+ #include "SaveBuf.h"
++extern int8 gUiStyle;
+ 
+ bool CVehicle::bWheelsOnlyCheat;
+ bool CVehicle::bAllDodosCheat;
+@@ -336,7 +337,7 @@
+ #ifdef FREE_CAM
+ 		if(!CCamera::bFreeCam || (CCamera::bFreeCam && !CPad::IsAffectedByController))
+ #endif
+-		if(fGunUD > 1.0f)
++		if(fGunUD > 1.0f && gUiStyle != 1)	// (revc: the PS2's planes pitch with the left stick only; research)
+ 			fSteerUD = -CPad::GetPad(0)->GetCarGunUpDown() / 128.0f;
+ 
+ 		float fSteerAngle = Atan2(fSteerUD, fSteerLR);
+@@ -464,6 +465,9 @@
+ 			return;
+ 		float fUpSpeed = DotProduct(m_vecMoveSpeed, GetUp());
+ 		float fThrust = (CPad::GetPad(0)->GetAccelerate() - CPad::GetPad(0)->GetBrake()) / 255.0f;
++		// revc: on the PS2 the right stick's up/down is an analogue collective over the buttons (research)
++		if(gUiStyle == 1 && Abs(CPad::GetPad(0)->GetCarGunUpDown()) > 1.0f)
++			fThrust = CPad::GetPad(0)->GetCarGunUpDown() / 128.0f;
+ 		if(fThrust < 0.0f)
+ 			fThrust *= 2.0f;
+ 		if(flightModel == FLIGHT_MODEL_RCHELI){
+@@ -518,7 +522,7 @@
+ #ifdef FREE_CAM
+ 		if(!CCamera::bFreeCam || (CCamera::bFreeCam && !CPad::IsAffectedByController))
+ #endif
+-		if(Abs(CPad::GetPad(0)->GetCarGunUpDown()) > 1.0f)
++		if(Abs(CPad::GetPad(0)->GetCarGunUpDown()) > 1.0f && gUiStyle != 1)	// (revc: not on the PS2, where it is the collective)
+ 			fPitch = -CPad::GetPad(0)->GetCarGunUpDown() / 128.0f;
+ 		if (CPad::GetPad(0)->GetHorn()) {
+ 			fYaw = 0.0f;

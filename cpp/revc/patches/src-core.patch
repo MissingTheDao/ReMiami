@@ -3494,6 +3494,43 @@
  	int GetStartOptionsCntrlConfigScreens();
  	void InitialiseChangedLanguageSettings();
  	void LoadAllTextures();
+--- a/src/core/IniFile.cpp
++++ b/src/core/IniFile.cpp
+@@ -10,6 +10,20 @@
+ float CIniFile::PedNumberMultiplier = 0.6f;
+ float CIniFile::CarNumberMultiplier = 0.6f;
+ 
++extern int8 gUiStyle;
++
++int32 CIniFile::PedCap(bool interior)
++{
++	float cap = (interior ? DEFAULT_MAX_NUMBER_OF_PEDS_INTERIOR : DEFAULT_MAX_NUMBER_OF_PEDS) * PedNumberMultiplier;
++	return gUiStyle != 0 ? (int32)(cap / 0.6f + 0.5f) : (int32)cap;
++}
++
++int32 CIniFile::CarCap(void)
++{
++	float cap = DEFAULT_MAX_NUMBER_OF_CARS * CarNumberMultiplier;
++	return gUiStyle != 0 ? (int32)(cap / 0.6f + 0.5f) : (int32)cap;
++}
++
+ void CIniFile::LoadIniFile()
+ {
+ 	CFileMgr::SetDir("");
+--- a/src/core/IniFile.h
++++ b/src/core/IniFile.h
+@@ -8,6 +8,11 @@
+ {
+ public:
+ 	static void LoadIniFile();
++	// revc: the population caps. The PC scales 25/40/12 by the density multipliers (default 0.6:
++	// 15/24/7); the PS2 and Xbox keep 25/40/12 with the same 0.6 in the density formulas (research
++	// on the console builds). The console styles' caps follow the multipliers relative to 0.6.
++	static int32 PedCap(bool interior);
++	static int32 CarCap(void);
+ 
+ 	static float PedNumberMultiplier;
+ 	static float CarNumberMultiplier;
 --- a/src/core/main.cpp
 +++ b/src/core/main.cpp
 @@ -16,6 +16,7 @@
@@ -4355,7 +4392,7 @@
  		
  #ifdef MISSION_REPLAY
  	// MENUPAGE_MISSION_RETRY = 57 on mobile
-@@ -826,3 +1148,268 @@
+@@ -826,3 +1148,269 @@
  
  #endif
  #endif
@@ -4429,9 +4466,10 @@
 +	if (gUiStyle == 1 || gUiStyle == 2)
 +		ApplyVisualStyle(gUiStyle);
 +#ifdef PED_CAR_DENSITY_SLIDERS
-+	PedDensityChange(CIniFile::PedNumberMultiplier, 1.0f);
-+	CarDensityChange(CIniFile::CarNumberMultiplier, 1.0f);
-+	CIniFile::PedNumberMultiplier = CIniFile::CarNumberMultiplier = 1.0f;
++	// (the game's own density, 0.6 on every platform; the console styles' caps follow, IniFile.h)
++	PedDensityChange(CIniFile::PedNumberMultiplier, 0.6f);
++	CarDensityChange(CIniFile::CarNumberMultiplier, 0.6f);
++	CIniFile::PedNumberMultiplier = CIniFile::CarNumberMultiplier = 0.6f;
 +#endif
 +	FrontEndMenuManager.m_PrefsCutsceneBorders = true;
 +	TheCamera.bFreeCam = false;

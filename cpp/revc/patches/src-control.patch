@@ -7,6 +7,15 @@
  #include "CarCtrl.h"
  
  #include "Accident.h"
+@@ -143,7 +144,7 @@
+ 	pPlayer->m_nTrafficMultiplier = pPlayer->m_fRoadDensity * zone.carDensity;
+ 	if (NumRandomCars >= pPlayer->m_nTrafficMultiplier * CarDensityMultiplier * CIniFile::CarNumberMultiplier)
+ 		return;
+-	if (NumFiretrucksOnDuty + NumAmbulancesOnDuty + NumParkedCars + NumMissionCars + NumLawEnforcerCars + NumRandomCars >= MaxNumberOfCarsInUse)
++	if (NumFiretrucksOnDuty + NumAmbulancesOnDuty + NumParkedCars + NumMissionCars + NumLawEnforcerCars + NumRandomCars >= CIniFile::CarCap())
+ 		return;
+ 	CWanted* pWanted = pPlayer->m_pPed->m_pWanted;
+ 	int carClass;
 @@ -1277,10 +1278,16 @@
  							pPlayerPed->AnnoyPlayerPed(false);
  							pPlayerPed->SetLookFlag(pVehicle, true);
@@ -24,6 +33,15 @@
  								pPlayerPed->bShakeFist = true;
  							}
  						}
+@@ -3173,7 +3180,7 @@
+ 	if (CGame::IsInInterior())
+ 		return;
+ 	if (NumFiretrucksOnDuty + NumAmbulancesOnDuty + NumParkedCars + NumMissionCars +
+-		NumLawEnforcerCars + NumRandomCars > MaxNumberOfCarsInUse)
++		NumLawEnforcerCars + NumRandomCars > CIniFile::CarCap())
+ 		return;
+ 	if (NumAmbulancesOnDuty == 0){
+ 		if (gAccidentManager.CountActiveAccidents() < 2){
 --- a/src/control/GameLogic.cpp
 +++ b/src/control/GameLogic.cpp
 @@ -251,6 +251,9 @@
@@ -48,7 +66,15 @@
  			TheCamera.m_fCamShakeForce = 0.0f;
 --- a/src/control/Garages.cpp
 +++ b/src/control/Garages.cpp
-@@ -666,7 +666,7 @@
+@@ -25,6 +25,7 @@
+ #include "World.h"
+ #include "VarConsole.h"
+ #include "SaveBuf.h"
++extern int8 gUiStyle;
+ 
+ #define ROTATED_DOOR_OPEN_SPEED (0.015f)
+ #define ROTATED_DOOR_CLOSE_SPEED (0.02f)
+@@ -666,7 +667,7 @@
  			if (((CVector2D)FindPlayerCoors() - CVector2D(GetGarageCenterX(), GetGarageCenterY())).MagnitudeSqr() > SQR(DISTANCE_TO_CLOSE_MISSION_GARAGE)) {
  				if ((CTimer::GetFrameCounter() & 0x1F) == 0 
  #ifndef GTA_PS2
@@ -57,6 +83,19 @@
  #endif
  					) {
  					m_eGarageState = GS_CLOSING;
+@@ -1438,10 +1439,9 @@
+ 	case MI_BARRACKS:
+ 	case MI_DODO:
+ 	case MI_COACH:
+-#ifndef GTA_PS2
+-	case MI_FBIRANCH:
+-#endif
+ 		return false;
++	case MI_FBIRANCH:	// (revc: the PS2 resprays it; research)
++		return gUiStyle == 1;
+ 	default:
+ 		break;
+ 	}
 @@ -1881,7 +1881,11 @@
  	pVehicle->m_currentColour2 = m_nSecondaryColor;
  	pVehicle->m_nRadioStation = m_nRadioStation;
@@ -69,6 +108,25 @@
  	{
  		((CAutomobile*)pVehicle)->m_bombType = m_nCarBombType;
  #ifdef FIX_BUGS
+--- a/src/control/Replay.cpp
++++ b/src/control/Replay.cpp
+@@ -52,6 +52,7 @@
+ #include "Radar.h"
+ #include "Fluff.h"
+ #include "WaterCreatures.h"
++extern int8 gUiStyle;
+ 
+ uint8 CReplay::Mode;
+ CAddressInReplayBuffer CReplay::Record;
+@@ -283,6 +284,8 @@
+ 	}
+ 	if (CDraw::FadeValue || !bReplayEnabled)
+ 		return;
++	if (gUiStyle != 0)
++		return;	// (revc: the consoles have no instant replay key; research)
+ 	if (Mode == MODE_PLAYBACK){
+ 		if (CPad::GetPad(0)->GetFJustDown(0))
+ 			FinishPlayback();
 --- a/src/control/Restart.cpp
 +++ b/src/control/Restart.cpp
 @@ -1,69 +1,81 @@

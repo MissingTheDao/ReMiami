@@ -273,3 +273,23 @@
  	delete[] buf;
  }
  
+--- a/src/peds/Population.cpp
++++ b/src/peds/Population.cpp
+@@ -545,7 +545,7 @@
+ 				(CCarCtrl::NumLawEnforcerCars >= wantedInfo->m_MaximumLawEnforcerVehicles
+ 				|| CCarCtrl::NumRandomCars >= playerInfo->m_nTrafficMultiplier * CCarCtrl::CarDensityMultiplier
+ 				|| CCarCtrl::NumFiretrucksOnDuty + CCarCtrl::NumAmbulancesOnDuty + CCarCtrl::NumParkedCars
+-				+ CCarCtrl::NumMissionCars + CCarCtrl::NumLawEnforcerCars + CCarCtrl::NumRandomCars >= CCarCtrl::MaxNumberOfCarsInUse) || forceAddingCop)) {
++				+ CCarCtrl::NumMissionCars + CCarCtrl::NumLawEnforcerCars + CCarCtrl::NumRandomCars >= CIniFile::CarCap()) || forceAddingCop)) {
+ 			addCop = true;
+ 			minDist = PedCreationDistMultiplier() * MIN_CREATION_DIST;
+ 			maxDist = PedCreationDistMultiplier() * (MIN_CREATION_DIST + CREATION_RANGE);
+@@ -561,7 +561,7 @@
+ 	}
+ 	if (CDarkel::FrenzyOnGoing())
+ 		missionAndWeatherMult = 1.0f;
+-	int selectedMaxPeds = CGame::IsInInterior() ? CPopulation::MaxNumberOfPedsInUseInterior : CPopulation::MaxNumberOfPedsInUse;
++	int selectedMaxPeds = CIniFile::PedCap(CGame::IsInInterior());	// (revc: per UI style, IniFile.h)
+ 
+ 	// Yeah, float
+ 	float maxPossiblePedsForArea = (zoneInfo.pedDensity + zoneInfo.carDensity) * playerInfo->m_fRoadDensity * PedDensityMultiplier

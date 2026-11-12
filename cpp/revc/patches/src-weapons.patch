@@ -1,3 +1,22 @@
+--- a/src/weapons/ProjectileInfo.cpp
++++ b/src/weapons/ProjectileInfo.cpp
+@@ -20,10 +20,12 @@
+ CProjectileInfo gaProjectileInfo[NUM_PROJECTILES];
+ CProjectile *CProjectileInfo::ms_apProjectile[NUM_PROJECTILES];
+ 
+-#define PROJECTILE_BOUNDARY_MIN_X -2390.0f
+-#define PROJECTILE_BOUNDARY_MAX_X 1590.0f
+-#define PROJECTILE_BOUNDARY_MIN_Y -1990.0f
+-#define PROJECTILE_BOUNDARY_MAX_Y 1990.0f
++extern int8 gUiStyle;
++// (revc: the PS2's are 10 units further out; research)
++#define PROJECTILE_BOUNDARY_MIN_X (gUiStyle == 1 ? -2400.0f : -2390.0f)
++#define PROJECTILE_BOUNDARY_MAX_X (gUiStyle == 1 ? 1600.0f : 1590.0f)
++#define PROJECTILE_BOUNDARY_MIN_Y (gUiStyle == 1 ? -2000.0f : -1990.0f)
++#define PROJECTILE_BOUNDARY_MAX_Y (gUiStyle == 1 ? 2000.0f : 1990.0f)
+ 
+ void
+ CProjectileInfo::Initialise()
 --- a/src/weapons/Weapon.cpp
 +++ b/src/weapons/Weapon.cpp
 @@ -455,7 +455,12 @@
