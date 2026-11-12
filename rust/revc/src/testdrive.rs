@@ -413,7 +413,7 @@ const MOTION_ROUTES: &[MotionRoute] = &[
     ("ps2_legend_on", "start cross cross", "cross", 60),
     ("ps2_map_blip_blink", "start", "none", 240),
     ("ps2_map_zoom_in", "start cross", "+r1:90", 150),
-    ("ps2_map_zoom_out", "start cross +r1:120", "+r2:90", 150),
+    ("ps2_map_zoom_out", "start cross +r1:90", "+r2:90", 150),	// (45 steps in, 45 out: as the console clip)
     ("ps2_stats_scroll", "start right right right", "none", 600),
     ("ps2_setup_switch", "start down cross cross", "right", 60),	// configuration: cross enters its edit mode
     ("ps2_display_screen_pos", "start down right right cross down down down down down down cross", "right", 60),

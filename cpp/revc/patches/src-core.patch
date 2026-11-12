@@ -969,15 +969,12 @@
  	m_nOptionHighlightTransitionBlend = 0;
  	m_LastScreenSwitch = CTimer::GetTimeInMillisecondsPauseMode();
  }
-@@ -529,9 +692,9 @@
- 	m_bWantToLoad = false;
- 	m_nMenuFadeAlpha = 0;
+@@ -531,7 +694,7 @@
  	m_OnlySaveMenu = false;
--	m_fMapSize = MENU_Y(162.0f); // Y because of HOR+
-+	m_fMapSize = MENU_Y(gUiStyle == 1 ? 150.0f : 162.0f); // Y because of HOR+ (revc: the PS2's map is 28 px higher, a little smaller)
+ 	m_fMapSize = MENU_Y(162.0f); // Y because of HOR+
  	m_fMapCenterX = MENU_X_LEFT_ALIGNED(320.0f);
 -	m_fMapCenterY = MENU_Y(225.0f);
-+	m_fMapCenterY = MENU_Y(gUiStyle == 1 ? 197.0f : 225.0f);
++	m_fMapCenterY = MENU_Y(gUiStyle == 1 ? 195.0f : 225.0f);	// (revc: the PS2's map centre is 30 lines higher; PS2 v1.40, research)
  	DMAudio.SetMusicMasterVolume(m_PrefsMusicVolume);
  	DMAudio.SetEffectsMasterVolume(m_PrefsSfxVolume);
  
@@ -995,15 +992,12 @@
  	m_nCurrOption = 0;
  	m_nOptionHighlightTransitionBlend = 0;
  	CentreMousePointer();
-@@ -580,9 +748,9 @@
- #else
- 	m_bShowMouse = true;
+@@ -582,7 +750,7 @@
  #endif
--	m_fMapSize = MENU_Y(162.0f); // Y because of HOR+
-+	m_fMapSize = MENU_Y(gUiStyle == 1 ? 150.0f : 162.0f); // Y because of HOR+ (revc: the PS2's map is 28 px higher, a little smaller)
+ 	m_fMapSize = MENU_Y(162.0f); // Y because of HOR+
  	m_fMapCenterX = MENU_X_LEFT_ALIGNED(320.0f);
 -	m_fMapCenterY = MENU_Y(225.0f);
-+	m_fMapCenterY = MENU_Y(gUiStyle == 1 ? 197.0f : 225.0f);
++	m_fMapCenterY = MENU_Y(gUiStyle == 1 ? 195.0f : 225.0f);	// (revc: the PS2's map centre is 30 lines higher; PS2 v1.40, research)
  	CPad::StopPadsShaking();
  #ifdef MISSION_REPLAY
  	if (!m_OnlySaveMenu) {
@@ -2757,7 +2751,7 @@
  			}
  
 +			// revc: the PS2 zooms while R1 (in) or R2 (out) is held: the map's half size +-15 per 30 Hz
-+			// menu update, linear, 162 to 1000 (here scaled to revc's measured overview size); zooming
++			// menu update, linear, 162 to 1000; zooming
 +			// in keeps the map's centre, zooming out first pulls the centre 1/n of the way back to its
 +			// default (n: the steps left), then clamps it to default +- (size - overview) (PS2 v1.40,
 +			// research)
@@ -2770,8 +2764,8 @@
 +			const bool ps2Zoom = PS2_SKIN_ON && (zoomIn || CPad::GetPad(0)->GetRightShoulder2() || gRevcTestMapZoom < 0) &&
 +				!CPad::GetPad(0)->GetMouseWheelUp() && !CPad::GetPad(0)->GetMouseWheelDown();
 +			if (ps2Zoom) {
-+				const float base = MENU_Y(150.0f), unit = base / 162.0f, step = 15.0f * unit, top = 1000.0f * unit;
-+				const float cx0 = MENU_X_LEFT_ALIGNED(320.0f), cy0 = MENU_Y(197.0f);
++				const float base = MENU_Y(162.0f), step = MENU_Y(15.0f), top = MENU_Y(1000.0f);
++				const float cx0 = MENU_X_LEFT_ALIGNED(320.0f), cy0 = MENU_Y(195.0f);
 +				for (int i = 0; i < zoomSteps; i++) {
 +					if (zoomIn) {
 +						m_fMapSize = Min(top, m_fMapSize + step);
@@ -3086,12 +3080,14 @@
  	DMAudio.ChangeMusicMode(MUSICMODE_GAME);
  	if (m_bSpritesLoaded) {
  		printf("REMOVE frontend\n");
-@@ -5827,52 +7186,54 @@
+@@ -5827,52 +7186,56 @@
  
  	// Because m_fMapSize is half of the map length(hence * 2), and map consists of 3x3 tiles(hence / 3).
  	float halfTile = m_fMapSize * 2.f / 3.f / 2.f;
-+	// revc: the PS2's map is narrower than it is tall (its 448-line pixels): x scaled by 0.957
-+	const float mapSX = m_fMapSize * (gUiStyle == 1 ? 0.957f : 1.0f), halfTileX = halfTile * (gUiStyle == 1 ? 0.957f : 1.0f);
++	// revc: the PS2's map is narrower than it is tall: its half size is the same number in its
++	// 640-wide x and its 448-line y (PS2 v1.40, research), so x is 448/480 of y here
++	const float ps2SX = gUiStyle == 1 ? 448.0f / 480.0f : 1.0f;
++	const float mapSX = m_fMapSize * ps2SX, halfTileX = halfTile * ps2SX;
  
  	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
  
@@ -3168,7 +3164,7 @@
  	}
  
  	CRadar::DrawBlips();
-@@ -5933,12 +7294,15 @@
+@@ -5933,12 +7296,15 @@
  		mapCrosshair.y = m_nMousePosY;
  	}
  
@@ -3184,7 +3180,7 @@
  
  #endif
  	m_bMenuMapActive = false;
-@@ -5957,10 +7321,10 @@
+@@ -5957,10 +7323,10 @@
  	m_PrefsRadioStation += increaseBy;
  	m_ScrollRadioBy = increaseBy;
  	if (m_ScrollRadioBy == 1) {
@@ -4432,9 +4428,9 @@
  {
  	if (FrontEndMenuManager.m_bMenuMapActive) {
 -		out.x = (FrontEndMenuManager.m_fMapCenterX - FrontEndMenuManager.m_fMapSize) + (MENU_MAP_LENGTH / 2 + MENU_MAP_LEFT_OFFSET + in.x) * FrontEndMenuManager.m_fMapSize * MENU_MAP_WIDTH_SCALE * 2.0f / MENU_MAP_LENGTH;
-+		{	// revc: the PS2 style's map is 0.92 as wide (Frontend.cpp PrintMap)
++		{	// revc: the PS2 style's map is 448/480 as wide (Frontend.cpp PrintMap)
 +		extern int8 gUiStyle;
-+		const float sx = FrontEndMenuManager.m_fMapSize * (gUiStyle == 1 ? 0.957f : 1.0f);
++		const float sx = FrontEndMenuManager.m_fMapSize * (gUiStyle == 1 ? 448.0f / 480.0f : 1.0f);
 +		out.x = (FrontEndMenuManager.m_fMapCenterX - sx) + (MENU_MAP_LENGTH / 2 + MENU_MAP_LEFT_OFFSET + in.x) * sx * MENU_MAP_WIDTH_SCALE * 2.0f / MENU_MAP_LENGTH;
 +		}
  		out.y = (FrontEndMenuManager.m_fMapCenterY - FrontEndMenuManager.m_fMapSize) + (MENU_MAP_LENGTH / 2 - MENU_MAP_TOP_OFFSET - in.y) * FrontEndMenuManager.m_fMapSize * MENU_MAP_HEIGHT_SCALE * 2.0f / MENU_MAP_LENGTH;
