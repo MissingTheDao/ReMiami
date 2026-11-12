@@ -1,0 +1,16 @@
+[package]
+name = "retro-wgpu"
+description = "Engine-neutral renderer core on wgpu for ports and remasters of fixed-function era games (Vulkan, OpenGL, Direct3D 12)"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+# No `license` yet: the owner chooses one before the crate is shared (see NOTICE.md).
+
+[dependencies]
+# Same wgpu version and features as revc-rw.
+wgpu = "30.0.1"
+pollster = "1.0.1"
+
+[dev-dependencies]
+png = "0.18"

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["revc", "revc-audio", "revc-timing", "revc-formats", "revc-rw", "revc-import"]
+members = ["revc", "retro-wgpu", "revc-audio", "revc-timing", "revc-formats", "revc-rw", "revc-import"]
 # `cargo run` / `cargo build` mean the game; tools are built with -p (e.g. -p revc-audio --bin audiocmp).
 default-members = ["revc"]
 
