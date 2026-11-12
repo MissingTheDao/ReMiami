@@ -48,6 +48,15 @@
  			TheCamera.m_fCamShakeForce = 0.0f;
 --- a/src/control/Garages.cpp
 +++ b/src/control/Garages.cpp
+@@ -666,7 +666,7 @@
+ 			if (((CVector2D)FindPlayerCoors() - CVector2D(GetGarageCenterX(), GetGarageCenterY())).MagnitudeSqr() > SQR(DISTANCE_TO_CLOSE_MISSION_GARAGE)) {
+ 				if ((CTimer::GetFrameCounter() & 0x1F) == 0 
+ #ifndef GTA_PS2
+-					&& (!m_pTarget || IsEntityTouching3D(m_pTarget))
++					&& (!m_pTarget || !IsEntityTouching3D(m_pTarget))	// revc: closes only when the target car isn't in the door, as the game (reVC dropped the '!')
+ #endif
+ 					) {
+ 					m_eGarageState = GS_CLOSING;
 @@ -1881,7 +1881,11 @@
  	pVehicle->m_currentColour2 = m_nSecondaryColor;
  	pVehicle->m_nRadioStation = m_nRadioStation;
