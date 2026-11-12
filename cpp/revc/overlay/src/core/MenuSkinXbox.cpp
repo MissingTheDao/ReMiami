@@ -32,8 +32,8 @@ static bool IsTabPage(int page);
 void ConsoleAudioRows(bool);	// (core/MenuScreensCustom.cpp)
 static bool SettingsSubTabs(int page);
 int MenuSkinXboxSubTab(int page);
-const CRGBA XBOX_MINT(0, 210, 141, 255);
-const CRGBA XBOX_PINK(255, 154, 227, 255);
+const CRGBA XBOX_MINT(0, 207, 133, 255);	// (the Xbox's own colours; research on the Xbox build)
+const CRGBA XBOX_PINK(255, 150, 225, 255);
 
 // The Xbox pause menu's seven pages in icon order, the PC page shown for each, the icon sprite.
 struct XboxTab { int page; int alt; const char *icon; };
@@ -462,6 +462,7 @@ HelpItem(float x, float y, const int *glyphs, int ng, const char *pre, const cha
 	auto text = [&](const char *t) {
 		AsciiToUnicode(t, buf);
 		if (fontRW.ok) {
+			XboxFontPrint(fontRW, x + W(1.0f), y + H(1.0f), th, buf, CRGBA(0, 0, 0, alpha), sp);	// (its black shadow, +1,+1)
 			XboxFontPrint(fontRW, x, y, th, buf, pink, sp);
 			x += XboxFontWidth(fontRW, buf, th, sp);
 		}
@@ -514,43 +515,52 @@ static void
 DrawHelpLine(CMenuManager *m, uint8 alpha)
 {
 	const float y = Y(424.2f);
-	// the Xbox's slots (x 52, 200, 340, 450, 530), each pushed right past a longer item before it
-	// (another pad's names: "OPTIONS:resume game")
+	// the Xbox's slots (x 52, 202, 338.95, 459.95, 497.95; the Map's legend 151.95, 255.95, 339.95;
+	// research on the Xbox build), each pushed right past a longer item before it (another pad's
+	// names: "OPTIONS:resume game")
 	float last = 0.0f;
 	auto slot = [&](float x) { return Max(X(x), last + W(8.0f)); };
 	static const int start[1] = { BUTTON_START }, lr[2] = { BUTTON_DPAD_LEFT, BUTTON_DPAD_RIGHT }, ud[2] = { BUTTON_DPAD_UP, BUTTON_DPAD_DOWN };
 	static const int a[1] = { BUTTON_CROSS }, b[1] = { BUTTON_CIRCLE }, sticks[2] = { BUTTON_UP, BUTTON_RSTICK_UP };
 	if (m->m_nCurrScreen == MENUPAGE_MAP) {
-		last = HelpItem(slot(52.0f), y, a, 1, nil, "RVC_XHS", alpha);
-		last = HelpItem(slot(200.0f), y, b, 1, nil, "RVC_XHB", alpha);
-		last = HelpItem(slot(340.0f), y, sticks, 2, nil, "RVC_XHM", alpha);
+		last = HelpItem(slot(151.95f), y, a, 1, nil, "RVC_XHS", alpha);
+		last = HelpItem(slot(255.95f), y, b, 1, nil, "RVC_XHB", alpha);
+		last = HelpItem(slot(339.95f), y, sticks, 2, nil, "RVC_XHM", alpha);
 		return;
 	}
 	last = HelpItem(slot(52.0f), y, start, 1, nil, "RVC_XHR", alpha);
 	if (HasSubTabs(m->m_nCurrScreen) && !(barFocus && IsTabPage(m->m_nCurrScreen)) && (!SettingsSubTabs(m->m_nCurrScreen) || subBarFocus)) {	// "START:resume game  <-/->:select  B:back" (the sub-tabs)
-		last = HelpItem(slot(200.0f), y, lr, 2, nil, "RVC_XHS", alpha);
-		last = HelpItem(slot(340.0f), y, b, 1, nil, "RVC_XHB", alpha);
+		last = HelpItem(slot(202.0f), y, lr, 2, nil, "RVC_XHS", alpha);
+		last = HelpItem(slot(338.9f), y, b, 1, nil, "RVC_XHB", alpha);
 		return;
 	}
 	if (m->m_nCurrScreen == MENUPAGE_CONSOLE_OPTIONS) {	// "START:resume game  up/down:select  <-/->:change  B:back"
-		last = HelpItem(slot(200.0f), y, ud, 2, nil, "RVC_XHS", alpha);
-		last = HelpItem(slot(340.0f), y, lr, 2, nil, "RVC_XHC", alpha);
-		last = HelpItem(slot(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
+		last = HelpItem(slot(202.0f), y, ud, 2, nil, "RVC_XHS", alpha);
+		last = HelpItem(slot(338.95f), y, lr, 2, nil, "RVC_XHC", alpha);
+		last = HelpItem(slot(459.95f), y, b, 1, nil, "RVC_XHB", alpha);
 		return;
 	}
 	if (m->m_nCurrScreen == MENUPAGE_PAD_PICTURE) {
-		last = HelpItem(slot(200.0f), y, lr, 2, nil, "RVC_XHC", alpha);
-		last = HelpItem(slot(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
+		last = HelpItem(slot(202.95f), y, lr, 2, nil, "RVC_XHC", alpha);
+		last = HelpItem(slot(459.95f), y, b, 1, nil, "RVC_XHB", alpha);
 		return;
 	}
 	bool bar = barFocus && !MenuSkinXboxDialog(m->m_nCurrScreen);	// a dialog is a list
-	last = HelpItem(slot(200.0f), y, bar ? lr : ud, 2, nil, "RVC_XHS", alpha);
-	last = HelpItem(slot(340.0f), y, a, 1, nil, "RVC_XHS", alpha);
+	// (rows changed with left/right, on Display, Audio and Controls: "<-/->:change" where a list
+	// says "A:select")
+	int action = aScreens[m->m_nCurrScreen].m_aEntries[m->m_nCurrOption].m_Action;
+	bool lrRow = !bar && (m->m_nCurrScreen == MENUPAGE_CONSOLE_DISPLAY || m->m_nCurrScreen == MENUPAGE_SOUND_SETTINGS || m->m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS) &&
+		action != MENUACTION_CHANGEMENU && action != MENUACTION_GOBACK && action != MENUACTION_CFO_DYNAMIC;
+	last = HelpItem(slot(202.0f), y, bar ? lr : ud, 2, nil, "RVC_XHS", alpha);
+	if (lrRow)
+		last = HelpItem(slot(338.95f), y, lr, 2, nil, "RVC_XHC", alpha);
+	else
+		last = HelpItem(slot(338.95f), y, a, 1, nil, "RVC_XHS", alpha);
 	if (!bar)
-		last = HelpItem(slot(450.0f), y, b, 1, nil, "RVC_XHB", alpha);
+		last = HelpItem(slot(459.95f), y, b, 1, nil, "RVC_XHB", alpha);
 	if (SettingsSubTabs(m->m_nCurrScreen)) {	// "Y:advanced" (the face-button item grammar of "X:delete")
 		static const int yb[1] = { BUTTON_TRIANGLE };
-		last = HelpItem(slot(530.0f), y, yb, 1, nil, "RVC_XHA", alpha);
+		last = HelpItem(slot(497.95f), y, yb, 1, nil, "RVC_XHA", alpha);
 	}
 }
 
@@ -701,19 +711,21 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 		CSprite2d::Draw2DPolygon(x0 + tilt, y0, x1 + tilt, y0, x0, y1, x1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
 }
 
-// A dialog's background, drawn before the page's own text (CMenuManager::DrawStandardMenus): the
-// menu behind dimmed, then its layers as measured on the new-game dialog: a steel-blue layer
-// behind, offset down-right, a dark edge, and the light-blue panel; the layers behind translucent.
+// A dialog's background, drawn before the page's own text (CMenuManager::DrawStandardMenus), as the
+// Xbox's dialog animation data has it (research on the Xbox build): the menu dimmed (black, 0.699),
+// then the card and its right-hand edge strip twice in (97,194,247): offset (20, 20) at alpha 0.5,
+// and on top, opaque.
 void
 MenuSkinXboxDialogBack(uint8 alpha)
 {
-	CSprite2d::DrawRect(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(0, 0, 0, alpha / 2));
-	// (the layers behind the panel are translucent: 0.5 for the one offset down-right, 0.699 for the
-	// others; the panel opaque. Research on the Xbox build, its dialog animation data)
-	CSprite2d::Draw2DPolygon(X(118.0f), Y(152.0f), X(560.0f), Y(136.0f), X(118.0f), Y(352.0f), X(538.0f), Y(347.0f), CRGBA(70, 118, 145, alpha / 2));
-	CSprite2d::Draw2DPolygon(X(522.0f), Y(128.0f), X(543.0f), Y(126.0f), X(510.0f), Y(350.0f), X(531.0f), Y(350.0f), CRGBA(90, 160, 205, alpha * 699 / 1000));	// stacked lighter edges on the right
-	CSprite2d::Draw2DPolygon(X(498.0f), Y(126.0f), X(520.0f), Y(124.0f), X(484.0f), Y(352.0f), X(506.0f), Y(352.0f), CRGBA(20, 40, 60, alpha * 699 / 1000));
-	CSprite2d::Draw2DPolygon(X(85.0f), Y(138.0f), X(520.0f), Y(118.0f), X(100.0f), Y(337.0f), X(505.0f), Y(333.0f), CRGBA(105, 198, 247, alpha));
+	CSprite2d::DrawRect(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(0, 0, 0, alpha * 699 / 1000));
+	for (int layer = 0; layer < 2; layer++) {
+		const float d = layer == 0 ? 20.0f : 0.0f;
+		const CRGBA c(97, 194, 247, layer == 0 ? alpha / 2 : alpha);
+		// (corners TL, TR, BL, BR)
+		CSprite2d::Draw2DPolygon(X(84.5f + d), Y(137.3f + d), X(512.05f + d), Y(118.95f + d), X(99.7f + d), Y(327.9f + d), X(474.6f + d), Y(335.95f + d), c);
+		CSprite2d::Draw2DPolygon(X(522.35f + d), Y(117.95f + d), X(542.6f + d), Y(117.1f + d), X(484.9f + d), Y(334.95f + d), X(516.2f + d), Y(335.65f + d), c);
+	}
 }
 
 // The Xbox's slider (research on the Xbox build, its menu animation data): a wedge (rgb 51,98,128)
@@ -793,14 +805,15 @@ DrawSubTabs(int page, uint8 alpha)
 {
 	const bool stats = page == MENUPAGE_STATS;
 	const char *names[2] = { stats ? "RVC_XS1" : "RVC_XB1", stats ? "RVC_XS2" : "RVC_XB2" };
-	float lx[2] = { 68.0f, stats ? 248.0f : 308.0f };
+	float lx[2] = { 68.2f, stats ? 248.2f : 307.65f };	// (research on the Xbox build)
 	if (SettingsSubTabs(page)) {	// "display | advanced" and so on (OPTIONS_PLACEMENT)
 		int origin = page == MENUPAGE_CONSOLE_OPTIONS ? optionsOrigin : page;
 		names[0] = origin == MENUPAGE_SOUND_SETTINGS ? "RVC_XAU" : origin == MENUPAGE_CONSOLE_CONTROLS ? "RVC_XCO" : "RVC_XDI";
 		names[1] = "RVC_XAD";
 		lx[1] = 248.0f;
 	}
-	const float ty = 350.0f * 448.0f / 480.0f, y0 = Y(340.0f * 448.0f / 480.0f), y1 = Y(375.0f * 448.0f / 480.0f);
+	const float ty = 350.0f * 448.0f / 480.0f;	// (measured: the glyphs' top, a little under the font cell's)
+	float y0, y1;
 	int cur = MenuSkinXboxSubTab(page);
 	CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
 	CFont::SetScale(W(BIGTEXT_X_SCALE * 1.2f), H(BIGTEXT_Y_SCALE * 1.2f));
@@ -808,19 +821,15 @@ DrawSubTabs(int page, uint8 alpha)
 	CFont::SetCentreOff();
 	CFont::SetRightJustifyOff();
 	CFont::SetWrapx(SCREEN_WIDTH);
-	float w = CFont::GetStringWidth(TheText.Get(names[cur]), true);
-	float bx0 = X(lx[cur] - 8.0f), bx1 = Max(X(lx[cur]) + w + W(60.0f), X(lx[cur] + 172.0f)), tilt = W(5.0f);
-	// the dark block at the bar's outer end, there at once after a switch (the change is a hard cut;
-	// what looked like it sliding in was the selection pulse, research on autopad set 2)
+	// the bars at the Xbox's fixed extents per sub-tab, y 318.7-355.4, no end block (research on the
+	// Xbox build); at full alpha with the icon bar focused too (autopad set 2, Brief -> Stats)
+	static const float statsBar[2][2] = { { 59.9f, 243.5f }, { 239.5f, 593.6f } }, briefBar[2][2] = { { 62.4f, 298.4f }, { 302.8f, 591.4f } };
+	const float (*bar)[2] = page == MENUPAGE_BRIEFS ? briefBar : statsBar;
+	float tilt = W(5.0f), bx0 = X(bar[cur][0]), bx1 = X(bar[cur][1]) - tilt;
+	y0 = Y(318.7f);
+	y1 = Y(355.4f);
 	(void)page;
-	float sw = W(15.0f);
 	CSprite2d::Draw2DPolygon(bx0 + tilt, y0, bx1 + tilt, y0, bx0, y1, bx1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, alpha));
-	if (sw > 0.0f) {
-		if (cur == 0)
-			CSprite2d::Draw2DPolygon(bx0 - sw + tilt, y0, bx0 + tilt, y0, bx0 - sw, y1, bx0, y1, CRGBA(40, 40, 40, alpha));
-		else
-			CSprite2d::Draw2DPolygon(bx1 + tilt, y0, bx1 + sw + tilt, y0, bx1, y1, bx1 + sw, y1, CRGBA(40, 40, 40, alpha));
-	}
 	CFont::SetDropShadowPosition(2);
 	CFont::SetDropColor(CRGBA(0, 0, 0, alpha));
 	CFont::SetColor(CRGBA(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha));
@@ -846,15 +855,31 @@ void SaveINIControllerSettings(void);
 static void
 DrawDropDown(uint8 alpha)
 {
+	// the Xbox's drop-down (research on the Xbox build): a light-blue card TL(252.45, 93.5)
+	// TR(413.45, 98) BL(256.95, 181.45) BR(416.95, 177.45) at alpha 154 for its two entries (one
+	// row lower here for revc's third), the entries at x 273.55, 34 apart, in its item font and the
+	// legend's pink
 	static const char *names[NUM_DROP] = { "standard", "classic", "original pc" };
-	const float x0 = 128.0f, x1 = 330.0f, y0 = 150.0f * 448.0f / 480.0f, pitch = 30.0f * 448.0f / 480.0f;
-	CSprite2d::DrawRect(CRect(X(x0), Y(y0), X(x1), Y(y0 + pitch * NUM_DROP + 6.0f)), CRGBA(120, 190, 235, alpha));
-	MenuSkinXboxSelection(X(x0 + 4.0f), Y(y0 + 3.0f + pitch * dropSel), X(x1 - 4.0f), Y(y0 + 3.0f + pitch * (dropSel + 1)), alpha, false, 0.0f);
+	const float pitch = 34.0f, extra = pitch * (NUM_DROP - 2);
+	CSprite2d::Draw2DPolygon(X(252.45f), Y(93.5f), X(413.45f), Y(98.0f), X(256.95f), Y(181.45f + extra), X(416.95f), Y(177.45f + extra),
+		CRGBA(97, 194, 247, alpha * 154 / 255));
+	float top = 143.55f - 28.9f + pitch * dropSel;	// (the glyphs' top under the font cell's baseline)
+	MenuSkinXboxSelection(X(262.0f), Y(top - 4.0f), X(408.0f), Y(top + 30.0f), alpha, false, 0.0f);
+	CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
+	CFont::SetScale(W(BIGTEXT_X_SCALE * 1.2f), H(BIGTEXT_Y_SCALE * 1.2f));
+	CFont::SetPropOn();
+	CFont::SetCentreOff();
+	CFont::SetRightJustifyOff();
+	CFont::SetWrapx(SCREEN_WIDTH);
+	CFont::SetDropShadowPosition(2);
+	CFont::SetDropColor(CRGBA(0, 0, 0, alpha));
+	CFont::SetColor(CRGBA(252, 138, 242, alpha));
 	for (int i = 0; i < NUM_DROP; i++) {
 		wchar buf[32];
 		AsciiToUnicode(names[i], buf);
-		MenuSkinXboxText(X(x0 + 14.0f), Y(y0 + 8.0f + pitch * i), H(15.0f), buf, i == dropSel ? CRGBA(0, 0, 0, alpha) : CRGBA(XBOX_PINK.r, XBOX_PINK.g, XBOX_PINK.b, alpha), 0);
+		CFont::PrintString(X(273.55f), Y(143.55f - 28.9f + pitch * i), buf);
 	}
+	CFont::SetDropShadowPosition(0);
 }
 
 // The page START opens (Frontend.cpp), with the icon bar focused.
