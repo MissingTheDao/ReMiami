@@ -216,6 +216,53 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
         }
         }
     }
+    if disc.kind == DiscKind::Ps2 {
+        // World textures (the "exact PS2 textures" option; revc/src/ps2pack.rs): every TXD of the
+        // split GTA3.IMG (GTA3.IMG, GTA3_1..6.IMG, each part the first one's size, offsets running
+        // on across them), written out as it is
+        if let Some(dir_e) = disc.find("MODELS/GTA3.DIR").cloned() {
+            let parts: Vec<Entry> = std::iter::once("MODELS/GTA3.IMG".to_string())
+                .chain((1..=6).map(|i| format!("MODELS/GTA3_{i}.IMG")))
+                .map_while(|p| disc.find(&p).cloned())
+                .collect();
+            if let Some(first) = parts.first() {
+                let part_size = first.size;
+                let dir = disc.read(&dir_e).map_err(|e| format!("GTA3.DIR: {e}"))?;
+                for e in dir.chunks_exact(32) {
+                    let name = String::from_utf8_lossy(e[8..32].split(|&c| c == 0).next().unwrap_or(&[])).to_ascii_lowercase();
+                    if !name.ends_with(".txd") {
+                        continue;
+                    }
+                    let mut pos = u32::from_le_bytes(e[0..4].try_into().unwrap()) as u64 * 2048;
+                    let mut left = u32::from_le_bytes(e[4..8].try_into().unwrap()) as u64 * 2048;
+                    let mut data = Vec::with_capacity(left as usize);
+                    while left > 0 {
+                        let (i, o) = ((pos / part_size) as usize, pos % part_size);
+                        let part = parts.get(i).ok_or_else(|| format!("{name}: beyond GTA3_{}.IMG", parts.len() - 1))?;
+                        let n = left.min(part_size - o);
+                        data.extend(disc.read_range(part, o, n as usize).map_err(|err| format!("{name}: {err}"))?);
+                        pos += n;
+                        left -= n;
+                    }
+                    let dest = root.join("world").join(&name);
+                    std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
+                    std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+                    report.written.push(dest);
+                }
+            }
+        }
+        // The game fills the "generic" slot from the standalone MODELS/GENERIC.TXD, not from the
+        // archive's generic.txd (an older copy: its parking-lane road lacks the yellow centre line)
+        if let Some(e) = disc.find("MODELS/GENERIC.TXD").cloned() {
+            let data = disc.read(&e).map_err(|err| format!("GENERIC.TXD: {err}"))?;
+            let dest = root.join("world").join("generic.txd");
+            std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
+            std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+            if !report.written.contains(&dest) {
+                report.written.push(dest);
+            }
+        }
+    }
     let marker = format!(
         "imported from {}\nfiles {}\n(from the player's own disc; not for redistribution)\n",
         image.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),

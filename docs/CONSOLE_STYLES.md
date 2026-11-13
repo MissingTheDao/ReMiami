@@ -295,10 +295,13 @@ from the Xbox HUD, fonts (the PC's layout in DXT5; its [ ] slots hold the Xbox's
 wheels and the loading, splash and intro screens, decoded with revc-formats' Xbox texture reader.
 With these packs alone the Xbox menu shots score as with the full hand-made comparison pack.
 
-Goal (research session, 2026-11-11): import the PS2 world textures as a style pack
-(`userfiles/import/ps2/packs/ps2-world.zip`, about 12,000 textures via a Rust port of the GS
-memory reader) with an option for exact PS2 versus PC textures in the PS2 style; texmods would
-index packs in the import cache too. Details: research notes `importer/IMPORT_LIST.md` (local).
+PS2 world textures (roadmap R3, "exact PS2 textures"): a PS2 import also writes every TXD of the
+split GTA3.IMG to `<import cache>/ps2/world/` (the `generic` slot from the standalone
+MODELS/GENERIC.TXD, which the game loads instead of the archive's older copy) and decodes them into
+`<import cache>/ps2/packs-world/ps2-world.zip` (about 12,000 textures, 130 MB). texmods uses it in
+the PS2 style while `[Graphics] Ps2WorldTextures` is on (default; read when the settings load),
+after the player's own mods and packs. It has an index of its own, consulted per texture, because
+the main index is built at the first texture, before the settings load.
 
 ## Menu comparison shots
 

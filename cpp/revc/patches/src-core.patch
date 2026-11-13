@@ -6082,7 +6082,30 @@
  	broken since forever, someone tried to fix size for 640x512(PAL)
 --- a/src/core/re3.cpp
 +++ b/src/core/re3.cpp
-@@ -588,6 +588,13 @@
+@@ -479,6 +479,8 @@
+ 	ini.write(cfg);
+ }
+ 
++extern "C" void revc_texmods_set_ps2_world(int on);	// (revc: texmods.rs)
++
+ bool LoadINISettings()
+ {
+ 	if (!ini.read(cfg))
+@@ -493,6 +495,13 @@
+ #else
+ 	ReadIniIfExists("Graphics", "VideoMode", &FrontEndMenuManager.m_nDisplayVideoMode);
+ #endif
++	{
++		// (revc: "exact PS2 textures": the PS2 disc's world textures in the PS2 style, when imported;
++		// texmods.rs)
++		bool ps2World = true;
++		ReadIniIfExists("Graphics", "Ps2WorldTextures", &ps2World);
++		revc_texmods_set_ps2_world(ps2World ? 1 : 0);
++	}
+ 	ReadIniIfExists("Controller", "HeadBob1stPerson", &TheCamera.m_bHeadBob);
+ 	ReadIniIfExists("Controller", "HorizantalMouseSens", &TheCamera.m_fMouseAccelHorzntl);
+ 	ReadIniIfExists("Controller", "InvertMouseVertically", &MousePointerStateHelper.bInvertVertically);
+@@ -588,6 +597,13 @@
  	CCarCtrl::MaxNumberOfCarsInUse = DEFAULT_MAX_NUMBER_OF_CARS * CIniFile::CarNumberMultiplier;
  #endif
  
@@ -6096,7 +6119,7 @@
  	return true;
  }
  
-@@ -1055,8 +1062,8 @@
+@@ -1055,8 +1071,8 @@
  #endif
  
  #ifdef EXTENDED_COLOURFILTER

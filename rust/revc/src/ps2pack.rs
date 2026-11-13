@@ -170,6 +170,39 @@ pub fn build(cache: &Path, console: Console) -> Result<usize, String> {
     Ok(files.len())
 }
 
+/// The PS2 world textures' pack (the "exact PS2 textures" option): its own folder, so texmods can
+/// leave it out.
+pub fn world_dir(cache: &Path) -> PathBuf {
+    cache.join("ps2").join("packs-world")
+}
+
+/// Builds `ps2-world.zip` from the world TXDs a PS2 import wrote (`ps2/world/*.txd`), each under
+/// its own TXD name: Ok(textures written).
+pub fn build_world(cache: &Path) -> Result<usize, String> {
+    let rd = std::fs::read_dir(cache.join("ps2").join("world")).map_err(|e| format!("world TXDs: {e}"))?;
+    let mut txds: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("txd"))).collect();
+    txds.sort();
+    let (mut files, mut failed) = (Vec::new(), 0);
+    for txd in txds {
+        let folder = txd.file_stem().unwrap().to_string_lossy().to_ascii_lowercase();
+        let d = std::fs::read(&txd).map_err(|e| format!("{}: {e}", txd.display()))?;
+        for t in revc_import::ps2tex::read_ps2_txd(&d) {
+            match t {
+                Ok(t) => files.push((format!("textures/{folder}/{}.png", t.name.to_ascii_lowercase()), png_bytes(t.width, t.height, &t.rgba)?)),
+                Err(_) => failed += 1,
+            }
+        }
+    }
+    if files.is_empty() {
+        return Err("no PS2 world textures in the import".into());
+    }
+    let path = world_dir(cache).join("ps2-world.zip");
+    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    write_zip(&path, &files).map_err(|e| e.to_string())?;
+    eprintln!("ps2pack: {} world textures in {} ({failed} not decoded)", files.len(), path.display());
+    Ok(files.len())
+}
+
 /// Builds a console's pack if its import exists without one (an import made before the packs).
 pub fn ensure(cache: &Path) {
     for (console, kind) in [(Console::Ps2, revc_import::DiscKind::Ps2), (Console::Xbox, revc_import::DiscKind::Xbox)] {
@@ -177,6 +210,14 @@ pub fn ensure(cache: &Path) {
             if let Err(e) = build(cache, console) {
                 eprintln!("ps2pack: {e}");
             }
+        }
+    }
+    if revc_import::imported(cache, revc_import::DiscKind::Ps2)
+        && cache.join("ps2").join("world").is_dir()
+        && !world_dir(cache).join("ps2-world.zip").is_file()
+    {
+        if let Err(e) = build_world(cache) {
+            eprintln!("ps2pack: {e}");
         }
     }
 }

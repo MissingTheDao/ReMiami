@@ -51,6 +51,15 @@ type Index = HashMap<(String, String), Source>;
 
 /// One index per UI style (0 PC, 1 PS2, 2 Xbox): style packs differ.
 static INDEX: [OnceLock<Index>; 3] = [OnceLock::new(), OnceLock::new(), OnceLock::new()];
+/// "exact PS2 textures" ([Graphics] Ps2WorldTextures, default on): the PS2 disc's world textures
+/// in the PS2 style. Set when the settings load.
+static PS2_WORLD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_texmods_set_ps2_world(on: std::ffi::c_int) {
+    PS2_WORLD.store(on != 0, Ordering::Relaxed);
+}
+
 /// The UI style the game shows (Graphics menu UI STYLE), set by the host.
 static STYLE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
@@ -177,6 +186,22 @@ fn index() -> &'static Index {
     })
 }
 
+/// The PS2 world textures (`ps2-world.zip`): an index of their own, used in the PS2 style while
+/// "exact PS2 textures" is on. Apart from the main index, which is built at the first texture
+/// (before the settings load), so the setting holds for every texture loaded after it.
+fn world_index() -> Option<&'static Index> {
+    static WORLD: OnceLock<Index> = OnceLock::new();
+    if STYLE.load(Ordering::Relaxed) != 1 || !PS2_WORLD.load(Ordering::Relaxed) {
+        return None;
+    }
+    let idx = WORLD.get_or_init(|| {
+        let mut idx = Index::new();
+        add_packs(&mut idx, &crate::ps2pack::world_dir(&crate::discimport::cache_dir()), 1);
+        idx
+    });
+    (!idx.is_empty()).then_some(idx)
+}
+
 /// (textures replaced, files rejected) since start.
 pub fn stats() -> (usize, usize) {
     (APPLIED.load(Ordering::Relaxed), FAILED.load(Ordering::Relaxed))
@@ -260,8 +285,10 @@ pub fn find_rgba(txd: &str, tex: &str) -> Option<(u32, u32, Vec<u8>)> {
 
 fn lookup(txd: &str, tex: &str) -> Option<&'static Source> {
     let idx = index();
-    idx.get(&(txd.to_ascii_lowercase(), tex.to_ascii_lowercase()))
-        .or_else(|| idx.get(&(String::new(), tex.to_ascii_lowercase())))
+    let key = (txd.to_ascii_lowercase(), tex.to_ascii_lowercase());
+    idx.get(&key)
+        .or_else(|| world_index().and_then(|w| w.get(&key)))
+        .or_else(|| idx.get(&(String::new(), key.1.clone())))
 }
 
 /// # Safety
@@ -313,7 +340,7 @@ pub unsafe extern "C" fn revc_texmod_free_blocks(blocks: *mut c_uchar, size: usi
 
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_texmod_active() -> c_int {
-    !index().is_empty() as c_int
+    (!index().is_empty() || world_index().is_some()) as c_int
 }
 
 /// # Safety

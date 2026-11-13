@@ -46,7 +46,15 @@ pub fn import_image(path: &Path) -> Result<String, String> {
         Ok(n) => format!(", {n} textures converted"),
         Err(e) => format!(", textures not converted ({e})"),
     };
-    Ok(format!("{what}: {} files imported{pack}", report.written.len()))
+    let world = if console == crate::ps2pack::Console::Ps2 && cache_dir().join("ps2").join("world").is_dir() {
+        match crate::ps2pack::build_world(&cache_dir()) {
+            Ok(n) => format!(", {n} world textures"),
+            Err(e) => format!(", world textures not converted ({e})"),
+        }
+    } else {
+        String::new()
+    };
+    Ok(format!("{what}: {} files imported{pack}{world}", report.written.len()))
 }
 
 fn set_message(msg: String) {
