@@ -1,6 +1,7 @@
 //! reVC entry point. Rust owns `main()`, the main loop, the SDL3 window/GL context and input
 //! (see `host`); each loop iteration runs one step of the C++ game (src/skel/host/host.cpp).
 
+mod ps2pack;
 mod audio;
 mod formatcheck;
 mod padtest;

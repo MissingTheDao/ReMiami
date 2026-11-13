@@ -8,6 +8,7 @@
 //! Claude outputs/xbox-research/XBOX_RESEARCH.md for what the discs hold.
 
 pub mod iso9660;
+pub mod ps2tex;
 pub mod xboxlm;
 pub mod xdvdfs;
 
@@ -115,8 +116,14 @@ pub const MANIFEST: &[Lift] = &[
     // HUD and fonts (DXT5: smoother alpha than the PC's DXT3).
     Lift { kind: DiscKind::Xbox, dir: "models/hud.txd", exts: &[], dest: "models" },
     Lift { kind: DiscKind::Xbox, dir: "models/fonts.txd", exts: &[], dest: "models" },
-    // PS2 front end: the controller-setup sprites (DualShock picture, callouts) re3's PS2 menu uses.
+    // PS2 front end: the controller-setup sprites (DualShock picture, callouts) re3's PS2 menu uses,
+    // the rest of the menu art, the HUD, and the loading, splash and intro screens. They are PS2
+    // native (GS swizzled); the game reads them through a texture pack built from them
+    // (revc/src/ps2pack.rs, ps2tex.rs).
     Lift { kind: DiscKind::Ps2, dir: "MODELS/FRONTEN2.TXD", exts: &[], dest: "models" },
+    Lift { kind: DiscKind::Ps2, dir: "MODELS/FRONTEN1.TXD", exts: &[], dest: "models" },
+    Lift { kind: DiscKind::Ps2, dir: "MODELS/HUD.TXD", exts: &[], dest: "models" },
+    Lift { kind: DiscKind::Ps2, dir: "TXD/", exts: &[".txd"], dest: "txd" },
     // PS2 time cycle: 5 rows differ from the PC's (the PS2 visual style uses it, plan task 13).
     Lift { kind: DiscKind::Ps2, dir: "DATA/TIMECYC.DAT", exts: &[], dest: "data" },
     // PS2 ped animations: 13 differ from the PC's (walk_start, idle_armed, the woman's walks, ...);

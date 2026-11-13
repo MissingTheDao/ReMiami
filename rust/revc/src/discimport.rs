@@ -40,7 +40,16 @@ pub fn import_image(path: &Path) -> Result<String, String> {
         DiscKind::Xbox => "Xbox",
         DiscKind::Ps2 => "PS2",
     };
-    Ok(format!("{what}: {} files imported", report.written.len()))
+    // the PS2's own textures as a pack (it can't read them as they are on the disc)
+    let pack = if disc.kind == DiscKind::Ps2 {
+        match crate::ps2pack::build(&cache_dir()) {
+            Ok(n) => format!(", {n} textures converted"),
+            Err(e) => format!(", textures not converted ({e})"),
+        }
+    } else {
+        String::new()
+    };
+    Ok(format!("{what}: {} files imported{pack}", report.written.len()))
 }
 
 fn set_message(msg: String) {

@@ -134,8 +134,10 @@ fn ps2_disc_is_read_detected_and_imported() {
     assert_eq!(disc.entries.len(), 3, "{:?}", disc.entries);
     let cache = iso.parent().unwrap().join("cache");
     let report = import(&mut disc, &iso, &cache).unwrap();
-    assert_eq!(report.written.len(), 1);
+    // FRONTEN2.TXD and HUD.TXD (both in the manifest since the PS2 texture pack, ps2pack.rs)
+    assert_eq!(report.written.len(), 2, "{:?}", report.written);
     assert_eq!(std::fs::read(cache.join("ps2/models/fronten2.txd")).unwrap(), b"frontend");
+    assert!(cache.join("ps2/models/hud.txd").is_file());
     assert!(imported(&cache, DiscKind::Ps2));
 }
 

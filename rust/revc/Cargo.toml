@@ -24,6 +24,8 @@ revc-import = { path = "../revc-import" }
 revc-rw = { path = "../revc-rw" }
 # Deflate for texture packs in zip files (texmods.rs); already in the tree via png.
 miniz_oxide = "0.8"
+# CRC-32 for the PS2 texture pack built at import (ps2pack.rs); already in the tree via png.
+crc32fast = "1.5"
 
 [features]
 # Kept so `--features wgpu` in old commands still builds; the wgpu renderer is the only one.

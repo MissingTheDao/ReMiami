@@ -282,6 +282,15 @@ order). One texture index per style (`texmods.rs`); when the UI style changes, `
 reloads the fonts and `hud.txd` (`CHud::ReloadTextures`, radar sprites included). Imported console
 art (`ui/r3_menu_*`) is looked up in the same index.
 
+PS2 disc textures (roadmap R2): the game can't read PS2-native TXDs (GS-swizzled, palettised), so a
+PS2 import decodes them once (`rust/revc-import/src/ps2tex.rs`, a port of the research reader,
+pixel-identical to it on the disc's FRONTEN2.TXD) into `<import cache>/ps2/packs/ps2-native.zip`
+(`rust/revc/src/ps2pack.rs`): the HUD (`hud`), the menu art (`frontend1`, `frontend2`) and the
+loading, splash and intro screens. texmods also reads the packs in the import cache, after the
+player's own packs and under the same style rule, so the PS2 style uses the disc's art (the PS2
+controller picture included). The fonts stay out: their glyph sheets are laid out differently.
+An import made before this builds the pack the first time the textures are indexed.
+
 Goal (research session, 2026-11-11): import the PS2 world textures as a style pack
 (`userfiles/import/ps2/packs/ps2-world.zip`, about 12,000 textures via a Rust port of the GS
 memory reader) with an option for exact PS2 versus PC textures in the PS2 style; texmods would

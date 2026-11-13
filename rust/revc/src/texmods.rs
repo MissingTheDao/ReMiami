@@ -166,6 +166,13 @@ fn index() -> &'static Index {
             eprintln!("texmods: {} texture overrides in {}", idx.len(), mods_dir().display());
         }
         add_packs(&mut idx, &packs_dir(), style);
+        // then the packs built from imported console discs (ps2pack.rs), so the player's own packs
+        // win over them; the same style rule applies (ps2-* in the PS2 style only)
+        let cache = crate::discimport::cache_dir();
+        crate::ps2pack::ensure(&cache);
+        for kind in ["ps2", "xbox"] {
+            add_packs(&mut idx, &cache.join(kind).join("packs"), style);
+        }
         idx
     })
 }
