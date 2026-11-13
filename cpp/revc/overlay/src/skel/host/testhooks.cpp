@@ -162,8 +162,9 @@ revc_test_goto_marker(float *x, float *y, float *z)
 	if (best < 0)
 		return 0;
 	CVector pos = CRadar::ms_RadarTrace[best].m_vecPos;
-	// (the save starts inside the hotel; the markers are outside: the main map, no room colours)
-	if (CGame::currArea != AREA_MAIN_MAP) {
+	// (a marker in the building the player is in, like the hotel's: walked to as it is, the
+	// interior's area and colours kept; farther ones are outside: the main map, no room colours)
+	if (bestDist > 50.0f && CGame::currArea != AREA_MAIN_MAP) {
 		CGame::currArea = AREA_MAIN_MAP;
 		CStreaming::RemoveBuildingsNotInArea(AREA_MAIN_MAP);
 		CTimeCycle::StopExtraColour(false);
@@ -181,12 +182,19 @@ revc_test_goto_marker(float *x, float *y, float *z)
 	return 1;
 }
 
-// The running cutscene's name into name (size n, "" when none); 1 while one runs.
+// The running cutscene's name into name (size n, "" when none; with the time cycle's state:
+// extra colours, ambient and the colour filter's colours); 1 while one runs.
 int
 revc_test_cutscene(char *name, int n)
 {
 	bool on = CCutsceneMgr::IsRunning();
-	snprintf(name, n, "%s", on ? CCutsceneMgr::GetCutsceneName() : "");
+	if (on)
+		snprintf(name, n, "%s extra %d/%d amb %.2f %.2f %.2f blur %d %d %d", CCutsceneMgr::GetCutsceneName(),
+			CTimeCycle::m_bExtraColourOn, CTimeCycle::m_ExtraColour, CTimeCycle::GetAmbientRed(),
+			CTimeCycle::GetAmbientGreen(), CTimeCycle::GetAmbientBlue(), CTimeCycle::GetBlurRed(),
+			CTimeCycle::GetBlurGreen(), CTimeCycle::GetBlurBlue());
+	else
+		snprintf(name, n, "%s", "");
 	return on ? 1 : 0;
 }
 

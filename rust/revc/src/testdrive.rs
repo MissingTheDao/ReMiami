@@ -1769,9 +1769,11 @@ impl Driver {
     /// One frame of the cutscenes scenario (see the module notes).
     fn cutscenes_step(&mut self, t0: u32, last: u32) -> bool {
         let now = unsafe { revc_test_game_ms() };
-        let mut buf = [0 as std::ffi::c_char; 64];
+        let mut buf = [0 as std::ffi::c_char; 160];
         let running = unsafe { revc_test_cutscene(buf.as_mut_ptr(), buf.len() as i32) } != 0;
-        let name = unsafe { std::ffi::CStr::from_ptr(buf.as_ptr()) }.to_string_lossy().to_ascii_lowercase();
+        let full = unsafe { std::ffi::CStr::from_ptr(buf.as_ptr()) }.to_string_lossy().to_ascii_lowercase();
+        // (the name, then the time cycle's state for the log)
+        let (name, tc) = full.split_once(' ').map_or((full.clone(), String::new()), |(a, b)| (a.to_string(), b.to_string()));
         let mut st = CUTSCENES.lock().unwrap_or_else(|e| e.into_inner());
         let ctx = if running { name.clone() } else { "(game)".to_string() };
         for m in crate::rwtexture::take_missing() {
@@ -1803,7 +1805,7 @@ impl Driver {
         }
         let done = st.trips >= trips && st.cut_after_trip && !running && quiet >= 5000;
         if running && !st.seen.contains(&name) {
-            log(format!("cutscene {name} at game time {}", now.wrapping_sub(t0)));
+            log(format!("cutscene {name} at game time {} (time cycle: {tc})", now.wrapping_sub(t0)));
             st.seen.push(name.clone());
         }
         if let Some((w, h, rgba)) = crate::host::take_capture() {
