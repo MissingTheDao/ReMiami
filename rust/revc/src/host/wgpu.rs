@@ -84,9 +84,15 @@ fn with_front<R>(f: impl FnOnce(&mut Recorder) -> R) -> Option<R> {
     STATE.with(|c| c.borrow_mut().as_mut().map(|s| f(&mut s.front)))
 }
 
-/// REVC_RENDERER=retro: retro-wgpu (the engine-neutral core) presents instead of the wgpu back end.
+/// Which back end presents: retro-wgpu (the engine-neutral core) by default; REVC_RENDERER=wgpu
+/// (or "legacy") selects the older wgpu back end, kept as a fallback. Shadow mode needs the older
+/// one presenting (it draws retro-wgpu off-screen next to it).
 fn retro_wanted() -> bool {
-    matches!(std::env::var("REVC_RENDERER").as_deref(), Ok("retro") | Ok("retro-wgpu"))
+    !matches!(std::env::var("REVC_RENDERER").as_deref(), Ok("wgpu") | Ok("legacy")) && !shadow_wanted()
+}
+
+fn shadow_wanted() -> bool {
+    matches!(std::env::var("REVC_RENDER_SHADOW").as_deref(), Ok("1") | Ok("on") | Ok("yes"))
 }
 
 fn render_thread_wanted() -> bool {
@@ -152,7 +158,7 @@ pub fn create(window: *mut SDL_Window, samples: i32) -> Result<(), String> {
     let table: [u32; 17] = std::array::from_fn(|n| WgpuBackend::supported_samples(&p.gpu, n.max(1) as u32));
     let retro = retro_wanted();
     let threaded = render_thread_wanted();
-    let shadow_wanted = matches!(std::env::var("REVC_RENDER_SHADOW").as_deref(), Ok("1") | Ok("on") | Ok("yes"));
+    let shadow_wanted = shadow_wanted();
     let shadow = (shadow_wanted && !threaded && !retro).then(|| {
         let every = std::env::var("REVC_RENDER_SHADOW_EVERY").ok().and_then(|v| v.parse().ok()).unwrap_or(30u64).max(1);
         eprintln!("revc: shadow mode on: retro-wgpu draws every frame off-screen, compared every {every} frames and on captures");
@@ -161,11 +167,36 @@ pub fn create(window: *mut SDL_Window, samples: i32) -> Result<(), String> {
     if shadow_wanted && shadow.is_none() {
         eprintln!("revc: shadow mode needs the wgpu back end presenting on the game thread; not started");
     }
-    let draw: Box<dyn DrawFrames + Send> = if retro {
-        eprintln!("revc: retro-wgpu presents");
-        Box::new(RetroPresent::new(&p.gpu, p.format()))
-    } else {
-        Box::new(back)
+    // retro-wgpu by default; if it can't start, the older back end presents instead.
+    let retro_present = retro
+        .then(|| {
+            let gpu = &p.gpu;
+            let format = p.format();
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                // REVC_TEST_RETRO_FAIL=1: retro-wgpu fails to start (tests the fallback).
+                if std::env::var_os("REVC_TEST_RETRO_FAIL").is_some() {
+                    panic!("REVC_TEST_RETRO_FAIL set");
+                }
+                RetroPresent::new(gpu, format)
+            }))
+                .map_err(|e| e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default())
+        })
+        .and_then(|r| match r {
+            Ok(r) => Some(r),
+            Err(e) => {
+                eprintln!("revc: WARNING: retro-wgpu failed to start ({e}); the wgpu back end presents instead");
+                None
+            }
+        });
+    let draw: Box<dyn DrawFrames + Send> = match retro_present {
+        Some(r) => {
+            eprintln!("revc: retro-wgpu presents");
+            Box::new(r)
+        }
+        None => {
+            eprintln!("revc: wgpu back end presents");
+            Box::new(back)
+        }
     };
     let out = if threaded {
         eprintln!("revc: render thread on");

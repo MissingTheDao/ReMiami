@@ -64,6 +64,23 @@ The result is `rust/target/release/remiami` and its SHA-256 is printed.
 
 For day-to-day work, `cd rust && cargo run` builds a dev binary and starts the game.
 
+## Renderers
+
+The game draws through **retro-wgpu** by default: an engine-neutral renderer core, published at
+github.com/MissingTheDao/retro-wgpu and fetched by Cargo at the rev pinned in
+`rust/revc-rw/Cargo.toml` (the first build needs network access, or a vendored/cached copy).
+reMiami's RenderWare shading runs on it.
+
+- `REVC_RENDERER=wgpu` selects the older wgpu back end, kept as a fallback (same images in the
+  test suites). It also takes over automatically, with a `WARNING` in the log, if retro-wgpu fails
+  to start.
+- `REVC_RENDERER_BACKEND=vulkan` (default) or `gl` picks the graphics API for either.
+- `REVC_RENDER_THREAD=1` draws on a render thread.
+- `REVC_RENDER_SHADOW=1` uses the older back end to present and draws retro-wgpu off-screen next
+  to it, comparing the two (see `docs/RENDERER_PORT.md`).
+
+Not tested yet: Windows, Direct3D 12.
+
 ## Game data
 
 The game needs your own Vice City files. `revc` looks for them in this order:

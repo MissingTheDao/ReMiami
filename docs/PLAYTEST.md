@@ -47,8 +47,21 @@ Controller):
 
 ## Task 12: wgpu renderer
 
-The only renderer now: `scripts/build.sh` (or `cd rust && cargo build`), backend
-`REVC_RENDERER_BACKEND=vulkan` (default) or `gl`.
+`scripts/build.sh` (or `cd rust && cargo build`). Two renderers, both on wgpu:
+
+- **retro-wgpu (default since 2026-11-14):** the engine-neutral core
+  (github.com/MissingTheDao/retro-wgpu) with reMiami's RenderWare shading on top.
+- **The older wgpu back end (fallback):** `REVC_RENDERER=wgpu`. It also presents automatically,
+  with a `WARNING` in the log, if retro-wgpu fails to start.
+
+Either runs on `REVC_RENDERER_BACKEND=vulkan` (default) or `gl`. Untested: Windows and DX12.
+
+- [ ] Play a while with the default and once with `REVC_RENDERER=wgpu`: both look the same.
+
+## Console text (R4)
+
+- [ ] PS2 style, English: an Ammu-Nation shop lists items in arrows ("< Hammer >", "< Grenades >").
+- [ ] PS2 style: Stats shows "Best INSANE stunt so far:" with a colon (needs a save with stunts).
 
 - [ ] Cars have their shiny reflections (MatFX environment map) like the normal build, on both
       backends; nothing looks inside out or too bright.

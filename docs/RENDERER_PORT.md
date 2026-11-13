@@ -293,7 +293,10 @@ always match the passes they're drawn in.
 `revc-render`; the game records frame n + 1 while frame n is drawn (at most one frame ahead).
 saveload and spots give the same images inline and threaded (within run-to-run noise).
 
-**Choosing the presenting back end** (`REVC_RENDERER=retro`, opt-in): retro-wgpu presents
+**Choosing the presenting back end:** retro-wgpu is the default since 2026-11-14 (user's
+decision, "with fallback"); `REVC_RENDERER=wgpu` selects `WgpuBackend`, which also presents
+automatically if retro-wgpu fails to start (`REVC_TEST_RETRO_FAIL=1` simulates that). Before
+that switch retro-wgpu was opt-in: it presents
 instead of `WgpuBackend` (through the `DrawFrames` trait both implement; screenshots read its
 final image). saveload, spots, texmods and gamepad pass against the references with it. It also runs
 on the render thread (`REVC_RENDER_THREAD=1`; retro-wgpu's post passes and output stages are
@@ -306,7 +309,7 @@ rewritten (see `docs/RETRO_WGPU.md`, "Draw path"): models as instance blocks, re
 tables, pipelines and bind groups resolved when a draw is recorded, compact draw commands, a
 lean program draw call, and here `RetroBackend` translating with array lookups and the previous
 draw's program and pipeline state. The rest (about 8 %) is recording each draw twice, once in
-the front end and once in retro-wgpu. Not the default yet.
+the front end and once in retro-wgpu. Default since 2026-11-14 (above).
 
 **retro-wgpu back end and shadow mode** (`REVC_RENDER_SHADOW=1`, inline renderer only): the
 wgpu back end presents as usual while `RetroBackend` draws the same frames off-screen. RW's

@@ -7,6 +7,10 @@ An engine-neutral renderer core on wgpu 30 for ports and remasters of fixed-func
   it as a git dependency pinned to a rev (`rust/revc-rw/Cargo.toml`); its own design document is
   `DESIGN.md` there. This file keeps reMiami's notes on it.
 
+reMiami presents with retro-wgpu by default since 2026-11-14; the older wgpu back end stays as a
+fallback (`REVC_RENDERER=wgpu`, automatic if retro-wgpu fails to start). Removal of the older back
+end is to be reviewed around 2026-12-05, not before the user decides. Untested: Windows, DX12.
+
 ### Working on retro-wgpu
 
 Changes land in the retro-wgpu repository first (neutral commit messages, a tag), then the rev is
