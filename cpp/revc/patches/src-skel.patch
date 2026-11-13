@@ -280,16 +280,16 @@
  
 -#elif defined(REVC_RUST_MAIN)
 -// Rust owns main() (rust/revc); it calls this with the process argv.
--extern "C" int
--revc_cpp_main(int argc, char *argv[])
--{
--#else
--// Called from Rust main() with the process argv.
 +// Process start: platform and RenderWare initialisation, settings. Returns 0 on failure.
  extern "C" int
 -revc_cpp_main(int argc, char *argv[])
 +revc_game_init(int argc, char *argv[])
  {
+-#else
+-// Called from Rust main() with the process argv.
+-extern "C" int
+-revc_cpp_main(int argc, char *argv[])
+-{
 -#endif
 -	RwV2d pos;
  	RwInt32 i;
@@ -948,7 +948,7 @@
  	}
  	// TODO? L2-R2 axes(not buttons-that's fine) on joysticks that don't have SDL gamepad mapping AREN'T handled, and I think it's impossible to do without mapping.
  
-@@ -1879,20 +1983,56 @@
+@@ -1879,24 +1983,63 @@
  		
  		CPad *pad = CPad::GetPad(bs.padID);
  
@@ -1015,7 +1015,25 @@
  
  	return;
  }
-@@ -1924,4 +2064,4 @@
+ 
++extern int8 gUiStyle;
++static bool ConsoleUiStyle(void) { return gUiStyle != 0; }
++
+ extern "C" void revc_on_joystick(int jid, int connected)
+ {
+ 	if (!HostCallbacksEnabled)
+@@ -1918,10 +2061,15 @@
+ 
+ 	} else if (!connected) {
+ 		if (PSGLOBAL(joy1id) == jid) {
++			// revc: the consoles pause when the pad in use is unplugged (PS2: the pause menu; Xbox: a
++			// "reconnect the controller" pause; research): the console styles open the pause menu
++			if (ConsoleUiStyle() && hostActiveInputKind() != 0 && gGameState == GS_PLAYING_GAME &&
++			    !FrontEndMenuManager.m_bMenuActive && !FrontEndMenuManager.m_bGameNotLoaded)
++				FrontEndMenuManager.m_bStartUpFrontEndRequested = true;
+ 			PSGLOBAL(joy1id) = -1;
+ 		} else if (PSGLOBAL(joy2id) == jid)
+ 			PSGLOBAL(joy2id) = -1;
  	}
  }
  

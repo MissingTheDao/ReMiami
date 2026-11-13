@@ -640,7 +640,69 @@
  	CMessages::InsertNumberInString(TheText.Get("FEC_JBO"),		// JOY ~1~
  		m_aSettings[action][JOYSTICK].m_Key, -1, -1, -1, -1, -1,
  		NewStringWithNumber);
-@@ -2733,6 +2870,19 @@
+@@ -2439,6 +2576,8 @@
+ #define VFB(b)
+ #endif
+ 
++// (revc: rows checked against the PS2's getters, PS2 v1.40, research: the turret is the right stick in
++// setups 1-3 and the D-pad in setup 4; setup 2 changes the camera with the D-pad)
+ #define CONTROLLER_BUTTONS(T, O, X, Q, L1, L2, L3, R1, R2, R3, SELECT, RSU, RSD, RSL, RSR)                                                                                         \
+ 	{{                                                                                                                                                         \
+ 	     O,      /* PED_FIREWEAPON */                                                                                                                          \
+@@ -2471,8 +2610,8 @@
+ 	     nil,    /* VEHICLE_LOOKBEHIND */                                                                                                                      \
+ 	     RSL,    /* VEHICLE_TURRETLEFT */                                                                                                                      \
+ 	     RSR,    /* VEHICLE_TURRETRIGHT */                                                                                                                     \
+-	     UP,    /* VEHICLE_TURRETUP */                                                                                                                        \
+-	     DOWN,    /* VEHICLE_TURRETDOWN */                                                                                                                      \
++	     RSU,   /* VEHICLE_TURRETUP */                                                                                                                        \
++	     RSD,    /* VEHICLE_TURRETDOWN */                                                                                                                      \
+ 	     L2,     /* PED_CYCLE_TARGET_LEFT */                                                                                                                   \
+ 	     R2,     /* PED_CYCLE_TARGET_RIGHT */                                                                                                                  \
+ 	     L1,     /* PED_CENTER_CAMERA_BEHIND_PLAYER */                                                                                                         \
+@@ -2498,7 +2637,7 @@
+ 	     Q,      /* PED_SNIPER_ZOOM_IN */                                                                                                                      \
+ 	     X,      /* PED_SNIPER_ZOOM_OUT */                                                                                                                     \
+ 	     T,      /* VEHICLE_ENTER_EXIT */                                                                                                                      \
+-	     SELECT, /* CAMERA_CHANGE_VIEW_ALL_SITUATIONS */                                                                                                       \
++	     UP,     /* CAMERA_CHANGE_VIEW_ALL_SITUATIONS */                                                                                                       \
+ 	     Q,      /* PED_JUMPING */                                                                                                                             \
+ 	     X,      /* PED_SPRINT */                                                                                                                              \
+ 	     R3,     /* PED_LOOKBEHIND */                                                                                                                          \
+@@ -2518,8 +2657,8 @@
+ 	     nil,    /* VEHICLE_LOOKBEHIND */                                                                                                                      \
+ 	     RSL,    /* VEHICLE_TURRETLEFT */                                                                                                                      \
+ 	     RSR,    /* VEHICLE_TURRETRIGHT */                                                                                                                     \
+-	     UP,    /* VEHICLE_TURRETUP */                                                                                                                        \
+-	     DOWN,    /* VEHICLE_TURRETDOWN */                                                                                                                      \
++	     RSU,   /* VEHICLE_TURRETUP */                                                                                                                        \
++	     RSD,    /* VEHICLE_TURRETDOWN */                                                                                                                      \
+ 	     L2,     /* PED_CYCLE_TARGET_LEFT */                                                                                                                   \
+ 	     R2,     /* PED_CYCLE_TARGET_RIGHT */                                                                                                                  \
+ 	     L1,     /* PED_CENTER_CAMERA_BEHIND_PLAYER */                                                                                                         \
+@@ -2565,8 +2704,8 @@
+ 	     nil,    /* VEHICLE_LOOKBEHIND */                                                                                                                      \
+ 	     RSL,    /* VEHICLE_TURRETLEFT */                                                                                                                      \
+ 	     RSR,    /* VEHICLE_TURRETRIGHT */                                                                                                                     \
+-	     UP,    /* VEHICLE_TURRETUP */                                                                                                                        \
+-	     DOWN,    /* VEHICLE_TURRETDOWN */                                                                                                                      \
++	     RSU,   /* VEHICLE_TURRETUP */                                                                                                                        \
++	     RSD,    /* VEHICLE_TURRETDOWN */                                                                                                                      \
+ 	     L2,     /* PED_CYCLE_TARGET_LEFT */                                                                                                                   \
+ 	     R2,     /* PED_CYCLE_TARGET_RIGHT */                                                                                                                  \
+ 	     T,      /* PED_CENTER_CAMERA_BEHIND_PLAYER */                                                                                                         \
+@@ -2610,8 +2749,8 @@
+ 	     L2,     /* VEHICLE_LOOKLEFT */                                                                                                                        \
+ 	     R2,     /* VEHICLE_LOOKRIGHT */                                                                                                                       \
+ 	     nil,    /* VEHICLE_LOOKBEHIND */                                                                                                                      \
+-	     RSL,    /* VEHICLE_TURRETLEFT */                                                                                                                      \
+-	     RSR,    /* VEHICLE_TURRETRIGHT */                                                                                                                     \
++	     LEFT,   /* VEHICLE_TURRETLEFT */                                                                                                                      \
++	     RIGHT,  /* VEHICLE_TURRETRIGHT */                                                                                                                     \
+ 	     UP,    /* VEHICLE_TURRETUP */                                                                                                                        \
+ 	     DOWN,    /* VEHICLE_TURRETDOWN */                                                                                                                      \
+ 	     L2,     /* PED_CYCLE_TARGET_LEFT */                                                                                                                   \
+@@ -2733,6 +2872,19 @@
  		}
  #endif
  
@@ -660,7 +722,7 @@
  		assert(Buttons[CPad::GetPad(0)->Mode][action] != nil); // we cannot use these
  		AsciiToUnicode(Buttons[CPad::GetPad(0)->Mode][action], wstr);
  
-@@ -2802,7 +2952,7 @@
+@@ -2802,7 +2954,7 @@
  		else
  			m_aButtonStates[i] = false;
  	}
@@ -5196,6 +5258,30 @@
 -	// "RDLU12ULDR"		-	RIGHT DOWN LEFT UP L1 L2 UP LEFT DOWN RIGHT
 -	else if ( !_CHEATCMP("RDLU21ULDR") )
 -		ChangePlayerCheat();
+-
+-	// "DULUX3421"		-	DOWN UP LEFT UP CROSS R1 R2 L2 L1
+-	else if ( !_CHEATCMP("1243XULUD") )
+-		MayhemCheat();
+-
+-	// "DULUX3412"		-	DOWN UP LEFT UP CROSS R1 R2 L1 L2
+-	else if ( !_CHEATCMP("2143XULUD") )
+-		EverybodyAttacksPlayerCheat();
+-
+-	// "43TX21UD"		-	R2 R1 TRIANGLE CROSS L2 L1 UP DOWN
+-	else if ( !_CHEATCMP("DU12XT34") )
+-		WeaponsForAllCheat();
+-
+-	// "TURDS12"		-	TRIANGLE UP RIGHT DOWN SQUARE L1 L2
+-	else if ( !_CHEATCMP("21SDRUT") )
+-		FastTimeCheat();
+-
+-	// "TURDS34"		-	TRIANGLE UP RIGHT DOWN SQUARE R1 R2
+-	else if ( !_CHEATCMP("43SDRUT") )
+-		SlowTimeCheat();
+-
+-	// "11S4T1T"		-	L1 L1 SQUARE R2 TRIANGLE L1 TRIANGLE
+-	else if ( !_CHEATCMP("T1T4S11") )
+-		OnlyRenderWheelsCheat();
 +	// revc: Vice City's own console sequences (GTA III's were here; research on the PS2 and Xbox
 +	// builds): the strings hold the newest press first; T triangle/Y, C circle/B, X cross/A,
 +	// S square/X, U D L R the D-pad, 1 L1/LT, 2 L2/White, 3 R1/RT, 4 R2/Black. A match blanks the
@@ -5288,30 +5374,6 @@
 +	else if ( !_CHEATCMP("11S4T1T") )
 +		{ CheatString[0] = ' '; OnlyRenderWheelsCheat(); }
  
--	// "DULUX3421"		-	DOWN UP LEFT UP CROSS R1 R2 L2 L1
--	else if ( !_CHEATCMP("1243XULUD") )
--		MayhemCheat();
--
--	// "DULUX3412"		-	DOWN UP LEFT UP CROSS R1 R2 L1 L2
--	else if ( !_CHEATCMP("2143XULUD") )
--		EverybodyAttacksPlayerCheat();
--
--	// "43TX21UD"		-	R2 R1 TRIANGLE CROSS L2 L1 UP DOWN
--	else if ( !_CHEATCMP("DU12XT34") )
--		WeaponsForAllCheat();
--
--	// "TURDS12"		-	TRIANGLE UP RIGHT DOWN SQUARE L1 L2
--	else if ( !_CHEATCMP("21SDRUT") )
--		FastTimeCheat();
--
--	// "TURDS34"		-	TRIANGLE UP RIGHT DOWN SQUARE R1 R2
--	else if ( !_CHEATCMP("43SDRUT") )
--		SlowTimeCheat();
--
--	// "11S4T1T"		-	L1 L1 SQUARE R2 TRIANGLE L1 TRIANGLE
--	else if ( !_CHEATCMP("T1T4S11") )
--		OnlyRenderWheelsCheat();
--
 -	// "R4C32D13"		-	RIGHT R2 CIRCLE R1 L2 DOWN L1 R1
 +	// flying cars: RIGHT R2 CIRCLE R1 L2 DOWN L1 R1
  	else if ( !_CHEATCMP("31D23C4R") )
@@ -5439,7 +5501,21 @@
  
  #undef _CHEATCMP
  }
-@@ -1710,9 +1837,110 @@
+@@ -1692,6 +1819,13 @@
+ 		GetPad(0)->Update(0);
+ 
+ #ifndef MASTER
++	// revc: the retail consoles never read a second pad's debug keys (clock, weather, slow mode;
++	// the PS2 zeroes pad 2 each frame: PS2 v1.40, research), so not in the console styles
++	extern int8 gUiStyle;
++	if (gUiStyle != 0) {
++		GetPad(1)->NewState.Clear();
++		GetPad(1)->OldState.Clear();
++	} else
+ 	GetPad(1)->Update(1);
+ #else
+ 	GetPad(1)->NewState.Clear();
+@@ -1710,9 +1844,110 @@
  	;
  }
  
@@ -5550,7 +5626,7 @@
  
  #ifdef GTA_PS2
  	bObsoleteControllerMessage = false;
-@@ -1978,6 +2206,32 @@
+@@ -1978,6 +2213,32 @@
  		NewState = ReconcileTwoControllersInput(PCTempKeyState, PCTempJoyState);
  		NewState = ReconcileTwoControllersInput(PCTempMouseState, NewState);
  	}
@@ -5583,7 +5659,7 @@
  
  	PCTempJoyState.Clear();
  	PCTempKeyState.Clear();
-@@ -2007,14 +2261,31 @@
+@@ -2007,14 +2268,31 @@
  void CPad::DoCheats(void)
  {
  #ifdef DETECT_PAD_INPUT_SWITCH
@@ -5615,7 +5691,7 @@
  	if ( GetTriangleJustDown() )
  		AddToCheatString('T');
  
-@@ -2341,11 +2612,37 @@
+@@ -2341,11 +2619,37 @@
  	return 0;
  }
  
@@ -5653,7 +5729,7 @@
  	return !!(NewState.LeftShoulder2 && !NewState.RightShoulder2);
  }
  
-@@ -2354,6 +2651,9 @@
+@@ -2354,6 +2658,9 @@
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -5663,7 +5739,7 @@
  	return !!(NewState.RightShoulder2 && !NewState.LeftShoulder2);
  }
  
-@@ -2363,6 +2663,9 @@
+@@ -2363,6 +2670,9 @@
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -5673,7 +5749,7 @@
  	return !!(NewState.RightShoulder2 && NewState.LeftShoulder2);
  }
  
-@@ -3244,6 +3547,8 @@
+@@ -3244,6 +3554,8 @@
  	int16 dpad = (NewState.DPadRight - NewState.DPadLeft) / 2;
  
  	if ( Abs(axis) > Abs(dpad) ) {
@@ -5682,7 +5758,7 @@
  		if ( Abs(axis) > 35.0f ) {
  		  return (axis > 0.f ? axis - 35.f : axis + 35.f) * (128.f / (128 - 35));
  		} else {
-@@ -3259,6 +3564,7 @@
+@@ -3259,6 +3571,7 @@
  	int16 dpad;
  
  #ifdef FIX_BUGS
@@ -5690,7 +5766,7 @@
  	axis = -axis;
  #endif
  	if (CPad::bInvertLook4Pad) {
-@@ -3269,6 +3575,8 @@
+@@ -3269,6 +3582,8 @@
  	}
  
  	if ( Abs(axis) > Abs(dpad) ) {
@@ -5699,7 +5775,7 @@
  	    if ( Abs(axis) > 35.0f ) {
  	      return (axis > 0.f ? axis - 35.f : axis + 35.f) * (128.f / (128 - 35));
  	    } else {
-@@ -3293,11 +3601,17 @@
+@@ -3293,11 +3608,17 @@
  	return 0;
  }
  
