@@ -2,7 +2,7 @@
 // https://github.com/iryoku/smaa (commit 71c806a8), preset HIGH, luma edge detection.
 //
 // Copyright (C) 2013 Jorge Jimenez, Jose I. Echevarria, Belen Masia, Fernando Navarro,
-// Diego Gutierrez. MIT licence: assets/smaa/LICENSE.txt (copied from revc-rw, the user's own port).
+// Diego Gutierrez. MIT licence: assets/smaa/LICENSE.txt (the author's port).
 //
 // Three passes, each a full-screen triangle:
 //   edges:   colour (tex_a) -> edges (RG8), discarding pixels without an edge (target cleared to 0)

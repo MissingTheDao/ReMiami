@@ -6,7 +6,7 @@
 //!
 //! Provenance: the surface set-up (own instance with the display handle for GL on Wayland,
 //! 8-bit non-sRGB format choice, the GL vsync driver switches, reconfigure-and-retry on a stale
-//! surface) follows revc-rw's `Presenter` (the user's own engine-neutral code).
+//! surface) is adapted from the author's earlier renderer.
 
 use crate::gpu::{Backend, Gpu, GpuOptions};
 use std::ffi::c_void;

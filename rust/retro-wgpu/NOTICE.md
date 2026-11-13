@@ -5,23 +5,21 @@ License section in README.md). The third-party parts below keep their own licenc
 
 ## Origin of the code
 
-retro-wgpu was written fresh for an engine-neutral model. **Nothing in it is derived from
-librw, RenderWare or re3/reVC**: no librw vertex layouts, Im2D transform, alpha-test window,
-depth-test quirks, gl3 shader maths, MatFX or Neo shaders.
+retro-wgpu was written for an engine-neutral model. It is not derived from any game engine,
+game or console SDK, and it contains no game code or data.
 
-A few engine-neutral pieces were copied or adapted from **revc-rw** (the owner's own code in the
-revc workspace, not librw-derived):
+A few engine-neutral pieces were adapted from the author's earlier wgpu renderer:
 
-| retro-wgpu | from revc-rw | what |
-|---|---|---|
-| `src/gpu.rs` | `lib.rs` `Backend`/`Gpu` | backend enum, WebGL2-level limits, BC/adapter feature requests, logging error handler, MSAA sample-count probe |
-| `src/present.rs` | `present.rs` | raw-handle surface set-up, non-sRGB 8-bit format choice, GL vsync driver switches, acquire-retry |
-| `src/readback.rs` | `frame.rs` `readback_start/finish` | texture-to-buffer copy and row unpadding |
-| `src/post.rs` `Smaa`, `src/smaa.wgsl`, `assets/smaa/*` | `frame.rs` SMAA set-up, `smaa.wgsl`, `assets/smaa` | SMAA port and its three-pass plumbing (third-party, see below) |
-| `src/renderer.rs` (ideas only) | `frame.rs` | record-then-encode structure, redundant-bind tracking, frame copies |
+| retro-wgpu | what |
+|---|---|
+| `src/gpu.rs` | backend enum, WebGL2-level limits, BC/adapter feature requests, logging error handler, MSAA sample-count probe |
+| `src/present.rs` | raw-handle surface set-up, non-sRGB 8-bit format choice, GL vsync driver switches, acquire-retry |
+| `src/readback.rs` | texture-to-buffer copy and row unpadding |
+| `src/post.rs` `Smaa`, `src/smaa.wgsl`, `assets/smaa/*` | the author's SMAA port and its three-pass plumbing (third-party, see below) |
+| `src/renderer.rs` (ideas only) | record-then-encode structure, redundant-bind tracking, frame copies |
 
 Everything else (state model, layouts, shader generator and WGSL, combiners, texture formats
-and BC/CLUT decoding, FXAA, scaler, texture replacement, tests) is new.
+and BC/CLUT decoding, FXAA, scaler, texture replacement, programs, overlay, tests) is new.
 
 ## Third-party material
 

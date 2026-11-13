@@ -6,8 +6,8 @@
 //! redundant state changes. After the scene: SSAA downsample, the post chain, the output stage.
 //!
 //! New code for retro-wgpu. The record-then-encode structure, the redundant-bind tracking and
-//! the frame-copy/feedback handling follow ideas from revc-rw (the user's own code), rewritten
-//! for the generic state model.
+//! the frame-copy/feedback handling follow ideas from the author's earlier renderer,
+//! rewritten for the generic state model.
 
 use crate::gpu::Gpu;
 use crate::layout::VertexLayout;

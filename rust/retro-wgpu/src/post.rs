@@ -3,7 +3,7 @@
 //! aspect correction, filtering, output gamma).
 //!
 //! Provenance: the SMAA pass (smaa.wgsl, lookup textures, three-pass plumbing) is copied from
-//! revc-rw, the user's own port of iryoku/SMAA (MIT, notice kept). FXAA (fxaa.wgsl), the blit
+//! the author's port of iryoku/SMAA (MIT, notice kept). FXAA (fxaa.wgsl), the blit
 //! shader, the scaler and the rectangle maths are new code for retro-wgpu.
 
 use crate::gpu::Gpu;
@@ -214,7 +214,7 @@ impl PostPass for Fxaa {
     }
 }
 
-/// SMAA 1x (preset high), from revc-rw's port of iryoku/SMAA (MIT; see NOTICE.md).
+/// SMAA 1x (preset high), the author's port of iryoku/SMAA (MIT; see NOTICE.md).
 pub struct Smaa {
     layout: wgpu::BindGroupLayout,
     edges: wgpu::RenderPipeline,

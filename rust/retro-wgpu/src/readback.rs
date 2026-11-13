@@ -1,7 +1,6 @@
 //! GPU -> CPU copies for screenshots and tests.
 //!
-//! Provenance: from revc-rw's `readback_start`/`readback_finish` (the user's own engine-neutral
-//! code), returning an [`Image`] instead of a bare vector.
+//! Adapted from the author's earlier renderer, returning an [`Image`] instead of a bare vector.
 
 use crate::gpu::Gpu;
 

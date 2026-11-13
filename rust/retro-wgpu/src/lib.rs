@@ -14,7 +14,7 @@
 //! - `slang` (feature "slang"): RetroArch .slangp presets (CRT, Mega Bezel-style overlays)
 //!   as the output stage, through librashader.
 //!
-//! Nothing here is derived from librw or RenderWare; see NOTICE.md for provenance.
+//! Not derived from any game engine or SDK; see NOTICE.md for provenance.
 
 mod fxhash;
 mod slab;

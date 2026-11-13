@@ -1,7 +1,7 @@
 //! Backend and device selection.
 //!
 //! Provenance: the backend enum, the WebGL2/GLES3-level limits and the logging error handler
-//! follow revc-rw's `Gpu` (the user's own engine-neutral code); the options struct is new.
+//! are adapted from the author's earlier renderer; the options struct is new.
 
 /// The graphics API to render with.
 ///
