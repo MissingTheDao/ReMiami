@@ -466,31 +466,59 @@ pub unsafe fn geo_add_lightmap_coords(geo: *mut Geometry, xbox: *const KeyedUv, 
                 map.get(&revc_import::xboxlm::vertex_key([p.x, p.y, p.z], *uv0.add(i))).copied()
             })
             .collect();
-        let missing: Vec<usize> = (0..nv).filter(|&i| uv1[i].is_none()).collect();
-        if missing.len() * 20 > nv {
+        // Vertices without a match (the Xbox moved some by a few centimetres: 5 % of the hotel's
+        // mob_mobroom2) take the coordinates of a matched neighbour in a triangle, the one with
+        // the same first coordinates if there is one; repeated, so groups of them fill from their
+        // edges inwards. Up to a tenth of the vertices; past that the geometry stays unlit.
+        let mut missing: Vec<usize> = (0..nv).filter(|&i| uv1[i].is_none()).collect();
+        if missing.len() * 10 > nv {
             return false;
         }
         if !missing.is_empty() {
             let tris = std::slice::from_raw_parts(g.triangles, g.num_triangles.max(0) as usize);
-            for &i in &missing {
-                let mut pick: Option<usize> = None;
-                for t in tris.iter().filter(|t| t.v.contains(&(i as u16))) {
-                    for &k in &t.v {
-                        let k = k as usize;
-                        if k >= nv || k == i || missing.contains(&k) {
-                            continue;
+            while !missing.is_empty() {
+                let mut filled = Vec::new();
+                for &i in &missing {
+                    let mut pick: Option<usize> = None;
+                    for t in tris.iter().filter(|t| t.v.contains(&(i as u16))) {
+                        for &k in &t.v {
+                            let k = k as usize;
+                            if k >= nv || k == i || uv1[k].is_none() {
+                                continue;
+                            }
+                            if *uv0.add(k) == *uv0.add(i) {
+                                pick = Some(k);
+                                break;
+                            }
+                            pick.get_or_insert(k);
                         }
-                        if *uv0.add(k) == *uv0.add(i) {
-                            pick = Some(k);
-                            break;
-                        }
-                        pick.get_or_insert(k);
+                    }
+                    if let Some(k) = pick {
+                        filled.push((i, uv1[k]));
                     }
                 }
-                match pick {
-                    Some(k) => uv1[i] = uv1[k],
-                    None => return false,
+                if filled.is_empty() {
+                    // (left over: vertices in no triangle, or a moved piece without a matched
+                    // vertex: the nearest matched vertex by position)
+                    for &i in &missing {
+                        let p = *pos.add(i);
+                        let near = (0..nv).filter(|&k| uv1[k].is_some()).min_by(|&a, &b| {
+                            let d = |k: usize| {
+                                let q = *pos.add(k);
+                                (q.x - p.x).powi(2) + (q.y - p.y).powi(2) + (q.z - p.z).powi(2)
+                            };
+                            d(a).total_cmp(&d(b))
+                        });
+                        match near {
+                            Some(k) => filled.push((i, uv1[k])),
+                            None => return false,
+                        }
+                    }
                 }
+                for (i, u) in filled {
+                    uv1[i] = u;
+                }
+                missing.retain(|&i| uv1[i].is_none());
             }
         }
         let uv1: Vec<[f32; 2]> = uv1.into_iter().map(|u| u.unwrap()).collect();
