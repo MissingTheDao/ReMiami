@@ -4,17 +4,42 @@
 //! revc_rw::frame::Renderer and drawn when the frame is presented; Im3D and models come next.
 
 use revc_rw::Backend;
-use revc_rw::frame::{Antialiasing, DrawState, EnvMap, MAX_BONES, Mat4, MeshExtras, MeshVertex, ModelState, Renderer, SkinVertex, TexData, Vertex2D, Vertex2DUV2, Vertex3D, Xform};
+use revc_rw::frame::{Antialiasing, DrawState, EnvMap, FrameSettings, MAX_BONES, Mat4, MeshExtras, MeshVertex, ModelState, Recorder, SkinVertex, TexData, Vertex2D, Vertex2DUV2, Vertex3D, WgpuBackend, Xform};
 use revc_rw::present::{NativeWindow, Presenter};
+use revc_rw::thread::{Done, RenderThread};
 use sdl3_sys::everything::*;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::ffi::{CStr, c_void};
 use std::ptr::NonNull;
 
+/// Where recorded frames are drawn: on the game thread, or on the render thread
+/// (REVC_RENDER_THREAD=1).
+enum Out {
+    Inline(Box<(Presenter, WgpuBackend)>),
+    Thread(RenderThread),
+}
+
+/// The front end (records on the game thread) and where its frames go.
+struct State {
+    front: Recorder,
+    out: Out,
+    window: *mut SDL_Window,
+    /// Output size at the last begin_frame.
+    size: (u32, u32),
+    /// supported_samples(wanted) for wanted 0..=16, so the game thread needs no device.
+    samples: [u32; 17],
+}
+
 thread_local! {
-    static PRESENTER: RefCell<Option<Presenter>> = const { RefCell::new(None) };
-    static RENDERER: RefCell<Option<Renderer>> = const { RefCell::new(None) };
-    static WINDOW: Cell<*mut SDL_Window> = const { Cell::new(std::ptr::null_mut()) };
+    static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
+}
+
+fn with_front<R>(f: impl FnOnce(&mut Recorder) -> R) -> Option<R> {
+    STATE.with(|c| c.borrow_mut().as_mut().map(|s| f(&mut s.front)))
+}
+
+fn render_thread_wanted() -> bool {
+    matches!(std::env::var("REVC_RENDER_THREAD").as_deref(), Ok("1") | Ok("on") | Ok("yes"))
 }
 
 /// rwCAMERACLEARIMAGE, rwCAMERACLEARZ
@@ -68,36 +93,40 @@ pub fn create(window: *mut SDL_Window, samples: i32) -> Result<(), String> {
     let p = unsafe { Presenter::new(backend(), native(window)?, w, h, vsync)? };
     let bc = p.gpu.bc_textures();
     eprintln!("revc: wgpu renderer on {} ({:?}), {:?} {w}x{h}, DXT {}, models in {}", p.gpu.info.name, p.gpu.info.backend, p.format(), if bc { "on the GPU" } else { "decoded on the CPU" }, if p.gpu.model_storage { "a storage buffer" } else { "uniform blocks" });
-    let r = Renderer::with_samples(&p.gpu, p.format(), samples.max(1) as u32);
-    let used = Renderer::supported_samples(&p.gpu, samples.max(1) as u32);
+    let back = WgpuBackend::with_samples(&p.gpu, p.format(), samples.max(1) as u32);
+    let used = back.antialiasing().msaa;
     if used > 1 || samples > 1 {
         eprintln!("revc: MSAA {used}x (asked {samples}x)");
     }
-    RENDERER.with(|c| *c.borrow_mut() = Some(r));
-    PRESENTER.with(|c| *c.borrow_mut() = Some(p));
-    WINDOW.with(|c| c.set(window));
+    let table: [u32; 17] = std::array::from_fn(|n| WgpuBackend::supported_samples(&p.gpu, n.max(1) as u32));
+    let out = if render_thread_wanted() {
+        eprintln!("revc: render thread on");
+        Out::Thread(RenderThread::spawn(p, back)?)
+    } else {
+        Out::Inline(Box::new((p, back)))
+    };
+    STATE.with(|c| *c.borrow_mut() = Some(State { front: Recorder::new(used), out, window, size: (w, h), samples: table }));
     Ok(())
 }
 
 /// Before the window is destroyed.
 pub fn destroy() {
-    RENDERER.with(|c| *c.borrow_mut() = None);
-    PRESENTER.with(|c| *c.borrow_mut() = None);
-    WINDOW.with(|c| c.set(std::ptr::null_mut()));
+    // Dropping a render thread waits for its frames.
+    STATE.with(|c| *c.borrow_mut() = None);
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_rw_begin_frame(_window: *mut c_void) {
-    let window = WINDOW.with(|c| c.get());
-    if window.is_null() {
-        return;
-    }
-    let size = pixel_size(window);
-    PRESENTER.with(|c| {
-        if let Some(p) = c.borrow_mut().as_mut()
-            && p.size() != size
+    STATE.with(|c| {
+        if let Some(st) = c.borrow_mut().as_mut()
+            && !st.window.is_null()
         {
-            p.resize(size.0, size.1);
+            st.size = pixel_size(st.window);
+            if let Out::Inline(b) = &mut st.out
+                && b.0.size() != st.size
+            {
+                b.0.resize(st.size.0, st.size.1);
+            }
         }
     });
 }
@@ -105,11 +134,7 @@ pub extern "C" fn revc_rw_begin_frame(_window: *mut c_void) {
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_rw_clear(r: f32, g: f32, b: f32, a: f32, mode: u32) {
     let color = (mode & CLEAR_IMAGE != 0).then_some([r as f64, g as f64, b as f64, a as f64]);
-    RENDERER.with(|c| {
-        if let Some(rd) = c.borrow_mut().as_mut() {
-            rd.clear(color, mode & CLEAR_Z != 0);
-        }
-    });
+    with_front(|f| f.clear(color, mode & CLEAR_Z != 0));
 }
 
 /// Creates (id 0) or updates a texture from mip levels, RGBA8 (`dxt` 0) or DXT1/3/5 blocks;
@@ -139,21 +164,12 @@ pub unsafe extern "C" fn revc_rw_texture_upload(id: u32, width: i32, height: i32
     if slices.is_empty() {
         return 0;
     }
-    PRESENTER.with(|pc| {
-        RENDERER.with(|rc| match (pc.borrow().as_ref(), rc.borrow_mut().as_mut()) {
-            (Some(p), Some(r)) => r.upload_texture(&p.gpu, id, w, h, TexData::from_dxt(dxt as u32), &slices, autogen != 0),
-            _ => 0,
-        })
-    })
+    with_front(|f| f.upload_texture(id, w, h, TexData::from_dxt(dxt as u32), &slices, autogen != 0)).unwrap_or(0)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_rw_texture_destroy(id: u32) {
-    RENDERER.with(|c| {
-        if let Some(r) = c.borrow_mut().as_mut() {
-            r.destroy_texture(id);
-        }
-    });
+    with_front(|f| f.destroy_texture(id));
 }
 
 /// # Safety
@@ -167,11 +183,7 @@ pub unsafe extern "C" fn revc_rw_im2d(state: *const DrawState, prim: u32, vertic
     let state = unsafe { &*state };
     let verts = unsafe { std::slice::from_raw_parts(vertices, num_vertices as usize) };
     let idx = (!indices.is_null() && num_indices > 0).then(|| unsafe { std::slice::from_raw_parts(indices, num_indices as usize) });
-    RENDERER.with(|c| {
-        if let Some(r) = c.borrow_mut().as_mut() {
-            r.draw_2d(state, prim, verts, idx);
-        }
-    });
+    with_front(|f| f.draw_2d(state, prim, verts, idx));
 }
 
 /// # Safety
@@ -185,11 +197,7 @@ pub unsafe extern "C" fn revc_rw_im3d(state: *const DrawState, prim: u32, vertic
     let verts = unsafe { std::slice::from_raw_parts(vertices, num_vertices as usize) };
     let idx = (!indices.is_null() && num_indices > 0).then(|| unsafe { std::slice::from_raw_parts(indices, num_indices as usize) });
     let xf = unsafe { *xform };
-    RENDERER.with(|c| {
-        if let Some(r) = c.borrow_mut().as_mut() {
-            r.draw_3d(state, prim, verts, idx, &xf);
-        }
-    });
+    with_front(|f| f.draw_3d(state, prim, verts, idx, &xf));
 }
 
 /// Creates (id 0) or replaces a model geometry; returns its id, 0 without a window.
@@ -200,12 +208,7 @@ pub unsafe extern "C" fn revc_rw_im3d(state: *const DrawState, prim: u32, vertic
 pub unsafe extern "C" fn revc_rw_geometry_upload(id: u32, vertices: *const MeshVertex, num_vertices: i32, indices: *const u16, num_indices: i32) -> u32 {
     let verts = if vertices.is_null() || num_vertices <= 0 { &[][..] } else { unsafe { std::slice::from_raw_parts(vertices, num_vertices as usize) } };
     let idx = if indices.is_null() || num_indices <= 0 { &[][..] } else { unsafe { std::slice::from_raw_parts(indices, num_indices as usize) } };
-    PRESENTER.with(|pc| {
-        RENDERER.with(|rc| match (pc.borrow().as_ref(), rc.borrow_mut().as_mut()) {
-            (Some(p), Some(r)) => r.upload_geometry(&p.gpu, id, verts, idx),
-            _ => 0,
-        })
-    })
+    with_front(|f| f.upload_geometry(id, verts, idx)).unwrap_or(0)
 }
 
 /// As `revc_rw_geometry_upload`, for a skinned geometry.
@@ -216,21 +219,12 @@ pub unsafe extern "C" fn revc_rw_geometry_upload(id: u32, vertices: *const MeshV
 pub unsafe extern "C" fn revc_rw_geometry_upload_skin(id: u32, vertices: *const SkinVertex, num_vertices: i32, indices: *const u16, num_indices: i32) -> u32 {
     let verts = if vertices.is_null() || num_vertices <= 0 { &[][..] } else { unsafe { std::slice::from_raw_parts(vertices, num_vertices as usize) } };
     let idx = if indices.is_null() || num_indices <= 0 { &[][..] } else { unsafe { std::slice::from_raw_parts(indices, num_indices as usize) } };
-    PRESENTER.with(|pc| {
-        RENDERER.with(|rc| match (pc.borrow().as_ref(), rc.borrow_mut().as_mut()) {
-            (Some(p), Some(r)) => r.upload_skinned_geometry(&p.gpu, id, verts, idx),
-            _ => 0,
-        })
-    })
+    with_front(|f| f.upload_skinned_geometry(id, verts, idx)).unwrap_or(0)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_rw_geometry_destroy(id: u32) {
-    RENDERER.with(|c| {
-        if let Some(r) = c.borrow_mut().as_mut() {
-            r.destroy_geometry(id);
-        }
-    });
+    with_front(|f| f.destroy_geometry(id));
 }
 
 /// # Safety
@@ -246,11 +240,7 @@ pub unsafe extern "C" fn revc_rw_draw_mesh(state: *const DrawState, geometry: u3
     let xf = unsafe { *xform };
     let bones = (!bones.is_null()).then(|| unsafe { std::slice::from_raw_parts(bones, num_bones.clamp(0, MAX_BONES as i32) as usize) });
     let env = (!env.is_null()).then(|| unsafe { *env });
-    RENDERER.with(|c| {
-        if let Some(r) = c.borrow_mut().as_mut() {
-            r.draw_mesh(state, geometry, first, count, &xf, model, &MeshExtras { bones, env });
-        }
-    });
+    with_front(|f| f.draw_mesh(state, geometry, first, count, &xf, model, &MeshExtras { bones, env }));
 }
 
 /// # Safety
@@ -263,69 +253,78 @@ pub unsafe extern "C" fn revc_rw_im2d_uv2(state: *const DrawState, prim: u32, ve
     let (state, tex1) = unsafe { (&*state, &*tex1) };
     let verts = unsafe { std::slice::from_raw_parts(vertices, num_vertices as usize) };
     let idx = (!indices.is_null() && num_indices > 0).then(|| unsafe { std::slice::from_raw_parts(indices, num_indices as usize) });
-    RENDERER.with(|c| {
-        if let Some(r) = c.borrow_mut().as_mut() {
-            r.draw_2d_uv2(state, prim, verts, idx, tex1);
-        }
-    });
+    with_front(|f| f.draw_2d_uv2(state, prim, verts, idx, tex1));
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_rw_set_antialiasing(level: i32) {
-    PRESENTER.with(|pc| {
-        RENDERER.with(|rc| {
-            if let (Some(p), Some(r)) = (pc.borrow().as_ref(), rc.borrow_mut().as_mut()) {
-                let (name, _) = Antialiasing::LEVELS.get(level.max(0) as usize).copied().unwrap_or(Antialiasing::LEVELS[0]);
-                r.set_antialiasing(&p.gpu, Antialiasing::level(level.max(0) as u32));
-                let aa = r.antialiasing();
-                eprintln!("revc: antialiasing {name} (MSAA {}x, supersampling {}x, FXAA {}, SMAA {})", aa.msaa, aa.supersample, if aa.fxaa { "on" } else { "off" }, if aa.smaa { "on" } else { "off" });
-            }
-        })
+    STATE.with(|c| {
+        if let Some(st) = c.borrow_mut().as_mut() {
+            let (name, aa) = Antialiasing::LEVELS.get(level.max(0) as usize).copied().unwrap_or(Antialiasing::LEVELS[0]);
+            let samples = st.samples[aa.msaa.min(16) as usize];
+            let s = st.front.settings();
+            st.front.set_settings(FrameSettings { samples, scale: aa.supersample, fxaa: aa.fxaa, smaa: aa.smaa, ..s });
+            let s = st.front.settings();
+            eprintln!("revc: antialiasing {name} (MSAA {}x, supersampling {}x, FXAA {}, SMAA {})", s.samples, s.scale, if s.fxaa { "on" } else { "off" }, if s.smaa { "on" } else { "off" });
+        }
     });
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_rw_begin_overlay() {
-    RENDERER.with(|c| {
-        if let Some(r) = c.borrow_mut().as_mut() {
-            r.begin_overlay();
-        }
-    });
+    with_front(|f| f.begin_overlay());
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_rw_set_target(texture: u32) {
-    RENDERER.with(|c| {
-        if let Some(r) = c.borrow_mut().as_mut() {
-            r.set_target(texture);
-        }
-    });
+    with_front(|f| f.set_target(texture));
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_rw_copy_frame(texture: u32, x: u32, y: u32) {
-    RENDERER.with(|c| {
-        if let Some(r) = c.borrow_mut().as_mut() {
-            r.copy_frame(texture, x, y);
+    with_front(|f| f.copy_frame(texture, x, y));
+}
+
+/// Takes back drawn frames: recycles them and reports errors.
+fn returned(front: &mut Recorder, done: Vec<Done>) -> Option<(u32, u32, Vec<u8>)> {
+    let mut shot = None;
+    for d in done {
+        if let Some(e) = d.error {
+            eprintln!("revc: present: {e}");
         }
-    });
+        if d.capture {
+            shot = d.shot;
+        }
+        front.recycle(d.frame);
+    }
+    shot
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_rw_present(vsync: i32) {
     let capture = super::with(|h| std::mem::take(&mut h.capture_requested));
-    let shot = PRESENTER.with(|pc| {
-        RENDERER.with(|rc| match (pc.borrow_mut().as_mut(), rc.borrow_mut().as_mut()) {
-            (Some(p), Some(r)) => {
-                // The game's VSync setting (rwRASTERFLIPWAITVSYNC), like GL3's swap interval.
-                p.set_vsync(vsync != 0);
-                p.present_frame(r, capture).unwrap_or_else(|e| {
+    // The game's VSync setting (rwRASTERFLIPWAITVSYNC), like GL3's swap interval.
+    let vsync = vsync != 0;
+    let shot = STATE.with(|c| {
+        let mut b = c.borrow_mut();
+        let st = b.as_mut()?;
+        let mut frame = st.front.finish();
+        match &mut st.out {
+            Out::Inline(pb) => {
+                let (p, back) = &mut **pb;
+                p.set_vsync(vsync);
+                let shot = p.present(back, &mut frame, capture).unwrap_or_else(|e| {
                     eprintln!("revc: present: {e}");
                     None
-                })
+                });
+                st.front.recycle(frame);
+                shot
             }
-            _ => None,
-        })
+            Out::Thread(t) => {
+                let done = t.submit(frame, st.size, vsync, capture);
+                returned(&mut st.front, done)
+            }
+        }
     });
     if capture {
         super::with(|h| h.captured = shot);

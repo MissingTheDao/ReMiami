@@ -1,6 +1,5 @@
-//! Immediate-mode drawing for librw's WGPU platform (renderer port stage 1): the C++ device
-//! forwards camera clears, texture uploads and Im2D primitives here; they are recorded per frame
-//! and encoded into render passes when the frame is shown.
+//! Back end of the RenderWare renderer on wgpu: draws the frames the front end (`front.rs`)
+//! records. `Renderer` combines both for callers that record and draw on one thread.
 //!
 //! Semantics follow librw's GL3 device so both renderers draw the same picture:
 //! - Im2D vertices are screen pixels; `xform` maps them to clip space and the position is
@@ -15,292 +14,11 @@
 //! Rasters are RGBA8, top row first, so texture coordinates are used as they are.
 
 use crate::Gpu;
-use crate::prim::{expand_primitive, generate_mips, is_line_primitive};
-use std::collections::HashMap as StdHashMap;
+pub use crate::front::*;
+use crate::front::{BONE_FLOATS, HashMap, Kind, MODEL_FLOATS, MeshDraw, Op, PipeKey, SamplerKey, Upload};
+use crate::prim::generate_mips;
 
-/// rustc's Fx hash: the renderer's caches are looked up several times per draw, and std's SipHash
-/// showed up in profiles (keys are small, trusted integers).
-#[derive(Clone, Copy, Default)]
-pub struct FxBuild;
 
-#[derive(Default)]
-pub struct FxHasher(u64);
-
-impl FxHasher {
-    #[inline]
-    fn add(&mut self, x: u64) {
-        self.0 = (self.0.rotate_left(5) ^ x).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
-    }
-}
-
-impl std::hash::Hasher for FxHasher {
-    #[inline]
-    fn write(&mut self, bytes: &[u8]) {
-        let (chunks, rest) = bytes.as_chunks::<8>();
-        for c in chunks {
-            self.add(u64::from_le_bytes(*c));
-        }
-        for &b in rest {
-            self.add(b as u64);
-        }
-    }
-    #[inline]
-    fn write_u8(&mut self, x: u8) {
-        self.add(x as u64);
-    }
-    #[inline]
-    fn write_u16(&mut self, x: u16) {
-        self.add(x as u64);
-    }
-    #[inline]
-    fn write_u32(&mut self, x: u32) {
-        self.add(x as u64);
-    }
-    #[inline]
-    fn write_u64(&mut self, x: u64) {
-        self.add(x);
-    }
-    #[inline]
-    fn write_usize(&mut self, x: usize) {
-        self.add(x as u64);
-    }
-    #[inline]
-    fn finish(&self) -> u64 {
-        self.0
-    }
-}
-
-impl std::hash::BuildHasher for FxBuild {
-    type Hasher = FxHasher;
-    #[inline]
-    fn build_hasher(&self) -> FxHasher {
-        FxHasher(0)
-    }
-}
-
-type HashMap<K, V> = StdHashMap<K, V, FxBuild>;
-
-/// librw `wgpu::Im2DVertex` (same layout as gl3's).
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Vertex2D {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub w: f32,
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: u8,
-    pub u: f32,
-    pub v: f32,
-}
-const _: () = assert!(std::mem::size_of::<Vertex2D>() == 28);
-
-/// An Im2D vertex with a second texture coordinate set (re3's screen droplets, Im2DVertexUV2).
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Vertex2DUV2 {
-    pub base: Vertex2D,
-    pub u2: f32,
-    pub v2: f32,
-}
-const _: () = assert!(std::mem::size_of::<Vertex2DUV2>() == 36);
-
-/// librw `wgpu::Im3DVertex` (same layout as gl3's).
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Vertex3D {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: u8,
-    pub u: f32,
-    pub v: f32,
-}
-const _: () = assert!(std::mem::size_of::<Vertex3D>() == 24);
-
-/// A model vertex as the device instances geometry (gl3 defaultInstanceCB attributes; missing
-/// ones are filled with GL's defaults: normal 0, colour (0, 0, 0, 1), texcoords 0).
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct MeshVertex {
-    pub pos: [f32; 3],
-    pub normal: [f32; 3],
-    pub color: [u8; 4],
-    pub uv: [f32; 2],
-    /// Second texture coordinate set (Neo world lightmaps); 0 without one.
-    pub uv2: [f32; 2],
-}
-const _: () = assert!(std::mem::size_of::<MeshVertex>() == 44);
-
-/// A skinned model vertex: up to four bones per vertex (gl3 skinInstanceCB: RW skin weights and
-/// bone indices as stored in the geometry's skin).
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct SkinVertex {
-    pub base: MeshVertex,
-    pub weights: [f32; 4],
-    pub indices: [u8; 4],
-}
-const _: () = assert!(std::mem::size_of::<SkinVertex>() == 64);
-
-/// Bone matrices per skinned draw (gl3 u_boneMatrices).
-pub const MAX_BONES: usize = 64;
-const BONE_FLOATS: usize = MAX_BONES * 16;
-
-/// Per-draw model data for the lit pipeline (gl3 Object uniforms + material).
-#[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ModelState {
-    /// Column-major world matrix.
-    pub world: [f32; 16],
-    /// Material colour (white unless the geometry modulates), 0..1.
-    pub mat_color: [f32; 4],
-    /// Ambient, specular, diffuse, extra.
-    pub surf_props: [f32; 4],
-    /// Sum of ambient lights, 0..1.
-    pub ambient: [f32; 4],
-    /// 8 lights x (params: type 0 end / 1 directional / 2 point / 3 spot, radius, minusCosAngle,
-    /// hardSpot; position; direction; colour).
-    pub lights: [[f32; 4]; 32],
-    /// MatFX environment map (only read by environment-mapped draws, gl3 matfx_env): normal to
-    /// env texture coordinates, the lit colour's lower clamp (0 = PC style lit env map, 1 = env
-    /// map at full strength), the env colour, and (coefficient, 1 - frame-buffer alpha flag).
-    pub tex_matrix: [f32; 16],
-    pub color_clamp: [f32; 4],
-    pub env_color: [f32; 4],
-    pub fx_params: [f32; 4],
-    /// Parameters of the re3 Neo shaders (MESH_NEO_*), as their render callbacks upload them.
-    pub extra: [[f32; 4]; 12],
-}
-
-/// DrawState::shader for meshes: re3's Neo pipelines (EXTENDED_PIPELINES, the Xbox look).
-/// Vehicle: extra = eye, (fresnel, light strength, shininess, specularity), 5 spec light
-/// directions (w = power), 5 spec colours; tex1 = env map.
-pub const MESH_NEO_VEHICLE: u32 = 10;
-/// World lightmaps: extra[0] = light map factors (rgb blend, a = material alpha); tex1 = the
-/// MatFX dual texture (white without one); second UV set.
-pub const MESH_NEO_WORLD: u32 = 11;
-/// Road gloss (additive pass with the gloss texture): extra = eye, (gloss mult, 0, 0, 0).
-pub const MESH_NEO_GLOSS: u32 = 12;
-/// Rim light (peds, also skinned): extra = view vector, ramp start, ramp end, (offset, scale,
-/// scaling, 0).
-pub const MESH_NEO_RIM: u32 = 13;
-
-impl ModelState {
-    /// A model state without lights or environment map.
-    pub fn new(world: [f32; 16]) -> ModelState {
-        ModelState {
-            world,
-            mat_color: [1.0; 4],
-            surf_props: [1.0, 0.0, 1.0, 0.0],
-            ambient: [0.0; 4],
-            lights: [[0.0; 4]; 32],
-            tex_matrix: [0.0; 16],
-            color_clamp: [0.0; 4],
-            env_color: [0.0; 4],
-            fx_params: [0.0; 4],
-            extra: [[0.0; 4]; 12],
-        }
-    }
-}
-
-/// The environment texture of a MatFX draw, with its texture's filter and addressing (the
-/// device passes it as is: `RevcEnvMap` in wgpupipe.cpp).
-#[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct EnvMap {
-    pub texture: u32,
-    pub filter: u32,
-    pub address_u: u32,
-    pub address_v: u32,
-}
-
-/// What a mesh draw adds to the plain lit pipeline.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct MeshExtras<'a> {
-    /// Bone matrices of a skinned geometry.
-    pub bones: Option<&'a [Mat4]>,
-    /// MatFX environment map pass.
-    pub env: Option<EnvMap>,
-}
-const MODEL_FLOATS: usize = std::mem::size_of::<ModelState>() / 4;
-
-/// Column-major 4x4 matrix (RW RawMatrix / GL layout: right, up, at, pos columns).
-pub type Mat4 = [f32; 16];
-
-/// a * b, column-major.
-pub fn mat_mul(a: &Mat4, b: &Mat4) -> Mat4 {
-    let mut r = [0.0; 16];
-    for c in 0..4 {
-        for row in 0..4 {
-            r[c * 4 + row] = (0..4).map(|k| a[k * 4 + row] * b[c * 4 + k]).sum();
-        }
-    }
-    r
-}
-
-/// Device state for one draw, filled by the C++ device (`RevcDrawState` in wgpudevice.cpp).
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct DrawState {
-    /// Texture id from `upload_texture`; 0 = untextured (white).
-    pub texture: u32,
-    /// rw::Texture::FilterMode (1 nearest .. 6 linear-mip-linear).
-    pub filter: u32,
-    /// rw::Texture::Addressing (1 wrap, 2 mirror, 3 clamp, 4 border).
-    pub address_u: u32,
-    pub address_v: u32,
-    /// Blending on (vertex alpha or texture alpha), with rw::BlendFunction factors.
-    pub blend: u32,
-    pub src_blend: u32,
-    pub dst_blend: u32,
-    pub z_test: u32,
-    pub z_write: u32,
-    /// rw::CullMode (1 none, 2 back, 3 front).
-    pub cull: u32,
-    /// rw::AlphaTestFunc as the shader sees it (0 always, 1 >= ref, 2 < ref) and ref in 0..1.
-    pub alpha_func: u32,
-    pub alpha_ref: f32,
-    pub fog: u32,
-    pub fog_start: f32,
-    pub fog_end: f32,
-    /// RGBA bytes, red in the low byte (RWRGBAINT).
-    pub fog_color: u32,
-    /// Screen pixels to clip space: x * xform[0] + xform[2], y * xform[1] + xform[3].
-    pub xform: [f32; 4],
-    /// Im2D override shader (re3 CPostFX): 0 none, 1 PS2/Xbox colour filter (params[0..4] blur
-    /// colour), 2 mobile contrast (params[0..3] multiply, params[4..7] add).
-    pub shader: u32,
-    pub shader_params: [f32; 8],
-    /// Anisotropic filtering (1 = off), used with trilinear filtering.
-    pub max_anisotropy: u32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-enum Kind {
-    Im2D,
-    Im3D,
-    Mesh,
-    Skin,
-    MeshEnv,
-    /// Im2D with two texture coordinate sets and a second texture (screen droplets).
-    Im2DUV2,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct MeshDraw {
-    geometry: u32,
-    model: u32,
-    /// Bone block for skinned draws.
-    bones: u32,
-    /// Environment texture and sampler for MatFX draws.
-    env: Option<(u32, SamplerKey)>,
-}
 
 /// A bind group slot's content in a pass: a dynamic-offset block (model, bones) or a texture.
 #[derive(Clone, Copy, PartialEq)]
@@ -329,109 +47,11 @@ struct Bound {
     vb: Option<Vb>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct PipeKey {
-    kind: Kind,
-    /// Im2D override shader (DrawState::shader).
-    shader: u32,
-    lines: bool,
-    blend: Option<(u32, u32)>,
-    z_test: bool,
-    z_write: bool,
-    cull: u32,
-    /// MSAA sample count of the target (the scene's; texture targets have 1).
-    samples: u32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct SamplerKey {
-    filter: u32,
-    address_u: u32,
-    address_v: u32,
-    anisotropy: u16,
-}
-
-/// xform, alpha window, fog, fog colour, the Im3D model-view-projection matrix, then the
-/// override shader's parameters.
-type Uniforms = [f32; 72];
-
-/// The vertex transform of a draw, kept apart like GL3's u_proj, u_view and u_world so the
-/// shaders multiply in GL3's order (clip = proj * view * world * pos) and round the same.
-#[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Xform {
-    pub proj: Mat4,
-    pub view: Mat4,
-    pub world: Mat4,
-}
-
-/// Im2D draws ignore the transform.
-const NO_XFORM: Xform = Xform { proj: [0.0; 16], view: [0.0; 16], world: [0.0; 16] };
-
-pub const IDENTITY: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
-
-impl From<Mat4> for Xform {
-    /// One combined matrix (as projection; view and world identity).
-    fn from(m: Mat4) -> Xform {
-        Xform { proj: m, view: IDENTITY, world: IDENTITY }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-enum Op {
-    Clear { color: Option<[f64; 4]>, depth: bool },
-    /// Immediate geometry (first/count vertices) or, with `mesh` = (geometry, model uniform), an
-    /// index range of a stored geometry.
-    /// For skinned meshes the third value is the bone-matrix block.
-    Draw { pipe: PipeKey, texture: u32, sampler: SamplerKey, uniform: u32, first: u32, count: u32, mesh: Option<MeshDraw> },
-    /// The frame so far copied into a texture at (x, y) (librw rasterRenderFast of the camera).
-    CopyFrame { texture: u32, x: u32, y: u32 },
-    /// Following clears and draws go to this texture (a camera rendering into a texture, like
-    /// the Neo env map camera), or to the scene with 0.
-    Target { texture: u32 },
-    /// The 3D scene is finished; what follows (HUD, menus) is drawn at window resolution on top
-    /// of the scaled and antialiased scene.
-    Overlay,
-}
 
 /// The frame is drawn into an offscreen texture of this format, then shown (blitted) on the
 /// output; frame copies (post effects) and screenshots read it.
 pub const SCENE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
-/// Antialiasing as one setting, levels ordered by cost (lowest first): what the game's
-/// Antialiasing option selects.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Antialiasing {
-    /// MSAA samples (1 = off; clamped to what the device does).
-    pub msaa: u32,
-    /// Supersampling: the scene is drawn at this many times the window size per axis, then
-    /// filtered down (1 = off, 2 = 4 samples per pixel).
-    pub supersample: u32,
-    /// FXAA post pass on the final image.
-    pub fxaa: bool,
-    /// SMAA 1x (preset high) on the final image; takes precedence over FXAA.
-    pub smaa: bool,
-}
-
-impl Antialiasing {
-    pub const OFF: Antialiasing = Antialiasing { msaa: 1, supersample: 1, fxaa: false, smaa: false };
-    /// Levels 0.. from cheapest to most expensive.
-    pub const LEVELS: [(&'static str, Antialiasing); 9] = [
-        ("Off", Antialiasing::OFF),
-        ("FXAA", Antialiasing { msaa: 1, supersample: 1, fxaa: true, smaa: false }),
-        ("SMAA", Antialiasing { msaa: 1, supersample: 1, fxaa: false, smaa: true }),
-        ("MSAA 2x", Antialiasing { msaa: 2, supersample: 1, fxaa: false, smaa: false }),
-        ("MSAA 4x", Antialiasing { msaa: 4, supersample: 1, fxaa: false, smaa: false }),
-        ("MSAA 4x + SMAA", Antialiasing { msaa: 4, supersample: 1, fxaa: false, smaa: true }),
-        ("MSAA 8x", Antialiasing { msaa: 8, supersample: 1, fxaa: false, smaa: false }),
-        ("SSAA 2x", Antialiasing { msaa: 1, supersample: 2, fxaa: false, smaa: false }),
-        ("SSAA 2x + MSAA 4x", Antialiasing { msaa: 4, supersample: 2, fxaa: false, smaa: false }),
-    ];
-
-    pub fn level(n: u32) -> Antialiasing {
-        Self::LEVELS.get(n as usize).map_or(Self::OFF, |l| l.1)
-    }
-}
 
 // Filtering passes over a finished image: `down` samples it with linear filtering (2x
 // supersampled -> window size averages 2x2 texels), `fxaa` is FXAA (Timothy Lottes' compact
@@ -528,42 +148,12 @@ struct Tex {
     levels: u32,
 }
 
-/// Pixel data of a texture upload: RGBA8, or DXT1/3/5 blocks as they are in the TXD.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TexData {
-    Rgba8,
-    Dxt1,
-    Dxt3,
-    Dxt5,
-}
-
-impl TexData {
-    /// librw WGPU raster `dxt` field: 0, 1, 3 or 5.
-    pub fn from_dxt(dxt: u32) -> TexData {
-        match dxt {
-            1 => TexData::Dxt1,
-            3 => TexData::Dxt3,
-            5 => TexData::Dxt5,
-            _ => TexData::Rgba8,
-        }
-    }
-
-    fn kind(self) -> u8 {
-        match self {
-            TexData::Rgba8 => 0,
-            TexData::Dxt1 => 1,
-            TexData::Dxt3 => 3,
-            TexData::Dxt5 => 5,
-        }
-    }
-
-    fn wgpu(self) -> wgpu::TextureFormat {
-        match self {
-            TexData::Rgba8 => wgpu::TextureFormat::Rgba8Unorm,
-            TexData::Dxt1 => wgpu::TextureFormat::Bc1RgbaUnorm,
-            TexData::Dxt3 => wgpu::TextureFormat::Bc2RgbaUnorm,
-            TexData::Dxt5 => wgpu::TextureFormat::Bc3RgbaUnorm,
-        }
+fn tex_format(d: TexData) -> wgpu::TextureFormat {
+    match d {
+        TexData::Rgba8 => wgpu::TextureFormat::Rgba8Unorm,
+        TexData::Dxt1 => wgpu::TextureFormat::Bc1RgbaUnorm,
+        TexData::Dxt3 => wgpu::TextureFormat::Bc2RgbaUnorm,
+        TexData::Dxt5 => wgpu::TextureFormat::Bc3RgbaUnorm,
     }
 }
 
@@ -938,7 +528,9 @@ fn fs_simple(i: Out) -> @location(0) vec4<f32> {
 }
 "#;
 
-pub struct Renderer {
+/// Draws recorded frames with wgpu (the back end): owns the GPU resources, pipelines and the
+/// scene, antialiasing and output images.
+pub struct WgpuBackend {
     /// Pipelines draw into the scene texture (SCENE_FORMAT).
     format: wgpu::TextureFormat,
     blit_pipeline: wgpu::RenderPipeline,
@@ -954,8 +546,6 @@ pub struct Renderer {
     /// Render resolution of the 3D scene in percent of the window (per axis); applies to frames
     /// with an overlay marker, the HUD and menus stay at window resolution.
     render_scale: u32,
-    /// Recording past the overlay marker.
-    recording_overlay: bool,
     fxaa: bool,
     smaa: bool,
     smaa_layout: wgpu::BindGroupLayout,
@@ -988,7 +578,6 @@ pub struct Renderer {
     /// Gpu::model_storage at creation.
     model_storage: bool,
     model_bind: wgpu::BindGroup,
-    models: Vec<ModelState>,
     skin_layout: wgpu::PipelineLayout,
     env_layout: wgpu::PipelineLayout,
     bones_layout: wgpu::BindGroupLayout,
@@ -996,18 +585,12 @@ pub struct Renderer {
     bones_buf: wgpu::Buffer,
     bones_capacity: usize,
     bones_bind: wgpu::BindGroup,
-    /// BONE_FLOATS per skinned draw.
-    bones: Vec<f32>,
     geometries: HashMap<u32, Geom>,
-    next_geometry: u32,
-    /// Textures and geometries destroyed while a recorded frame may still use them.
-    dead_textures: Vec<u32>,
-    dead_geometries: Vec<u32>,
+    /// Geometries replaced during the frame being drawn (kept alive until it is done).
     retired: Vec<Geom>,
     pipelines: HashMap<PipeKey, wgpu::RenderPipeline>,
     samplers: HashMap<SamplerKey, wgpu::Sampler>,
     textures: HashMap<u32, Tex>,
-    next_texture: u32,
     white: Tex,
     bind_groups: HashMap<(u32, SamplerKey), wgpu::BindGroup>,
     uniform_stride: u64,
@@ -1018,18 +601,9 @@ pub struct Renderer {
     vertex3_buf: wgpu::Buffer,
     /// Depth buffers by size (the scene's and those of texture targets).
     depths: HashMap<(u32, u32, u32), (wgpu::Texture, wgpu::TextureView)>,
-    /// Render target being recorded (0 = scene).
-    recording_target: u32,
-    ops: Vec<Op>,
-    verts: Vec<Vertex2D>,
-    verts3: Vec<Vertex3D>,
-    verts_uv2: Vec<Vertex2DUV2>,
     vertex_uv2_buf: wgpu::Buffer,
     shader_uv2: wgpu::ShaderModule,
     uv2_layout: wgpu::PipelineLayout,
-    uniforms: Vec<Uniforms>,
-    scratch_in: Vec<u32>,
-    scratch_out: Vec<u32>,
 }
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -1148,9 +722,9 @@ fn write_levels(gpu: &Gpu, t: &Tex, levels: &[&[u8]]) {
     }
 }
 
-impl Renderer {
+impl WgpuBackend {
     /// For output targets of `output` format (the window's swapchain format).
-    pub fn new(gpu: &Gpu, output: wgpu::TextureFormat) -> Renderer {
+    pub fn new(gpu: &Gpu, output: wgpu::TextureFormat) -> WgpuBackend {
         Self::with_samples(gpu, output, 1)
     }
 
@@ -1173,7 +747,7 @@ impl Renderer {
     }
 
     /// As `new`, drawing the scene with `samples`-times MSAA (clamped to what the device does).
-    pub fn with_samples(gpu: &Gpu, output: wgpu::TextureFormat, samples: u32) -> Renderer {
+    pub fn with_samples(gpu: &Gpu, output: wgpu::TextureFormat, samples: u32) -> WgpuBackend {
         let samples = Self::supported_samples(gpu, samples);
         let d = &gpu.device;
         let post_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -1387,7 +961,7 @@ impl Renderer {
             bind_group_layouts: &[Some(&uniform_layout), Some(&texture_layout), Some(&texture_layout)],
             immediate_size: 0,
         });
-        Renderer {
+        WgpuBackend {
             format,
             blit_pipeline,
             blit_xbox_pipeline,
@@ -1397,7 +971,6 @@ impl Renderer {
             msaa: None,
             scale: 1,
             render_scale: 100,
-            recording_overlay: false,
             fxaa: false,
             smaa: false,
             smaa_layout,
@@ -1426,7 +999,6 @@ impl Renderer {
             model_capacity: 64,
             model_storage: gpu.model_storage,
             model_bind,
-            models: Vec::new(),
             skin_layout,
             env_layout,
             bones_layout,
@@ -1434,16 +1006,11 @@ impl Renderer {
             bones_buf,
             bones_capacity: 16,
             bones_bind,
-            bones: Vec::new(),
             geometries: HashMap::default(),
-            next_geometry: 1,
-            dead_textures: Vec::new(),
-            dead_geometries: Vec::new(),
             retired: Vec::new(),
             pipelines: HashMap::default(),
             samplers: HashMap::default(),
             textures: HashMap::default(),
-            next_texture: 1,
             white,
             bind_groups: HashMap::default(),
             uniform_stride,
@@ -1453,17 +1020,9 @@ impl Renderer {
             vertex_buf,
             vertex3_buf,
             depths: HashMap::default(),
-            recording_target: 0,
-            ops: Vec::new(),
-            verts: Vec::new(),
-            verts3: Vec::new(),
-            verts_uv2: Vec::new(),
             vertex_uv2_buf,
             shader_uv2,
             uv2_layout,
-            uniforms: Vec::new(),
-            scratch_in: Vec::new(),
-            scratch_out: Vec::new(),
         }
     }
 
@@ -1522,27 +1081,8 @@ impl Renderer {
     }
 
     /// Creates or replaces a geometry (vertices + triangle-list indices); returns its id.
-    pub fn upload_geometry(&mut self, gpu: &Gpu, id: u32, vertices: &[MeshVertex], indices: &[u16]) -> u32 {
-        // SAFETY: MeshVertex is repr(C) plain data without padding (36 bytes, asserted above).
-        let vbytes = unsafe { std::slice::from_raw_parts(vertices.as_ptr().cast::<u8>(), std::mem::size_of_val(vertices)) };
-        self.upload_raw(gpu, id, vbytes, indices)
-    }
-
-    /// A skinned geometry (drawn with bone matrices by `draw_mesh`).
-    pub fn upload_skinned_geometry(&mut self, gpu: &Gpu, id: u32, vertices: &[SkinVertex], indices: &[u16]) -> u32 {
-        // SAFETY: SkinVertex is repr(C) plain data without padding (56 bytes, asserted above).
-        let vbytes = unsafe { std::slice::from_raw_parts(vertices.as_ptr().cast::<u8>(), std::mem::size_of_val(vertices)) };
-        self.upload_raw(gpu, id, vbytes, indices)
-    }
-
-    fn upload_raw(&mut self, gpu: &Gpu, id: u32, vbytes: &[u8], indices: &[u16]) -> u32 {
-        let id = if id != 0 && self.geometries.contains_key(&id) {
-            id
-        } else {
-            let id = self.next_geometry;
-            self.next_geometry += 1;
-            id
-        };
+    /// Creates or replaces geometry `id` (vertex bytes + triangle-list indices).
+    fn apply_geometry(&mut self, gpu: &Gpu, id: u32, vbytes: &[u8], indices: &[u16]) {
         let mut ibytes: Vec<u8> = indices.iter().flat_map(|i| i.to_le_bytes()).collect();
         // Buffer copies come in multiples of 4 bytes.
         ibytes.resize(ibytes.len().next_multiple_of(4).max(4), 0);
@@ -1558,11 +1098,6 @@ impl Renderer {
         if let Some(old) = self.geometries.insert(id, geom) {
             self.retired.push(old);
         }
-        id
-    }
-
-    pub fn destroy_geometry(&mut self, id: u32) {
-        self.dead_geometries.push(id);
     }
 
     fn make_vertices(gpu: &Gpu, bytes: usize) -> wgpu::Buffer {
@@ -1574,14 +1109,12 @@ impl Renderer {
         })
     }
 
-    /// Creates or replaces a texture from mip levels (top row first, each half the previous
+    /// Creates or replaces texture `id` from mip levels (top row first, each half the previous
     /// size), RGBA8 or DXT blocks. DXT stays compressed when the device samples BC formats and
     /// the size is whole blocks, else it is decoded here. `autogen` builds the mip chain from
-    /// level 0 (RGBA8 rasters with AUTOMIPMAP). Returns the texture's id (`id` itself when it
-    /// already existed).
-    // One argument per field of the device's upload call (revc_rw_texture_upload).
+    /// level 0 (RGBA8 rasters with AUTOMIPMAP).
     #[allow(clippy::too_many_arguments)]
-    pub fn upload_texture(&mut self, gpu: &Gpu, id: u32, width: u32, height: u32, data: TexData, levels: &[&[u8]], autogen: bool) -> u32 {
+    fn apply_texture(&mut self, gpu: &Gpu, id: u32, width: u32, height: u32, data: TexData, levels: &[&[u8]], autogen: bool) {
         let (width, height) = (width.max(1), height.max(1));
         let bc = gpu.device.features().contains(wgpu::Features::TEXTURE_COMPRESSION_BC) && width % 4 == 0 && height % 4 == 0;
         let decoded: Vec<Vec<u8>>;
@@ -1604,173 +1137,26 @@ impl Renderer {
             levels
         };
         let count = levels.len().max(1) as u32;
-        let id = if id != 0 && self.textures.contains_key(&id) {
-            id
-        } else {
-            let id = self.next_texture;
-            self.next_texture += 1;
-            id
-        };
-        let format = data.wgpu();
+        let format = tex_format(data);
         let reuse = self.textures.get(&id).is_some_and(|t| t.format == format && t.width == width && t.height == height && t.levels == count);
         if !reuse {
             self.textures.insert(id, new_texture(gpu, format, width, height, count));
             self.bind_groups.retain(|k, _| k.0 != id);
         }
         write_levels(gpu, &self.textures[&id], levels);
-        id
     }
 
-    pub fn destroy_texture(&mut self, id: u32) {
-        self.dead_textures.push(id);
-    }
-
-    /// Camera clear: colour (when given) and/or depth.
-    pub fn clear(&mut self, color: Option<[f64; 4]>, depth: bool) {
-        self.ops.push(Op::Clear { color, depth });
-    }
-
-    fn expand(&mut self, prim: u32, num_verts: usize, indices: Option<&[u16]>) {
-        self.scratch_in.clear();
-        match indices {
-            Some(ix) => self.scratch_in.extend(ix.iter().map(|&i| i as u32)),
-            None => self.scratch_in.extend(0..num_verts as u32),
-        }
-        self.scratch_out.clear();
-        expand_primitive(prim, &self.scratch_in, &mut self.scratch_out);
-    }
-
-    /// An Im2D primitive (rw::PrimitiveType `prim`), optionally indexed.
-    pub fn draw_2d(&mut self, state: &DrawState, prim: u32, verts: &[Vertex2D], indices: Option<&[u16]>) {
-        self.expand(prim, verts.len(), indices);
-        let first = self.verts.len() as u32;
-        self.verts.extend(self.scratch_out.iter().filter_map(|&i| verts.get(i as usize)));
-        let count = self.verts.len() as u32 - first;
-        self.record(state, prim, Kind::Im2D, first, count, &NO_XFORM, None);
-    }
-
-    /// An Im3D primitive with its projection, view and world matrices (column-major).
-    pub fn draw_3d(&mut self, state: &DrawState, prim: u32, verts: &[Vertex3D], indices: Option<&[u16]>, xf: &Xform) {
-        self.expand(prim, verts.len(), indices);
-        let first = self.verts3.len() as u32;
-        self.verts3.extend(self.scratch_out.iter().filter_map(|&i| verts.get(i as usize)));
-        let count = self.verts3.len() as u32 - first;
-        self.record(state, prim, Kind::Im3D, first, count, xf, None);
-    }
-
-    /// An Im2D primitive with two coordinate sets, textured with the bound raster and `tex1`
-    /// (re3's screen droplets: drop mask times the frame copy).
-    pub fn draw_2d_uv2(&mut self, state: &DrawState, prim: u32, verts: &[Vertex2DUV2], indices: Option<&[u16]>, tex1: &EnvMap) {
-        self.expand(prim, verts.len(), indices);
-        let first = self.verts_uv2.len() as u32;
-        self.verts_uv2.extend(self.scratch_out.iter().filter_map(|&i| verts.get(i as usize)));
-        let count = self.verts_uv2.len() as u32 - first;
-        let t = if self.textures.contains_key(&tex1.texture) { tex1.texture } else { 0 };
-        let env = Some((t, SamplerKey { filter: tex1.filter, address_u: tex1.address_u, address_v: tex1.address_v, anisotropy: 1 }));
-        self.record(state, prim, Kind::Im2DUV2, first, count, &NO_XFORM, Some(MeshDraw { geometry: 0, model: 0, bones: 0, env }));
-    }
-
-    /// Triangles `first..first + count` of the index list of a stored geometry, lit with
-    /// `model`; `xf` = projection and view (world comes with the model). A skinned geometry gets its bones (at most
-    /// MAX_BONES; missing ones are identity); a MatFX material its environment map.
-    #[allow(clippy::too_many_arguments)]
-    pub fn draw_mesh(&mut self, state: &DrawState, geometry: u32, first: u32, count: u32, xf: &Xform, model: &ModelState, extras: &MeshExtras) {
-        let bones = extras.bones;
-        if !self.geometries.contains_key(&geometry) {
-            return;
-        }
-        if self.models.last() != Some(model) {
-            self.models.push(*model);
-        }
-        let mi = self.models.len() as u32 - 1;
-        let (kind, bi) = match bones {
-            Some(b) => {
-                let mut block = [0.0f32; BONE_FLOATS];
-                for i in 0..MAX_BONES {
-                    let m = b.get(i).copied().unwrap_or([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]);
-                    block[i * 16..][..16].copy_from_slice(&m);
+    /// Applies a frame's resource uploads (before its draws).
+    fn apply_uploads(&mut self, gpu: &Gpu, uploads: &mut Vec<Upload>) {
+        for up in uploads.drain(..) {
+            match up {
+                Upload::Texture { id, width, height, data, levels, autogen } => {
+                    let refs: Vec<&[u8]> = levels.iter().map(|l| l.as_slice()).collect();
+                    self.apply_texture(gpu, id, width, height, data, &refs, autogen);
                 }
-                let n = self.bones.len();
-                if n < BONE_FLOATS || self.bones[n - BONE_FLOATS..] != block {
-                    self.bones.extend_from_slice(&block);
-                }
-                (Kind::Skin, (self.bones.len() / BONE_FLOATS - 1) as u32)
+                Upload::Geometry { id, vertices, indices } => self.apply_geometry(gpu, id, &vertices, &indices),
             }
-            None => (Kind::Mesh, u32::MAX),
-        };
-        let env = extras.env.map(|e| {
-            let t = if self.textures.contains_key(&e.texture) { e.texture } else { 0 };
-            (t, SamplerKey { filter: e.filter, address_u: e.address_u, address_v: e.address_v, anisotropy: 1 })
-        });
-        // Skinned atomics never take the MatFX path (as in gl3, whose skin pipeline has no env pass).
-        let kind = if env.is_some() && kind == Kind::Mesh { Kind::MeshEnv } else { kind };
-        self.record(state, 3, kind, first, count, xf, Some(MeshDraw { geometry, model: mi, bones: bi, env }));
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn record(&mut self, state: &DrawState, prim: u32, kind: Kind, first: u32, count: u32, xf: &Xform, mesh: Option<MeshDraw>) {
-        if count == 0 {
-            return;
         }
-
-        let alpha = match state.alpha_func {
-            1 => [state.alpha_ref, 1000.0],
-            2 => [-1000.0, state.alpha_ref],
-            _ => [-1000.0, 1000.0],
-        };
-        let c = state.fog_color;
-        let mut u: Uniforms = [0.0; 72];
-        u[0..4].copy_from_slice(&state.xform);
-        u[4] = alpha[0];
-        u[5] = alpha[1];
-        u[8] = state.fog_start;
-        u[9] = state.fog_end;
-        u[10] = 1.0 / (state.fog_start - state.fog_end);
-        u[11] = if state.fog != 0 { 0.0 } else { 1.0 };
-        u[12] = (c & 0xFF) as f32 / 255.0;
-        u[13] = (c >> 8 & 0xFF) as f32 / 255.0;
-        u[14] = (c >> 16 & 0xFF) as f32 / 255.0;
-        u[15] = (c >> 24 & 0xFF) as f32 / 255.0;
-        // GL3 computes the range unguarded; keep the uniform finite either way.
-        if !u[10].is_finite() {
-            u[10] = 0.0;
-        }
-        u[16..32].copy_from_slice(&xf.proj);
-        u[32..48].copy_from_slice(&xf.view);
-        u[48..64].copy_from_slice(&xf.world);
-        if kind == Kind::Im2D {
-            u[64..72].copy_from_slice(&state.shader_params);
-        }
-        if self.uniforms.last() != Some(&u) {
-            self.uniforms.push(u);
-        }
-        let uniform = self.uniforms.len() as u32 - 1;
-
-        let pipe = PipeKey {
-            // Past the overlay marker the scene is finished and the HUD draws single-sampled.
-            samples: if self.recording_target == 0 && !(self.recording_overlay && self.overlay_split()) { self.samples } else { 1 },
-            kind,
-            shader: if kind == Kind::Im3D { 0 } else { state.shader },
-            lines: is_line_primitive(prim),
-            blend: (state.blend != 0).then_some((state.src_blend, state.dst_blend)),
-            z_test: state.z_test != 0,
-            z_write: state.z_write != 0,
-            cull: state.cull,
-        };
-        let texture = if self.textures.contains_key(&state.texture) { state.texture } else { 0 };
-        let sampler = SamplerKey { filter: state.filter, address_u: state.address_u, address_v: state.address_v, anisotropy: state.max_anisotropy.clamp(1, 16) as u16 };
-        if let Some(Op::Draw { pipe: p, texture: t, sampler: s, uniform: un, first: f, count: n, mesh: me }) = self.ops.last_mut()
-            && *me == mesh
-            && *p == pipe
-            && *t == texture
-            && *s == sampler
-            && *un == uniform
-            && *f + *n == first
-        {
-            *n += count;
-            return;
-        }
-        self.ops.push(Op::Draw { pipe, texture, sampler, uniform, first, count, mesh });
     }
 
     fn ensure_pipeline(&mut self, gpu: &Gpu, key: PipeKey) {
@@ -1913,50 +1299,6 @@ impl Renderer {
 
     /// Following clears and draws render into texture `texture` (level 0), or into the scene
     /// with 0.
-    pub fn set_target(&mut self, texture: u32) {
-        if texture != self.recording_target {
-            self.ops.push(Op::Target { texture });
-            self.recording_target = texture;
-        }
-    }
-
-    /// Marks the end of the 3D scene: following draws (HUD, menus) go on top of the scaled and
-    /// antialiased scene at window resolution. Once per frame; frames without it are drawn
-    /// whole at the antialiasing scale (no render scale).
-    pub fn begin_overlay(&mut self) {
-        if !self.recording_overlay {
-            self.ops.push(Op::Overlay);
-            self.recording_overlay = true;
-        }
-    }
-
-    /// Whether the overlay is drawn separately from the scene (the scene gets filtered).
-    fn overlay_split(&self) -> bool {
-        self.scale > 1 || self.render_scale != 100 || self.fxaa || self.smaa
-    }
-
-    /// Render resolution of the 3D scene, percent of the window per axis (25..=100); takes
-    /// effect with the next frame.
-    pub fn set_render_scale(&mut self, percent: u32) {
-        self.render_scale = percent.clamp(25, 100);
-    }
-
-    pub fn render_scale(&self) -> u32 {
-        self.render_scale
-    }
-
-    /// The scene's size for a `window`: supersampling times, with an overlay, the render scale.
-    pub fn scene_size(&self, window: (u32, u32), overlay: bool) -> (u32, u32) {
-        let f = self.scale as f64 * if overlay { self.render_scale as f64 / 100.0 } else { 1.0 };
-        (((window.0 as f64 * f).round() as u32).max(1), ((window.1 as f64 * f).round() as u32).max(1))
-    }
-
-    /// The frame so far, copied into texture `texture` at (x, y) when the frame is drawn.
-    pub fn copy_frame(&mut self, texture: u32, x: u32, y: u32) {
-        self.ops.push(Op::CopyFrame { texture, x, y });
-    }
-
-    /// The last encoded frame as shown (SCENE_FORMAT, COPY_SRC, window size), for screenshots.
     pub fn scene_texture(&self) -> Option<&wgpu::Texture> {
         match self.last_output {
             1 => self.frame_tex.as_ref().map(|t| &t.0),
@@ -1966,18 +1308,6 @@ impl Renderer {
     }
 
     /// Switches antialiasing; takes effect with the next frame.
-    pub fn set_antialiasing(&mut self, gpu: &Gpu, aa: Antialiasing) {
-        self.samples = Self::supported_samples(gpu, aa.msaa);
-        self.scale = aa.supersample.clamp(1, 2);
-        self.fxaa = aa.fxaa;
-        self.smaa = aa.smaa;
-    }
-
-    /// The antialiasing in effect (MSAA after clamping to the device).
-    pub fn antialiasing(&self) -> Antialiasing {
-        Antialiasing { msaa: self.samples, supersample: self.scale, fxaa: self.fxaa, smaa: self.smaa }
-    }
-
     fn window_texture(gpu: &Gpu, slot: &mut Option<(wgpu::Texture, (u32, u32))>, size: (u32, u32), label: &str) {
         if slot.as_ref().is_none_or(|t| t.1 != size) {
             let t = gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -2107,13 +1437,20 @@ impl Renderer {
 
     /// Encodes the recorded frame into the scene texture and shows it on `target` (`size` pixels,
     /// the output format given to `new`). The recording stays until `end_frame`.
-    pub fn encode(&mut self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32)) {
+    pub fn encode(&mut self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32), frame: &mut Frame) {
+        let settings = frame.settings;
+        self.samples = settings.samples;
+        self.scale = settings.scale;
+        self.fxaa = settings.fxaa;
+        self.smaa = settings.smaa;
+        self.render_scale = settings.render_scale;
+        self.apply_uploads(gpu, &mut frame.uploads);
         // The scene is drawn at the supersampling scale times, in frames with an overlay marker,
         // the render scale; `window` is the output's size.
         let window = size;
-        let has_overlay = self.ops.iter().any(|op| matches!(op, Op::Overlay));
-        let split = has_overlay && self.overlay_split();
-        let size = self.scene_size(window, has_overlay);
+        let has_overlay = frame.has_overlay();
+        let split = has_overlay && settings.overlay_split();
+        let size = settings.scene_size(window, has_overlay);
         let scaled = size != window;
         if scaled {
             Self::window_texture(gpu, &mut self.frame_tex, window, "frame");
@@ -2143,7 +1480,7 @@ impl Renderer {
             self.scene = Some((t, bind, size));
         }
         let scene_view = self.scene.as_ref().unwrap().0.create_view(&Default::default());
-        let mut ops = std::mem::take(&mut self.ops);
+        let mut ops = std::mem::take(&mut frame.ops);
         // A draw into a texture target that samples that same texture (a feedback loop: GL3
         // tolerates it with undefined results, wgpu rejects the pass) samples white instead.
         let mut tgt = 0u32;
@@ -2163,11 +1500,11 @@ impl Renderer {
                 _ => {}
             }
         }
-        let verts = std::mem::take(&mut self.verts);
-        let verts3 = std::mem::take(&mut self.verts3);
-        let verts_uv2 = std::mem::take(&mut self.verts_uv2);
-        let uniforms = std::mem::take(&mut self.uniforms);
-        let models = std::mem::take(&mut self.models);
+        let verts = std::mem::take(&mut frame.verts);
+        let verts3 = std::mem::take(&mut frame.verts3);
+        let verts_uv2 = std::mem::take(&mut frame.verts_uv2);
+        let uniforms = std::mem::take(&mut frame.uniforms);
+        let models = std::mem::take(&mut frame.models);
         if models.len() > self.model_capacity {
             let cap = models.len().next_power_of_two();
             (self.model_buf, self.model_bind) = Self::make_models(gpu, &self.model_layout, self.model_stride, cap);
@@ -2182,7 +1519,7 @@ impl Renderer {
             }
             gpu.queue.write_buffer(&self.model_buf, 0, &bytes);
         }
-        let bones = std::mem::take(&mut self.bones);
+        let bones = std::mem::take(&mut frame.bones);
         let blocks = bones.len() / BONE_FLOATS;
         if blocks > self.bones_capacity {
             let cap = blocks.next_power_of_two();
@@ -2543,33 +1880,161 @@ impl Renderer {
         blit.draw(0..3, 0..1);
         drop(blit);
 
-        self.ops = ops;
-        self.verts = verts;
-        self.verts3 = verts3;
-        self.verts_uv2 = verts_uv2;
-        self.uniforms = uniforms;
-        self.models = models;
-        self.bones = bones;
+        frame.ops = ops;
+        frame.verts = verts;
+        frame.verts3 = verts3;
+        frame.verts_uv2 = verts_uv2;
+        frame.uniforms = uniforms;
+        frame.models = models;
+        frame.bones = bones;
     }
 
-    /// Drops the recorded frame (keeping the allocations) to start recording the next one.
-    pub fn end_frame(&mut self) {
-        self.ops.clear();
-        self.verts.clear();
-        self.verts3.clear();
-        self.verts_uv2.clear();
-        self.uniforms.clear();
-        self.models.clear();
-        self.bones.clear();
+    /// After the frame's commands were submitted: frees what the frame destroyed or replaced.
+    pub fn end_frame(&mut self, frame: &Frame) {
         self.retired.clear();
-        self.recording_target = 0;
-        self.recording_overlay = false;
-        for id in std::mem::take(&mut self.dead_textures) {
+        for &id in &frame.dead_textures {
             self.textures.remove(&id);
             self.bind_groups.retain(|k, _| k.0 != id);
         }
-        for id in std::mem::take(&mut self.dead_geometries) {
-            self.geometries.remove(&id);
+        for id in &frame.dead_geometries {
+            self.geometries.remove(id);
+        }
+    }
+
+    /// The antialiasing in effect (MSAA after clamping to the device).
+    pub fn antialiasing(&self) -> Antialiasing {
+        Antialiasing { msaa: self.samples, supersample: self.scale, fxaa: self.fxaa, smaa: self.smaa }
+    }
+}
+
+/// Front end and wgpu back end on one thread: records the device's calls and draws them when
+/// the frame is presented (the API the renderer had before the split).
+pub struct Renderer {
+    pub front: Recorder,
+    pub back: WgpuBackend,
+    /// The frame being drawn, between `encode` and `end_frame`.
+    drawing: Option<Frame>,
+}
+
+impl Renderer {
+    /// A renderer drawing into the scene format, then onto an `output` format view.
+    pub fn new(gpu: &Gpu, output: wgpu::TextureFormat) -> Renderer {
+        Self::with_samples(gpu, output, 1)
+    }
+
+    /// The highest MSAA count up to `wanted` that the device does for the scene format.
+    pub fn supported_samples(gpu: &Gpu, wanted: u32) -> u32 {
+        WgpuBackend::supported_samples(gpu, wanted)
+    }
+
+    /// As `new`, with `samples`-times MSAA (clamped to what the device does).
+    pub fn with_samples(gpu: &Gpu, output: wgpu::TextureFormat, samples: u32) -> Renderer {
+        let back = WgpuBackend::with_samples(gpu, output, samples);
+        Renderer { front: Recorder::new(back.antialiasing().msaa), back, drawing: None }
+    }
+
+    pub fn upload_geometry(&mut self, _gpu: &Gpu, id: u32, vertices: &[MeshVertex], indices: &[u16]) -> u32 {
+        self.front.upload_geometry(id, vertices, indices)
+    }
+
+    pub fn upload_skinned_geometry(&mut self, _gpu: &Gpu, id: u32, vertices: &[SkinVertex], indices: &[u16]) -> u32 {
+        self.front.upload_skinned_geometry(id, vertices, indices)
+    }
+
+    pub fn destroy_geometry(&mut self, id: u32) {
+        self.front.destroy_geometry(id);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn upload_texture(&mut self, _gpu: &Gpu, id: u32, width: u32, height: u32, data: TexData, levels: &[&[u8]], autogen: bool) -> u32 {
+        self.front.upload_texture(id, width, height, data, levels, autogen)
+    }
+
+    pub fn destroy_texture(&mut self, id: u32) {
+        self.front.destroy_texture(id);
+    }
+
+    pub fn clear(&mut self, color: Option<[f64; 4]>, depth: bool) {
+        self.front.clear(color, depth);
+    }
+
+    pub fn draw_2d(&mut self, state: &DrawState, prim: u32, verts: &[Vertex2D], indices: Option<&[u16]>) {
+        self.front.draw_2d(state, prim, verts, indices);
+    }
+
+    pub fn draw_3d(&mut self, state: &DrawState, prim: u32, verts: &[Vertex3D], indices: Option<&[u16]>, xf: &Xform) {
+        self.front.draw_3d(state, prim, verts, indices, xf);
+    }
+
+    pub fn draw_2d_uv2(&mut self, state: &DrawState, prim: u32, verts: &[Vertex2DUV2], indices: Option<&[u16]>, tex1: &EnvMap) {
+        self.front.draw_2d_uv2(state, prim, verts, indices, tex1);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_mesh(&mut self, state: &DrawState, geometry: u32, first: u32, count: u32, xf: &Xform, model: &ModelState, extras: &MeshExtras) {
+        self.front.draw_mesh(state, geometry, first, count, xf, model, extras);
+    }
+
+    pub fn set_target(&mut self, texture: u32) {
+        self.front.set_target(texture);
+    }
+
+    pub fn begin_overlay(&mut self) {
+        self.front.begin_overlay();
+    }
+
+    pub fn copy_frame(&mut self, texture: u32, x: u32, y: u32) {
+        self.front.copy_frame(texture, x, y);
+    }
+
+    /// Render resolution of the 3D scene, percent of the window per axis (25..=100); takes
+    /// effect with the next frame.
+    pub fn set_render_scale(&mut self, percent: u32) {
+        let s = self.front.settings();
+        self.front.set_settings(FrameSettings { render_scale: percent, ..s });
+    }
+
+    pub fn render_scale(&self) -> u32 {
+        self.front.settings().render_scale
+    }
+
+    /// The scene's size for a `window`: supersampling times, with an overlay, the render scale.
+    pub fn scene_size(&self, window: (u32, u32), overlay: bool) -> (u32, u32) {
+        self.front.settings().scene_size(window, overlay)
+    }
+
+    /// Switches antialiasing; takes effect with the next frame.
+    pub fn set_antialiasing(&mut self, gpu: &Gpu, aa: Antialiasing) {
+        let s = self.front.settings();
+        self.front.set_settings(FrameSettings { samples: WgpuBackend::supported_samples(gpu, aa.msaa), scale: aa.supersample, fxaa: aa.fxaa, smaa: aa.smaa, ..s });
+    }
+
+    /// The antialiasing of the next frame (MSAA after clamping to the device).
+    pub fn antialiasing(&self) -> Antialiasing {
+        let s = self.front.settings();
+        Antialiasing { msaa: s.samples, supersample: s.scale, fxaa: s.fxaa, smaa: s.smaa }
+    }
+
+    /// The last encoded frame as shown (SCENE_FORMAT, COPY_SRC, window size), for screenshots.
+    pub fn scene_texture(&self) -> Option<&wgpu::Texture> {
+        self.back.scene_texture()
+    }
+
+    /// Ends recording and encodes the frame into the scene texture, shown on `target` (`size`
+    /// pixels). The frame's resources stay alive until `end_frame`.
+    pub fn encode(&mut self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32)) {
+        let mut frame = self.front.finish();
+        self.back.encode(gpu, enc, target, size, &mut frame);
+        if let Some(old) = self.drawing.replace(frame) {
+            self.front.recycle(old);
+        }
+    }
+
+    /// After the frame's commands were submitted.
+    pub fn end_frame(&mut self) {
+        if let Some(frame) = self.drawing.take() {
+            self.back.end_frame(&frame);
+            self.front.recycle(frame);
         }
     }
 }

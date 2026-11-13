@@ -3,7 +3,7 @@
 //! backend (EGL) needs the display handle when the instance is created, so the presenter creates
 //! its own instance.
 
-use crate::frame::{Renderer, readback_finish, readback_start};
+use crate::frame::{Frame, WgpuBackend, Renderer, readback_finish, readback_start};
 use crate::{Backend, Gpu};
 use std::ffi::c_void;
 use std::ptr::NonNull;
@@ -141,15 +141,30 @@ impl Presenter {
     /// Draws the frame `renderer` recorded and presents it. With `capture`, also returns the
     /// frame as RGBA8 (top row first, alpha forced opaque like the GL3 capture).
     pub fn present_frame(&mut self, renderer: &mut Renderer, capture: bool) -> Result<Option<(u32, u32, Vec<u8>)>, String> {
-        let frame = self.acquire()?;
+        let mut frame = renderer.front.finish();
+        let shot = self.present(&mut renderer.back, &mut frame, capture);
+        renderer.front.recycle(frame);
+        shot
+    }
+
+    /// Draws a recorded `frame` with the back end and presents it (the back end's half of
+    /// `present_frame`, usable on a render thread).
+    pub fn present(&mut self, back: &mut WgpuBackend, rec: &mut Frame, capture: bool) -> Result<Option<(u32, u32, Vec<u8>)>, String> {
+        let frame = match self.acquire() {
+            Ok(f) => f,
+            Err(e) => {
+                back.end_frame(rec);
+                return Err(e);
+            }
+        };
         let size = (frame.texture.width(), frame.texture.height());
         let view = frame.texture.create_view(&Default::default());
         let mut enc = self.gpu.device.create_command_encoder(&Default::default());
-        renderer.encode(&self.gpu, &mut enc, &view, size);
+        back.encode(&self.gpu, &mut enc, &view, size, rec);
         // Screenshots read the scene texture (RGBA8) the frame was drawn into.
-        let readback = if capture { renderer.scene_texture().map(|t| readback_start(&self.gpu, &mut enc, t, size)) } else { None };
-        renderer.end_frame();
+        let readback = if capture { back.scene_texture().map(|t| readback_start(&self.gpu, &mut enc, t, size)) } else { None };
         self.gpu.queue.submit([enc.finish()]);
+        back.end_frame(rec);
         let shot = match readback {
             Some(r) => {
                 let mut px = readback_finish(&self.gpu, r)?;

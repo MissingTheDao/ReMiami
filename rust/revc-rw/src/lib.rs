@@ -16,6 +16,8 @@ use wgpu::util::DeviceExt;
 pub mod frame;
 pub mod present;
 mod prim;
+pub mod front;
+pub mod thread;
 
 /// The graphics API to render with (the game's settings offer each one the platform has).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
