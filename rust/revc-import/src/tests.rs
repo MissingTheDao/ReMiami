@@ -165,3 +165,11 @@ fn real_discs_if_given() {
         assert!(n > 0);
     }
 }
+
+#[test]
+fn vehicle_txds_come_from_the_cars_section() {
+    let ide = "objs\n1, box, generic, 1, 50\nend\ncars\n# Id, Model, Txd\n130, landstal, landstal, car, LANDSTAL\n131, idaho, Idaho, car, IDAHO\nend\npeds\n0, null, generic, CIVMALE\nend\n";
+    let names = crate::vehicle_txds(ide);
+    assert_eq!(names.len(), 2);
+    assert!(names.contains("landstal") && names.contains("idaho"));
+}

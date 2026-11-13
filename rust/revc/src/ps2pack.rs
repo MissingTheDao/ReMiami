@@ -9,7 +9,8 @@
 //! are unique). Not the fonts: the PS2's glyph sheets are laid out differently from the PC's, which
 //! the font code's tables expect.
 //! Xbox (revc_formats::txd reads Xbox natives): the HUD, the fonts (the PC's layout, DXT5; its [ ]
-//! slots hold the Xbox's arrow icons), the wheels and the loading, splash and intro screens.
+//! slots hold the Xbox's arrow icons), the wheels, the vehicles (their own TXD names) and the
+//! loading, splash and intro screens.
 
 use std::path::{Path, PathBuf};
 
@@ -49,6 +50,12 @@ fn sources(cache: &Path, console: Console) -> Vec<(String, PathBuf)> {
             ("wheels".to_string(), root.join("models/wheels.txd")),
         ],
     };
+    // Xbox vehicle textures: each TXD under its own name, as the game looks them up
+    if let Ok(rd) = std::fs::read_dir(root.join("vehicles")) {
+        let mut cars: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("txd"))).collect();
+        cars.sort();
+        out.extend(cars.into_iter().map(|p| (p.file_stem().unwrap().to_string_lossy().to_ascii_lowercase(), p)));
+    }
     if let Ok(rd) = std::fs::read_dir(root.join("txd")) {
         let mut screens: Vec<PathBuf> = rd
             .flatten()

@@ -185,6 +185,28 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
             (Some(d), Some(i)) => vec![xbox_lightmaps(disc, &d, &i)?],
             _ => Vec::new(),
         };
+        // Vehicle textures (the Xbox's are sharper: 256 x 256 car textures): the TXDs that the
+        // disc's default.ide names in its cars section, out of gta3.img, unpacked
+        if let (Some(d), Some(i), Some(ide)) = (disc.find("models/gta3.dir").cloned(), disc.find("models/gta3.img").cloned(), disc.find("data/default.ide").cloned()) {
+            let ide = disc.read(&ide).map_err(|e| format!("default.ide: {e}"))?;
+            let names = vehicle_txds(&String::from_utf8_lossy(&ide));
+            let dir = disc.read(&d).map_err(|e| format!("gta3.dir: {e}"))?;
+            for e in dir.chunks_exact(32) {
+                let name = String::from_utf8_lossy(e[8..32].split(|&c| c == 0).next().unwrap_or(&[])).to_ascii_lowercase();
+                let Some(stem) = name.strip_suffix(".txd") else { continue };
+                if !names.contains(stem) {
+                    continue;
+                }
+                let off = u32::from_le_bytes(e[0..4].try_into().unwrap()) as u64 * 2048;
+                let size = u32::from_le_bytes(e[4..8].try_into().unwrap()) as usize * 2048;
+                let raw = disc.read_range(&i, off, size).map_err(|err| format!("{name}: {err}"))?;
+                let data = xboxlm::img_entry(&raw).map_err(|err| format!("{name}: {err}"))?;
+                let dest = root.join("vehicles").join(&name);
+                std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
+                std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+                report.written.push(dest);
+            }
+        }
         for (bin, txd) in lightmaps {
         for (file, data) in [("lightmaps.bin", bin), ("lightmaps.txd", txd)] {
             let dest = root.join("models").join(file);
@@ -201,6 +223,30 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
     );
     std::fs::write(root.join("IMPORTED.txt"), marker).map_err(|e| e.to_string())?;
     Ok(report)
+}
+
+/// The TXD names of the vehicles in an IDE file's `cars` section (third field; lower case).
+pub fn vehicle_txds(ide: &str) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    let mut in_cars = false;
+    for line in ide.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        if !in_cars {
+            in_cars = line.eq_ignore_ascii_case("cars");
+            continue;
+        }
+        if line.eq_ignore_ascii_case("end") {
+            in_cars = false;
+            continue;
+        }
+        if let Some(txd) = line.split(',').nth(2) {
+            out.insert(txd.trim().to_ascii_lowercase());
+        }
+    }
+    out
 }
 
 /// The Xbox world lightmap sidecar and TXD (xboxlm) from the disc's models/gta3.dir, gta3.img and
