@@ -243,3 +243,60 @@ mod tests {
         assert_eq!(get("A"), None);
     }
 }
+
+// ---------------------------------------------------------------- the consoles' own text
+
+/// The Xbox's text (imported `xbox/text/american.gxt`), read once.
+static XBOX: std::sync::OnceLock<Option<Store>> = std::sync::OnceLock::new();
+/// Whether the menu language is English (the consoles' text is the American one only).
+static ENGLISH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_text_set_english(on: c_int) {
+    ENGLISH.store(on != 0, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The Xbox skin's own keys (Text.cpp RVC_X…) with the Xbox's key holding exactly that text.
+/// Only exact matches: the Xbox's menu keys aren't what its skin draws (its FET_SG is "SAVE
+/// GAME" where the save screen shows "Save Game", FEI_SEL "Select" where the help line shows
+/// "select"; checked against the captures), so the skin's other strings stay revc's.
+const XBOX_ALIASES: &[(&str, &str)] = &[
+    ("RVC_XSF", "FEA_SFX"),
+    ("RVC_XOK", "FEM_OK"),
+    ("RVC_XNG", "T_0914C"),
+];
+
+/// The keys the console's text supplies in its style besides the aliases: the pad names (C_…),
+/// which only the Xbox's text has. The rest stays the PC's: the menus' keys partly mean other
+/// things on the Xbox (its Stats title key holds a help line), the credits roll walks a fixed key
+/// list, and gameplay prompts name the Xbox's own actions.
+fn console_key(key: &[u8]) -> bool {
+    key.starts_with(b"C_")
+}
+
+/// The console's string for `key` in its UI style (the Xbox's only for now), or null: the PC
+/// text and revc's own then apply.
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_text_console_get(key: *const c_char) -> *const u16 {
+    if crate::texmods::style() != 2 || !ENGLISH.load(std::sync::atomic::Ordering::Relaxed) {
+        return std::ptr::null();
+    }
+    let k = key_bytes(key);
+    let k: Vec<u8> = match XBOX_ALIASES.iter().find(|(a, _)| a.as_bytes() == k.as_slice()) {
+        Some((_, x)) => x.as_bytes().to_vec(),
+        None if console_key(&k) => k,
+        None => return std::ptr::null(),
+    };
+    let store = XBOX.get_or_init(|| {
+        let path = crate::discimport::cache_dir().join("xbox").join("text").join("american.gxt");
+        let data = std::fs::read(path).ok()?;
+        match Gxt::parse(&data) {
+            Ok(g) => Some(build(g)),
+            Err(e) => {
+                eprintln!("text: the Xbox's american.gxt: {e}");
+                None
+            }
+        }
+    });
+    store.as_ref().and_then(|s| s.main.and_then(|m| s.tables[m].get(&k))).unwrap_or(std::ptr::null())
+}

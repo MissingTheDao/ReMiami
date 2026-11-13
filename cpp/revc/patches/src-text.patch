@@ -1010,7 +1010,7 @@
  #include "Timer.h"
  
  wchar WideErrorString[25];
-@@ -16,173 +15,274 @@
+@@ -16,173 +15,282 @@
  CText::CText(void)
  {
  	encoding = 'e';
@@ -1091,7 +1091,10 @@
 +}
  
 -	file = CFileMgr::OpenFile(filename, "rb");
--
++// (revc: the consoles' own text, rust/revc/src/text.rs)
++extern "C" const wchar *revc_text_console_get(const char *key);
++extern "C" void revc_text_set_english(int on);
+ 
 -	offset = 0;
 -	while (!tkey_loaded || !tdat_loaded) {
 -		ReadChunkHeader(&m_ChunkHeader, file, &offset);
@@ -1127,6 +1130,7 @@
  	CFileMgr::SetDir("");
 +	if (len <= 0 || len >= MAX_GXT_SIZE || !revc_text_load(buf, len))
 +		printf("CText::Load - can't load %s\n", GetFilename());
++	revc_text_set_english(FrontEndMenuManager.m_PrefsLanguage == CMenuManager::LANGUAGE_AMERICAN);
 +	delete[] buf;
  }
  
@@ -1164,6 +1168,9 @@
 -#else
 -	wchar *outstr = keyArray.Search(key, &result);
 -#endif
++	// (revc: the Xbox's own menu text in its UI style, from the imported disc: text.rs)
++	if (const wchar *s = revc_text_console_get(key))
++		return (wchar*)s;
 +	if (const wchar *s = revc_text_get(key))
 +		return (wchar*)s;
 +	if (wchar *extra = GetRevcText(key))
@@ -1416,7 +1423,7 @@
  }
  
  void
-@@ -201,297 +301,24 @@
+@@ -201,297 +309,24 @@
  }
  
  void
@@ -1719,7 +1726,7 @@
  	return aStr;
  }
  
-@@ -499,13 +326,7 @@
+@@ -499,13 +334,7 @@
  UnicodeToAsciiForSaveLoad(wchar *src)
  {
  	static char aStr[256];
@@ -1734,7 +1741,7 @@
  	return aStr;
  }
  
-@@ -513,13 +334,7 @@
+@@ -513,13 +342,7 @@
  UnicodeToAsciiForMemoryCard(wchar *src)
  {
  	static char aStr[256];

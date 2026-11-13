@@ -135,6 +135,10 @@ pub const MANIFEST: &[Lift] = &[
     // PS2 ped animations: 13 differ from the PC's (walk_start, idle_armed, the woman's walks, ...);
     // the PS2 UI style plays them (animation/AnimManager.cpp ReplacePedAnimsFromPS2).
     Lift { kind: DiscKind::Ps2, dir: "ANIM/PED.IFP", exts: &[], dest: "anim" },
+    // The consoles' English text (the console styles' menus and credits: revc/src/text.rs). The
+    // Xbox's is one flat TKEY/TDAT table.
+    Lift { kind: DiscKind::Xbox, dir: "TEXT/american.gxt", exts: &[], dest: "text" },
+    Lift { kind: DiscKind::Ps2, dir: "TEXT/AMERICAN.GXT", exts: &[], dest: "text" },
 ];
 
 fn matches(lift: &Lift, path: &str) -> bool {

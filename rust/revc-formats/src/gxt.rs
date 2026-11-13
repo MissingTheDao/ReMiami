@@ -35,6 +35,10 @@ impl Gxt {
         let mut r = Reader::new(data);
         let total_len = data.len();
 
+        // The Xbox's files have no TABL: one TKEY/TDAT pair, the MAIN table
+        if data.starts_with(b"TKEY") {
+            return Ok(Gxt { tables: vec![read_table(data, 0, "MAIN".to_string())?] });
+        }
         // Read the first chunk to verify magic "TABL"
         let magic = r.bytes(4, "chunk magic")?;
         if magic != b"TABL" {
@@ -75,96 +79,7 @@ impl Gxt {
                 )));
             }
 
-            let mut table_reader = Reader::new(&data[offset..]);
-
-            // If not MAIN, the first 8 bytes must be the NUL-padded table name
-            if table_name != "MAIN" {
-                let stored_name_bytes = table_reader.bytes(8, "table header name")?;
-                let stored_name = c_str(stored_name_bytes);
-                if stored_name != table_name {
-                    return Err(Error::Invalid(format!(
-                        "table header name mismatch: expected {}, found {}",
-                        table_name, stored_name
-                    )));
-                }
-            }
-
-            // Next chunk must be "TKEY"
-            let key_magic = table_reader.bytes(4, "TKEY magic")?;
-            if key_magic != b"TKEY" {
-                return Err(Error::Invalid(format!(
-                    "expected TKEY magic in table {}, found {:?}",
-                    table_name,
-                    std::str::from_utf8(key_magic)
-                )));
-            }
-            let key_size = table_reader.u32("TKEY size")?;
-            let key_data = table_reader.bytes(key_size as usize, "TKEY payload")?;
-
-            // Validate TKEY payload size is multiple of 12
-            if key_data.len() % 12 != 0 {
-                return Err(Error::Invalid(format!(
-                    "TKEY payload size {} is not a multiple of 12",
-                    key_data.len()
-                )));
-            }
-
-            let mut keys = Vec::with_capacity(key_data.len() / 12);
-            let mut key_reader = Reader::new(key_data);
-            for _ in 0..(key_data.len() / 12) {
-                let offset_in_dat = key_reader.u32("TKEY offset")?;
-                let key_name_bytes = key_reader.bytes(8, "TKEY key name")?;
-                let key_name = c_str(key_name_bytes);
-                keys.push((offset_in_dat, key_name));
-            }
-
-            // Next chunk must be "TDAT"
-            let dat_magic = table_reader.bytes(4, "TDAT magic")?;
-            if dat_magic != b"TDAT" {
-                return Err(Error::Invalid(format!(
-                    "expected TDAT magic in table {}, found {:?}",
-                    table_name,
-                    std::str::from_utf8(dat_magic)
-                )));
-            }
-            let _dat_size = table_reader.u32("TDAT size")?;
-            let dat_payload = table_reader.bytes(_dat_size as usize, "TDAT payload")?;
-
-            // Parse entries
-            let mut entries = Vec::with_capacity(keys.len());
-            for (offset_in_dat, key_name) in keys {
-                // Validate offset
-                if offset_in_dat as usize > dat_payload.len() {
-                    return Err(Error::Invalid(format!(
-                        "TKEY offset {} for key '{}' in table {} is out of TDAT bounds",
-                        offset_in_dat, key_name, table_name
-                    )));
-                }
-                if offset_in_dat % 2 != 0 {
-                    return Err(Error::Invalid(format!(
-                        "TKEY offset {} for key '{}' in table {} is not even",
-                        offset_in_dat, key_name, table_name
-                    )));
-                }
-
-                let start_idx = offset_in_dat as usize;
-                let mut units = Vec::new();
-                let mut idx = start_idx;
-                while idx + 1 < dat_payload.len() {
-                    let unit = u16::from_le_bytes([dat_payload[idx], dat_payload[idx + 1]]);
-                    if unit == 0 {
-                        break;
-                    }
-                    units.push(unit);
-                    idx += 2;
-                }
-                entries.push((key_name, units));
-            }
-
-            tables.push(Table {
-                name: table_name,
-                entries,
-            });
+            tables.push(read_table(data, offset, table_name)?);
         }
 
         Ok(Gxt { tables })
@@ -195,9 +110,119 @@ pub fn to_lossy_string(units: &[u16]) -> String {
     s
 }
 
+/// One table at `offset`: its name header (unless MAIN), then TKEY and TDAT.
+fn read_table(data: &[u8], offset: usize, table_name: String) -> Result<Table> {
+    let mut table_reader = Reader::new(&data[offset..]);
+
+    // If not MAIN, the first 8 bytes must be the NUL-padded table name
+    if table_name != "MAIN" {
+        let stored_name_bytes = table_reader.bytes(8, "table header name")?;
+        let stored_name = c_str(stored_name_bytes);
+        if stored_name != table_name {
+            return Err(Error::Invalid(format!(
+                "table header name mismatch: expected {}, found {}",
+                table_name, stored_name
+            )));
+        }
+    }
+
+    // Next chunk must be "TKEY"
+    let key_magic = table_reader.bytes(4, "TKEY magic")?;
+    if key_magic != b"TKEY" {
+        return Err(Error::Invalid(format!(
+            "expected TKEY magic in table {}, found {:?}",
+            table_name,
+            std::str::from_utf8(key_magic)
+        )));
+    }
+    let key_size = table_reader.u32("TKEY size")?;
+    let key_data = table_reader.bytes(key_size as usize, "TKEY payload")?;
+
+    // Validate TKEY payload size is multiple of 12
+    if key_data.len() % 12 != 0 {
+        return Err(Error::Invalid(format!(
+            "TKEY payload size {} is not a multiple of 12",
+            key_data.len()
+        )));
+    }
+
+    let mut keys = Vec::with_capacity(key_data.len() / 12);
+    let mut key_reader = Reader::new(key_data);
+    for _ in 0..(key_data.len() / 12) {
+        let offset_in_dat = key_reader.u32("TKEY offset")?;
+        let key_name_bytes = key_reader.bytes(8, "TKEY key name")?;
+        let key_name = c_str(key_name_bytes);
+        keys.push((offset_in_dat, key_name));
+    }
+
+    // Next chunk must be "TDAT"
+    let dat_magic = table_reader.bytes(4, "TDAT magic")?;
+    if dat_magic != b"TDAT" {
+        return Err(Error::Invalid(format!(
+            "expected TDAT magic in table {}, found {:?}",
+            table_name,
+            std::str::from_utf8(dat_magic)
+        )));
+    }
+    let _dat_size = table_reader.u32("TDAT size")?;
+    let dat_payload = table_reader.bytes(_dat_size as usize, "TDAT payload")?;
+
+    // Parse entries
+    let mut entries = Vec::with_capacity(keys.len());
+    for (offset_in_dat, key_name) in keys {
+        // Validate offset
+        if offset_in_dat as usize > dat_payload.len() {
+            return Err(Error::Invalid(format!(
+                "TKEY offset {} for key '{}' in table {} is out of TDAT bounds",
+                offset_in_dat, key_name, table_name
+            )));
+        }
+        if offset_in_dat % 2 != 0 {
+            return Err(Error::Invalid(format!(
+                "TKEY offset {} for key '{}' in table {} is not even",
+                offset_in_dat, key_name, table_name
+            )));
+        }
+
+        let start_idx = offset_in_dat as usize;
+        let mut units = Vec::new();
+        let mut idx = start_idx;
+        while idx + 1 < dat_payload.len() {
+            let unit = u16::from_le_bytes([dat_payload[idx], dat_payload[idx + 1]]);
+            if unit == 0 {
+                break;
+            }
+            units.push(unit);
+            idx += 2;
+        }
+        entries.push((key_name, units));
+    }
+
+    Ok(Table {
+        name: table_name,
+        entries,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn flat_file_is_one_main_table() {
+        // (the Xbox's layout: TKEY with offset + key entries, then TDAT, no TABL)
+        let mut keys = Vec::new();
+        keys.extend_from_slice(&0u32.to_le_bytes());
+        keys.extend_from_slice(b"FEH_A\0\0\0");
+        let dat: Vec<u8> = "A:select".encode_utf16().chain([0]).flat_map(|u| u.to_le_bytes()).collect();
+        let mut data = Vec::new();
+        chunk(&mut data, b"TKEY", &keys);
+        chunk(&mut data, b"TDAT", &dat);
+        let g = Gxt::parse(&data).unwrap();
+        assert_eq!(g.tables.len(), 1);
+        assert_eq!(g.tables[0].name, "MAIN");
+        assert_eq!(g.tables[0].get("FEH_A").unwrap(), "A:select".encode_utf16().collect::<Vec<_>>().as_slice());
+    }
 
     fn chunk(out: &mut Vec<u8>, magic: &[u8; 4], payload: &[u8]) {
         out.extend_from_slice(magic);
