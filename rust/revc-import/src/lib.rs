@@ -116,6 +116,10 @@ pub const MANIFEST: &[Lift] = &[
     // HUD and fonts (DXT5: smoother alpha than the PC's DXT3).
     Lift { kind: DiscKind::Xbox, dir: "models/hud.txd", exts: &[], dest: "models" },
     Lift { kind: DiscKind::Xbox, dir: "models/fonts.txd", exts: &[], dest: "models" },
+    // Wheels and the loading, splash and intro screens (with the HUD and fonts, the Xbox style's
+    // texture pack: revc/src/ps2pack.rs).
+    Lift { kind: DiscKind::Xbox, dir: "models/generic/wheels.txd", exts: &[], dest: "models" },
+    Lift { kind: DiscKind::Xbox, dir: "txd/", exts: &[".txd"], dest: "txd" },
     // PS2 front end: the controller-setup sprites (DualShock picture, callouts) re3's PS2 menu uses,
     // the rest of the menu art, the HUD, and the loading, splash and intro screens. They are PS2
     // native (GS swizzled); the game reads them through a texture pack built from them

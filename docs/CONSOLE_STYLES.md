@@ -290,6 +290,10 @@ loading, splash and intro screens. texmods also reads the packs in the import ca
 player's own packs and under the same style rule, so the PS2 style uses the disc's art (the PS2
 controller picture included). The fonts stay out: their glyph sheets are laid out differently.
 An import made before this builds the pack the first time the textures are indexed.
+Xbox disc textures (roadmap R3) work the same way: `<import cache>/xbox/packs/xbox-native.zip`
+from the Xbox HUD, fonts (the PC's layout in DXT5; its [ ] slots hold the Xbox's arrow icons),
+wheels and the loading, splash and intro screens, decoded with revc-formats' Xbox texture reader.
+With these packs alone the Xbox menu shots score as with the full hand-made comparison pack.
 
 Goal (research session, 2026-11-11): import the PS2 world textures as a style pack
 (`userfiles/import/ps2/packs/ps2-world.zip`, about 12,000 textures via a Rust port of the GS
