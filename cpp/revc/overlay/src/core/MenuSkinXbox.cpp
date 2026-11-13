@@ -735,6 +735,26 @@ MenuSkinXboxSelection(float x0, float y0, float x1, float y1, uint8 alpha, bool 
 // "cancel" at its top left (the selection when it opens) and the eight slots in black. No title,
 // logo, icon bar or help line. Overwriting a save asks in the Xbox's OK / Cancel dialog over it;
 // while saving, the black only (the message is the Xbox's dialog, CMenuManager::DrawOverlays).
+// A save's date as the Xbox writes it: "Nov 10 2026, 10:07:06PM" from the menu's own
+// "10 Nov 2026 22:07:06" (research on the Xbox build, the console's Load page); unchanged if it
+// doesn't read as that.
+const wchar *
+MenuSkinXboxDate(const wchar *pc)
+{
+	static wchar out[48];
+	char a[48], month[16], buf[48];
+	int n = 0;
+	for (; pc[n] && n < 47; n++)
+		a[n] = pc[n] < 128 ? (char)pc[n] : '?';
+	a[n] = '\0';
+	int day, year, h, m, sec;
+	if (sscanf(a, "%d %15s %d %d:%d:%d", &day, month, &year, &h, &m, &sec) != 6)
+		return pc;
+	snprintf(buf, sizeof(buf), "%s %02d %04d, %d:%02d:%02d%s", month, day, year, h % 12 == 0 ? 12 : h % 12, m, sec, h < 12 ? "AM" : "PM");
+	AsciiToUnicode(buf, out);
+	return out;
+}
+
 void MenuSkinXboxDialogBack(uint8 alpha);
 void MenuSkinXboxFixedBar(float x0, float y0, float x1, float y1, uint8 alpha);
 
@@ -774,8 +794,18 @@ MenuSkinXboxSaveScreen(CMenuManager *m, uint8 alpha)
 			static wchar name[96], date[40];
 			const wchar *l = nil, *r = nil;
 			if (Slots[k] == SLOT_OK) {
-				l = GetNameOfSavedGame(k);
-				r = GetSavedGameDateAndTime(k);
+				// (the Xbox lists a save as "1. In The Beginning...", the console's Load page)
+				static wchar numbered[104];
+				char num[8];
+				sprintf(num, "%d. ", k + 1);
+				AsciiToUnicode(num, numbered);
+				const wchar *nm = GetNameOfSavedGame(k);
+				int o = UnicodeStrlen(numbered);
+				for (int c = 0; nm && nm[c] && o < 102; c++)
+					numbered[o++] = nm[c];
+				numbered[o] = 0;
+				l = nm && nm[0] ? numbered : nil;
+				r = MenuSkinXboxDate(GetSavedGameDateAndTime(k));
 			}
 			if (!l || l[0] == '\0') {
 				UnicodeStrcpy(name, TheText.Get("RVC_XSG"));
@@ -941,6 +971,7 @@ MenuSkinXboxSetSubTab(int page, int tab)
 	subTab = tab;
 }
 
+void MenuSkinXboxFixedBar(float x0, float y0, float x1, float y1, uint8 alpha);
 static void
 DrawSubTabs(int page, uint8 alpha)
 {
@@ -972,6 +1003,11 @@ DrawSubTabs(int page, uint8 alpha)
 	y1 = Y(355.4f);
 	(void)page;
 	const uint8 barAlpha = barFocus && !SettingsSubTabs(page) ? alpha * 602 / 1000 : alpha;
+	// Brief/Stats: the Xbox's own outline at the sub-tab's scale, pulsing while the sub-tabs have
+	// focus (the console's Stats page: the pulse shows past the bar's ends)
+	if (!SettingsSubTabs(page) && !barFocus)
+		MenuSkinXboxFixedBar(X(bar[cur][0]), y0, X(bar[cur][1]), y1, alpha);
+	else if (SettingsSubTabs(page) || !DrawBarShape(X(bar[cur][0]), y0, X(bar[cur][1]), y1, CRGBA(0, 207, 133, barAlpha), true, -1, true))
 	CSprite2d::Draw2DPolygon(bx0 + tilt, y0, bx1 + tilt, y0, bx0, y1, bx1, y1, CRGBA(XBOX_MINT.r, XBOX_MINT.g, XBOX_MINT.b, barAlpha));
 	CFont::SetDropShadowPosition(2);
 	CFont::SetDropColor(CRGBA(0, 0, 0, alpha));

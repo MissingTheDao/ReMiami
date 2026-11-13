@@ -238,11 +238,11 @@ const MENU_SHOTS_PS2: &[MenuShot] = &[
 const MENU_SHOTS_XBOX: &[MenuShot] = &[
     ("map_legend_on", "map", 0, -1, -1, 1, 1000),
     ("map_legend_off", "map", 0, -1, -1, 0, 1000),
-    ("brief", "brief", 0, -1, -1, -1, 1000),
+    ("brief", "brief", 0, 1, -1, -1, 1000),	// (the console reference: the tutorial sub-tab)
     ("stats", "stats", 0, -1, -1, -1, 1000),
     ("stats_scrolled", "stats", 0, -1, -1, -1, 5000),
     ("unlocked_items", "stats", 0, 1, -1, -1, 1000),
-    ("brief_tutorial", "brief", 0, 1, -1, -1, 1000),
+    ("brief_briefs", "brief", 0, 0, -1, -1, 1000),
     ("controls", "console_controls", 0, -1, -1, -1, 1000),
     ("controls_select", "console_controls", 0, -1, -1, -1, 1000),
     ("controls_walking", "pad", 0, 0, 0, -1, 1000),
