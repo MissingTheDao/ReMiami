@@ -31,13 +31,13 @@
 #                            (thermal throttling, leaks) and crashes. Saved under logs/n150/.
 #                            --capped: player defaults (frame limiter: display refresh, 60 Hz headless).
 #   info                     hardware, driver versions, temperatures
-# Host: N150_HOST (default steam@192.168.20.239), folder there: N150_DIR (default revc-bench).
+# Host: N150_HOST (default steam@192.168.10.150), folder there: N150_DIR (default revc-bench).
 # Game runs (test, perf, soak) are headless by default: inside a private, invisible compositor
 # (scripts/headless.sh), so the box's screen may be locked, off or in use. N150_SCREEN=1 runs them
 # on its desktop instead (then it must be unlocked and awake; that is what the TV playtests need).
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-HOST=${N150_HOST:-steam@192.168.20.239}
+HOST=${N150_HOST:-steam@192.168.10.150}
 DIR=${N150_DIR:-revc-bench}
 LOCAL=$ROOT/logs/n150
 BASELINE=$ROOT/tests/perf/n150-baseline.txt

@@ -19,7 +19,7 @@ systemctl --user reset-failed "$UNIT" 2>/dev/null || true
 # the Claude app again. The model came up between runs from a delayed restart. AI_FORCE=1 skips
 # these checks.
 if [[ -z "${AI_FORCE:-}" ]]; then
-  if pgrep -x 'revc|xemu|pcsx2|pcsx2-qt' > /dev/null; then
+  if pgrep -x 'remiami|revc|xemu|pcsx2|pcsx2-qt' > /dev/null; then
     echo "revc-ai not started: a game or emulator is running" >&2; exit 3
   fi
   AVAIL_GIB=$(awk '/^MemAvailable:/ {print int($2 / 1048576)}' /proc/meminfo)

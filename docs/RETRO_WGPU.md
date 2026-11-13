@@ -156,6 +156,34 @@ stored flat at the GPU stride, and consecutive identical blocks are deduplicated
 `draw_program_parts` takes the block in pieces (e.g. uniforms and a model) without joining them.
 The renderer's caches use an Fx hash (`fxhash.rs`).
 
+**Instance blocks.** A program may have a second per-draw block (`instance_block_size`) for what
+changes with every draw (a model's matrix and lights) while the first block stays the same.
+Declare it with `Renderer::instance_block_decl(name, type)` and read `name[instance_index]`. Where
+the device has storage buffers in vertex shaders (`GpuOptions::instance_storage`, or any device
+created with that limit), all of a frame's instance blocks sit in one buffer bound once and the
+draw's instance index picks one; otherwise it is a uniform block at a per-draw offset (index 0).
+Both modes draw the same picture (`tests/programs.rs`, `instance_blocks`).
+
+**The lean call.** `draw_with_program(&ProgramDraw { program, pipeline: &PipelineState, textures,
+block, instance, .. })` records a program draw without building a `RenderState` (four stages
+with matrices) that a program ignores. `draw_program*` are the same call for `Draw` users.
+
+## Draw path
+
+Recording a draw resolves everything to indices; replaying compares and binds by index.
+
+- **Resources** (`slab.rs`): textures and buffers live in tables indexed by id, not hash maps.
+- **Pipelines and stage bind groups** are found (or created) when the draw is recorded: first the
+  previous draw's, then, for one-stage draws, a per-texture slot, then a hash map. A changed or
+  destroyed texture drops its bind groups; draws already recorded keep theirs until the frame ends.
+- **Draw commands** are a few indices plus the vertex/index references. Viewport, scissor, stencil
+  reference and blend constant are separate commands, recorded when they change.
+- **Uniform data** (view, fixed-function draw, bone, program and instance blocks) goes into flat
+  per-frame pools already laid out at the GPU stride: one buffer write each per frame, consecutive
+  identical blocks shared, no per-draw allocation.
+- Uniform words are uploaded as they are in memory (little-endian targets only; checked at
+  compile time).
+
 ## Overlay
 
 `Renderer::begin_overlay()` ends a frame's scene: later `Target::Scene` clears, draws and copies go

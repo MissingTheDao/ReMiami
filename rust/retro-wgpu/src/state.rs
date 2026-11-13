@@ -480,7 +480,46 @@ pub(crate) struct FixedKey {
     pub bias: (i32, u32, u32),
 }
 
+/// The pipeline part of a draw's state (what `RenderState` holds besides stages, fog, alpha
+/// test and the dynamic values): for program draws, which need nothing else.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PipelineState {
+    pub blend: Option<Blend>,
+    pub color_mask: ColorMask,
+    pub depth: DepthState,
+    pub stencil: StencilState,
+    pub cull: Option<Face>,
+    pub front_face: FrontFace,
+    pub depth_bias: DepthBias,
+}
+
+impl Default for PipelineState {
+    /// Opaque, depth tested and written, no culling (as `RenderState::default`).
+    fn default() -> PipelineState {
+        RenderState::default().pipeline()
+    }
+}
+
+impl PipelineState {
+    pub(crate) fn fixed_key(&self) -> FixedKey {
+        FixedKey {
+            blend: self.blend,
+            mask: self.color_mask,
+            depth: self.depth,
+            stencil: self.stencil,
+            cull: self.cull,
+            front_face: self.front_face,
+            bias: (self.depth_bias.constant, self.depth_bias.slope.to_bits(), self.depth_bias.clamp.to_bits()),
+        }
+    }
+}
+
 impl RenderState {
+    /// The pipeline part of this state.
+    pub fn pipeline(&self) -> PipelineState {
+        PipelineState { blend: self.blend, color_mask: self.color_mask, depth: self.depth, stencil: self.stencil, cull: self.cull, front_face: self.front_face, depth_bias: self.depth_bias }
+    }
+
     pub(crate) fn fixed_key(&self) -> FixedKey {
         FixedKey {
             blend: self.blend,

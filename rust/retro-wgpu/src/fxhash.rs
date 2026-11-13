@@ -53,7 +53,9 @@ impl Hasher for FxHasher {
     }
     #[inline]
     fn finish(&self) -> u64 {
-        self.0
+        // The multiply leaves the entropy in the high bits; hashbrown takes buckets from the low
+        // ones (as rustc-hash does).
+        self.0.rotate_left(26)
     }
 }
 

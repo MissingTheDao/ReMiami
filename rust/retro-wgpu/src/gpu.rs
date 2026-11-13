@@ -65,11 +65,15 @@ pub struct GpuOptions {
     pub adapter_format_features: bool,
     /// Log validation errors instead of panicking (wgpu's default panics).
     pub log_errors: bool,
+    /// Ask for one storage buffer per shader stage where the adapter has them in vertex shaders,
+    /// so program instance blocks are indexed instead of rebound per draw (faster with many
+    /// draws). Off by default: every backend then runs the same GLES3-level path.
+    pub instance_storage: bool,
 }
 
 impl Default for GpuOptions {
     fn default() -> GpuOptions {
-        GpuOptions { label: "retro-wgpu", power: wgpu::PowerPreference::HighPerformance, bc_textures: true, adapter_format_features: true, log_errors: true }
+        GpuOptions { label: "retro-wgpu", power: wgpu::PowerPreference::HighPerformance, bc_textures: true, adapter_format_features: true, log_errors: true, instance_storage: false }
     }
 }
 
@@ -108,7 +112,15 @@ impl Gpu {
         .map_err(|e| format!("no {backend:?} adapter: {e}"))?;
         let info = adapter.get_info();
         // GLES 3 level limits on every backend, so all of them run the same code paths.
-        let limits = wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits());
+        let mut limits = wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits());
+        if opts.instance_storage
+            && adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::VERTEX_STORAGE)
+            && adapter.limits().max_storage_buffers_per_shader_stage >= 1
+            && adapter.limits().max_storage_buffer_binding_size >= 1 << 24
+        {
+            limits.max_storage_buffers_per_shader_stage = 1;
+            limits.max_storage_buffer_binding_size = adapter.limits().max_storage_buffer_binding_size.min(1 << 27);
+        }
         let mut features = wgpu::Features::empty();
         if opts.bc_textures {
             features |= adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC;

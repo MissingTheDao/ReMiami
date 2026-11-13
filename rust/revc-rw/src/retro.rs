@@ -15,26 +15,26 @@ use crate::frame::{Frame, MESH_NEO_GLOSS, MESH_NEO_RIM, MESH_NEO_VEHICLE, MESH_N
 use crate::front::{BONE_FLOATS, HashMap, HashSet, Kind, MeshDraw, Op, PipeKey, SamplerKey, Upload};
 use retro_wgpu as rw;
 
-/// RW `U` uniforms (72 floats) then `M` (ModelState): the per-draw block of the mesh programs.
+/// RW `U` uniforms (72 floats): the per-draw block; a mesh's `M` (ModelState) is its instance block.
 const U_BYTES: usize = 72 * 4;
-const BLOCK: u32 = (U_BYTES + std::mem::size_of::<ModelState>()) as u32;
-const _: () = assert!(BLOCK.is_multiple_of(16));
+const M_BYTES: usize = std::mem::size_of::<ModelState>();
+const _: () = assert!(U_BYTES.is_multiple_of(16) && M_BYTES.is_multiple_of(16));
 
-/// `frame::SHADER` on retro-wgpu's binding contract: the U and M blocks become the program's
-/// per-draw block, textures move to the stage group, vertex inputs to retro-wgpu's locations.
-pub(crate) fn mesh_wgsl() -> String {
+/// `frame::SHADER` on retro-wgpu's binding contract: U is the program's per-draw block, the
+/// models its instance blocks (`models_decl` from the renderer), textures move to the stage
+/// group, vertex inputs to retro-wgpu's locations.
+pub(crate) fn mesh_wgsl(models_decl: &str) -> String {
     let mut s = crate::frame::SHADER.to_string();
     let mut sub = |from: &str, to: &str| {
         assert!(s.contains(from), "retro shader port: `{from}` not found in frame::SHADER");
         s = s.replace(from, to);
     };
-    sub("@group(0) @binding(0) var<uniform> u: U;", "struct B { u: U, m: M };\n@group(1) @binding(0) var<uniform> blk: B;");
+    sub("@group(0) @binding(0) var<uniform> u: U;", "@group(1) @binding(0) var<uniform> u: U;");
     sub("@group(1) @binding(0) var tex: texture_2d<f32>;", "@group(2) @binding(0) var tex: texture_2d<f32>;");
     sub("@group(1) @binding(1) var samp: sampler;", "@group(2) @binding(1) var samp: sampler;");
-    sub("//MODELS_DECL", "");
+    sub("//MODELS_DECL", models_decl);
     sub("@group(3) @binding(0) var env_tex: texture_2d<f32>;", "@group(2) @binding(2) var env_tex: texture_2d<f32>;");
     sub("@group(3) @binding(1) var env_samp: sampler;", "@group(2) @binding(3) var env_samp: sampler;");
-    sub("models[mi]", "blk.m");
     // Vertex inputs: retro-wgpu puts colour at 2 and UV sets at 3.., blend data at 7 and 8.
     let lines: Vec<String> = s
         .lines()
@@ -49,21 +49,7 @@ pub(crate) fn mesh_wgsl() -> String {
             l
         })
         .collect();
-    let s = lines.join("\n");
-    // `u.` (the RW uniforms) is now inside the block.
-    let mut out = String::with_capacity(s.len() + 1024);
-    let b = s.as_bytes();
-    let mut i = 0;
-    while i < b.len() {
-        if b[i] == b'u' && b.get(i + 1) == Some(&b'.') && (i == 0 || !(b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'_' || b[i - 1] == b'.')) {
-            out.push_str("blk.u.");
-            i += 2;
-        } else {
-            out.push(b[i] as char);
-            i += 1;
-        }
-    }
-    out
+    lines.join("\n")
 }
 
 /// `frame::UV2_SHADER` (screen droplets) on retro-wgpu's bindings; its block is U alone.
@@ -161,9 +147,9 @@ fn sampler(k: SamplerKey) -> rw::Sampler {
     rw::Sampler { min, mag, mip, address_u: address(k.address_u), address_v: address(k.address_v), anisotropy: aniso }
 }
 
-fn render_state(pipe: &PipeKey) -> rw::RenderState {
+fn pipeline_state(pipe: &PipeKey) -> rw::PipelineState {
     let blend = pipe.blend.map(|(s, d)| rw::Blend::same(rw::BlendEq { src: blend_factor(s), dst: blend_factor(d), op: wgpu::BlendOperation::Add }));
-    rw::RenderState {
+    rw::PipelineState {
         blend,
         // The frame has no alpha channel (as in WgpuBackend): alpha stays 1.
         color_mask: rw::ColorMask { rgb: true, alpha: false },
@@ -173,7 +159,38 @@ fn render_state(pipe: &PipeKey) -> rw::RenderState {
             3 => Some(wgpu::Face::Front),
             _ => None,
         },
-        ..rw::RenderState::default()
+        ..rw::PipelineState::default()
+    }
+}
+
+/// Resources by the front end's ids (small, handed out in order): array lookups per draw.
+struct Table<T>(Vec<Option<T>>);
+
+impl<T> Table<T> {
+    fn get(&self, id: &u32) -> Option<&T> {
+        self.0.get(*id as usize).and_then(|t| t.as_ref())
+    }
+
+    fn get_mut(&mut self, id: &u32) -> Option<&mut T> {
+        self.0.get_mut(*id as usize).and_then(|t| t.as_mut())
+    }
+
+    fn insert(&mut self, id: u32, v: T) -> Option<T> {
+        if id as usize >= self.0.len() {
+            self.0.resize_with(id as usize + 1, || None);
+        }
+        self.0[id as usize].replace(v)
+    }
+
+    fn remove(&mut self, id: &u32) -> Option<T> {
+        self.0.get_mut(*id as usize).and_then(|t| t.take())
+    }
+}
+
+impl<T> std::ops::Index<&u32> for Table<T> {
+    type Output = T;
+    fn index(&self, id: &u32) -> &T {
+        self.get(id).expect("no such resource")
     }
 }
 
@@ -255,8 +272,11 @@ struct RetroTex {
 pub struct RetroBackend {
     pub r: rw::Renderer,
     programs: HashMap<(Kind, u32), rw::ProgramId>,
-    textures: HashMap<u32, RetroTex>,
-    geometries: HashMap<u32, (rw::BufferId, rw::BufferId)>,
+    /// The previous draw's program and pipeline state (most draws repeat them).
+    last_program: Option<((Kind, u32), rw::ProgramId)>,
+    last_pipeline: Option<(PipeKey, rw::PipelineState)>,
+    textures: Table<RetroTex>,
+    geometries: Table<(rw::BufferId, rw::BufferId)>,
     scene: Option<rw::SceneSettings>,
     post: Option<(bool, bool)>,
     warned: HashSet<&'static str>,
@@ -269,12 +289,14 @@ impl RetroBackend {
         RetroBackend {
             r: rw::Renderer::new(gpu, output, rw::SceneSettings::default()),
             programs: HashMap::default(),
-            textures: HashMap::default(),
-            geometries: HashMap::default(),
+            last_program: None,
+            last_pipeline: None,
+            textures: Table(Vec::new()),
+            geometries: Table(Vec::new()),
             scene: None,
             post: None,
             warned: HashSet::default(),
-            mesh_src: mesh_wgsl(),
+            mesh_src: String::new(),
             uv2_src: uv2_wgsl(),
         }
     }
@@ -291,8 +313,17 @@ impl RetroBackend {
             Kind::Im3D | Kind::Im2DUV2 => 0,
             _ => shader,
         };
+        if let Some((k, p)) = self.last_program
+            && k == (kind, shader)
+        {
+            return Some(p);
+        }
         if let Some(p) = self.programs.get(&(kind, shader)) {
+            self.last_program = Some(((kind, shader), *p));
             return Some(*p);
+        }
+        if self.mesh_src.is_empty() {
+            self.mesh_src = mesh_wgsl(&self.r.instance_block_decl("models", "M"));
         }
         let (vs, fs) = entries(kind, shader);
         let uv2 = kind == Kind::Im2DUV2;
@@ -302,7 +333,8 @@ impl RetroBackend {
             vertex_entry: vs,
             fragment_entry: fs,
             layout: layout(kind),
-            block_size: if uv2 { U_BYTES as u32 } else { BLOCK },
+            block_size: U_BYTES as u32,
+            instance_block_size: if matches!(kind, Kind::Mesh | Kind::MeshEnv | Kind::Skin) { M_BYTES as u32 } else { 0 },
             // The second stage is the env map / lightmap / droplet mask.
             stages: if matches!(kind, Kind::MeshEnv | Kind::Im2DUV2) { 2 } else { 1 },
         };
@@ -417,7 +449,8 @@ impl RetroBackend {
         // The scene's first pass starts black with cleared depth (as in WgpuBackend).
         self.r.set_target(rw::Target::Scene);
         self.r.clear(Some([0.0, 0.0, 0.0, 1.0]), Some(1.0), Some(0));
-        let mut cur = 0u32;
+        // Whether the current target can be drawn into.
+        let mut cur_ok = true;
         let mut in_overlay = false;
         let screen = rw::View::screen(size.0 as f32, size.1 as f32);
         self.r.set_view(&screen);
@@ -430,12 +463,12 @@ impl RetroBackend {
                     }
                 }
                 Op::Target { texture } => {
-                    cur = texture;
                     let t = if texture == 0 {
                         Some(rw::Target::Scene)
                     } else {
                         self.target(gpu, texture).map(rw::Target::Texture)
                     };
+                    cur_ok = t.is_some();
                     match t {
                         Some(t) => self.r.set_target(t),
                         None => self.warn("draw target that can't be drawn into (compressed or unknown) skipped"),
@@ -452,78 +485,82 @@ impl RetroBackend {
                     }
                 }
                 Op::Clear { color, depth } => {
-                    if cur != 0 && !self.textures.get(&cur).is_some_and(|t| t.target) {
+                    if !cur_ok {
                         continue;
                     }
                     self.r.clear(color.map(|c| [c[0], c[1], c[2], 1.0]), depth.then_some(1.0), None);
                 }
                 Op::Draw { pipe, texture, sampler: smp, uniform, first, count, mesh } => {
-                    if cur != 0 && !self.textures.get(&cur).is_some_and(|t| t.target) {
+                    if !cur_ok {
                         continue;
                     }
-                    let Some(prog) = self.program(gpu, pipe.kind, pipe.shader) else { continue };
-                    let mut state = render_state(&pipe);
-                    state.stages[0].texture = if texture != 0 { self.tex(texture) } else { None };
-                    state.stages[0].sampler = sampler(smp);
+                    let Some(program) = self.program(gpu, pipe.kind, pipe.shader) else { continue };
+                    let pipeline = match self.last_pipeline {
+                        Some((k, p)) if k == pipe => p,
+                        _ => {
+                            let p = pipeline_state(&pipe);
+                            self.last_pipeline = Some((pipe, p));
+                            p
+                        }
+                    };
+                    let mut textures = [(if texture != 0 { self.tex(texture) } else { None }, sampler(smp)), (None, rw::Sampler::POINT_CLAMP)];
                     if let Some(MeshDraw { env: Some((t, s)), .. }) = mesh {
-                        state.stages[1].texture = if t != 0 { self.tex(t) } else { None };
-                        state.stages[1].sampler = sampler(s);
+                        textures[1] = (if t != 0 { self.tex(t) } else { None }, sampler(s));
                     }
-                    // The per-draw block: RW uniforms, then the model (meshes), straight from the frame.
+                    // The per-draw block (RW uniforms) and, for meshes, the model as instance block,
+                    // both straight from the frame.
                     let u = &frame.uniforms[uniform as usize];
                     // SAFETY: the uniforms are plain f32 (little-endian targets only, as the GPU reads them).
                     let ubytes: &[u8] = unsafe { std::slice::from_raw_parts(u.as_ptr().cast::<u8>(), U_BYTES) };
-                    let mbytes: &[u8] = match mesh {
-                        Some(MeshDraw { model, .. }) if pipe.kind != Kind::Im2DUV2 => match frame.models.get(model as usize) {
-                            // SAFETY: ModelState is repr(C) f32 data.
-                            Some(m) => unsafe { std::slice::from_raw_parts((m as *const ModelState).cast::<u8>(), std::mem::size_of::<ModelState>()) },
-                            None => &[],
-                        },
-                        _ => &[],
-                    };
-                    let parts: [&[u8]; 2] = [ubytes, mbytes];
+                    let block: [&[u8]; 1] = [ubytes];
                     let topology = if pipe.lines { rw::Topology::LineList } else { rw::Topology::TriangleList };
-                    let params = rw::DrawParams::default();
+                    let mut d = rw::ProgramDraw {
+                        program,
+                        topology,
+                        vertices: rw::Vertices::Slice(&[]),
+                        indices: rw::Indices::None,
+                        range: None,
+                        base_vertex: 0,
+                        pipeline: &pipeline,
+                        stencil_reference: 0,
+                        blend_constant: [0.0; 4],
+                        textures: &textures,
+                        bones: None,
+                        block: &block,
+                        instance: None,
+                    };
                     match (pipe.kind, mesh) {
-                        (Kind::Mesh | Kind::MeshEnv | Kind::Skin, Some(MeshDraw { geometry, bones, .. })) => {
+                        (Kind::Mesh | Kind::MeshEnv | Kind::Skin, Some(MeshDraw { geometry, model, bones, .. })) => {
                             let Some(&(vb, ib)) = self.geometries.get(&geometry) else { continue };
-                            let bone_mats: Option<Vec<rw::Mat4>> = (pipe.kind == Kind::Skin).then(|| {
-                                let b = &frame.bones[bones as usize * BONE_FLOATS..][..BONE_FLOATS];
-                                b.as_chunks::<16>().0.to_vec()
-                            });
-                            let d = rw::Draw {
-                                layout: rw::LayoutId(0),
-                                topology,
-                                vertices: rw::Vertices::Buffer(vb, 0),
-                                indices: rw::Indices::Buffer(ib),
-                                range: Some((first, count)),
-                                base_vertex: 0,
-                                state: &state,
-                                params: &params,
-                                bones: bone_mats.as_deref(),
-                            };
-                            self.r.draw_program_parts(gpu, &d, prog, &parts);
+                            let Some(m) = frame.models.get(model as usize) else { continue };
+                            // SAFETY: ModelState is repr(C) f32 data.
+                            let mbytes: &[u8] = unsafe { std::slice::from_raw_parts((m as *const ModelState).cast::<u8>(), M_BYTES) };
+                            d.vertices = rw::Vertices::Buffer(vb, 0);
+                            d.indices = rw::Indices::Buffer(ib);
+                            d.range = Some((first, count));
+                            d.instance = Some(mbytes);
+                            if pipe.kind == Kind::Skin {
+                                d.bones = Some(frame.bones[bones as usize * BONE_FLOATS..][..BONE_FLOATS].as_chunks::<16>().0);
+                            }
+                            self.r.draw_with_program(gpu, &d);
                         }
                         (Kind::Im2D, _) => {
                             let v = &frame.verts[first as usize..(first + count) as usize];
                             // SAFETY: Vertex2D is repr(C) plain data.
-                            let bytes: &[u8] = unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), std::mem::size_of_val(v)) };
-                            let d = rw::Draw { layout: rw::LayoutId(0), topology, vertices: rw::Vertices::Slice(bytes), indices: rw::Indices::None, range: None, base_vertex: 0, state: &state, params: &params, bones: None };
-                            self.r.draw_program_parts(gpu, &d, prog, &parts);
+                            d.vertices = rw::Vertices::Slice(unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), std::mem::size_of_val(v)) });
+                            self.r.draw_with_program(gpu, &d);
                         }
                         (Kind::Im3D, _) => {
                             let v = &frame.verts3[first as usize..(first + count) as usize];
                             // SAFETY: Vertex3D is repr(C) plain data.
-                            let bytes: &[u8] = unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), std::mem::size_of_val(v)) };
-                            let d = rw::Draw { layout: rw::LayoutId(0), topology, vertices: rw::Vertices::Slice(bytes), indices: rw::Indices::None, range: None, base_vertex: 0, state: &state, params: &params, bones: None };
-                            self.r.draw_program_parts(gpu, &d, prog, &parts);
+                            d.vertices = rw::Vertices::Slice(unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), std::mem::size_of_val(v)) });
+                            self.r.draw_with_program(gpu, &d);
                         }
                         (Kind::Im2DUV2, _) => {
                             let v = &frame.verts_uv2[first as usize..(first + count) as usize];
                             // SAFETY: Vertex2DUV2 is repr(C) plain data.
-                            let bytes: &[u8] = unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), std::mem::size_of_val(v)) };
-                            let d = rw::Draw { layout: rw::LayoutId(0), topology, vertices: rw::Vertices::Slice(bytes), indices: rw::Indices::None, range: None, base_vertex: 0, state: &state, params: &params, bones: None };
-                            self.r.draw_program_parts(gpu, &d, prog, &parts[..1]);
+                            d.vertices = rw::Vertices::Slice(unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), std::mem::size_of_val(v)) });
+                            self.r.draw_with_program(gpu, &d);
                         }
                         _ => {}
                     }
@@ -562,7 +599,9 @@ impl RetroBackend {
 mod tests {
     #[test]
     fn shader_ports_parse() {
-        for (name, src) in [("mesh", super::mesh_wgsl()), ("uv2", super::uv2_wgsl())] {
+        let storage = "@group(1) @binding(1) var<storage, read> models: array<M>;";
+        let uniform = "@group(1) @binding(1) var<uniform> models: array<M, 1>;";
+        for (name, src) in [("mesh storage", super::mesh_wgsl(storage)), ("mesh uniform", super::mesh_wgsl(uniform)), ("uv2", super::uv2_wgsl())] {
             if let Err(e) = naga::front::wgsl::parse_str(&src) {
                 panic!("{name}: {}", e.emit_to_string(&src));
             }
