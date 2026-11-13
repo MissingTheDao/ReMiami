@@ -274,6 +274,23 @@ native 640x480 xemu captures:
 Still to do: the Xbox's "Fire missiles" callout, every page checked in play, the comparison shot set
 (research request: `REVC_TEST=menus`, every page per style, see below).
 
+## Console text (R4)
+
+The import lifts each disc's `american.gxt` (`ps2/text`, `xbox/text`); `rust/revc/src/text.rs`
+(`revc_text_console_get`, `console_source`) answers some keys from it in that UI style, with the
+menu language English:
+
+- **Xbox:** the pad names (`C_…`) and the skin's own keys that have an exact Xbox string
+  (`RVC_XSF` = `FEA_SFX`, `RVC_XOK` = `FEM_OK`, `RVC_XNG` = `T_0914C`).
+- **PS2:** the Ammu-Nation items, which the PS2 shows in arrows ("< Hammer >": `ARMOUR`, `BASEBAT`,
+  `CHAINSA`, `CLEVER`, `GRENADE`, `HAMMER`), and the stunt stats line with its colon (`BSTSTU`).
+
+Left out on purpose: the consoles' button prompts (they name the console's default buttons and
+would be wrong once controls are remapped; reMiami's prompts show the bound buttons), the
+memory card and bonus-disc texts, and the menu labels (the skins draw their own, checked against
+the captures: the Xbox titles and rows in the heading font's lowercase, the PS2's "subtitles :
+off" rows).
+
 ## 13i: texture packs per UI style
 
 `mods/packs/pc-*.zip`, `ps2-*.zip`, `xbox-*.zip` apply only in that UI style; other packs in every

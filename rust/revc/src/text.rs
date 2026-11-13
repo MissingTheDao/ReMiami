@@ -246,8 +246,6 @@ mod tests {
 
 // ---------------------------------------------------------------- the consoles' own text
 
-/// The Xbox's text (imported `xbox/text/american.gxt`), read once.
-static XBOX: std::sync::OnceLock<Option<Store>> = std::sync::OnceLock::new();
 /// Whether the menu language is English (the consoles' text is the American one only).
 static ENGLISH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -274,29 +272,126 @@ fn console_key(key: &[u8]) -> bool {
     key.starts_with(b"C_")
 }
 
-/// The console's string for `key` in its UI style (the Xbox's only for now), or null: the PC
-/// text and revc's own then apply.
-#[unsafe(no_mangle)]
-pub extern "C" fn revc_text_console_get(key: *const c_char) -> *const u16 {
-    if crate::texmods::style() != 2 || !ENGLISH.load(std::sync::atomic::Ordering::Relaxed) {
-        return std::ptr::null();
-    }
-    let k = key_bytes(key);
-    let k: Vec<u8> = match XBOX_ALIASES.iter().find(|(a, _)| a.as_bytes() == k.as_slice()) {
-        Some((_, x)) => x.as_bytes().to_vec(),
-        None if console_key(&k) => k,
-        None => return std::ptr::null(),
-    };
-    let store = XBOX.get_or_init(|| {
-        let path = crate::discimport::cache_dir().join("xbox").join("text").join("american.gxt");
+/// The PS2's keys taken as they are in its style: the Ammu-Nation items, which the PS2 shows in
+/// arrows (< Hammer >), and the stunt line with a colon. Its button prompts are left out (they
+/// name the PS2's default buttons, wrong once the controls are remapped), and its menu skin draws
+/// its own labels.
+const PS2_KEYS: &[&str] = &["ARMOUR", "BASEBAT", "CHAINSA", "CLEVER", "GRENADE", "HAMMER", "BSTSTU"];
+
+/// The Xbox's text (imported `xbox/text/american.gxt`), read once.
+static XBOX: std::sync::OnceLock<Option<Store>> = std::sync::OnceLock::new();
+/// The PS2's text (imported `ps2/text/american.gxt`), read once.
+static PS2: std::sync::OnceLock<Option<Store>> = std::sync::OnceLock::new();
+
+/// A console's imported text, read on first use.
+fn console_store(lock: &'static std::sync::OnceLock<Option<Store>>, folder: &str, name: &str) -> Option<&'static Store> {
+    lock.get_or_init(|| {
+        let path = crate::discimport::cache_dir().join(folder).join("text").join("american.gxt");
         let data = std::fs::read(path).ok()?;
         match Gxt::parse(&data) {
             Ok(g) => Some(build(g)),
             Err(e) => {
-                eprintln!("text: the Xbox's american.gxt: {e}");
+                eprintln!("text: the {name}'s american.gxt: {e}");
                 None
             }
         }
-    });
-    store.as_ref().and_then(|s| s.main.and_then(|m| s.tables[m].get(&k))).unwrap_or(std::ptr::null())
+    })
+    .as_ref()
+}
+
+/// The console's string for `key` in its UI style (PS2 or Xbox), or null: the PC text and revc's
+/// own then apply.
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_text_console_get(key: *const c_char) -> *const u16 {
+    if !ENGLISH.load(std::sync::atomic::Ordering::Relaxed) {
+        return std::ptr::null();
+    }
+    let Some((console, k)) = console_source(crate::texmods::style(), &key_bytes(key)) else { return std::ptr::null() };
+    let store = match console {
+        Console::Ps2 => console_store(&PS2, "ps2", "PS2"),
+        Console::Xbox => console_store(&XBOX, "xbox", "Xbox"),
+    };
+    store.and_then(|s| s.main.and_then(|m| s.tables[m].get(&k))).unwrap_or(std::ptr::null())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Console {
+    Ps2,
+    Xbox,
+}
+
+/// Which console's text answers `key` in UI style `style` (1 PS2, 2 Xbox), and under which of
+/// its keys; None: the PC text and revc's own apply.
+fn console_source(style: i32, key: &[u8]) -> Option<(Console, Vec<u8>)> {
+    match style {
+        1 if PS2_KEYS.iter().any(|p| p.as_bytes() == key) => Some((Console::Ps2, key.to_vec())),
+        2 => match XBOX_ALIASES.iter().find(|(a, _)| a.as_bytes() == key) {
+            Some((_, x)) => Some((Console::Xbox, x.as_bytes().to_vec())),
+            None if console_key(key) => Some((Console::Xbox, key.to_vec())),
+            None => None,
+        },
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod console_tests {
+    use super::*;
+
+    #[test]
+    fn test_style_1_ps2() {
+        // Every key in PS2_KEYS gives Some((Console::Ps2, the same key))
+        for &ps2_key in PS2_KEYS.iter() {
+            let result = console_source(1, ps2_key.as_bytes());
+            assert_eq!(result, Some((Console::Ps2, ps2_key.as_bytes().to_vec())), "Failed for PS2 key: {}", ps2_key);
+        }
+
+        // "C_ABC" gives None
+        assert_eq!(console_source(1, b"C_ABC"), None);
+
+        // "RVC_XSF" gives None
+        assert_eq!(console_source(1, b"RVC_XSF"), None);
+
+        // "FEA_MUS" gives None
+        assert_eq!(console_source(1, b"FEA_MUS"), None);
+    }
+
+    #[test]
+    fn test_style_2_xbox() {
+        // "RVC_XSF" gives Some((Console::Xbox, b"FEA_SFX"))
+        assert_eq!(console_source(2, b"RVC_XSF"), Some((Console::Xbox, b"FEA_SFX".to_vec())));
+
+        // "RVC_XOK" -> "FEM_OK"
+        assert_eq!(console_source(2, b"RVC_XOK"), Some((Console::Xbox, b"FEM_OK".to_vec())));
+
+        // "RVC_XNG" -> "T_0914C"
+        assert_eq!(console_source(2, b"RVC_XNG"), Some((Console::Xbox, b"T_0914C".to_vec())));
+
+        // "C_FIRE" gives Some((Console::Xbox, b"C_FIRE"))
+        assert_eq!(console_source(2, b"C_FIRE"), Some((Console::Xbox, b"C_FIRE".to_vec())));
+
+        // "HAMMER" gives None
+        assert_eq!(console_source(2, b"HAMMER"), None);
+
+        // "FEA_MUS" gives None
+        assert_eq!(console_source(2, b"FEA_MUS"), None);
+    }
+
+    #[test]
+    fn test_style_0_and_3_none() {
+        let keys_to_test: [&[u8]; 3] = [b"HAMMER", b"C_FIRE", b"RVC_XSF"];
+
+        // Styles 0 and 3 should give None for all specified keys
+        for style in [0, 3] {
+            for key in &keys_to_test {
+                assert_eq!(
+                    console_source(style, key),
+                    None,
+                    "Expected None for style {} and key {:?}",
+                    style,
+                    String::from_utf8_lossy(key)
+                );
+            }
+        }
+    }
 }
