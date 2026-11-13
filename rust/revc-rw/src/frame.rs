@@ -57,7 +57,7 @@ pub const SCENE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 // supersampled -> window size averages 2x2 texels), `fxaa` is FXAA (Timothy Lottes' compact
 // variant: luma edge direction, two- and four-tap blend along it, falls back to two taps when
 // the four-tap result leaves the local luma range).
-const POST_SHADER: &str = r#"
+pub(crate) const POST_SHADER: &str = r#"
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var samp: sampler;
 

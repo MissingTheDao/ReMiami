@@ -218,10 +218,13 @@ struct DrawOp {
 
 #[derive(Clone, Copy, Debug)]
 enum Cmd {
+    /// End of the scene: what follows for `Target::Scene` is drawn at output resolution on top
+    /// of the post-processed, scaled image.
+    Overlay,
     Target(Target),
     Clear { color: Option<[f64; 4]>, depth: Option<f32>, stencil: Option<u32> },
     Draw(DrawOp),
-    Copy { src: Target, rect: Option<[u32; 4]>, dst: TextureId, at: [u32; 2] },
+    Copy { src: Target, rect: Option<[u32; 4]>, dst: TextureId, at: [u32; 2], scale_to: Option<[u32; 2]> },
 }
 
 /// A uniform buffer of fixed-size blocks bound at dynamic offsets.
@@ -287,6 +290,23 @@ impl Stream {
     }
 }
 
+/// Where `Target::Scene` draws go during a replay: the scene, or the overlay image.
+struct SceneAtt<'a> {
+    color: &'a wgpu::Texture,
+    view: &'a wgpu::TextureView,
+    msaa: Option<&'a wgpu::TextureView>,
+    depth: &'a wgpu::TextureView,
+    size: (u32, u32),
+}
+
+/// Output-size image the overlay is drawn on (with its depth/stencil).
+struct OverlayTarget {
+    color: wgpu::Texture,
+    view: wgpu::TextureView,
+    depth: wgpu::TextureView,
+    size: (u32, u32),
+}
+
 struct SceneTarget {
     color: wgpu::Texture,
     view: wgpu::TextureView,
@@ -328,7 +348,8 @@ pub struct Renderer {
     pub output: OutputSettings,
     post: Vec<Box<dyn PostPass>>,
     custom_output: Option<Box<dyn OutputStage>>,
-    blitter: Blitter,
+    /// In a RefCell: replaying the commands (`&self`) blits filtered frame copies.
+    blitter: std::cell::RefCell<Blitter>,
     view_layout: wgpu::BindGroupLayout,
     draw_layout: wgpu::BindGroupLayout,
     tex_layout: wgpu::BindGroupLayout,
@@ -374,6 +395,9 @@ pub struct Renderer {
     work: [Option<wgpu::Texture>; 2],
     prescale: Option<wgpu::Texture>,
     final_image: Option<wgpu::Texture>,
+    /// The frame being recorded is past `begin_overlay`.
+    overlay: bool,
+    overlay_target: Option<OverlayTarget>,
     frame: u64,
     warned: std::collections::HashSet<&'static str>,
 }
@@ -444,7 +468,7 @@ impl Renderer {
             output: OutputSettings::default(),
             post: Vec::new(),
             custom_output: None,
-            blitter: Blitter::new(gpu),
+            blitter: std::cell::RefCell::new(Blitter::new(gpu)),
             view_ub: Blocks::new(gpu, &view_layout, VIEW_BLOCK, 16),
             draw_ub: Blocks::new(gpu, &draw_layout, DRAW_BLOCK, 256),
             bones_ub: Blocks::new(gpu, &bones_layout, BONES_BLOCK, 8),
@@ -486,6 +510,8 @@ impl Renderer {
             work: [None, None],
             prescale: None,
             final_image: None,
+            overlay: false,
+            overlay_target: None,
             frame: 0,
             warned: Default::default(),
         }
@@ -783,6 +809,22 @@ impl Renderer {
         }
     }
 
+    /// Ends the scene of this frame: following `Target::Scene` clears, draws and copies go to an
+    /// output-resolution image on top of the scene after its downsampling, post chain and output
+    /// scaling (a HUD drawn sharp at window resolution whatever the internal resolution,
+    /// supersampling or post AA). Its depth starts cleared; draws are single-sampled. The output
+    /// curve (gamma) is applied after the overlay. Once per frame.
+    pub fn begin_overlay(&mut self) {
+        if !self.overlay {
+            self.cmds.push(Cmd::Overlay);
+            self.overlay = true;
+            if self.target == Target::Scene {
+                self.viewport = None;
+                self.scissor = None;
+            }
+        }
+    }
+
     /// Clears the whole current target: colour (0..1), depth, stencil, each if given.
     pub fn clear(&mut self, color: Option<[f64; 4]>, depth: Option<f32>, stencil: Option<u32>) {
         self.cmds.push(Cmd::Clear { color, depth, stencil });
@@ -810,7 +852,13 @@ impl Renderer {
     /// so far into a texture for feedback effects. `rect` in source pixels (x, y, w, h); None =
     /// all of it. Same-format copies are exact; otherwise the copy is filtered.
     pub fn copy_to_texture(&mut self, src: Target, rect: Option<[u32; 4]>, dst: TextureId, at: [u32; 2]) {
-        self.cmds.push(Cmd::Copy { src, rect, dst, at });
+        self.cmds.push(Cmd::Copy { src, rect, dst, at, scale_to: None });
+    }
+
+    /// Copies all of `src`, filtered (bilinear) to `size` pixels, into `dst` at `at` when the
+    /// frame is drawn: e.g. a supersampled or scaled frame into a window-size texture.
+    pub fn copy_to_texture_scaled(&mut self, src: Target, dst: TextureId, at: [u32; 2], size: [u32; 2]) {
+        self.cmds.push(Cmd::Copy { src, rect: None, dst, at, scale_to: Some(size) });
     }
 
     /// Records a draw.
@@ -936,6 +984,7 @@ impl Renderer {
             _ => None,
         };
         let samples = match self.target {
+            Target::Scene if self.overlay => 1,
             Target::Scene => self.samples,
             Target::Texture(t) => match self.textures.get(&t).and_then(|t| t.rt.as_ref()) {
                 Some(rt) => rt.samples,
@@ -1118,10 +1167,96 @@ impl Renderer {
             }
         }
 
-        let scene = self.scene.as_ref().unwrap();
+        // The scene's commands, then (after a `begin_overlay`) the overlay's.
+        let split = cmds.iter().position(|c| matches!(c, Cmd::Overlay));
+        let (scene_cmds, overlay_cmds) = match split {
+            Some(i) => (&cmds[..i], Some(&cmds[i + 1..])),
+            None => (&cmds[..], None),
+        };
+        {
+            let sc = self.scene.as_ref().unwrap();
+            self.replay(gpu, enc, scene_cmds, SceneAtt { color: &sc.color, view: &sc.view, msaa: sc.msaa.as_ref(), depth: &sc.depth, size: sc.size });
+        }
+
+        // After the scene: downsample to the internal size, post chain, output.
+        let internal = self.internal_size(size);
+        let internal = (internal.0.max(1), internal.1.max(1));
+        for w in self.work.iter_mut() {
+            if w.as_ref().is_none_or(|t| (t.width(), t.height()) != internal) {
+                *w = Some(render_texture(gpu, "post", internal, TARGET_FORMAT));
+            }
+        }
+        let scene_color = self.scene.as_ref().unwrap().color.clone();
+        let mut image = scene_color;
+        let mut slot = 0;
+        if scene_size != internal {
+            let dst = self.work[slot].clone().unwrap();
+            self.blitter.borrow_mut().blit(gpu, enc, &image, true, &dst.create_view(&Default::default()), TARGET_FORMAT, None, [0.0, 0.0, 1.0, 1.0], None, None);
+            image = dst;
+            slot ^= 1;
+        }
+        let mut post = std::mem::take(&mut self.post);
+        for p in post.iter_mut() {
+            let dst = self.work[slot].clone().unwrap();
+            p.run(gpu, enc, &image, &dst.create_view(&Default::default()));
+            image = dst;
+            slot ^= 1;
+        }
+        self.post = post;
+        match overlay_cmds {
+            None => {
+                self.final_image = Some(image.clone());
+                if let Some(mut stage) = self.custom_output.take() {
+                    stage.run(gpu, enc, &image, output, self.output_format, size, self.frame);
+                    self.custom_output = Some(stage);
+                } else {
+                    self.run_scaler(gpu, enc, &image, output, self.output_format, size, true);
+                }
+            }
+            Some(ov) => {
+                // The game image scaled to the output into an output-size image, the overlay
+                // drawn on it, then the output curve on the way out.
+                let size = (size.0.max(1), size.1.max(1));
+                if self.overlay_target.as_ref().is_none_or(|o| o.size != size) {
+                    let color = render_texture(gpu, "overlay", size, TARGET_FORMAT);
+                    let view = color.create_view(&Default::default());
+                    let depth = attachment(gpu, "overlay depth", size, DEPTH_FORMAT, 1);
+                    self.overlay_target = Some(OverlayTarget { color, view, depth, size });
+                }
+                let o = self.overlay_target.as_ref().unwrap();
+                let (oc, ovw, od) = (o.color.clone(), o.view.clone(), o.depth.clone());
+                if let Some(mut stage) = self.custom_output.take() {
+                    stage.run(gpu, enc, &image, &ovw, TARGET_FORMAT, size, self.frame);
+                    self.custom_output = Some(stage);
+                } else {
+                    self.run_scaler(gpu, enc, &image, &ovw, TARGET_FORMAT, size, false);
+                }
+                // The overlay's depth/stencil starts cleared.
+                drop(enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("overlay depth clear"),
+                    color_attachments: &[],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &od,
+                        depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
+                        stencil_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(0), store: wgpu::StoreOp::Store }),
+                    }),
+                    ..Default::default()
+                }));
+                self.replay(gpu, enc, ov, SceneAtt { color: &oc, view: &ovw, msaa: None, depth: &od, size });
+                let gamma = (self.output.gamma != 1.0).then_some(self.output.gamma);
+                self.blitter.borrow_mut().blit(gpu, enc, &oc, false, output, self.output_format, None, [0.0, 0.0, 1.0, 1.0], None, gamma);
+                self.final_image = Some(oc);
+            }
+        }
+        self.cmds = cmds;
+        self.frame += 1;
+    }
+
+    /// Replays recorded commands, with `Target::Scene` drawing into `scene`.
+    fn replay(&self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, cmds: &[Cmd], scene: SceneAtt) {
         let mut pass: Option<wgpu::RenderPass<'static>> = None;
         let mut target = Target::Scene;
-        let mut target_size = scene_size;
+        let mut target_size = scene.size;
         let mut ok = true;
         #[derive(Default)]
         struct Bound {
@@ -1140,9 +1275,9 @@ impl Renderer {
         let mut bound = Bound::default();
         let attachments = |t: Target| -> Option<(&wgpu::TextureView, Option<&wgpu::TextureView>, &wgpu::TextureView, (u32, u32))> {
             match t {
-                Target::Scene => Some(match &scene.msaa {
-                    Some(m) => (m, Some(&scene.view), &scene.depth, scene.size),
-                    None => (&scene.view, None, &scene.depth, scene.size),
+                Target::Scene => Some(match scene.msaa {
+                    Some(m) => (m, Some(scene.view), scene.depth, scene.size),
+                    None => (scene.view, None, scene.depth, scene.size),
                 }),
                 Target::Texture(id) => {
                     let tex = self.textures.get(&id)?;
@@ -1176,8 +1311,9 @@ impl Renderer {
                 .forget_lifetime(),
             )
         };
-        for c in &cmds {
+        for c in cmds {
             match *c {
+                Cmd::Overlay => {}
                 Cmd::Target(t) => {
                     drop(pass.take());
                     target = t;
@@ -1192,11 +1328,32 @@ impl Renderer {
                     pass = begin(enc, target, color, depth, stencil);
                     bound = Bound::default();
                 }
-                Cmd::Copy { src, rect, dst, at } => {
+                Cmd::Copy { src, rect: _, dst, at, scale_to: Some(sz) } => {
+                    drop(pass.take());
+                    let Some(d) = self.textures.get(&dst) else { continue };
+                    if d.format.is_compressed() || attachments(src).is_none() {
+                        continue;
+                    }
+                    let src_tex = match src {
+                        Target::Scene => scene.color,
+                        Target::Texture(id) => &self.textures[&id].texture,
+                    };
+                    // Clip the destination rectangle to the texture, sampling the matching part.
+                    let (dw, dh) = (d.texture.width(), d.texture.height());
+                    let w = sz[0].min(dw.saturating_sub(at[0]));
+                    let h = sz[1].min(dh.saturating_sub(at[1]));
+                    if w == 0 || h == 0 || sz[0] == 0 || sz[1] == 0 {
+                        continue;
+                    }
+                    let uv = [0.0, 0.0, w as f32 / sz[0] as f32, h as f32 / sz[1] as f32];
+                    let dview = d.texture.create_view(&wgpu::TextureViewDescriptor { base_mip_level: 0, mip_level_count: Some(1), ..Default::default() });
+                    self.blitter.borrow_mut().blit(gpu, enc, src_tex, true, &dview, d.format, Some([at[0] as f32, at[1] as f32, w as f32, h as f32]), uv, None, None);
+                }
+                Cmd::Copy { src, rect, dst, at, scale_to: None } => {
                     drop(pass.take());
                     let (Some(s), Some(d)) = (attachments(src).map(|a| (a.1.is_some(), a.3)), self.textures.get(&dst)) else { continue };
                     let src_tex = match src {
-                        Target::Scene => &scene.color,
+                        Target::Scene => scene.color,
                         Target::Texture(id) => &self.textures[&id].texture,
                     };
                     let _ = s.0;
@@ -1218,7 +1375,7 @@ impl Renderer {
                         let dview = d.texture.create_view(&wgpu::TextureViewDescriptor { base_mip_level: 0, mip_level_count: Some(1), ..Default::default() });
                         let (fw, fh) = (s.1.0 as f32, s.1.1 as f32);
                         let uv = [sx as f32 / fw, sy as f32 / fh, w as f32 / fw, h as f32 / fh];
-                        self.blitter.blit(gpu, enc, src_tex, false, &dview, d.format, Some([at[0] as f32, at[1] as f32, w as f32, h as f32]), uv, None, None);
+                        self.blitter.borrow_mut().blit(gpu, enc, src_tex, false, &dview, d.format, Some([at[0] as f32, at[1] as f32, w as f32, h as f32]), uv, None, None);
                     }
                 }
                 Cmd::Draw(d) => {
@@ -1309,44 +1466,11 @@ impl Renderer {
             }
         }
         drop(pass.take());
-        self.cmds = cmds;
-
-        // After the scene: downsample to the internal size, post chain, output.
-        let internal = self.internal_size(size);
-        let internal = (internal.0.max(1), internal.1.max(1));
-        for w in self.work.iter_mut() {
-            if w.as_ref().is_none_or(|t| (t.width(), t.height()) != internal) {
-                *w = Some(render_texture(gpu, "post", internal, TARGET_FORMAT));
-            }
-        }
-        let scene_color = self.scene.as_ref().unwrap().color.clone();
-        let mut image = scene_color;
-        let mut slot = 0;
-        if scene_size != internal {
-            let dst = self.work[slot].clone().unwrap();
-            self.blitter.blit(gpu, enc, &image, true, &dst.create_view(&Default::default()), TARGET_FORMAT, None, [0.0, 0.0, 1.0, 1.0], None, None);
-            image = dst;
-            slot ^= 1;
-        }
-        let mut post = std::mem::take(&mut self.post);
-        for p in post.iter_mut() {
-            let dst = self.work[slot].clone().unwrap();
-            p.run(gpu, enc, &image, &dst.create_view(&Default::default()));
-            image = dst;
-            slot ^= 1;
-        }
-        self.post = post;
-        self.final_image = Some(image.clone());
-        if let Some(mut stage) = self.custom_output.take() {
-            stage.run(gpu, enc, &image, output, self.output_format, size, self.frame);
-            self.custom_output = Some(stage);
-        } else {
-            self.run_scaler(gpu, enc, &image, output, size);
-        }
-        self.frame += 1;
     }
 
-    fn run_scaler(&mut self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, image: &wgpu::Texture, output: &wgpu::TextureView, size: (u32, u32)) {
+    /// Scales `image` into `output` (`format`) per the output settings; `curve`: with the gamma.
+    #[allow(clippy::too_many_arguments)]
+    fn run_scaler(&mut self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, image: &wgpu::Texture, output: &wgpu::TextureView, format: wgpu::TextureFormat, size: (u32, u32), curve: bool) {
         let s = self.output;
         let src = (image.width(), image.height());
         let r = output_rect(src, size, &s);
@@ -1356,7 +1480,7 @@ impl Renderer {
         let uv = [(x0 - r[0]) / r[2], (y0 - r[1]) / r[3], (x1 - x0) / r[2], (y1 - y0) / r[3]];
         let bg = wgpu::Color { r: s.background[0], g: s.background[1], b: s.background[2], a: s.background[3] };
         // A gamma of 1 is a plain copy (pow(x, 1) isn't exact on every GPU).
-        let gamma = (s.gamma != 1.0).then_some(s.gamma);
+        let gamma = (curve && s.gamma != 1.0).then_some(s.gamma);
         let vp = Some([x0, y0, x1 - x0, y1 - y0]);
         let mut src_tex = image.clone();
         let mut linear = s.filter != ScaleFilter::Nearest;
@@ -1368,16 +1492,17 @@ impl Renderer {
                     self.prescale = Some(render_texture(gpu, "prescale", pre, TARGET_FORMAT));
                 }
                 let t = self.prescale.clone().unwrap();
-                self.blitter.blit(gpu, enc, image, false, &t.create_view(&Default::default()), TARGET_FORMAT, None, [0.0, 0.0, 1.0, 1.0], None, None);
+                self.blitter.borrow_mut().blit(gpu, enc, image, false, &t.create_view(&Default::default()), TARGET_FORMAT, None, [0.0, 0.0, 1.0, 1.0], None, None);
                 src_tex = t;
             }
             linear = true;
         }
-        self.blitter.blit(gpu, enc, &src_tex, linear, output, self.output_format, vp, uv, Some(bg), gamma);
+        self.blitter.borrow_mut().blit(gpu, enc, &src_tex, linear, output, format, vp, uv, Some(bg), gamma);
     }
 
     /// The last encoded frame after the post chain, before the output stage (internal
-    /// resolution, TARGET_FORMAT): what screenshots and texture dumps should read.
+    /// resolution, TARGET_FORMAT): what screenshots and texture dumps should read. In a frame
+    /// with an overlay: the output-size image with the overlay, before the output curve.
     pub fn final_image(&self) -> Option<&wgpu::Texture> {
         self.final_image.as_ref()
     }
@@ -1403,6 +1528,7 @@ impl Renderer {
         self.prog_blocks.values_mut().for_each(Vec::clear);
         self.retired.clear();
         self.target = Target::Scene;
+        self.overlay = false;
         self.viewport = None;
         self.scissor = None;
         for id in std::mem::take(&mut self.dead_textures) {

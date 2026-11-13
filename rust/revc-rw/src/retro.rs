@@ -4,8 +4,12 @@
 //! programs generated from the same WGSL as `frame.rs`, so both back ends shade identically;
 //! retro-wgpu owns resources, recording, targets, MSAA, the post chain and the output.
 //!
-//! Not translated yet (warned once): the overlay split for render scale / supersampling /
-//! post AA (retro-wgpu has no output-resolution overlay yet).
+//! The overlay split (render scale, supersampling or post AA with a HUD marker) maps onto
+//! retro-wgpu's output-resolution overlay. One difference with a render scale below 100 %:
+//! WgpuBackend filters the scene straight to window size and runs post AA there, retro-wgpu runs
+//! post AA at the scaled size and then scales (render scale is not a player option). Without
+//! post AA both filter the scene to the window in one bilinear step. FXAA is this renderer's own
+//! (`RwFxaa`, frame.rs's shader as a retro-wgpu post pass); SMAA is the same port in both.
 
 use crate::frame::{Frame, MESH_NEO_GLOSS, MESH_NEO_RIM, MESH_NEO_VEHICLE, MESH_NEO_WORLD, ModelState, TexData};
 use crate::front::{BONE_FLOATS, HashMap, Kind, MeshDraw, Op, PipeKey, SamplerKey, Upload};
@@ -174,6 +178,70 @@ fn render_state(pipe: &PipeKey) -> rw::RenderState {
     }
 }
 
+/// WgpuBackend's FXAA (frame.rs `POST_SHADER`) as a retro-wgpu post pass, so both back ends
+/// antialias alike.
+pub struct RwFxaa {
+    pipeline: wgpu::RenderPipeline,
+    layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+}
+
+impl RwFxaa {
+    pub fn new(gpu: &rw::Gpu) -> RwFxaa {
+        let d = &gpu.device;
+        let tex = |binding| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+            count: None,
+        };
+        let layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("rw fxaa"),
+            entries: &[tex(0), wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None }],
+        });
+        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("rw fxaa"), source: wgpu::ShaderSource::Wgsl(crate::frame::POST_SHADER.into()) });
+        let pl = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("rw fxaa"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
+        let pipeline = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("rw fxaa"),
+            layout: Some(&pl),
+            vertex: wgpu::VertexState { module: &module, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
+            fragment: Some(wgpu::FragmentState { module: &module, entry_point: Some("fxaa"), targets: &[Some(rw::TARGET_FORMAT.into())], compilation_options: Default::default() }),
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        let sampler = d.create_sampler(&wgpu::SamplerDescriptor { label: Some("rw fxaa"), mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, ..Default::default() });
+        RwFxaa { pipeline, layout, sampler }
+    }
+}
+
+impl rw::PostPass for RwFxaa {
+    fn name(&self) -> &str {
+        "fxaa (revc-rw)"
+    }
+
+    fn run(&mut self, gpu: &rw::Gpu, enc: &mut wgpu::CommandEncoder, input: &wgpu::Texture, output: &wgpu::TextureView) {
+        let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("rw fxaa"),
+            layout: &self.layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&input.create_view(&Default::default())) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.sampler) },
+            ],
+        });
+        let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("rw fxaa"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: output, resolve_target: None, depth_slice: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store } })],
+            ..Default::default()
+        });
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &bind, &[]);
+        pass.draw(0..3, 0..1);
+    }
+}
+
 struct RetroTex {
     id: rw::TextureId,
     width: u32,
@@ -190,7 +258,8 @@ pub struct RetroBackend {
     programs: HashMap<(Kind, u32), rw::ProgramId>,
     textures: HashMap<u32, RetroTex>,
     geometries: HashMap<u32, (rw::BufferId, rw::BufferId)>,
-    settings: Option<crate::front::FrameSettings>,
+    scene: Option<rw::SceneSettings>,
+    post: Option<(bool, bool)>,
     warned: HashSet<&'static str>,
     mesh_src: String,
     uv2_src: String,
@@ -204,7 +273,8 @@ impl RetroBackend {
             programs: HashMap::default(),
             textures: HashMap::default(),
             geometries: HashMap::default(),
-            settings: None,
+            scene: None,
+            post: None,
             warned: HashSet::new(),
             mesh_src: mesh_wgsl(),
             uv2_src: uv2_wgsl(),
@@ -249,21 +319,29 @@ impl RetroBackend {
         }
     }
 
-    fn apply_settings(&mut self, gpu: &rw::Gpu, s: crate::front::FrameSettings) {
-        if self.settings == Some(s) {
-            return;
+    /// The frame's settings for a `window`-size output: as WgpuBackend sizes its scene, the
+    /// render scale only applies to frames with a HUD marker.
+    fn apply_settings(&mut self, gpu: &rw::Gpu, s: crate::front::FrameSettings, window: (u32, u32), overlay: bool) {
+        // With a render scale the scene (supersampling included) is the internal image, filtered
+        // to the window in one step by the output stage, as WgpuBackend does.
+        let scene = if overlay && s.render_scale != 100 {
+            rw::SceneSettings { internal_size: Some(s.scene_size(window, true)), supersample: 1, msaa: s.samples }
+        } else {
+            rw::SceneSettings { internal_size: None, supersample: s.scale, msaa: s.samples }
+        };
+        if self.scene != Some(scene) {
+            self.scene = Some(scene);
+            self.r.set_scene(gpu, scene);
         }
-        self.settings = Some(s);
-        self.r.set_scene(gpu, rw::SceneSettings { internal_size: None, supersample: s.scale, msaa: s.samples });
-        let mut post: Vec<Box<dyn rw::PostPass>> = Vec::new();
-        if s.smaa {
-            post.push(Box::new(rw::Smaa::new(gpu)));
-        } else if s.fxaa {
-            post.push(Box::new(rw::Fxaa::new(gpu)));
-        }
-        self.r.set_post_chain(post);
-        if s.render_scale != 100 {
-            self.warn("render scale is not translated (drawn at 100 %)");
+        if self.post != Some((s.smaa, s.fxaa)) {
+            self.post = Some((s.smaa, s.fxaa));
+            let mut post: Vec<Box<dyn rw::PostPass>> = Vec::new();
+            if s.smaa {
+                post.push(Box::new(rw::Smaa::new(gpu)));
+            } else if s.fxaa {
+                post.push(Box::new(RwFxaa::new(gpu)));
+            }
+            self.r.set_post_chain(post);
         }
     }
 
@@ -321,7 +399,9 @@ impl RetroBackend {
 
     /// Records `frame` into retro-wgpu and encodes it into `output` (`size` pixels).
     pub fn encode(&mut self, gpu: &rw::Gpu, enc: &mut wgpu::CommandEncoder, output: &wgpu::TextureView, size: (u32, u32), frame: &Frame) {
-        self.apply_settings(gpu, frame.settings);
+        let split = frame.has_overlay() && frame.settings.overlay_split();
+        self.apply_settings(gpu, frame.settings, size, frame.has_overlay());
+        let scaled = frame.settings.scene_size(size, frame.has_overlay()) != size;
         for up in &frame.uploads {
             match up {
                 Upload::Texture { id, width, height, data, levels, autogen } => self.upload_texture(gpu, *id, *width, *height, *data, levels, *autogen),
@@ -335,18 +415,21 @@ impl RetroBackend {
                 }
             }
         }
-        if frame.has_overlay() && frame.settings.overlay_split() {
-            self.warn("overlay split (render scale, supersampling or post AA) is not translated: the HUD is drawn into the scene");
-        }
         // The scene's first pass starts black with cleared depth (as in WgpuBackend).
         self.r.set_target(rw::Target::Scene);
         self.r.clear(Some([0.0, 0.0, 0.0, 1.0]), Some(1.0), Some(0));
         let mut cur = 0u32;
+        let mut in_overlay = false;
         let screen = rw::View::screen(size.0 as f32, size.1 as f32);
         self.r.set_view(&screen);
         for op in &frame.ops {
             match *op {
-                Op::Overlay => {}
+                Op::Overlay => {
+                    if split && !in_overlay {
+                        self.r.begin_overlay();
+                        in_overlay = true;
+                    }
+                }
                 Op::Target { texture } => {
                     cur = texture;
                     let t = if texture == 0 {
@@ -361,7 +444,12 @@ impl RetroBackend {
                 }
                 Op::CopyFrame { texture, x, y } => {
                     if let Some(t) = self.tex(texture) {
-                        self.r.copy_to_texture(rw::Target::Scene, None, t, [x, y]);
+                        if scaled && !in_overlay {
+                            // The scaled scene filtered to window pixels (WgpuBackend's "down" pass).
+                            self.r.copy_to_texture_scaled(rw::Target::Scene, t, [x, y], [size.0, size.1]);
+                        } else {
+                            self.r.copy_to_texture(rw::Target::Scene, None, t, [x, y]);
+                        }
                     }
                 }
                 Op::Clear { color, depth } => {

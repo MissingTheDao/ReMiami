@@ -142,14 +142,37 @@ fn record(r: &mut Renderer, gpu: &Gpu) {
 }
 
 fn run(backend: Backend) {
+    run_with(backend, 0, 100, true);
+}
+
+/// Every antialiasing level, and a render scale, with the HUD marker (the overlay split).
+fn levels(backend: Backend) {
+    let mut worst = Vec::new();
+    for level in 0..Antialiasing::LEVELS.len() as u32 {
+        worst.push((Antialiasing::LEVELS[level as usize].0, 100, run_with(backend, level, 100, false)));
+    }
+    worst.push(("Off", 75, run_with(backend, 0, 75, false)));
+    worst.push(("SSAA 2x", 75, run_with(backend, 7, 75, false)));
+    for (name, scale, w) in &worst {
+        eprintln!("{backend:?} {name} at {scale} %: {:.3} % within 2", w * 100.0);
+    }
+    for (name, scale, w) in worst {
+        assert!(w >= GATE, "{backend:?} {name} at {scale} %: only {:.3} % within 2 levels", w * 100.0);
+    }
+}
+
+fn run_with(backend: Backend, level: u32, render_scale: u32, strict: bool) -> f64 {
     let gpu = match Gpu::headless(backend) {
         Ok(g) => g,
         Err(e) => {
             eprintln!("SKIPPED on {backend:?}: {e}");
-            return;
+            return 1.0;
         }
     };
     let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+    r.set_antialiasing(&gpu, Antialiasing::level(level));
+    r.set_render_scale(render_scale);
+    let mut worst = 1.0f64;
     let mut shadow = Shadow::new(&gpu);
     let out = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
@@ -175,12 +198,16 @@ fn run(backend: Backend) {
         if let Some((a, b)) = &c.images {
             let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"));
             for (name, img) in [("wgpu", a), ("retro", b)] {
-                let f = std::fs::File::create(dir.join(format!("shadow-{backend:?}-{n}-{name}.png"))).unwrap();
-                let mut e = png::Encoder::new(f, SIZE, SIZE);
+                let f = std::fs::File::create(dir.join(format!("shadow-{backend:?}-l{level}-s{render_scale}-{n}-{name}.png"))).unwrap();
+                let mut e = png::Encoder::new(f, c.width, c.height);
                 e.set_color(png::ColorType::Rgba);
                 e.write_header().unwrap().write_image_data(img).unwrap();
             }
             eprintln!("images in {}", dir.display());
+        }
+        worst = worst.min(c.within);
+        if !strict {
+            continue;
         }
         assert!(c.within >= GATE, "{backend:?} frame {n}: only {:.3} % of pixels within 2 levels (max diff {})", c.within * 100.0, c.max_diff);
         // The image isn't trivially empty: the drawn parts have many colours.
@@ -196,6 +223,7 @@ fn run(backend: Backend) {
         }
         let _ = compare;
     }
+    worst
 }
 
 /// The wgpu back end's last image (before the output stage).
@@ -215,4 +243,14 @@ fn shadow_vulkan() {
 #[test]
 fn shadow_gl() {
     run(Backend::Gl);
+}
+
+#[test]
+fn shadow_levels_vulkan() {
+    levels(Backend::Vulkan);
+}
+
+#[test]
+fn shadow_levels_gl() {
+    levels(Backend::Gl);
 }

@@ -302,9 +302,12 @@ Every `REVC_RENDER_SHADOW_EVERY` frames (default 30) and on every capture both i
 back before the output stage and compared: the gate is 99.5 % of pixels within 2 levels. Frames
 below it are logged and, with `REVC_RENDER_SHADOW_DIR`, written as PNG pairs; a summary line is
 printed at exit. `revc-rw/tests/shadow.rs` runs the gate headless on a frame with every draw kind
-(both back ends match exactly on Vulkan and GL). Not translated yet: the overlay split (render
-scale, supersampling, post AA draw the HUD at window resolution in `WgpuBackend`); retro-wgpu
-needs its output-resolution overlay first.
+(both back ends match exactly on Vulkan and GL), also at every antialiasing level and with a
+render scale (`shadow_levels_*`). The overlay split (render scale, supersampling or post AA with
+a HUD marker) uses retro-wgpu's output-resolution overlay; FXAA runs as this renderer's own pass
+(`retro::RwFxaa`) so both back ends antialias alike. With a render scale below 100 % plus post
+AA the order differs (WgpuBackend filters to the window first, retro-wgpu after its post chain);
+render scale is only the upscaler hook, not a player option.
 
 ## What the game calls
 

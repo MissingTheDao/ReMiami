@@ -153,6 +153,18 @@ program's per-draw block (`block_size` bytes, a multiple of 16), `@group(2)` the
 inputs are at `VertexLayout::location(semantic)`. Blocks are pooled per block size; consecutive
 identical blocks are deduplicated like the fixed-function ones.
 
+## Overlay
+
+`Renderer::begin_overlay()` ends a frame's scene: later `Target::Scene` clears, draws and copies go
+to an output-size image, after the scene's downsampling, post chain and output scaling. It has
+its own depth/stencil, which starts cleared, and draws are single-sampled. A HUD drawn there stays sharp
+whatever the internal resolution, supersampling or post AA. The output curve (gamma) is applied
+afterwards, to both. `final_image()` is then that output-size image with the overlay, before the
+curve. A custom output stage (slang) runs on the game image before the overlay. Frame copies
+after the marker copy the overlay image. `copy_to_texture_scaled(src, dst, at, size)` copies a
+whole target filtered to a given size, e.g. a supersampled scene into a window-size texture.
+Tested in `tests/overlay.rs`.
+
 ## How engine front ends map onto it
 
 | Front end concept | retro-wgpu |
@@ -297,13 +309,12 @@ Unit tests cover the stable key (pinned value, cross-checked with an independent
 2. **reMiami migration** (2026-11-13): revc-rw has a retro back end (`revc-rw/src/retro.rs`)
    that draws its recorded frames with retro-wgpu, its RW shading ported as programs, and a
    shadow mode that proves it against the wgpu back end (`docs/RENDERER_PORT.md`, "Layering").
-   Left: the output-resolution overlay (follow-up 7) for render scale / supersampling / post AA,
-   then switching the default once the suites pass in shadow mode.
+   Left: switching the default once the suites pass in shadow mode.
 3. **Lighting:** point and spot lights with D3D attenuation, specular, per-pixel option.
 4. **Custom pipelines:** done as programs (above).
 5. **Stencil:** clear-by-rectangle and stencil-only targets. Depth/stencil sharing between targets, which D3D games sometimes expect.
 6. **Partial clears** (D3D `Clear` with rects or viewport): currently whole-target only.
-7. **Overlay at output resolution:** a HUD drawn after the post chain at window resolution, as revc-rw's `begin_overlay`.
+7. **Overlay at output resolution:** done (`begin_overlay`, below).
 8. **Border colour addressing** needs the wgpu `ADDRESS_MODE_CLAMP_TO_BORDER` feature. It currently clamps to the edge.
 9. **Port the 43mode CRT shaders** as `PostPass`es with their notices.
 10. **librashader:**
