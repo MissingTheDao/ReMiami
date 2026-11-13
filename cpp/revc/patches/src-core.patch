@@ -1,16 +1,17 @@
 --- a/src/core/Cam.cpp
 +++ b/src/core/Cam.cpp
-@@ -30,6 +30,9 @@
+@@ -30,6 +30,10 @@
  #include "Bike.h"
  #include "Pickups.h"
  
 +int XboxFlyLayout(void); int16 XboxStick(int axis); int16 XboxTriggerX(void); int XboxLookDir(int16 x, int16 y);	// (core/Pad.cpp)
++bool XboxRawDown(int joy);
 +
 +
  bool PrintDebugCode = false;
  int16 DebugCamMode;
  
-@@ -318,7 +321,24 @@
+@@ -318,7 +322,24 @@
  		   CamTargetEntity->IsVehicle()){
  			bool bDisableLR = CamTargetEntity &&
  				(((CVehicle*)CamTargetEntity)->GetVehicleAppearance() == VEHICLE_APPEARANCE_HELI || CamTargetEntity->GetModelIndex() == MI_RCBARON);
@@ -36,7 +37,7 @@
  				LookBehind();
  				if(DirectionWasLooking != LOOKING_BEHIND)
  					TheCamera.m_bJust_Switched = true;
-@@ -327,12 +347,12 @@
+@@ -327,12 +348,12 @@
  				if(DirectionWasLooking != LOOKING_FORWARD)
  					TheCamera.m_bJust_Switched = true;
  				DirectionWasLooking = LOOKING_FORWARD;
@@ -51,7 +52,7 @@
  				LookRight();
  				if(DirectionWasLooking != LOOKING_RIGHT)
  					TheCamera.m_bJust_Switched = true;
-@@ -1400,9 +1420,13 @@
+@@ -1400,9 +1421,13 @@
  		}
  	}
  
@@ -67,7 +68,7 @@
  		if(Alpha < fDefaultAlphaOrient-0.05f)
  			AlphaOffset = 0.05f;
  		else if(Alpha < fDefaultAlphaOrient)
-@@ -2500,6 +2524,44 @@
+@@ -2500,6 +2525,44 @@
  
  float fBike1stPersonOffsetZ = 0.15f;
  
@@ -112,7 +113,7 @@
  void
  CCam::Process_1stPerson(const CVector &CameraTarget, float TargetOrientation, float SpeedVar, float TargetSpeedVar)
  {
-@@ -2564,8 +2626,18 @@
+@@ -2564,8 +2627,18 @@
  		LookUpDown = CPad::GetPad(0)->LookAroundUpDown();
  		float xdir = LookLeftRight < 0.0f ? -1.0f : 1.0f;
  		float ydir = LookUpDown < 0.0f ? -1.0f : 1.0f;
@@ -131,6 +132,19 @@
  		while(Beta >= PI) Beta -= 2*PI;
  		while(Beta < -PI) Beta += 2*PI;
  		if(Alpha > DEGTORAD(60.0f)) Alpha = DEGTORAD(60.0f);
+@@ -2616,7 +2689,11 @@
+ 
+ 		if(((CVehicle*)CamTargetEntity)->IsBike() &&
+ 		   (((CBike*)CamTargetEntity)->bWheelieCam || TheCamera.m_fAvoidTheGeometryProbsTimer > 0.0f)){
+-			if(CPad::GetPad(0)->GetLeftShoulder2() || CPad::GetPad(0)->GetRightShoulder2()){
++			// (revc: the Xbox cancels it with its camera button: Black in Standard, White in Classic,
++			// read raw; in its layouts L2/R2 are other actions or unbound on a bike; research)
++			bool cancelWheelie = XboxFlyLayout() >= 0 ? XboxRawDown(XboxFlyLayout() == 1 ? 7 : 8) :
++				CPad::GetPad(0)->GetLeftShoulder2() || CPad::GetPad(0)->GetRightShoulder2();
++			if(cancelWheelie){
+ 				TheCamera.m_fAvoidTheGeometryProbsTimer = 0.0f;
+ 				((CBike*)CamTargetEntity)->bWheelieCam = false;
+ 			}else if(Process_WheelCam(CameraTarget, TargetOrientation, SpeedVar, TargetSpeedVar)){
 --- a/src/core/Camera.cpp
 +++ b/src/core/Camera.cpp
 @@ -108,6 +108,9 @@

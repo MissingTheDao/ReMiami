@@ -948,7 +948,7 @@
  	}
  	// TODO? L2-R2 axes(not buttons-that's fine) on joysticks that don't have SDL gamepad mapping AREN'T handled, and I think it's impossible to do without mapping.
  
-@@ -1879,24 +1983,63 @@
+@@ -1879,24 +1983,69 @@
  		
  		CPad *pad = CPad::GetPad(bs.padID);
  
@@ -961,23 +961,29 @@
 +		// dead zone d, rescaled so the stick still reaches full deflection; d = 0.25, 0.10 while
 +		// aiming in first person, and 0.60 until that stick has once gone past 60 % on both
 +		// axes since the pad was plugged in (keeps a drifting stick from moving anything).
++		// (the Xbox: a stick counts as calibrated once both axes have gone past 60 % both ways; the
++		// aiming dead zone applies before that too; research on the Xbox build)
 +		static int calibratedPad = -2;
-+		static bool seenX[2], seenY[2];
++		static bool seenLo[2][2], seenHi[2][2];	// [stick][axis]
 +		if (calibratedPad != hostPad) {
 +			calibratedPad = hostPad;
-+			seenX[0] = seenX[1] = seenY[0] = seenY[1] = false;
++			memset(seenLo, 0, sizeof(seenLo));
++			memset(seenHi, 0, sizeof(seenHi));
 +		}
 +		RwV2d *sticks[2] = { &leftStickPos, &rightStickPos };
++		bool seenX[2], seenY[2];
 +		for (int i = 0; i < 2; i++) {
-+			seenX[i] |= Abs(sticks[i]->x) > 0.6f;
-+			seenY[i] |= Abs(sticks[i]->y) > 0.6f;
++			seenLo[i][0] |= sticks[i]->x < -0.6f; seenHi[i][0] |= sticks[i]->x > 0.6f;
++			seenLo[i][1] |= sticks[i]->y < -0.6f; seenHi[i][1] |= sticks[i]->y > 0.6f;
++			seenX[i] = seenLo[i][0] && seenHi[i][0];
++			seenY[i] = seenLo[i][1] && seenHi[i][1];
 +		}
 +		int16 camMode = TheCamera.Cams[TheCamera.ActiveCam].Mode;
 +		bool aiming = camMode == CCam::MODE_SNIPER || camMode == CCam::MODE_ROCKETLAUNCHER ||
 +			camMode == CCam::MODE_M16_1STPERSON || camMode == CCam::MODE_HELICANNON_1STPERSON;
 +		float deadZone[2];
 +		for (int i = 0; i < 2; i++)
-+			deadZone[i] = !(seenX[i] && seenY[i]) ? 0.60f : aiming ? 0.10f : 0.25f;
++			deadZone[i] = aiming ? 0.10f : !(seenX[i] && seenY[i]) ? 0.60f : 0.25f;
 +		// revc: the PS2's own: one dead zone of 42/128 per axis in every situation, the rest
 +		// rescaled to +-127 (PS2 v1.40, research)
 +		extern int8 gUiStyle;
@@ -1022,7 +1028,7 @@
  extern "C" void revc_on_joystick(int jid, int connected)
  {
  	if (!HostCallbacksEnabled)
-@@ -1918,10 +2061,15 @@
+@@ -1918,10 +2067,15 @@
  
  	} else if (!connected) {
  		if (PSGLOBAL(joy1id) == jid) {
