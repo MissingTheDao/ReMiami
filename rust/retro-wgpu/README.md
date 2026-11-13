@@ -1,6 +1,6 @@
 # retro-wgpu
 
-Engine-neutral renderer core on wgpu for ports and remasters of fixed-function era games (Vulkan, OpenGL, Direct3D 12). Design, API and status: see RETRO_WGPU.md in the workspace docs; notices: NOTICE.md.
+Engine-neutral renderer core on wgpu for ports and remasters of fixed-function era games (Vulkan, OpenGL, Direct3D 12). Design, API and status: see DESIGN.md; notices: NOTICE.md.
 
 ## License
 
