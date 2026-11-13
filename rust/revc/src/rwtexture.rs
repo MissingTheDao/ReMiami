@@ -484,6 +484,10 @@ static MISSING: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new()
 
 fn note_missing(name: *const c_char) {
     let n = unsafe { std::ffi::CStr::from_ptr(name) }.to_string_lossy().into_owned();
+    // (the Xbox models' lightmaps, `<model>@`: XboxLightmaps.cpp gives them their textures)
+    if n.ends_with('@') {
+        return;
+    }
     let mut m = MISSING.lock().unwrap_or_else(|e| e.into_inner());
     if !m.contains(&n) {
         eprintln!("rwtexture: missing texture '{n}'");

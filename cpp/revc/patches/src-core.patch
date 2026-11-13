@@ -6082,17 +6082,18 @@
  	broken since forever, someone tried to fix size for 640x512(PAL)
 --- a/src/core/re3.cpp
 +++ b/src/core/re3.cpp
-@@ -479,6 +479,9 @@
+@@ -479,6 +479,10 @@
  	ini.write(cfg);
  }
  
 +extern "C" void revc_texmods_set_ps2_world(int on);
-+extern "C" void revc_ps2_models_set(int on);	// (revc: ps2models.rs)	// (revc: texmods.rs)
++extern "C" void revc_ps2_models_set(int on);	// (revc: ps2models.rs)
++extern "C" void revc_xbox_models_set(int on);	// (revc: ps2models.rs)	// (revc: texmods.rs)
 +
  bool LoadINISettings()
  {
  	if (!ini.read(cfg))
-@@ -493,6 +496,17 @@
+@@ -493,6 +497,20 @@
  #else
  	ReadIniIfExists("Graphics", "VideoMode", &FrontEndMenuManager.m_nDisplayVideoMode);
  #endif
@@ -6106,11 +6107,14 @@
 +		bool ps2Models = true;
 +		ReadIniIfExists("Graphics", "Ps2WorldModels", &ps2Models);
 +		revc_ps2_models_set(ps2Models ? 1 : 0);
++		bool xboxModels = true;
++		ReadIniIfExists("Graphics", "XboxWorldModels", &xboxModels);
++		revc_xbox_models_set(xboxModels ? 1 : 0);
 +	}
  	ReadIniIfExists("Controller", "HeadBob1stPerson", &TheCamera.m_bHeadBob);
  	ReadIniIfExists("Controller", "HorizantalMouseSens", &TheCamera.m_fMouseAccelHorzntl);
  	ReadIniIfExists("Controller", "InvertMouseVertically", &MousePointerStateHelper.bInvertVertically);
-@@ -588,6 +602,13 @@
+@@ -588,6 +606,13 @@
  	CCarCtrl::MaxNumberOfCarsInUse = DEFAULT_MAX_NUMBER_OF_CARS * CIniFile::CarNumberMultiplier;
  #endif
  
@@ -6124,7 +6128,7 @@
  	return true;
  }
  
-@@ -1055,8 +1076,8 @@
+@@ -1055,8 +1080,8 @@
  #endif
  
  #ifdef EXTENDED_COLOURFILTER

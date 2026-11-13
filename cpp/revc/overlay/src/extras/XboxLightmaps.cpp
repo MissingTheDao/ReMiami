@@ -145,6 +145,25 @@ Attach(const char *modelName, int n, rw::Atomic *atomic)
 	if(it == models.end())
 		return;
 	rw::Geometry *geo = atomic->geometry;
+	const std::vector<Geo> &all = it->second;
+	if(geo->numTexCoordSets == 2 && !all.empty()){
+		// the Xbox's own model (rust/revc/src/ps2models.rs): its second set is the lightmap's
+		// already; its materials' dual passes get the lightmaps (their names from the sidecar)
+		const Geo &c = all[n >= 0 && n < (int)all.size() ? n : 0];
+		for(int32 i = 0; i < geo->matList.numMaterials && !c.lightmaps.empty(); i++){
+			const std::string &name = c.lightmaps[i < (int32)c.lightmaps.size() ? i : c.lightmaps.size() - 1];
+			rw::Texture *tex = name.empty() ? nil : txd->find(name.c_str());
+			if(tex == nil)
+				continue;
+			rw::Material *m = geo->matList.materials[i];
+			rw::MatFX::setEffects(m, rw::MatFX::DUAL);
+			rw::MatFX *fx = rw::MatFX::get(m);
+			fx->setDualTexture(tex);
+			fx->setDualSrcBlend(rw::BLENDSRCALPHA);
+			fx->setDualDestBlend(rw::BLENDINVSRCALPHA);
+		}
+		return;
+	}
 	if(geo->numTexCoordSets != 1)
 		return;	// already done, or not a plain world mesh
 	// the Xbox geometry every vertex of this one is in: the atomic's (n-th) first, then the others

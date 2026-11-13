@@ -10,6 +10,7 @@
 pub mod iso9660;
 pub mod ps2geom;
 pub mod ps2tex;
+pub mod xboxgeom;
 pub mod xboxlm;
 pub mod xdvdfs;
 
@@ -192,8 +193,28 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
             let ide = disc.read(&ide).map_err(|e| format!("default.ide: {e}"))?;
             let names = vehicle_txds(&String::from_utf8_lossy(&ide));
             let dir = disc.read(&d).map_err(|e| format!("gta3.dir: {e}"))?;
+            let (mut models, mut kept_pc) = (0usize, std::collections::BTreeMap::<String, usize>::new());
             for e in dir.chunks_exact(32) {
                 let name = String::from_utf8_lossy(e[8..32].split(|&c| c == 0).next().unwrap_or(&[])).to_ascii_lowercase();
+                // Models (the "exact Xbox models" option): the Xbox's native geometry converted to
+                // ordinary geometry (xboxgeom.rs); the ones it can't convert stay PC models.
+                if name.ends_with(".dff") {
+                    let off = u32::from_le_bytes(e[0..4].try_into().unwrap()) as u64 * 2048;
+                    let size = u32::from_le_bytes(e[4..8].try_into().unwrap()) as usize * 2048;
+                    let raw = disc.read_range(&i, off, size).map_err(|err| format!("{name}: {err}"))?;
+                    let converted = xboxlm::img_entry(&raw).and_then(|d| xboxgeom::convert_dff(&d));
+                    match converted {
+                        Ok(data) => {
+                            let dest = root.join("models-world").join(&name);
+                            std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
+                            std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+                            report.written.push(dest);
+                            models += 1;
+                        }
+                        Err(why) => *kept_pc.entry(why.split(" (").next().unwrap_or("").to_string()).or_default() += 1,
+                    }
+                    continue;
+                }
                 let Some(stem) = name.strip_suffix(".txd") else { continue };
                 if !names.contains(stem) {
                     continue;
@@ -207,6 +228,7 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                 std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
                 report.written.push(dest);
             }
+            eprintln!("revc-import: {models} Xbox models converted; kept as PC models: {kept_pc:?}");
         }
         for (bin, txd) in lightmaps {
         for (file, data) in [("lightmaps.bin", bin), ("lightmaps.txd", txd)] {

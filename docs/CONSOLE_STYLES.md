@@ -313,6 +313,16 @@ objects; not vehicles or peds): same geometry, the PS2's own baked vertex lighti
 PS2 models use that a PC dictionary lacks (e.g. `hot_bottles1`) are added from the PS2 world pack
 when the dictionary loads.
 
+Xbox models (roadmap R4, "exact Xbox models"): an Xbox import converts the disc's models from
+gta3.img (Xbox native geometry, RenderWare 3.5: index buffers and one vertex buffer of position,
+[packed normal], [colour B,G,R,A] and two coordinate sets) to ordinary geometry
+(`rust/revc-import/src/xboxgeom.rs`, after librw's Xbox uninstance) into
+`<import cache>/xbox/models-world/` (4,613 models). In the Xbox style, while
+`[Graphics] XboxWorldModels` is on (default), they load instead of the PC ones, and
+XboxLightmaps.cpp gives their dual passes the lightmaps (their second set is the lightmap's
+already). The Xbox rebuilt and re-lit some map models (e.g. the shelf in Sonny's office, moved
+2.8 cm, int_b), so the PC models with the lightmaps grafted on can't look the same.
+
 ## Menu comparison shots
 
 `scripts/menu-shots.sh [out dir] [ps2|xbox ...]` runs `REVC_TEST=menus` (`rust/revc/src/testdrive.rs`,

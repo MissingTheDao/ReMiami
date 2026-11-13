@@ -24,31 +24,31 @@ const GEO_TRISTRIP: u16 = 0x01;
 const GEO_PRELIT: u16 = 0x08;
 const GEO_NORMALS: u16 = 0x10;
 
-fn u16_at(d: &[u8], o: usize) -> Result<u16, String> {
+pub(crate) fn u16_at(d: &[u8], o: usize) -> Result<u16, String> {
     d.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]])).ok_or_else(|| "truncated".to_string())
 }
-fn u32_at(d: &[u8], o: usize) -> Result<u32, String> {
+pub(crate) fn u32_at(d: &[u8], o: usize) -> Result<u32, String> {
     d.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])).ok_or_else(|| "truncated".to_string())
 }
-fn f32_at(d: &[u8], o: usize) -> Result<f32, String> {
+pub(crate) fn f32_at(d: &[u8], o: usize) -> Result<f32, String> {
     u32_at(d, o).map(f32::from_bits)
 }
 
 /// RenderWare's library id to version (librw libraryIDUnpackVersion).
-fn unpack_version(libid: u32) -> u32 {
+pub(crate) fn unpack_version(libid: u32) -> u32 {
     if libid & 0xFFFF_0000 != 0 { (((libid >> 14) & 0x3FF00) + 0x30000) | ((libid >> 16) & 0x3F) } else { libid << 8 }
 }
 
 /// A chunk: type, version stamp, body range.
 #[derive(Clone, Copy)]
-struct Chunk {
-    ty: u32,
-    ver: u32,
-    start: usize,
-    end: usize,
+pub(crate) struct Chunk {
+    pub(crate) ty: u32,
+    pub(crate) ver: u32,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
 }
 
-fn chunks(d: &[u8], mut o: usize, end: usize) -> Result<Vec<Chunk>, String> {
+pub(crate) fn chunks(d: &[u8], mut o: usize, end: usize) -> Result<Vec<Chunk>, String> {
     let mut out = Vec::new();
     while o + 12 <= end {
         let (ty, size, ver) = (u32_at(d, o)?, u32_at(d, o + 4)? as usize, u32_at(d, o + 8)?);
@@ -61,7 +61,7 @@ fn chunks(d: &[u8], mut o: usize, end: usize) -> Result<Vec<Chunk>, String> {
     Ok(out)
 }
 
-fn put_chunk(out: &mut Vec<u8>, ty: u32, ver: u32, body: &[u8]) {
+pub(crate) fn put_chunk(out: &mut Vec<u8>, ty: u32, ver: u32, body: &[u8]) {
     out.extend_from_slice(&ty.to_le_bytes());
     out.extend_from_slice(&(body.len() as u32).to_le_bytes());
     out.extend_from_slice(&ver.to_le_bytes());
