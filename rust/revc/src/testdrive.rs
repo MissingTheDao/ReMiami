@@ -38,7 +38,7 @@
 //!                       slot 1: the first mission's hotel cutscene). Ends 5 s after the last
 //!                       marker's cutscene, or after REVC_TEST_CUT_MS of game time (default 240 s). Every REVC_TEST_CUT_SHOT_MS (default 1000) of a running
 //!                       cutscene a frame goes to REVC_TEST_SHOT_DIR (cut_<name>_<ms>.png; outside
-//!                       them game_<ms>.png every 5 s). Fails on textures a model asked for during a
+//!                       them game_<ms>.png every REVC_TEST_CUT_GAME_MS, default 5 s). Fails on textures a model asked for during a
 //!                       cutscene that nobody had (drawn untextured), except the ones in
 //!                       tests/golden/missing-textures.txt (missing in the game's own data); the
 //!                       ones outside cutscenes are only logged.
@@ -1819,7 +1819,7 @@ impl Driver {
         let mut last = last;
         let every: u32 = env("REVC_TEST_CUT_SHOT_MS", 1000);
         // (outside cutscenes a frame every 5 s, to see where the opening stands)
-        let gap = if running { every } else { 5000 };
+        let gap = if running { every } else { env("REVC_TEST_CUT_GAME_MS", 5000) };
         if st.pending.is_none() && now.wrapping_sub(last) >= gap {
             let what = if running { format!("cut_{name}") } else { "game".to_string() };
             st.pending = Some(format!("{what}_{:06}.png", now.wrapping_sub(t0)));
