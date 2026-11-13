@@ -152,7 +152,7 @@ impl VertexLayout {
     }
 
     /// Shader input location of a semantic (fixed, so shaders can be generated per layout).
-    pub(crate) fn location(s: Semantic) -> u32 {
+    pub fn location(s: Semantic) -> u32 {
         match s {
             Semantic::Position | Semantic::PositionT => 0,
             Semantic::Normal => 1,

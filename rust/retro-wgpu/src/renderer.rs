@@ -26,6 +26,44 @@ pub struct TextureId(pub u32);
 pub struct LayoutId(pub u32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct BufferId(pub u32);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ProgramId(pub u32);
+
+/// A front end's own shader for draws the fixed-function model doesn't cover (an engine's
+/// lighting model, custom effects). The renderer still owns the recording, targets, MSAA, post
+/// chain and output, and the fixed-function state of `RenderState` (blend, depth, stencil, cull,
+/// bias, colour mask) still applies; lighting, fog, alpha test and the stage combiners are the
+/// program's job.
+///
+/// The WGSL module must use the renderer's bind groups:
+/// - `@group(0) @binding(0)`: the view block (`struct { view: mat4x4<f32>, proj: mat4x4<f32>,
+///   screen: vec4<f32> }`, uniform), as set with `set_view`;
+/// - `@group(1) @binding(0)`: the program's own per-draw block, `block_size` bytes (uniform),
+///   from the bytes given with each draw;
+/// - `@group(2)`: the four texture stages, texture i at binding 2i, its sampler at 2i + 1
+///   (`texture_2d<f32>`, filtering `sampler`);
+/// - `@group(3) @binding(0)`: bone matrices for skinned layouts (`array<mat4x4<f32>, 64>`).
+///
+/// Vertex attributes come at `VertexLayout::location(semantic)`; the fragment entry point writes
+/// one colour (`@location(0) vec4<f32>`).
+#[derive(Clone, Debug)]
+pub struct ProgramDesc<'a> {
+    pub label: &'a str,
+    pub wgsl: &'a str,
+    pub vertex_entry: &'a str,
+    pub fragment_entry: &'a str,
+    pub layout: VertexLayout,
+    /// Size of the per-draw block in bytes (a multiple of 16).
+    pub block_size: u32,
+}
+
+struct Program {
+    module: wgpu::ShaderModule,
+    vertex_entry: String,
+    fragment_entry: String,
+    layout: LayoutId,
+    block_size: u32,
+}
 
 /// Where draws go.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -136,6 +174,7 @@ struct Buf {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct PipeKey {
     layout: LayoutId,
+    program: Option<ProgramId>,
     fixed: FixedKey,
     topology: wgpu::PrimitiveTopology,
     strip_index: Option<wgpu::IndexFormat>,
@@ -161,7 +200,10 @@ struct DrawOp {
     pipe: PipeKey,
     binds: BindKey,
     view: u32,
+    /// Draw block: the fixed-function block, or (with `prog`) one of a program's blocks.
     block: u32,
+    /// Block size of the program pool the block is in.
+    prog: Option<u32>,
     bones: Option<u32>,
     vb: VbRef,
     ib: Option<IbRef>,
@@ -294,6 +336,10 @@ pub struct Renderer {
     pl_plain: wgpu::PipelineLayout,
     pl_skin: wgpu::PipelineLayout,
     layouts: Vec<(VertexLayout, wgpu::ShaderModule)>,
+    programs: Vec<Program>,
+    /// Program draw blocks of the frame and their GPU buffers, by block size.
+    prog_blocks: HashMap<u32, Vec<Vec<u32>>>,
+    prog_ub: HashMap<u32, Blocks>,
     pipelines: HashMap<PipeKey, wgpu::RenderPipeline>,
     samplers: HashMap<Sampler, wgpu::Sampler>,
     bind_groups: HashMap<BindKey, wgpu::BindGroup>,
@@ -409,6 +455,9 @@ impl Renderer {
             pl_plain,
             pl_skin,
             layouts: Vec::new(),
+            programs: Vec::new(),
+            prog_blocks: HashMap::new(),
+            prog_ub: HashMap::new(),
             pipelines: HashMap::new(),
             samplers: HashMap::new(),
             bind_groups: HashMap::new(),
@@ -492,6 +541,24 @@ impl Renderer {
         let module = gpu.device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("retro draw"), source: wgpu::ShaderSource::Wgsl(src.into()) });
         self.layouts.push((layout, module));
         Ok(LayoutId(self.layouts.len() as u32 - 1))
+    }
+
+    /// Registers a front end's shader program (see `ProgramDesc`).
+    pub fn create_program(&mut self, gpu: &Gpu, desc: &ProgramDesc) -> Result<ProgramId, String> {
+        if desc.block_size == 0 || desc.block_size % 16 != 0 {
+            return Err(format!("program {}: block size {} is not a positive multiple of 16", desc.label, desc.block_size));
+        }
+        if desc.block_size > gpu.device.limits().max_uniform_buffer_binding_size as u32 {
+            return Err(format!("program {}: block size {} over the device's uniform limit", desc.label, desc.block_size));
+        }
+        let layout = self.create_layout(gpu, desc.layout.clone())?;
+        let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let module = gpu.device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some(desc.label), source: wgpu::ShaderSource::Wgsl(desc.wgsl.into()) });
+        if let Some(e) = pollster::block_on(scope.pop()) {
+            return Err(format!("program {}: {e}", desc.label));
+        }
+        self.programs.push(Program { module, vertex_entry: desc.vertex_entry.into(), fragment_entry: desc.fragment_entry.into(), layout, block_size: desc.block_size });
+        Ok(ProgramId(self.programs.len() as u32 - 1))
     }
 
     /// The generated WGSL of a layout (for debugging).
@@ -748,6 +815,27 @@ impl Renderer {
 
     /// Records a draw.
     pub fn draw(&mut self, gpu: &Gpu, d: &Draw) {
+        self.record_draw(gpu, d, None);
+    }
+
+    /// Records a draw with a program (its layout replaces `d.layout`; `d.params` is unused) and
+    /// the program's per-draw block (`block`, at most its block size; the rest is zero).
+    pub fn draw_program(&mut self, gpu: &Gpu, d: &Draw, program: ProgramId, block: &[u8]) {
+        let Some(p) = self.programs.get(program.0 as usize) else {
+            self.warn("draw with an unknown program skipped");
+            return;
+        };
+        let (layout, size) = (p.layout, p.block_size);
+        let mut words = vec![0u32; size as usize / 4];
+        for (w, c) in words.iter_mut().zip(block.chunks(4)) {
+            let mut b = [0u8; 4];
+            b[..c.len()].copy_from_slice(c);
+            *w = u32::from_le_bytes(b);
+        }
+        self.record_draw(gpu, &Draw { layout, ..*d }, Some((program, size, words)));
+    }
+
+    fn record_draw(&mut self, gpu: &Gpu, d: &Draw, program: Option<(ProgramId, u32, Vec<u32>)>) {
         let _ = gpu;
         let Some((layout, _)) = self.layouts.get(d.layout.0 as usize) else {
             self.warn("draw with an unknown layout skipped");
@@ -861,7 +949,7 @@ impl Renderer {
         if !matches!(topology, wgpu::PrimitiveTopology::TriangleList | wgpu::PrimitiveTopology::TriangleStrip) {
             fixed.bias = (0, 0, 0);
         }
-        let pipe = PipeKey { layout: d.layout, fixed, topology, strip_index, samples };
+        let pipe = PipeKey { layout: d.layout, program: program.as_ref().map(|p| p.0), fixed, topology, strip_index, samples };
         // Textures: the current target can't be sampled while drawn into (white instead).
         let binds: BindKey = std::array::from_fn(|s| {
             let st = &d.state.stages[s];
@@ -873,10 +961,22 @@ impl Renderer {
             };
             (tex, sampler)
         });
-        let block = shader::draw_block(d.state, d.params);
-        if self.draw_blocks.last() != Some(&block) {
-            self.draw_blocks.push(block);
-        }
+        let (block, prog) = match program {
+            Some((_, size, words)) => {
+                let pool = self.prog_blocks.entry(size).or_default();
+                if pool.last() != Some(&words) {
+                    pool.push(words);
+                }
+                (pool.len() as u32 - 1, Some(size))
+            }
+            None => {
+                let block = shader::draw_block(d.state, d.params);
+                if self.draw_blocks.last() != Some(&block) {
+                    self.draw_blocks.push(block);
+                }
+                (self.draw_blocks.len() as u32 - 1, None)
+            }
+        };
         if self.view_blocks.is_empty() {
             self.view_blocks.push(shader::view_block(&View::screen(640.0, 480.0)));
         }
@@ -897,7 +997,8 @@ impl Renderer {
             pipe,
             binds,
             view: self.view_blocks.len() as u32 - 1,
-            block: self.draw_blocks.len() as u32 - 1,
+            block,
+            prog,
             bones,
             vb,
             ib,
@@ -917,7 +1018,11 @@ impl Renderer {
         if self.pipelines.contains_key(&key) {
             return;
         }
-        let (layout, module) = &self.layouts[key.layout.0 as usize];
+        let (layout, core) = &self.layouts[key.layout.0 as usize];
+        let (module, vs, fs) = match key.program.and_then(|p| self.programs.get(p.0 as usize)) {
+            Some(p) => (&p.module, p.vertex_entry.as_str(), p.fragment_entry.as_str()),
+            None => (core, "vs", "fs"),
+        };
         let attrs: Vec<wgpu::VertexAttribute> = layout.attributes.iter().map(|a| wgpu::VertexAttribute { format: a.format.wgpu(), offset: a.offset as u64, shader_location: VertexLayout::location(a.semantic) }).collect();
         let f = key.fixed;
         let stencil_face = |s: StencilFace| wgpu::StencilFaceState { compare: s.compare, fail_op: s.fail, depth_fail_op: s.depth_fail, pass_op: s.pass };
@@ -933,13 +1038,13 @@ impl Renderer {
             layout: Some(if layout.skinned() { &self.pl_skin } else { &self.pl_plain }),
             vertex: wgpu::VertexState {
                 module,
-                entry_point: Some("vs"),
+                entry_point: Some(vs),
                 buffers: &[Some(wgpu::VertexBufferLayout { array_stride: layout.stride as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attrs })],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module,
-                entry_point: Some("fs"),
+                entry_point: Some(fs),
                 targets: &[Some(wgpu::ColorTargetState { format: TARGET_FORMAT, blend: f.blend.map(|b| b.wgpu()), write_mask: mask })],
                 compilation_options: Default::default(),
             }),
@@ -1000,6 +1105,11 @@ impl Renderer {
         self.draw_ub.write(gpu, &self.draw_layout, &db);
         let bb: Vec<&[u32]> = self.bone_blocks.iter().map(|b| b.as_slice()).collect();
         self.bones_ub.write(gpu, &self.bones_layout, &bb);
+        for (size, blocks) in &self.prog_blocks {
+            let ub = self.prog_ub.entry(*size).or_insert_with(|| Blocks::new(gpu, &self.draw_layout, *size as usize, 64));
+            let pb: Vec<&[u32]> = blocks.iter().map(|b| b.as_slice()).collect();
+            ub.write(gpu, &self.draw_layout, &pb);
+        }
         let cmds = std::mem::take(&mut self.cmds);
         for c in &cmds {
             if let Cmd::Draw(d) = c {
@@ -1017,7 +1127,7 @@ impl Renderer {
         struct Bound {
             pipe: Option<PipeKey>,
             view: Option<u32>,
-            block: Option<u32>,
+            block: Option<(Option<u32>, u32)>,
             binds: Option<BindKey>,
             bones: Option<u32>,
             vb: Option<VbRef>,
@@ -1128,9 +1238,13 @@ impl Renderer {
                         p.set_bind_group(0, &self.view_ub.bind, &[self.view_ub.offset(d.view)]);
                         bound.view = Some(d.view);
                     }
-                    if bound.block != Some(d.block) {
-                        p.set_bind_group(1, &self.draw_ub.bind, &[self.draw_ub.offset(d.block)]);
-                        bound.block = Some(d.block);
+                    if bound.block != Some((d.prog, d.block)) {
+                        let ub = match d.prog {
+                            Some(size) => &self.prog_ub[&size],
+                            None => &self.draw_ub,
+                        };
+                        p.set_bind_group(1, &ub.bind, &[ub.offset(d.block)]);
+                        bound.block = Some((d.prog, d.block));
                     }
                     if bound.binds != Some(d.binds) {
                         p.set_bind_group(2, &self.bind_groups[&d.binds], &[]);
@@ -1286,6 +1400,7 @@ impl Renderer {
         self.draw_blocks.clear();
         self.view_blocks.clear();
         self.bone_blocks.clear();
+        self.prog_blocks.values_mut().for_each(Vec::clear);
         self.retired.clear();
         self.target = Target::Scene;
         self.viewport = None;

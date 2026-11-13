@@ -33,7 +33,7 @@ pub use gpu::{Backend, Gpu, GpuOptions};
 pub use layout::{AttrFormat, Attribute, Semantic, VertexLayout};
 pub use post::{Fxaa, OutputSettings, PostPass, ScaleFilter, ScaleMode, Smaa, TARGET_FORMAT};
 pub use readback::Image;
-pub use renderer::{BufferId, DEPTH_FORMAT, Draw, Indices, LayoutId, OutputStage, Renderer, SceneSettings, Target, TextureDesc, TextureId, Topology, VertexWriter, Vertices};
+pub use renderer::{BufferId, DEPTH_FORMAT, Draw, Indices, LayoutId, OutputStage, ProgramDesc, ProgramId, Renderer, SceneSettings, Target, TextureDesc, TextureId, Topology, VertexWriter, Vertices};
 pub use shader::MAX_BONES;
 pub use state::*;
 pub use replace::{ReplaceConfig, texture_key};
