@@ -293,6 +293,17 @@ always match the passes they're drawn in.
 `revc-render`; the game records frame n + 1 while frame n is drawn (at most one frame ahead).
 saveload and spots give the same images inline and threaded (within run-to-run noise).
 
+**Choosing the presenting back end** (`REVC_RENDERER=retro`, opt-in): retro-wgpu presents
+instead of `WgpuBackend` (through the `DrawFrames` trait both implement; screenshots read its
+final image). saveload, spots, texmods and gamepad pass against the references with it. It draws
+on the game thread for now: the render thread needs a `Send` back end, and retro-wgpu's post-pass
+and output-stage trait objects aren't `Send` yet. Shadow mode needs `WgpuBackend` presenting.
+Speed (2026-11-13, RX 9070 XT, Vulkan, 1280x720, `scripts/perf.sh`, two alternating runs each):
+`WgpuBackend` 0.76 ms mean over the spots (worst p99 1.26 ms), retro-wgpu 1.66 ms (worst p99
+2.73 ms), about 2.2x. Likely causes: every RW draw carries a 1216-byte block (uniforms + model,
+1280-byte stride) where `WgpuBackend` indexes models in one storage buffer and shares small
+uniform blocks; immediate vertices are copied per draw. Not the default until that's closed.
+
 **retro-wgpu back end and shadow mode** (`REVC_RENDER_SHADOW=1`, inline renderer only): the
 wgpu back end presents as usual while `RetroBackend` draws the same frames off-screen. RW's
 shading (lighting with point/spot lights, MatFX env, Neo vehicle/world/gloss/rim, CPostFX colour

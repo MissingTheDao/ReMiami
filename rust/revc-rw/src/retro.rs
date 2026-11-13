@@ -575,3 +575,32 @@ mod tests {
         }
     }
 }
+
+/// RetroBackend with its view of the device, presenting through `DrawFrames`.
+pub struct RetroPresent {
+    pub gpu: rw::Gpu,
+    pub back: RetroBackend,
+}
+
+impl RetroPresent {
+    /// For output views of `output` format on `gpu`'s device.
+    pub fn new(gpu: &crate::Gpu, output: wgpu::TextureFormat) -> RetroPresent {
+        let rgpu = gpu.retro();
+        let back = RetroBackend::new(&rgpu, output);
+        RetroPresent { gpu: rgpu, back }
+    }
+}
+
+impl crate::frame::DrawFrames for RetroPresent {
+    fn draw(&mut self, _gpu: &crate::Gpu, enc: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32), frame: &mut Frame) {
+        self.back.encode(&self.gpu, enc, target, size, frame);
+    }
+
+    fn shown_image(&self) -> Option<&wgpu::Texture> {
+        self.back.final_image()
+    }
+
+    fn finish_frame(&mut self, frame: &Frame) {
+        self.back.end_frame(frame);
+    }
+}

@@ -1908,6 +1908,32 @@ impl WgpuBackend {
     }
 }
 
+/// A back end that draws recorded frames onto a target view (what the presenter, the render
+/// thread and shadow mode drive). The render thread needs it `Send` too (retro-wgpu's renderer
+/// isn't yet: its post-pass and output-stage trait objects carry no `Send` bound).
+pub trait DrawFrames {
+    /// Draws `frame` into `target` (`size` pixels, the output format the back end was made for).
+    fn draw(&mut self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32), frame: &mut Frame);
+    /// The image last drawn before the output transform (RGBA8, COPY_SRC): screenshots.
+    fn shown_image(&self) -> Option<&wgpu::Texture>;
+    /// After the frame's commands were submitted.
+    fn finish_frame(&mut self, frame: &Frame);
+}
+
+impl DrawFrames for WgpuBackend {
+    fn draw(&mut self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32), frame: &mut Frame) {
+        self.encode(gpu, enc, target, size, frame);
+    }
+
+    fn shown_image(&self) -> Option<&wgpu::Texture> {
+        self.scene_texture()
+    }
+
+    fn finish_frame(&mut self, frame: &Frame) {
+        self.end_frame(frame);
+    }
+}
+
 /// Front end and wgpu back end on one thread: records the device's calls and draws them when
 /// the frame is presented (the API the renderer had before the split).
 pub struct Renderer {

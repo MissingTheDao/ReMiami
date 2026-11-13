@@ -4,7 +4,7 @@
 //! 99.5 % of pixels are within 2 levels per channel.
 
 use crate::Gpu;
-use crate::frame::{Frame, WgpuBackend, readback_finish, readback_start};
+use crate::frame::{DrawFrames, Frame, readback_finish, readback_start};
 use crate::retro::RetroBackend;
 
 /// Share of pixels that must be within `TOLERANCE` levels.
@@ -61,7 +61,7 @@ impl Shadow {
 
     /// Draws `frame` (already drawn and submitted by `legacy`) with retro-wgpu at `size`; with
     /// `check`, compares both images. Call before the frame is recycled.
-    pub fn run(&mut self, gpu: &Gpu, legacy: &WgpuBackend, frame: &Frame, size: (u32, u32), check: bool) -> Option<Comparison> {
+    pub fn run(&mut self, gpu: &Gpu, legacy: &dyn DrawFrames, frame: &Frame, size: (u32, u32), check: bool) -> Option<Comparison> {
         self.frame += 1;
         if self.out.as_ref().is_none_or(|o| o.1 != size) {
             let t = gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -80,7 +80,7 @@ impl Shadow {
         let mut enc = gpu.device.create_command_encoder(&Default::default());
         self.back.encode(&self.gpu, &mut enc, &view, size, frame);
         let reads = if check {
-            match (legacy.scene_texture(), self.back.final_image()) {
+            match (legacy.shown_image(), self.back.final_image()) {
                 (Some(a), Some(b)) if (a.width(), a.height()) == (b.width(), b.height()) => {
                     let sz = (a.width(), a.height());
                     Some((readback_start(gpu, &mut enc, a, sz), readback_start(gpu, &mut enc, b, sz), sz))

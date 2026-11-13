@@ -4,8 +4,9 @@
 //! revc_rw::frame::Renderer and drawn when the frame is presented; Im3D and models come next.
 
 use revc_rw::Backend;
-use revc_rw::frame::{Antialiasing, DrawState, EnvMap, FrameSettings, MAX_BONES, Mat4, MeshExtras, MeshVertex, ModelState, Recorder, SkinVertex, TexData, Vertex2D, Vertex2DUV2, Vertex3D, WgpuBackend, Xform};
+use revc_rw::frame::{Antialiasing, DrawFrames, DrawState, EnvMap, FrameSettings, MAX_BONES, Mat4, MeshExtras, MeshVertex, ModelState, Recorder, SkinVertex, TexData, Vertex2D, Vertex2DUV2, Vertex3D, WgpuBackend, Xform};
 use revc_rw::present::{NativeWindow, Presenter};
+use revc_rw::retro::RetroPresent;
 use revc_rw::shadow::{Comparison, GATE, Shadow};
 use revc_rw::thread::{Done, RenderThread};
 use sdl3_sys::everything::*;
@@ -14,9 +15,9 @@ use std::ffi::{CStr, c_void};
 use std::ptr::NonNull;
 
 /// Where recorded frames are drawn: on the game thread, or on the render thread
-/// (REVC_RENDER_THREAD=1).
+/// (REVC_RENDER_THREAD=1); by the wgpu back end or retro-wgpu (REVC_RENDERER=retro).
 enum Out {
-    Inline(Box<(Presenter, WgpuBackend)>),
+    Inline(Box<(Presenter, Box<dyn DrawFrames>)>),
     Thread(RenderThread),
 }
 
@@ -83,6 +84,11 @@ fn with_front<R>(f: impl FnOnce(&mut Recorder) -> R) -> Option<R> {
     STATE.with(|c| c.borrow_mut().as_mut().map(|s| f(&mut s.front)))
 }
 
+/// REVC_RENDERER=retro: retro-wgpu (the engine-neutral core) presents instead of the wgpu back end.
+fn retro_wanted() -> bool {
+    matches!(std::env::var("REVC_RENDERER").as_deref(), Ok("retro") | Ok("retro-wgpu"))
+}
+
 fn render_thread_wanted() -> bool {
     matches!(std::env::var("REVC_RENDER_THREAD").as_deref(), Ok("1") | Ok("on") | Ok("yes"))
 }
@@ -144,20 +150,29 @@ pub fn create(window: *mut SDL_Window, samples: i32) -> Result<(), String> {
         eprintln!("revc: MSAA {used}x (asked {samples}x)");
     }
     let table: [u32; 17] = std::array::from_fn(|n| WgpuBackend::supported_samples(&p.gpu, n.max(1) as u32));
+    let retro = retro_wanted();
+    let threaded = render_thread_wanted() && !retro;
+    if retro && render_thread_wanted() {
+        eprintln!("revc: the render thread isn't available with retro-wgpu yet; drawing on the game thread");
+    }
     let shadow_wanted = matches!(std::env::var("REVC_RENDER_SHADOW").as_deref(), Ok("1") | Ok("on") | Ok("yes"));
-    let shadow = (shadow_wanted && !render_thread_wanted()).then(|| {
+    let shadow = (shadow_wanted && !threaded && !retro).then(|| {
         let every = std::env::var("REVC_RENDER_SHADOW_EVERY").ok().and_then(|v| v.parse().ok()).unwrap_or(30u64).max(1);
         eprintln!("revc: shadow mode on: retro-wgpu draws every frame off-screen, compared every {every} frames and on captures");
         ShadowRun { shadow: Shadow::new(&p.gpu), every, n: 0, checked: 0, failed: 0, worst: 1.0, dir: std::env::var_os("REVC_RENDER_SHADOW_DIR").map(Into::into) }
     });
     if shadow_wanted && shadow.is_none() {
-        eprintln!("revc: shadow mode needs the inline renderer (REVC_RENDER_THREAD off); not started");
+        eprintln!("revc: shadow mode needs the wgpu back end presenting on the game thread; not started");
     }
-    let out = if render_thread_wanted() {
+    let out = if retro {
+        eprintln!("revc: retro-wgpu presents");
+        let r = RetroPresent::new(&p.gpu, p.format());
+        Out::Inline(Box::new((p, Box::new(r))))
+    } else if threaded {
         eprintln!("revc: render thread on");
-        Out::Thread(RenderThread::spawn(p, back)?)
+        Out::Thread(RenderThread::spawn(p, Box::new(back))?)
     } else {
-        Out::Inline(Box::new((p, back)))
+        Out::Inline(Box::new((p, Box::new(back))))
     };
     STATE.with(|c| *c.borrow_mut() = Some(State { front: Recorder::new(used), out, window, size: (w, h), samples: table, shadow }));
     Ok(())
@@ -367,14 +382,14 @@ pub extern "C" fn revc_rw_present(vsync: i32) {
             Out::Inline(pb) => {
                 let (p, back) = &mut **pb;
                 p.set_vsync(vsync);
-                let shot = p.present(back, &mut frame, capture).unwrap_or_else(|e| {
+                let shot = p.present(back.as_mut(), &mut frame, capture).unwrap_or_else(|e| {
                     eprintln!("revc: present: {e}");
                     None
                 });
                 if let Some(sh) = st.shadow.as_mut() {
                     sh.n += 1;
                     let check = capture || sh.n % sh.every == 0;
-                    if let Some(c) = sh.shadow.run(&p.gpu, back, &frame, p.size(), check) {
+                    if let Some(c) = sh.shadow.run(&p.gpu, back.as_ref(), &frame, p.size(), check) {
                         sh.report(c, capture);
                     }
                 }

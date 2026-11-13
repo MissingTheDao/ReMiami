@@ -3,7 +3,7 @@
 //! backend (EGL) needs the display handle when the instance is created, so the presenter creates
 //! its own instance.
 
-use crate::frame::{Frame, WgpuBackend, Renderer, readback_finish, readback_start};
+use crate::frame::{DrawFrames, Frame, Renderer, readback_finish, readback_start};
 use crate::{Backend, Gpu};
 use std::ffi::c_void;
 use std::ptr::NonNull;
@@ -149,24 +149,24 @@ impl Presenter {
 
     /// Draws a recorded `frame` with the back end and presents it (the back end's half of
     /// `present_frame`, usable on a render thread).
-    pub fn present(&mut self, back: &mut WgpuBackend, rec: &mut Frame, capture: bool) -> Result<Option<(u32, u32, Vec<u8>)>, String> {
+    pub fn present(&mut self, back: &mut dyn DrawFrames, rec: &mut Frame, capture: bool) -> Result<Option<(u32, u32, Vec<u8>)>, String> {
         let frame = match self.acquire() {
             Ok(f) => f,
             Err(e) => {
-                back.end_frame(rec);
+                back.finish_frame(rec);
                 return Err(e);
             }
         };
         let size = (frame.texture.width(), frame.texture.height());
         let view = frame.texture.create_view(&Default::default());
         let mut enc = self.gpu.device.create_command_encoder(&Default::default());
-        back.encode(&self.gpu, &mut enc, &view, size, rec);
+        back.draw(&self.gpu, &mut enc, &view, size, rec);
         // Screenshots read the scene texture (RGBA8) the frame was drawn into.
-        let readback = if capture { back.scene_texture().map(|t| readback_start(&self.gpu, &mut enc, t, size)) } else { None };
+        let readback = if capture { back.shown_image().map(|t| (readback_start(&self.gpu, &mut enc, t, (t.width(), t.height())), (t.width(), t.height()))) } else { None };
         self.gpu.queue.submit([enc.finish()]);
-        back.end_frame(rec);
+        back.finish_frame(rec);
         let shot = match readback {
-            Some(r) => {
+            Some((r, shot_size)) => {
                 let mut px = readback_finish(&self.gpu, r)?;
                 px.as_chunks_mut::<4>().0.iter_mut().for_each(|p| p[3] = 255);
                 // REVC_TEST_SHOT_POSTFX=1: the shot as presented, with the output stage's colour
@@ -177,7 +177,7 @@ impl Presenter {
                     let lut: Vec<u8> = (0..256).map(|i| ((i as f32 / 255.0).powf(1.0 / 1.1) * 255.0 + 0.5) as u8).collect();
                     px.as_chunks_mut::<4>().0.iter_mut().for_each(|p| for c in &mut p[..3] { *c = lut[*c as usize] });
                 }
-                Some((size.0, size.1, px))
+                Some((shot_size.0, shot_size.1, px))
             }
             None => None,
         };

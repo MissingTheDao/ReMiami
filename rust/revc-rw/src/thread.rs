@@ -4,7 +4,7 @@
 //! back for reuse. A frame that asks for a capture is waited for, so screenshots are synchronous
 //! as before.
 
-use crate::frame::{Frame, WgpuBackend};
+use crate::frame::{DrawFrames, Frame};
 use crate::present::Presenter;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::thread::JoinHandle;
@@ -37,7 +37,7 @@ pub struct RenderThread {
 
 impl RenderThread {
     /// Moves `presenter` and `back` to a new thread named `revc-render`.
-    pub fn spawn(mut presenter: Presenter, mut back: WgpuBackend) -> Result<RenderThread, String> {
+    pub fn spawn(mut presenter: Presenter, mut back: Box<dyn DrawFrames + Send>) -> Result<RenderThread, String> {
         let (jobs, rx) = sync_channel::<Job>(1);
         let (tx, done) = sync_channel::<Done>(4);
         let handle = std::thread::Builder::new()
@@ -48,7 +48,7 @@ impl RenderThread {
                         presenter.resize(job.size.0, job.size.1);
                     }
                     presenter.set_vsync(job.vsync);
-                    let (shot, error) = match presenter.present(&mut back, &mut job.frame, job.capture) {
+                    let (shot, error) = match presenter.present(back.as_mut(), &mut job.frame, job.capture) {
                         Ok(s) => (s, None),
                         Err(e) => (None, Some(e)),
                     };
