@@ -303,6 +303,16 @@ the PS2 style while `[Graphics] Ps2WorldTextures` is on (default; read when the 
 after the player's own mods and packs. It has an index of its own, consulted per texture, because
 the main index is built at the first texture, before the settings load.
 
+PS2 models (roadmap R4, "exact PS2 models"): a PS2 import also converts the disc's models from
+GTA3.IMG (PS2 native geometry: VIF unpacks of position, UV, prelit colour and normal in strip
+batches) to ordinary geometry (`rust/revc-import/src/ps2geom.rs`, after librw's PS2 uninstance)
+into `<import cache>/ps2/models-world/` (4,326 of 4,584; skinned peds and vehicles use broken-out
+attributes and stay PC models). In the PS2 style, while `[Graphics] Ps2WorldModels` is on
+(default), CStreaming::ConvertBufferToObject loads those instead of the PC ones (map and cutscene
+objects; not vehicles or peds): same geometry, the PS2's own baked vertex lighting. Textures the
+PS2 models use that a PC dictionary lacks (e.g. `hot_bottles1`) are added from the PS2 world pack
+when the dictionary loads.
+
 ## Menu comparison shots
 
 `scripts/menu-shots.sh [out dir] [ps2|xbox ...]` runs `REVC_TEST=menus` (`rust/revc/src/testdrive.rs`,

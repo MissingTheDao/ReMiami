@@ -65,6 +65,11 @@ static STYLE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0
 
 /// The UI style picks which style packs apply; the C++ side reloads the HUD and font textures
 /// when it changes.
+/// The UI style (0 PC, 1 PS2, 2 Xbox).
+pub fn style() -> i32 {
+    STYLE.load(Ordering::Relaxed)
+}
+
 pub fn set_style(style: i32) {
     STYLE.store(style.clamp(0, 2), Ordering::Relaxed);
 }
@@ -335,6 +340,32 @@ pub unsafe extern "C" fn revc_texmod_find_dxt(
 pub unsafe extern "C" fn revc_texmod_free_blocks(blocks: *mut c_uchar, size: usize) {
     if !blocks.is_null() {
         drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(blocks, size)) });
+    }
+}
+
+/// # Safety
+/// `txd` a NUL-terminated string.
+/// The textures the PS2 world pack has for `txd` (while it is in use), newline-separated, as a
+/// string freed with revc_texmod_free_names; null if none. The PS2 models (ps2models.rs) use some
+/// textures the PC dictionaries lack, which texmods.cpp adds from here.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_texmod_world_names(txd: *const c_char) -> *mut c_char {
+    let Some(w) = world_index() else { return std::ptr::null_mut() };
+    let txd = unsafe { CStr::from_ptr(txd) }.to_string_lossy().to_ascii_lowercase();
+    let mut names: Vec<&str> = w.keys().filter(|k| k.0 == txd).map(|k| k.1.as_str()).collect();
+    if names.is_empty() {
+        return std::ptr::null_mut();
+    }
+    names.sort_unstable();
+    std::ffi::CString::new(names.join("\n")).map_or(std::ptr::null_mut(), |c| c.into_raw())
+}
+
+/// # Safety
+/// `p` from revc_texmod_world_names.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_texmod_free_names(p: *mut c_char) {
+    if !p.is_null() {
+        drop(unsafe { std::ffi::CString::from_raw(p) });
     }
 }
 

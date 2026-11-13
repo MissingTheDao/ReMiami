@@ -19,6 +19,10 @@ void revc_texmod_free(unsigned char *rgba, int width, int height);
 int revc_texmod_find_dxt(const char *txd, const char *texture, int want_mips, int *width, int *height,
 	int *kind, int *levels, int *has_alpha, unsigned char **blocks, size_t *size);
 void revc_texmod_free_blocks(unsigned char *blocks, size_t size);
+// The PS2 world pack's texture names for a dictionary (newline-separated), freed with
+// revc_texmod_free_names; nil while the pack isn't in use.
+char *revc_texmod_world_names(const char *txd);
+void revc_texmod_free_names(char *names);
 }
 
 // A raster holding the DXT blocks as they are (a BC texture on the GPU, like the game's own DXT
@@ -121,6 +125,21 @@ TexModsApply(RwTexDictionary *dict, const char *txdName)
 	if (dict == nil || !revc_texmod_active())
 		return;
 	RwTexDictionaryForAllTextures(dict, (RwTextureCallBack)ApplyOne, (void*)txdName);
+	// the PS2 models (rust/revc/src/ps2models.rs) use some textures that only the PS2's
+	// dictionaries have: added from the PS2 world pack (linear, mipmapped, wrapping)
+	if (char *names = revc_texmod_world_names(txdName)) {
+		for (char *n = strtok(names, "\n"); n; n = strtok(nil, "\n")) {
+			if (RwTexDictionaryFindNamedTexture(dict, n))
+				continue;
+			rw::Raster *ras = rw::Raster::create(1, 1, 32, rw::Raster::C8888 | rw::Raster::TEXTURE);
+			rw::Texture *tex = rw::Texture::create(ras);
+			strncpy(tex->name, n, 32);
+			tex->filterAddressing = 0x1106;
+			ApplyNamed(tex, txdName, n);
+			RwTexDictionaryAddTexture(dict, tex);
+		}
+		revc_texmod_free_names(names);
+	}
 }
 
 #endif

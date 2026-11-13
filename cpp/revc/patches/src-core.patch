@@ -6082,16 +6082,17 @@
  	broken since forever, someone tried to fix size for 640x512(PAL)
 --- a/src/core/re3.cpp
 +++ b/src/core/re3.cpp
-@@ -479,6 +479,8 @@
+@@ -479,6 +479,9 @@
  	ini.write(cfg);
  }
  
-+extern "C" void revc_texmods_set_ps2_world(int on);	// (revc: texmods.rs)
++extern "C" void revc_texmods_set_ps2_world(int on);
++extern "C" void revc_ps2_models_set(int on);	// (revc: ps2models.rs)	// (revc: texmods.rs)
 +
  bool LoadINISettings()
  {
  	if (!ini.read(cfg))
-@@ -493,6 +495,13 @@
+@@ -493,6 +496,17 @@
  #else
  	ReadIniIfExists("Graphics", "VideoMode", &FrontEndMenuManager.m_nDisplayVideoMode);
  #endif
@@ -6101,11 +6102,15 @@
 +		bool ps2World = true;
 +		ReadIniIfExists("Graphics", "Ps2WorldTextures", &ps2World);
 +		revc_texmods_set_ps2_world(ps2World ? 1 : 0);
++		// (and the PS2's own models, "exact PS2 models": rust/revc/src/ps2models.rs)
++		bool ps2Models = true;
++		ReadIniIfExists("Graphics", "Ps2WorldModels", &ps2Models);
++		revc_ps2_models_set(ps2Models ? 1 : 0);
 +	}
  	ReadIniIfExists("Controller", "HeadBob1stPerson", &TheCamera.m_bHeadBob);
  	ReadIniIfExists("Controller", "HorizantalMouseSens", &TheCamera.m_fMouseAccelHorzntl);
  	ReadIniIfExists("Controller", "InvertMouseVertically", &MousePointerStateHelper.bInvertVertically);
-@@ -588,6 +597,13 @@
+@@ -588,6 +602,13 @@
  	CCarCtrl::MaxNumberOfCarsInUse = DEFAULT_MAX_NUMBER_OF_CARS * CIniFile::CarNumberMultiplier;
  #endif
  
@@ -6119,7 +6124,7 @@
  	return true;
  }
  
-@@ -1055,8 +1071,8 @@
+@@ -1055,8 +1076,8 @@
  #endif
  
  #ifdef EXTENDED_COLOURFILTER
@@ -7326,6 +7331,43 @@
  
  public:
  	static void Init(void);
+--- a/src/core/Streaming.cpp
++++ b/src/core/Streaming.cpp
+@@ -505,9 +505,20 @@
+ }
+ #endif
+ 
++// revc (roadmap R4, "exact PS2 models"): the PS2's own version of a map or cutscene model in the
++// PS2 style (rust/revc/src/ps2models.rs); freed when the conversion returns.
++extern "C" uint8 *revc_ps2_model(const char *name, size_t *len);
++extern "C" void revc_ps2_model_free(uint8 *p, size_t len);
++struct Ps2ModelBuffer {
++	uint8 *p = nil;
++	size_t n = 0;
++	~Ps2ModelBuffer() { if(p) revc_ps2_model_free(p, n); }
++};
++
+ bool
+ CStreaming::ConvertBufferToObject(int8 *buf, int32 streamId)
+ {
++	Ps2ModelBuffer ps2Model;
+ 	RwMemory mem;
+ 	RwStream *stream;
+ 	int cdsize;
+@@ -525,6 +536,13 @@
+ 	if(streamId < STREAM_OFFSET_TXD){
+ 		// Model
+ 		mi = CModelInfo::GetModelInfo(streamId);
++		if(mi->GetModelType() != MITYPE_VEHICLE && mi->GetModelType() != MITYPE_PED &&
++		   (ps2Model.p = revc_ps2_model(mi->GetModelName(), &ps2Model.n)) != nil){
++			RwStreamClose(stream, &mem);
++			mem.start = ps2Model.p;
++			mem.length = ps2Model.n;
++			stream = RwStreamOpen(rwSTREAMMEMORY, rwSTREAMREAD, &mem);
++		}
+ 
+ 		// Txd and anim have to be loaded
+ 		int animId = mi->GetAnimFileIndex();
 --- a/src/core/SurfaceTable.cpp
 +++ b/src/core/SurfaceTable.cpp
 @@ -6,151 +6,43 @@

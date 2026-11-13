@@ -8,6 +8,7 @@
 //! Claude outputs/xbox-research/XBOX_RESEARCH.md for what the discs hold.
 
 pub mod iso9660;
+pub mod ps2geom;
 pub mod ps2tex;
 pub mod xboxlm;
 pub mod xdvdfs;
@@ -228,9 +229,11 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
             if let Some(first) = parts.first() {
                 let part_size = first.size;
                 let dir = disc.read(&dir_e).map_err(|e| format!("GTA3.DIR: {e}"))?;
+                let (mut models, mut kept_pc) = (0usize, std::collections::BTreeMap::<String, usize>::new());
                 for e in dir.chunks_exact(32) {
                     let name = String::from_utf8_lossy(e[8..32].split(|&c| c == 0).next().unwrap_or(&[])).to_ascii_lowercase();
-                    if !name.ends_with(".txd") {
+                    let is_dff = name.ends_with(".dff");
+                    if !name.ends_with(".txd") && !is_dff {
                         continue;
                     }
                     let mut pos = u32::from_le_bytes(e[0..4].try_into().unwrap()) as u64 * 2048;
@@ -244,11 +247,27 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                         pos += n;
                         left -= n;
                     }
-                    let dest = root.join("world").join(&name);
+                    // Models (the "exact PS2 models" option): the PS2's native geometry converted to
+                    // ordinary geometry (ps2geom.rs); the ones it can't convert stay PC models.
+                    let (dest, data) = if is_dff {
+                        match ps2geom::convert_dff(&data) {
+                            Ok(d) => {
+                                models += 1;
+                                (root.join("models-world").join(&name), d)
+                            }
+                            Err(why) => {
+                                *kept_pc.entry(why.split(':').next_back().unwrap_or("").trim().to_string()).or_default() += 1;
+                                continue;
+                            }
+                        }
+                    } else {
+                        (root.join("world").join(&name), data)
+                    };
                     std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
                     std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
                     report.written.push(dest);
                 }
+                eprintln!("revc-import: {models} PS2 models converted; kept as PC models: {kept_pc:?}");
             }
         }
         // The game fills the "generic" slot from the standalone MODELS/GENERIC.TXD, not from the
