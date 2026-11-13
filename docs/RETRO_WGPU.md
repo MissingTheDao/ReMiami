@@ -150,8 +150,11 @@ combiners are the program's job; `draw.params` is unused.
 The WGSL uses the renderer's bind groups: `@group(0)` the view block, `@group(1) @binding(0)` the
 program's per-draw block (`block_size` bytes, a multiple of 16), `@group(2)` the four stages
 (texture i at binding 2i, sampler at 2i + 1), `@group(3)` the bones for skinned layouts. Vertex
-inputs are at `VertexLayout::location(semantic)`. Blocks are pooled per block size; consecutive
-identical blocks are deduplicated like the fixed-function ones.
+inputs are at `VertexLayout::location(semantic)`. `stages` (1..=4) is how many texture stages the
+program samples; fewer stages make texture changes cheaper. Blocks are pooled per block size,
+stored flat at the GPU stride, and consecutive identical blocks are deduplicated;
+`draw_program_parts` takes the block in pieces (e.g. uniforms and a model) without joining them.
+The renderer's caches use an Fx hash (`fxhash.rs`).
 
 ## Overlay
 

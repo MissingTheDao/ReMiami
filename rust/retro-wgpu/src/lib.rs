@@ -16,6 +16,7 @@
 //!
 //! Nothing here is derived from librw or RenderWare; see NOTICE.md for provenance.
 
+mod fxhash;
 pub mod gpu;
 pub mod layout;
 pub mod post;

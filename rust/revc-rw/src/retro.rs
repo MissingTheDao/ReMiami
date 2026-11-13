@@ -12,9 +12,8 @@
 //! (`RwFxaa`, frame.rs's shader as a retro-wgpu post pass); SMAA is the same port in both.
 
 use crate::frame::{Frame, MESH_NEO_GLOSS, MESH_NEO_RIM, MESH_NEO_VEHICLE, MESH_NEO_WORLD, ModelState, TexData};
-use crate::front::{BONE_FLOATS, HashMap, Kind, MeshDraw, Op, PipeKey, SamplerKey, Upload};
+use crate::front::{BONE_FLOATS, HashMap, HashSet, Kind, MeshDraw, Op, PipeKey, SamplerKey, Upload};
 use retro_wgpu as rw;
-use std::collections::HashSet;
 
 /// RW `U` uniforms (72 floats) then `M` (ModelState): the per-draw block of the mesh programs.
 const U_BYTES: usize = 72 * 4;
@@ -263,7 +262,6 @@ pub struct RetroBackend {
     warned: HashSet<&'static str>,
     mesh_src: String,
     uv2_src: String,
-    block: Vec<u8>,
 }
 
 impl RetroBackend {
@@ -275,10 +273,9 @@ impl RetroBackend {
             geometries: HashMap::default(),
             scene: None,
             post: None,
-            warned: HashSet::new(),
+            warned: HashSet::default(),
             mesh_src: mesh_wgsl(),
             uv2_src: uv2_wgsl(),
-            block: Vec::with_capacity(BLOCK as usize),
         }
     }
 
@@ -306,6 +303,8 @@ impl RetroBackend {
             fragment_entry: fs,
             layout: layout(kind),
             block_size: if uv2 { U_BYTES as u32 } else { BLOCK },
+            // The second stage is the env map / lightmap / droplet mask.
+            stages: if matches!(kind, Kind::MeshEnv | Kind::Im2DUV2) { 2 } else { 1 },
         };
         match self.r.create_program(gpu, &desc) {
             Ok(p) => {
@@ -470,28 +469,24 @@ impl RetroBackend {
                         state.stages[1].texture = if t != 0 { self.tex(t) } else { None };
                         state.stages[1].sampler = sampler(s);
                     }
-                    // The per-draw block: RW uniforms, then the model (meshes).
-                    self.block.clear();
-                    for f in &frame.uniforms[uniform as usize] {
-                        self.block.extend_from_slice(&f.to_le_bytes());
-                    }
-                    if let Some(MeshDraw { model, .. }) = mesh
-                        && pipe.kind != Kind::Im2DUV2
-                        && let Some(m) = frame.models.get(model as usize)
-                    {
-                        // SAFETY: ModelState is repr(C) f32 data.
-                        let bytes = unsafe { std::slice::from_raw_parts((m as *const ModelState).cast::<u8>(), std::mem::size_of::<ModelState>()) };
-                        self.block.extend_from_slice(bytes);
-                    }
+                    // The per-draw block: RW uniforms, then the model (meshes), straight from the frame.
+                    let u = &frame.uniforms[uniform as usize];
+                    // SAFETY: the uniforms are plain f32 (little-endian targets only, as the GPU reads them).
+                    let ubytes: &[u8] = unsafe { std::slice::from_raw_parts(u.as_ptr().cast::<u8>(), U_BYTES) };
+                    let mbytes: &[u8] = match mesh {
+                        Some(MeshDraw { model, .. }) if pipe.kind != Kind::Im2DUV2 => match frame.models.get(model as usize) {
+                            // SAFETY: ModelState is repr(C) f32 data.
+                            Some(m) => unsafe { std::slice::from_raw_parts((m as *const ModelState).cast::<u8>(), std::mem::size_of::<ModelState>()) },
+                            None => &[],
+                        },
+                        _ => &[],
+                    };
+                    let parts: [&[u8]; 2] = [ubytes, mbytes];
                     let topology = if pipe.lines { rw::Topology::LineList } else { rw::Topology::TriangleList };
                     let params = rw::DrawParams::default();
-                    let block = std::mem::take(&mut self.block);
                     match (pipe.kind, mesh) {
                         (Kind::Mesh | Kind::MeshEnv | Kind::Skin, Some(MeshDraw { geometry, bones, .. })) => {
-                            let Some(&(vb, ib)) = self.geometries.get(&geometry) else {
-                                self.block = block;
-                                continue;
-                            };
+                            let Some(&(vb, ib)) = self.geometries.get(&geometry) else { continue };
                             let bone_mats: Option<Vec<rw::Mat4>> = (pipe.kind == Kind::Skin).then(|| {
                                 let b = &frame.bones[bones as usize * BONE_FLOATS..][..BONE_FLOATS];
                                 b.as_chunks::<16>().0.to_vec()
@@ -507,32 +502,31 @@ impl RetroBackend {
                                 params: &params,
                                 bones: bone_mats.as_deref(),
                             };
-                            self.r.draw_program(gpu, &d, prog, &block);
+                            self.r.draw_program_parts(gpu, &d, prog, &parts);
                         }
                         (Kind::Im2D, _) => {
                             let v = &frame.verts[first as usize..(first + count) as usize];
                             // SAFETY: Vertex2D is repr(C) plain data.
                             let bytes: &[u8] = unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), std::mem::size_of_val(v)) };
                             let d = rw::Draw { layout: rw::LayoutId(0), topology, vertices: rw::Vertices::Slice(bytes), indices: rw::Indices::None, range: None, base_vertex: 0, state: &state, params: &params, bones: None };
-                            self.r.draw_program(gpu, &d, prog, &block);
+                            self.r.draw_program_parts(gpu, &d, prog, &parts);
                         }
                         (Kind::Im3D, _) => {
                             let v = &frame.verts3[first as usize..(first + count) as usize];
                             // SAFETY: Vertex3D is repr(C) plain data.
                             let bytes: &[u8] = unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), std::mem::size_of_val(v)) };
                             let d = rw::Draw { layout: rw::LayoutId(0), topology, vertices: rw::Vertices::Slice(bytes), indices: rw::Indices::None, range: None, base_vertex: 0, state: &state, params: &params, bones: None };
-                            self.r.draw_program(gpu, &d, prog, &block);
+                            self.r.draw_program_parts(gpu, &d, prog, &parts);
                         }
                         (Kind::Im2DUV2, _) => {
                             let v = &frame.verts_uv2[first as usize..(first + count) as usize];
                             // SAFETY: Vertex2DUV2 is repr(C) plain data.
                             let bytes: &[u8] = unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), std::mem::size_of_val(v)) };
                             let d = rw::Draw { layout: rw::LayoutId(0), topology, vertices: rw::Vertices::Slice(bytes), indices: rw::Indices::None, range: None, base_vertex: 0, state: &state, params: &params, bones: None };
-                            self.r.draw_program(gpu, &d, prog, &block[..U_BYTES]);
+                            self.r.draw_program_parts(gpu, &d, prog, &parts[..1]);
                         }
                         _ => {}
                     }
-                    self.block = block;
                 }
             }
         }

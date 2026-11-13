@@ -209,7 +209,7 @@ pub struct Replacer {
     cache: HashMap<String, Option<ReplacementImage>>,
     dumped: std::collections::HashSet<String>,
     /// Replaced textures (for sampler upgrades).
-    pub(crate) replaced: std::collections::HashSet<TextureId>,
+    pub(crate) replaced: crate::fxhash::HashSet<TextureId>,
 }
 
 fn scan(dir: &Path, out: &mut Vec<PathBuf>) {

@@ -71,11 +71,13 @@ fn programs(backend: Backend) {
         fragment_entry: "fs",
         layout: VertexLayout::packed(PCU),
         block_size: 64,
+        stages: 1,
     };
     let prog = c.r.create_program(&c.gpu, &desc).expect("program");
     // A bad program is an error, not a crash.
     assert!(c.r.create_program(&c.gpu, &ProgramDesc { wgsl: "fn broken(", ..desc.clone() }).is_err());
     assert!(c.r.create_program(&c.gpu, &ProgramDesc { block_size: 20, ..desc.clone() }).is_err());
+    assert!(c.r.create_program(&c.gpu, &ProgramDesc { stages: 0, ..desc.clone() }).is_err());
 
     // 2x1 texture: left texel white, right texel half grey.
     let tex = c.r.upload_texture(&c.gpu, 2, 1, TexFormat::Rgba8, &[&[255, 255, 255, 255, 128, 128, 128, 255]], None, false).unwrap();
@@ -96,7 +98,9 @@ fn programs(backend: Backend) {
         bones: None,
     };
     // Bottom half: tint (1, 0.5, 0.25), no offset.
-    c.r.draw_program(&c.gpu, &draw(LayoutId(u32::MAX)), prog, &block([1.0, 0.5, 0.25, 1.0], [0.0; 4], -1.0));
+    // (The block in two parts, joined without a copy.)
+    let b = block([1.0, 0.5, 0.25, 1.0], [0.0; 4], -1.0);
+    c.r.draw_program_parts(&c.gpu, &draw(LayoutId(u32::MAX)), prog, &[&b[..20], &b[20..]]);
     // Top half: green offset added on top of black with additive blending (fixed-function state
     // still applies); the right half is discarded by the block's rule (texel red 0.5 < 0.6).
     let top = quad_pcu(-1.0, 0.0, 1.0, 1.0, 0.5, [255, 255, 255, 255]);

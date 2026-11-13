@@ -298,11 +298,16 @@ instead of `WgpuBackend` (through the `DrawFrames` trait both implement; screens
 final image). saveload, spots, texmods and gamepad pass against the references with it. It draws
 on the game thread for now: the render thread needs a `Send` back end, and retro-wgpu's post-pass
 and output-stage trait objects aren't `Send` yet. Shadow mode needs `WgpuBackend` presenting.
-Speed (2026-11-13, RX 9070 XT, Vulkan, 1280x720, `scripts/perf.sh`, two alternating runs each):
-`WgpuBackend` 0.76 ms mean over the spots (worst p99 1.26 ms), retro-wgpu 1.66 ms (worst p99
-2.73 ms), about 2.2x. Likely causes: every RW draw carries a 1216-byte block (uniforms + model,
-1280-byte stride) where `WgpuBackend` indexes models in one storage buffer and shares small
-uniform blocks; immediate vertices are copied per draw. Not the default until that's closed.
+Speed (2026-11-13, RX 9070 XT, Vulkan, 1280x720, `scripts/perf.sh`, alternating runs):
+`WgpuBackend` 0.75 ms mean over the spots (worst p99 1.23 ms); retro-wgpu first 1.66 ms, after
+the profiling pass (perf, `cycles:u`) 0.94 ms (worst p99 1.51 ms), about 1.25x. Fixed: per-draw
+block allocation and conversion (blocks now stored flat at the GPU stride, given in parts
+straight from the frame), SipHash in retro-wgpu's caches and the front end's id sets (Fx hash),
+four texture stages bound where RW needs one or two (programs declare `stages`), and duplicate
+pipeline/bind-group lookups. Tried and dropped: a packed bind-key hash (slower). What's left is
+mostly wgpu-core's per-draw binding: retro-wgpu rebinds the program block for every model,
+where `WgpuBackend` indexes models in one storage buffer (retro-wgpu keeps to GLES limits, no
+storage buffers). Not the default yet.
 
 **retro-wgpu back end and shadow mode** (`REVC_RENDER_SHADOW=1`, inline renderer only): the
 wgpu back end presents as usual while `RetroBackend` draws the same frames off-screen. RW's

@@ -15,7 +15,7 @@ use crate::post::{Blitter, OutputSettings, PostPass, ScaleFilter, TARGET_FORMAT,
 use crate::shader::{self, BONES_BLOCK, DRAW_BLOCK, DrawBlock, MAX_BONES, VIEW_BLOCK};
 use crate::state::*;
 use crate::texture::{Palette, TexFormat, full_chain, mip_chain, to_rgba8};
-use std::collections::HashMap;
+use crate::fxhash::HashMap;
 
 /// Depth/stencil format of every target.
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24PlusStencil8;
@@ -55,6 +55,9 @@ pub struct ProgramDesc<'a> {
     pub layout: VertexLayout,
     /// Size of the per-draw block in bytes (a multiple of 16).
     pub block_size: u32,
+    /// Texture stages the program samples (1..=4; bindings 0..2 * stages in group 2). Fewer
+    /// stages make texture changes cheaper.
+    pub stages: u32,
 }
 
 struct Program {
@@ -63,6 +66,7 @@ struct Program {
     fragment_entry: String,
     layout: LayoutId,
     block_size: u32,
+    stages: u32,
 }
 
 /// Where draws go.
@@ -181,7 +185,9 @@ struct PipeKey {
     samples: u32,
 }
 
-type BindKey = [(Option<TextureId>, Sampler); STAGES];
+/// Number of stages bound (a program's `stages`, 4 for fixed-function draws) and the stages
+/// (unused ones are (None, POINT_CLAMP)).
+type BindKey = (u8, [(Option<TextureId>, Sampler); STAGES]);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum VbRef {
@@ -227,6 +233,15 @@ enum Cmd {
     Copy { src: Target, rect: Option<[u32; 4]>, dst: TextureId, at: [u32; 2], scale_to: Option<[u32; 2]> },
 }
 
+/// One frame's program blocks of one size, laid out at the GPU stride, ready to upload.
+#[derive(Default)]
+struct ProgPool {
+    bytes: Vec<u8>,
+    count: u32,
+    /// Offset of the last block (for deduplicating consecutive identical blocks).
+    last: Option<usize>,
+}
+
 /// A uniform buffer of fixed-size blocks bound at dynamic offsets.
 struct Blocks {
     buffer: wgpu::Buffer,
@@ -262,6 +277,16 @@ impl Blocks {
             }
         }
         gpu.queue.write_buffer(&self.buffer, 0, &bytes);
+    }
+
+    /// Uploads `count` blocks already laid out at this buffer's stride.
+    fn write_bytes(&mut self, gpu: &Gpu, layout: &wgpu::BindGroupLayout, bytes: &[u8], count: usize) {
+        if count > self.capacity {
+            *self = Blocks::new(gpu, layout, self.size as usize, count.next_power_of_two());
+        }
+        if !bytes.is_empty() {
+            gpu.queue.write_buffer(&self.buffer, 0, bytes);
+        }
     }
 
     fn offset(&self, i: u32) -> u32 {
@@ -352,14 +377,16 @@ pub struct Renderer {
     blitter: std::cell::RefCell<Blitter>,
     view_layout: wgpu::BindGroupLayout,
     draw_layout: wgpu::BindGroupLayout,
-    tex_layout: wgpu::BindGroupLayout,
+    /// Stage bind group layouts for 1..=4 stages, and pipeline layouts (plain, skinned) for each.
+    tex_layouts: Vec<wgpu::BindGroupLayout>,
+    stage_pls: Vec<[wgpu::PipelineLayout; 2]>,
     bones_layout: wgpu::BindGroupLayout,
-    pl_plain: wgpu::PipelineLayout,
-    pl_skin: wgpu::PipelineLayout,
     layouts: Vec<(VertexLayout, wgpu::ShaderModule)>,
     programs: Vec<Program>,
     /// Program draw blocks of the frame and their GPU buffers, by block size.
-    prog_blocks: HashMap<u32, Vec<Vec<u32>>>,
+    prog_blocks: HashMap<u32, ProgPool>,
+    /// Uniform buffer offset alignment (block strides are multiples of it).
+    ub_align: u64,
     prog_ub: HashMap<u32, Blocks>,
     pipelines: HashMap<PipeKey, wgpu::RenderPipeline>,
     samplers: HashMap<Sampler, wgpu::Sampler>,
@@ -431,6 +458,7 @@ impl Renderer {
         let view_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("view"), entries: &[uniform_entry(wgpu::ShaderStages::VERTEX_FRAGMENT)] });
         let draw_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("draw"), entries: &[uniform_entry(wgpu::ShaderStages::VERTEX_FRAGMENT)] });
         let bones_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("bones"), entries: &[uniform_entry(wgpu::ShaderStages::VERTEX)] });
+        let mut tex_layouts = Vec::new();
         let mut entries = Vec::new();
         for s in 0..STAGES as u32 {
             entries.push(wgpu::BindGroupLayoutEntry {
@@ -440,10 +468,17 @@ impl Renderer {
                 count: None,
             });
             entries.push(wgpu::BindGroupLayoutEntry { binding: 2 * s + 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None });
+            tex_layouts.push(d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("stages"), entries: &entries }));
         }
-        let tex_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("stages"), entries: &entries });
-        let pl_plain = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("draw"), bind_group_layouts: &[Some(&view_layout), Some(&draw_layout), Some(&tex_layout)], immediate_size: 0 });
-        let pl_skin = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("skin"), bind_group_layouts: &[Some(&view_layout), Some(&draw_layout), Some(&tex_layout), Some(&bones_layout)], immediate_size: 0 });
+        let stage_pls: Vec<[wgpu::PipelineLayout; 2]> = tex_layouts
+            .iter()
+            .map(|tl| {
+                [
+                    d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("draw"), bind_group_layouts: &[Some(&view_layout), Some(&draw_layout), Some(tl)], immediate_size: 0 }),
+                    d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("skin"), bind_group_layouts: &[Some(&view_layout), Some(&draw_layout), Some(tl), Some(&bones_layout)], immediate_size: 0 }),
+                ]
+            })
+            .collect();
         let white_tex = d.create_texture(&wgpu::TextureDescriptor {
             label: Some("white"),
             size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
@@ -474,21 +509,21 @@ impl Renderer {
             bones_ub: Blocks::new(gpu, &bones_layout, BONES_BLOCK, 8),
             view_layout,
             draw_layout,
-            tex_layout,
+            tex_layouts,
+            stage_pls,
             bones_layout,
-            pl_plain,
-            pl_skin,
             layouts: Vec::new(),
             programs: Vec::new(),
-            prog_blocks: HashMap::new(),
-            prog_ub: HashMap::new(),
-            pipelines: HashMap::new(),
-            samplers: HashMap::new(),
-            bind_groups: HashMap::new(),
-            textures: HashMap::new(),
+            prog_blocks: HashMap::default(),
+            ub_align: gpu.device.limits().min_uniform_buffer_offset_alignment as u64,
+            prog_ub: HashMap::default(),
+            pipelines: HashMap::default(),
+            samplers: HashMap::default(),
+            bind_groups: HashMap::default(),
+            textures: HashMap::default(),
             next_texture: 1,
             white: white_tex.create_view(&Default::default()),
-            buffers: HashMap::new(),
+            buffers: HashMap::default(),
             next_buffer: 1,
             dead_textures: Vec::new(),
             dead_buffers: Vec::new(),
@@ -577,13 +612,16 @@ impl Renderer {
         if desc.block_size > gpu.device.limits().max_uniform_buffer_binding_size as u32 {
             return Err(format!("program {}: block size {} over the device's uniform limit", desc.label, desc.block_size));
         }
+        if !(1..=STAGES as u32).contains(&desc.stages) {
+            return Err(format!("program {}: {} stages (1..={STAGES})", desc.label, desc.stages));
+        }
         let layout = self.create_layout(gpu, desc.layout.clone())?;
         let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let module = gpu.device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some(desc.label), source: wgpu::ShaderSource::Wgsl(desc.wgsl.into()) });
         if let Some(e) = pollster::block_on(scope.pop()) {
             return Err(format!("program {}: {e}", desc.label));
         }
-        self.programs.push(Program { module, vertex_entry: desc.vertex_entry.into(), fragment_entry: desc.fragment_entry.into(), layout, block_size: desc.block_size });
+        self.programs.push(Program { module, vertex_entry: desc.vertex_entry.into(), fragment_entry: desc.fragment_entry.into(), layout, block_size: desc.block_size, stages: desc.stages });
         Ok(ProgramId(self.programs.len() as u32 - 1))
     }
 
@@ -701,7 +739,7 @@ impl Renderer {
             // The texture got new contents without a replacement: back to the original storage.
             let t = self.make_texture(gpu, desc, None);
             self.textures.insert(id, t);
-            self.bind_groups.retain(|k, _| !k.iter().any(|(t, _)| *t == Some(id)));
+            self.bind_groups.retain(|k, _| !k.1.iter().any(|(t, _)| *t == Some(id)));
         }
         let t = &self.textures[&id];
         if level >= t.levels {
@@ -794,7 +832,7 @@ impl Renderer {
         }
         t.replaced = true;
         self.textures.insert(id, t);
-        self.bind_groups.retain(|k, _| !k.iter().any(|(t, _)| *t == Some(id)));
+        self.bind_groups.retain(|k, _| !k.1.iter().any(|(t, _)| *t == Some(id)));
     }
 
     // ---- Recording ------------------------------------------------------------------------
@@ -869,21 +907,48 @@ impl Renderer {
     /// Records a draw with a program (its layout replaces `d.layout`; `d.params` is unused) and
     /// the program's per-draw block (`block`, at most its block size; the rest is zero).
     pub fn draw_program(&mut self, gpu: &Gpu, d: &Draw, program: ProgramId, block: &[u8]) {
+        self.draw_program_parts(gpu, d, program, &[block]);
+    }
+
+    /// As `draw_program`, with the block given in consecutive parts (no copy to join them).
+    pub fn draw_program_parts(&mut self, gpu: &Gpu, d: &Draw, program: ProgramId, parts: &[&[u8]]) {
         let Some(p) = self.programs.get(program.0 as usize) else {
             self.warn("draw with an unknown program skipped");
             return;
         };
-        let (layout, size) = (p.layout, p.block_size);
-        let mut words = vec![0u32; size as usize / 4];
-        for (w, c) in words.iter_mut().zip(block.chunks(4)) {
-            let mut b = [0u8; 4];
-            b[..c.len()].copy_from_slice(c);
-            *w = u32::from_le_bytes(b);
+        let (layout, size) = (p.layout, p.block_size as usize);
+        let stride = (size as u64).next_multiple_of(self.ub_align) as usize;
+        let pool = self.prog_blocks.entry(p.block_size).or_default();
+        // Consecutive draws often share their block (one model's meshes).
+        let same = pool.last.is_some_and(|at| {
+            let last = &pool.bytes[at..at + size];
+            let mut o = 0;
+            for part in parts {
+                let n = part.len().min(size - o);
+                if last[o..o + n] != part[..n] {
+                    return false;
+                }
+                o += n;
+            }
+            last[o..].iter().all(|&b| b == 0)
+        });
+        if !same {
+            let at = pool.bytes.len();
+            pool.bytes.resize(at + stride, 0);
+            let mut o = at;
+            for part in parts {
+                let n = part.len().min(at + size - o);
+                pool.bytes[o..o + n].copy_from_slice(&part[..n]);
+                o += n;
+            }
+            pool.last = Some(at);
+            pool.count += 1;
         }
-        self.record_draw(gpu, &Draw { layout, ..*d }, Some((program, size, words)));
+        let index = pool.count - 1;
+        self.record_draw(gpu, &Draw { layout, ..*d }, Some((program, size as u32, index)));
     }
 
-    fn record_draw(&mut self, gpu: &Gpu, d: &Draw, program: Option<(ProgramId, u32, Vec<u32>)>) {
+    fn record_draw(&mut self, gpu: &Gpu, d: &Draw, program: Option<(ProgramId, u32, u32)>) {
         let _ = gpu;
         let Some((layout, _)) = self.layouts.get(d.layout.0 as usize) else {
             self.warn("draw with an unknown layout skipped");
@@ -1000,7 +1065,11 @@ impl Renderer {
         }
         let pipe = PipeKey { layout: d.layout, program: program.as_ref().map(|p| p.0), fixed, topology, strip_index, samples };
         // Textures: the current target can't be sampled while drawn into (white instead).
-        let binds: BindKey = std::array::from_fn(|s| {
+        let nstages = program.as_ref().and_then(|p| self.programs.get(p.0.0 as usize)).map_or(STAGES, |p| p.stages as usize);
+        let binds: BindKey = (nstages as u8, std::array::from_fn(|s| {
+            if s >= nstages {
+                return (None, Sampler::POINT_CLAMP);
+            }
             let st = &d.state.stages[s];
             let tex = st.texture.filter(|t| self.textures.contains_key(t) && Target::Texture(*t) != self.target);
             let sampler = match (tex, &self.replacer) {
@@ -1009,15 +1078,9 @@ impl Renderer {
                 (None, _) => Sampler::POINT_CLAMP,
             };
             (tex, sampler)
-        });
+        }));
         let (block, prog) = match program {
-            Some((_, size, words)) => {
-                let pool = self.prog_blocks.entry(size).or_default();
-                if pool.last() != Some(&words) {
-                    pool.push(words);
-                }
-                (pool.len() as u32 - 1, Some(size))
-            }
+            Some((_, size, index)) => (index, Some(size)),
             None => {
                 let block = shader::draw_block(d.state, d.params);
                 if self.draw_blocks.last() != Some(&block) {
@@ -1068,6 +1131,7 @@ impl Renderer {
             return;
         }
         let (layout, core) = &self.layouts[key.layout.0 as usize];
+        let nstages = key.program.and_then(|p| self.programs.get(p.0 as usize)).map_or(STAGES, |p| p.stages as usize);
         let (module, vs, fs) = match key.program.and_then(|p| self.programs.get(p.0 as usize)) {
             Some(p) => (&p.module, p.vertex_entry.as_str(), p.fragment_entry.as_str()),
             None => (core, "vs", "fs"),
@@ -1084,7 +1148,7 @@ impl Renderer {
         }
         let p = gpu.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("retro draw"),
-            layout: Some(if layout.skinned() { &self.pl_skin } else { &self.pl_plain }),
+            layout: Some(&self.stage_pls[nstages - 1][layout.skinned() as usize]),
             vertex: wgpu::VertexState {
                 module,
                 entry_point: Some(vs),
@@ -1116,16 +1180,17 @@ impl Renderer {
         if self.bind_groups.contains_key(&key) {
             return;
         }
-        for (_, s) in &key {
+        let n = key.0 as usize;
+        for (_, s) in &key.1[..n] {
             self.samplers.entry(*s).or_insert_with(|| gpu.device.create_sampler(&wgpu_sampler(s)));
         }
         let mut entries = Vec::new();
-        for (i, (t, s)) in key.iter().enumerate() {
+        for (i, (t, s)) in key.1[..n].iter().enumerate() {
             let view = t.and_then(|t| self.textures.get(&t)).map_or(&self.white, |t| &t.view);
             entries.push(wgpu::BindGroupEntry { binding: 2 * i as u32, resource: wgpu::BindingResource::TextureView(view) });
             entries.push(wgpu::BindGroupEntry { binding: 2 * i as u32 + 1, resource: wgpu::BindingResource::Sampler(&self.samplers[s]) });
         }
-        let bg = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("stages"), layout: &self.tex_layout, entries: &entries });
+        let bg = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("stages"), layout: &self.tex_layouts[n - 1], entries: &entries });
         self.bind_groups.insert(key, bg);
     }
 
@@ -1154,18 +1219,30 @@ impl Renderer {
         self.draw_ub.write(gpu, &self.draw_layout, &db);
         let bb: Vec<&[u32]> = self.bone_blocks.iter().map(|b| b.as_slice()).collect();
         self.bones_ub.write(gpu, &self.bones_layout, &bb);
-        for (size, blocks) in &self.prog_blocks {
+        for (size, pool) in &self.prog_blocks {
             let ub = self.prog_ub.entry(*size).or_insert_with(|| Blocks::new(gpu, &self.draw_layout, *size as usize, 64));
-            let pb: Vec<&[u32]> = blocks.iter().map(|b| b.as_slice()).collect();
-            ub.write(gpu, &self.draw_layout, &pb);
+            debug_assert_eq!(ub.stride, (*size as u64).next_multiple_of(self.ub_align));
+            ub.write_bytes(gpu, &self.draw_layout, &pool.bytes, pool.count as usize);
         }
         let cmds = std::mem::take(&mut self.cmds);
+        // Pipeline and stage bind group of every draw, looked up once here (consecutive draws
+        // mostly share them: only what changed is looked up) and handed to the replay.
+        let mut resolved: Vec<(wgpu::RenderPipeline, wgpu::BindGroup)> = Vec::with_capacity(cmds.len());
+        let (mut last_pipe, mut last_binds): (Option<(PipeKey, wgpu::RenderPipeline)>, Option<(BindKey, wgpu::BindGroup)>) = (None, None);
         for c in &cmds {
             if let Cmd::Draw(d) = c {
-                self.ensure_pipeline(gpu, d.pipe);
-                self.ensure_bind_group(gpu, d.binds);
+                if last_pipe.as_ref().is_none_or(|l| l.0 != d.pipe) {
+                    self.ensure_pipeline(gpu, d.pipe);
+                    last_pipe = Some((d.pipe, self.pipelines[&d.pipe].clone()));
+                }
+                if last_binds.as_ref().is_none_or(|l| l.0 != d.binds) {
+                    self.ensure_bind_group(gpu, d.binds);
+                    last_binds = Some((d.binds, self.bind_groups[&d.binds].clone()));
+                }
+                resolved.push((last_pipe.as_ref().unwrap().1.clone(), last_binds.as_ref().unwrap().1.clone()));
             }
         }
+        let n_scene = cmds.iter().position(|c| matches!(c, Cmd::Overlay)).map_or(resolved.len(), |i| cmds[..i].iter().filter(|c| matches!(c, Cmd::Draw(_))).count());
 
         // The scene's commands, then (after a `begin_overlay`) the overlay's.
         let split = cmds.iter().position(|c| matches!(c, Cmd::Overlay));
@@ -1175,7 +1252,7 @@ impl Renderer {
         };
         {
             let sc = self.scene.as_ref().unwrap();
-            self.replay(gpu, enc, scene_cmds, SceneAtt { color: &sc.color, view: &sc.view, msaa: sc.msaa.as_ref(), depth: &sc.depth, size: sc.size });
+            self.replay(gpu, enc, scene_cmds, &resolved[..n_scene], SceneAtt { color: &sc.color, view: &sc.view, msaa: sc.msaa.as_ref(), depth: &sc.depth, size: sc.size });
         }
 
         // After the scene: downsample to the internal size, post chain, output.
@@ -1242,7 +1319,7 @@ impl Renderer {
                     }),
                     ..Default::default()
                 }));
-                self.replay(gpu, enc, ov, SceneAtt { color: &oc, view: &ovw, msaa: None, depth: &od, size });
+                self.replay(gpu, enc, ov, &resolved[n_scene..], SceneAtt { color: &oc, view: &ovw, msaa: None, depth: &od, size });
                 let gamma = (self.output.gamma != 1.0).then_some(self.output.gamma);
                 self.blitter.borrow_mut().blit(gpu, enc, &oc, false, output, self.output_format, None, [0.0, 0.0, 1.0, 1.0], None, gamma);
                 self.final_image = Some(oc);
@@ -1253,7 +1330,8 @@ impl Renderer {
     }
 
     /// Replays recorded commands, with `Target::Scene` drawing into `scene`.
-    fn replay(&self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, cmds: &[Cmd], scene: SceneAtt) {
+    fn replay(&self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, cmds: &[Cmd], resolved: &[(wgpu::RenderPipeline, wgpu::BindGroup)], scene: SceneAtt) {
+        let mut draw_no = 0usize;
         let mut pass: Option<wgpu::RenderPass<'static>> = None;
         let mut target = Target::Scene;
         let mut target_size = scene.size;
@@ -1379,6 +1457,8 @@ impl Renderer {
                     }
                 }
                 Cmd::Draw(d) => {
+                    let (rp, rb) = &resolved[draw_no];
+                    draw_no += 1;
                     if !ok {
                         continue;
                     }
@@ -1388,7 +1468,7 @@ impl Renderer {
                     }
                     let Some(p) = pass.as_mut() else { continue };
                     if bound.pipe != Some(d.pipe) {
-                        p.set_pipeline(&self.pipelines[&d.pipe]);
+                        p.set_pipeline(rp);
                         bound.pipe = Some(d.pipe);
                     }
                     if bound.view != Some(d.view) {
@@ -1404,7 +1484,7 @@ impl Renderer {
                         bound.block = Some((d.prog, d.block));
                     }
                     if bound.binds != Some(d.binds) {
-                        p.set_bind_group(2, &self.bind_groups[&d.binds], &[]);
+                        p.set_bind_group(2, rb, &[]);
                         bound.binds = Some(d.binds);
                     }
                     if let Some(b) = d.bones
@@ -1525,7 +1605,11 @@ impl Renderer {
         self.draw_blocks.clear();
         self.view_blocks.clear();
         self.bone_blocks.clear();
-        self.prog_blocks.values_mut().for_each(Vec::clear);
+        for pool in self.prog_blocks.values_mut() {
+            pool.bytes.clear();
+            pool.count = 0;
+            pool.last = None;
+        }
         self.retired.clear();
         self.target = Target::Scene;
         self.overlay = false;
@@ -1533,7 +1617,7 @@ impl Renderer {
         self.scissor = None;
         for id in std::mem::take(&mut self.dead_textures) {
             self.textures.remove(&id);
-            self.bind_groups.retain(|k, _| !k.iter().any(|(t, _)| *t == Some(id)));
+            self.bind_groups.retain(|k, _| !k.1.iter().any(|(t, _)| *t == Some(id)));
         }
         for id in std::mem::take(&mut self.dead_buffers) {
             if let Some(b) = self.buffers.remove(&id) {

@@ -10,7 +10,6 @@
 
 use crate::prim::{expand_primitive, is_line_primitive};
 use std::collections::HashMap as StdHashMap;
-use std::collections::HashSet;
 
 /// rustc's Fx hash: the renderer's caches are looked up several times per draw, and std's SipHash
 /// showed up in profiles (keys are small, trusted integers).
@@ -73,6 +72,7 @@ impl std::hash::BuildHasher for FxBuild {
 }
 
 pub(crate) type HashMap<K, V> = StdHashMap<K, V, FxBuild>;
+pub(crate) type HashSet<K> = std::collections::HashSet<K, FxBuild>;
 
 /// librw `wgpu::Im2DVertex` (same layout as gl3's).
 #[repr(C)]
@@ -559,8 +559,8 @@ impl Recorder {
             frame: Frame::new(settings),
             spare: Vec::new(),
             settings,
-            textures: HashSet::new(),
-            geometries: HashSet::new(),
+            textures: HashSet::default(),
+            geometries: HashSet::default(),
             next_texture: 1,
             next_geometry: 1,
             recording_target: 0,
