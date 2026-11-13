@@ -113,7 +113,7 @@
  void
  CCam::Process_1stPerson(const CVector &CameraTarget, float TargetOrientation, float SpeedVar, float TargetSpeedVar)
  {
-@@ -2564,8 +2627,18 @@
+@@ -2564,8 +2627,31 @@
  		LookUpDown = CPad::GetPad(0)->LookAroundUpDown();
  		float xdir = LookLeftRight < 0.0f ? -1.0f : 1.0f;
  		float ydir = LookUpDown < 0.0f ? -1.0f : 1.0f;
@@ -123,8 +123,21 @@
 +			// carry-on, the rate a function of the stick's tilt (deg/s; pitch the same curve
 +			// scaled). The PC's is quadratic past 85/128 and reaches ~330 deg/s.
 +			bool down = Alpha < DEGTORAD(-10.0f);
++			if(gUiStyle == 2){
++				// the Xbox (research autopad-runs/lookrate, both sticks calibrated): the right stick
++				// after its 0.25 dead zone (as the host reads it), r = 0..1, squared: yaw 140 r^2
++				// deg/s but none below r 0.47 (a 0.6 tilt: 0 at 0.5, 54 deg/s at 0.7), pitch 79 r^2
++				CPad *pad = CPad::GetPad(0);
++				float rx = pad->NewState.RightStickX / 128.0f, ry = pad->NewState.RightStickY / 128.0f;
++				if(CPad::bInvertLook4Pad) ry = -ry;
++				if(pad->GetLookBehindForPed() || pad->ArePlayerControlsDisabled()) rx = ry = 0.0f;
++				float yaw = Abs(rx) >= 0.47f ? 140.0f * rx * rx : 0.0f, pitchRate = 79.0f * ry * ry;
++				Beta += (rx > 0.0f ? -1.0f : 1.0f) * DEGTORAD(yaw) / 50.0f * CTimer::GetTimeStep();
++				Alpha += (ry < 0.0f ? -1.0f : 1.0f) * DEGTORAD(pitchRate) / 50.0f * CTimer::GetTimeStep();
++			}else{
 +			Beta += xdir * DEGTORAD(ConsoleLookRate(LookLeftRight, false, down)) / 50.0f * CTimer::GetTimeStep();
 +			Alpha += ydir * DEGTORAD(ConsoleLookRate(LookUpDown, true, down)) / 50.0f * CTimer::GetTimeStep();
++			}
 +		}else{
  		Beta += SQR(LookLeftRight/100.0f)*xdir*0.8f/14.0f * FOV/80.0f * CTimer::GetTimeStep();
  		Alpha += SQR(LookUpDown/150.0f)*ydir*1.0f/14.0f * FOV/80.0f * CTimer::GetTimeStep();
@@ -132,7 +145,7 @@
  		while(Beta >= PI) Beta -= 2*PI;
  		while(Beta < -PI) Beta += 2*PI;
  		if(Alpha > DEGTORAD(60.0f)) Alpha = DEGTORAD(60.0f);
-@@ -2616,7 +2689,11 @@
+@@ -2616,7 +2702,11 @@
  
  		if(((CVehicle*)CamTargetEntity)->IsBike() &&
  		   (((CBike*)CamTargetEntity)->bWheelieCam || TheCamera.m_fAvoidTheGeometryProbsTimer > 0.0f)){
@@ -5949,8 +5962,15 @@
  	return !!(NewState.RightShoulder2 && NewState.LeftShoulder2);
  }
  
-@@ -3244,6 +3554,8 @@
+@@ -3242,8 +3552,15 @@
+ {
+ 	int16 axis = NewState.LeftStickX;
  	int16 dpad = (NewState.DPadRight - NewState.DPadLeft) / 2;
++	// revc: the Xbox aims with the left stick alone, without the PC's extra dead zone (its own
++	// first-person dead zone is applied when the stick is read; measured rates match the formula
++	// then: research autopad-runs/lookrate)
++	if (gUiStyle == 2)
++		return axis;
  
  	if ( Abs(axis) > Abs(dpad) ) {
 +		if ( gUiStyle == 1 )	// (revc: the PS2 has no extra dead zone here; PS2 v1.40, research)
@@ -5958,15 +5978,19 @@
  		if ( Abs(axis) > 35.0f ) {
  		  return (axis > 0.f ? axis - 35.f : axis + 35.f) * (128.f / (128 - 35));
  		} else {
-@@ -3259,6 +3571,7 @@
+@@ -3259,8 +3576,11 @@
  	int16 dpad;
  
  #ifdef FIX_BUGS
-+	if ( gUiStyle != 1 )	// (revc: the PS2 only turns it over with "invert"; PS2 v1.40, research)
++	if ( gUiStyle != 1 && gUiStyle != 2 )	// (revc: the consoles only turn it over with "invert"; research)
  	axis = -axis;
  #endif
++	if ( gUiStyle == 2 )	// (the Xbox: the stick alone, no extra dead zone, as left/right)
++		return CPad::bInvertLook4Pad ? -axis : axis;
  	if (CPad::bInvertLook4Pad) {
-@@ -3269,6 +3582,8 @@
+ 		axis = -axis;
+ 		dpad = (NewState.DPadDown - NewState.DPadUp) / 2;
+@@ -3269,6 +3589,8 @@
  	}
  
  	if ( Abs(axis) > Abs(dpad) ) {
@@ -5975,7 +5999,7 @@
  	    if ( Abs(axis) > 35.0f ) {
  	      return (axis > 0.f ? axis - 35.f : axis + 35.f) * (128.f / (128 - 35));
  	    } else {
-@@ -3293,11 +3608,17 @@
+@@ -3293,11 +3615,17 @@
  	return 0;
  }
  
