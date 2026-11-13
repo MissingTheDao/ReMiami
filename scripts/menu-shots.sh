@@ -21,7 +21,11 @@ FAILED=0
 [[ -z "${REVC_TEST_MODS:-}" && -d "$ROOT/game/mods" ]] && export REVC_TEST_MODS="$ROOT/game/mods"
 shoot() {	# set, ui style, width, height, suffix[, final height]
   local cfg=$TMP/menus.ini
-  sed -e "s/^\[Graphics\]/[Graphics]\nUiStyle=$2/" -e "s/^Width=.*/Width=$3/" -e "s/^Height=.*/Height=$4/" \
+  # (the PS2 set with the PS2's own button glyphs whatever pad the test machine has, as the motion
+  # tests do: ButtonPrompts 2 = PlayStation)
+  local prompts=()
+  [[ $2 == 1 ]] && prompts=(-e "s/^\[Controller\]/[Controller]\nButtonPrompts=2/")
+  sed -e "s/^\[Graphics\]/[Graphics]\nUiStyle=$2/" -e "s/^Width=.*/Width=$3/" -e "s/^Height=.*/Height=$4/" "${prompts[@]}" \
     "$ROOT/tests/config/reVC.ini" > "$cfg"
   mkdir -p "$TMP/shots"; rm -f "$TMP"/shots/*
   # The game picks its resolution from the display's modes: sizes a desktop rarely offers (21:9)
