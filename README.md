@@ -4,6 +4,9 @@ A long-term modernisation of [reVC](https://github.com/GTAmodding/re3) (the reve
 source of GTA: Vice City, re3-miami branch): the game is ported to Rust piece by piece, in
 strangler style, while staying playable at every step.
 
+The game binary is `remiami`; inside the code the project keeps its short working name `revc`
+(crate names, the `REVC_*` settings and test switches, the `cpp/revc` folder).
+
 ## Goals
 
 - **Faithful gameplay.** The game should play exactly like the original; behaviour changes are
@@ -32,7 +35,7 @@ either.
 | Path | What |
 |---|---|
 | `rust/` | Cargo workspace: the `revc` launcher and host, `revc-rw` (renderer), `revc-formats`, `revc-audio`, `revc-timing` |
-| `cpp/revc/` | revc's changes to the reVC C++ code (patches), its own C++ files and librw. The reVC source itself is not here: you build from your own copy (see [docs/BUILDING.md](docs/BUILDING.md)) |
+| `cpp/revc/` | reMiami's changes to the reVC C++ code (patches), its own C++ files and librw. The reVC source itself is not here: you build from your own copy (see [docs/BUILDING.md](docs/BUILDING.md)) |
 | `scripts/` | Build, test and tool scripts |
 | `tests/` | Test scenarios, golden data (synthetic inputs, hashes) and test saves |
 | `docs/` | Building, renderer port, modding, playtest checklists |

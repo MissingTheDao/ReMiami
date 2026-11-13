@@ -1056,3 +1056,14 @@
  
  #include "rwcore.h"
  #include "skeleton.h"
+--- a/src/skel/skeleton.cpp
++++ b/src/skel/skeleton.cpp
+@@ -397,7 +397,7 @@
+ 	 */
+ 	RwBool              result;
+ 
+-	RsGlobal.appName = RWSTRING("GTA: Vice City");
++	RsGlobal.appName = RWSTRING("reMiami");	// (revc: the project's name in the window title)
+ 	RsGlobal.maximumWidth = DEFAULT_SCREEN_WIDTH;
+ 	RsGlobal.maximumHeight = DEFAULT_SCREEN_HEIGHT;
+ 	RsGlobal.width = DEFAULT_SCREEN_WIDTH;

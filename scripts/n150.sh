@@ -140,7 +140,7 @@ case "$cmd" in
     (cd "$ROOT/rust" && cargo build --locked -q --release) || exit 1
     STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
     mkdir -p "$STAGE/bin" "$STAGE/scripts"
-    cp "$ROOT/rust/target/release/revc" "$STAGE/bin/revc"
+    cp "$ROOT/rust/target/release/remiami" "$STAGE/bin/remiami"
     cp "$ROOT/scripts/perf.sh" "$ROOT/scripts/test.sh" "$ROOT/scripts/headless.sh" "$STAGE/scripts/"
     cp -r "$ROOT/tests" "$ROOT/assets" "$STAGE/"   # assets: controller glyphs, found next to bin/
     git -C "$ROOT" describe --always --dirty > "$STAGE/COMMIT"
@@ -167,7 +167,7 @@ case "$cmd" in
       ssh -o BatchMode=yes "$HOST" "test -d $SRC" ||
         git -C "$ROOT" archive --format=tar "$rev" | ssh -o BatchMode=yes "$HOST" "mkdir -p $SRC && tar xf - -C $SRC" || exit 1
       echo "building $rev on $HOST (bin/$AS)"
-      ssh -o BatchMode=yes "$HOST" "bash -c '$TOOLS; set -o pipefail; cd $SRC/rust && nice cargo build -q --release 2>&1 | tail -30 && mkdir -p ~/$DIR/bin && cp target/release/revc ~/$DIR/bin/$AS'" || exit 1
+      ssh -o BatchMode=yes "$HOST" "bash -c '$TOOLS; set -o pipefail; cd $SRC/rust && nice cargo build -q --release 2>&1 | tail -30 && mkdir -p ~/$DIR/bin && { cp target/release/remiami ~/$DIR/bin/$AS 2>/dev/null || cp target/release/revc ~/$DIR/bin/$AS; }'" || exit 1
       echo "deployed $rev as $HOST:$DIR/bin/$AS"
       exit 0
     fi
@@ -183,7 +183,7 @@ case "$cmd" in
     scp -q /tmp/revc-n150-commit.$$ "$HOST:revc-src/COMMIT"; rm -f /tmp/revc-n150-commit.$$
     echo "building $(ssh -o BatchMode=yes "$HOST" cat revc-src/COMMIT) on $HOST"
     ssh -o BatchMode=yes "$HOST" "bash -c '$TOOLS; set -o pipefail; cd revc-src/rust && nice cargo build --locked -q --release 2>&1 | tail -120'" || exit 1
-    ssh -o BatchMode=yes "$HOST" "bash -c 'set -e; mkdir -p $DIR/bin $DIR/scripts; cd revc-src; cp rust/target/release/revc ~/$DIR/bin/revc; cp scripts/perf.sh scripts/test.sh scripts/headless.sh ~/$DIR/scripts/; rm -rf ~/$DIR/tests ~/$DIR/assets; cp -r tests assets ~/$DIR/; cp COMMIT ~/$DIR/COMMIT'" || exit 1
+    ssh -o BatchMode=yes "$HOST" "bash -c 'set -e; mkdir -p $DIR/bin $DIR/scripts; cd revc-src; cp rust/target/release/remiami ~/$DIR/bin/remiami; cp scripts/perf.sh scripts/test.sh scripts/headless.sh ~/$DIR/scripts/; rm -rf ~/$DIR/tests ~/$DIR/assets; cp -r tests assets ~/$DIR/; cp COMMIT ~/$DIR/COMMIT'" || exit 1
     # Your own game files (never committed); user mods and settings stay here.
     rsync -a --delete --exclude mods --exclude userfiles --exclude reVC.ini "$ROOT/game/" "$HOST:$DIR/game/" || exit 1
     echo "built and deployed $(ssh -o BatchMode=yes "$HOST" cat $DIR/COMMIT) on $HOST:$DIR"
@@ -199,7 +199,7 @@ case "$cmd" in
       esac
       shift
     done
-    REMOTE_SCRIPT="REVC_RENDERER_BACKEND=$BACKEND REVC_TEST_BIN=\$PWD/bin/revc $RUN scripts/test.sh ${ARGS[*]:-}" remote
+    REMOTE_SCRIPT="REVC_RENDERER_BACKEND=$BACKEND REVC_TEST_BIN=\$PWD/bin/remiami $RUN scripts/test.sh ${ARGS[*]:-}" remote
     ;;
   perf)
     check_screen

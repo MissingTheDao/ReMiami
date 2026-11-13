@@ -19,7 +19,7 @@ sums=()
 for d in "$WORK"/a/* "$WORK"/b/*; do
   echo "== building $d"
   CARGO_TARGET_DIR="$d/target" "$d/scripts/build.sh" > "$d.log" 2>&1 || { tail -30 "$d.log"; exit 1; }
-  sums+=("$(sha256sum "$d/target/release/revc" | awk '{print $1}')")
+  sums+=("$(sha256sum "$d/target/release/remiami" | awk '{print $1}')")
   echo "   ${sums[-1]}"
 done
 if [[ "${sums[0]}" == "${sums[1]}" ]]; then

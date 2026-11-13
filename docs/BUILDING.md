@@ -1,15 +1,15 @@
 # Building reVC
 
-The repository holds revc's own work. The reVC C++ source (re3, "miami" branch) that the game
+The repository holds reMiami's own work. The reVC C++ source (re3, "miami" branch) that the game
 still builds from is **not** in it: you supply your own copy, and `scripts/revc-source.sh` turns it
 into the C++ tree the build uses.
 
 | Path | What |
 |---|---|
 | `rust/` | Cargo workspace: the `revc` launcher and SDL3 platform host |
-| `cpp/revc/reVC.sha256` | The reVC files revc needs, with hashes (snapshot `dc21472`, 2021-09-02) |
-| `cpp/revc/patches/` | revc's changes to those files |
-| `cpp/revc/overlay/` | revc's own C++ files, and librw (aap/librw `5501c4f` plus our changes) |
+| `cpp/revc/reVC.sha256` | The reVC files reMiami needs, with hashes (snapshot `dc21472`, 2021-09-02) |
+| `cpp/revc/patches/` | reMiami's changes to those files |
+| `cpp/revc/overlay/` | reMiami's own C++ files, and librw (aap/librw `5501c4f` plus our changes) |
 | `cpp/re3-miami/` | Generated, never committed: your reVC files + patches + overlay |
 | `scripts/` | `build.sh`, `check-reproducible.sh`, `deps.lock` |
 | `bin/` | Local helpers (`ai-serve.sh`, `ask-local.py`) |
@@ -33,15 +33,15 @@ Rust is pinned in `rust/rust-toolchain.toml`. rustup honours it; with the system
 
 You need the reVC source at commit `dc2147268b17b86656b629d5370bf2e90229e618` (re3's "miami"
 branch, 2021-09-02) as a folder, a `.zip`/`.tar.*` archive of it, or a git repository URL that
-has that commit. revc never downloads it for you.
+has that commit. reMiami never downloads it for you.
 
 ```bash
 scripts/revc-source.sh prepare ~/Downloads/re3-dc21472.zip
 ```
 
 It checks all 518 needed files against `cpp/revc/reVC.sha256` (a different version is refused),
-then writes `cpp/re3-miami/`: those files, revc's patches applied, revc's own files copied in.
-Files of the copy that revc doesn't need (game data, Windows libraries, old build files) are ignored.
+then writes `cpp/re3-miami/`: those files, reMiami's patches applied, reMiami's own files copied in.
+Files of the copy that reMiami doesn't need (game data, Windows libraries, old build files) are ignored.
 
 Working on the C++: edit `cpp/re3-miami/` as usual, then
 
@@ -60,7 +60,7 @@ scripts/build.sh            # warns if toolchain/packages differ from the pins
 scripts/build.sh --strict   # refuses to build if they differ
 ```
 
-The result is `rust/target/release/revc` and its SHA-256 is printed.
+The result is `rust/target/release/remiami` and its SHA-256 is printed.
 
 For day-to-day work, `cd rust && cargo run` builds a dev binary and starts the game.
 

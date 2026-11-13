@@ -16,7 +16,7 @@ checksum and which sets are included).
 - Keyboard and mouse use keeps the last pad's set (prompts then show key names anyway).
 - Controls menu **BUTTON PROMPTS** (`[Controller] ButtonPrompts` in reVC.ini): AUTO (default)
   follows the pad; XBOX, PLAYSTATION, NINTENDO, STEAM DECK or STEAM CONTROLLER force a style, also
-  with no pad connected. The menu texts for revc's own entries are built in (`CText::GetRevcText`,
+  with no pad connected. The menu texts for reMiami's own entries are built in (`CText::GetRevcText`,
   English); the game's GXT files are not modified.
 - Graphics menu **UI STYLE** picks the set's variant: coloured buttons and round D-pad for Xbox,
   outlines for PS2, plain for PC (docs/CONSOLE_STYLES.md, 13f).

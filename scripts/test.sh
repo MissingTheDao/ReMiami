@@ -55,7 +55,7 @@ if [[ -n "${REVC_TEST_BIN:-}" ]]; then
 else
   echo "== build"
   (cd "$ROOT/rust" && cargo build --locked -q) || { echo "build failed"; exit 1; }
-  BIN=$ROOT/rust/target/debug/revc
+  BIN=$ROOT/rust/target/debug/remiami
 fi
 
 # Isolated game folder: symlink the game files, but use the test settings and saves.

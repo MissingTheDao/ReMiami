@@ -13,7 +13,7 @@ saves come from here, so tests never touch your own config or saves.
 
 Scenarios (implemented in `rust/revc/src/testdrive.rs`):
 
-- **boot**: reach the front-end menu, check the Controls page has revc's BUTTON PROMPTS entry,
+- **boot**: reach the front-end menu, check the Controls page has reMiami's BUTTON PROMPTS entry,
   capture that page (for a look only: the menu backdrop animates in real time) and exit cleanly.
 - **saveload**: load slot 1, wait 8 s of game time and for the fade-in to end, check the player position,
   capture the frame and compare it with `reference/saveload.png`.

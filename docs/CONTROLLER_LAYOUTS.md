@@ -69,7 +69,7 @@ Still missing (research: xbox_controls_full.md §D.2):
 - Rumble: heavy motor shake strength * 64, light motor * 256.
 
 Mission scripts read buttons through the same action-to-PS2-state layer. The Xbox remapped some
-per script (`ScriptControls.txt`); where that differs from what revc's layer gives, the Xbox style
+per script (`ScriptControls.txt`); where that differs from what reMiami's layer gives, the Xbox style
 uses the Xbox's buttons (control/Script5.cpp XboxScriptButton): the phone answers with LT, the
 shooting-range and "shit" menus go back with B, Pizza Boy throws with the right stick (Standard)
 or the D-pad (Classic), race selection cancels with B, and Ammu-Nation, the hardware shops and race

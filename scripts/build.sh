@@ -3,7 +3,7 @@
 # usage: scripts/build.sh [--strict]
 #   --strict  fail (instead of warn) if the toolchain or system packages differ
 #             from rust/rust-toolchain.toml and scripts/deps.lock
-# Output: rust/target/release/revc  (run it with REVC_GAME_DIR=<your VC folder>,
+# Output: rust/target/release/remiami  (run it with REVC_GAME_DIR=<your VC folder>,
 #         or from a checkout that has the game copy in ./game)
 set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -37,7 +37,7 @@ export RUSTC_WRAPPER=
 
 cd "$ROOT/rust"
 cargo build --release --locked
-bin="${CARGO_TARGET_DIR:-$ROOT/rust/target}/release/revc"
+bin="${CARGO_TARGET_DIR:-$ROOT/rust/target}/release/remiami"
 echo
 echo "built: $bin"
 sha256sum "$bin"

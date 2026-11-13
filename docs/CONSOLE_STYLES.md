@@ -50,10 +50,10 @@ First measurement (S1, noon, region means; `scene_colours.py`):
 |---|---|---|---|
 | PS2 capture | 209 242 244 | 82 60 46, 0.32 | 220 221 214 |
 | Xbox capture (PC textures) | 146 199 206 | 104 81 59, 0.41 | |
-| revc, no filter | 171 208 233 | 27 33 28, 0.13 | 161 171 181 |
-| revc, PS2 filter | 249 250 205 | 45 41 26, 0.20 | 212 213 159 |
+| reMiami, no filter | 171 208 233 | 27 33 28, 0.13 | 161 171 181 |
+| reMiami, PS2 filter | 249 250 205 | 45 41 26, 0.20 | 212 213 159 |
 
-Those revc numbers were wrong for a test reason: the save starts inside the hotel, and the
+Those reMiami numbers were wrong for a test reason: the save starts inside the hotel, and the
 teleport kept the interior's time-cycle colours (the "extra colour" rows: ambient 32 instead of
 70 outside), so the street was lit like a room. `revc_test_scene` and `revc_test_goto_spot` now
 stop the extra colour as leaving through a door does (the `spots` references were re-made).
@@ -82,7 +82,7 @@ A set without the variant (Steam Deck has no coloured buttons) uses the plain gl
 
 Measured on the console stills (research notes, `CONSOLE_LOOK_SPEC.md` 4b, local only):
 
-| | PC (revc default) | PS2 UI style | Xbox UI style |
+| | PC (reMiami default) | PS2 UI style | Xbox UI style |
 |---|---|---|---|
 | Vertical layout | the user's ProperScaling | PC constants in 448 lines (`CDraw::ScaleY`) | the same pixel constants in 480 lines |
 | Money, weapon, health, armour, wanted, clock | PC positions | PC positions | moved 22 px left and 22 px down (`HUD_FROM_RIGHT`/`HUD_Y` in Hud.cpp) |
@@ -98,10 +98,10 @@ mission texts, timers and counters, the pager. Checking them needs console captu
 
 ## 13b: world colours
 
-With outdoor lighting, revc's PS2 filter (re3's colourfilterVC emulation, `ColourFilter=2`) is
+With outdoor lighting, reMiami's PS2 filter (re3's colourfilterVC emulation, `ColourFilter=2`) is
 already close to the PS2 capture (S1/S2 region means, `scene_colours.py`):
 
-| | PS2 capture | revc PS2 filter | Xbox capture |
+| | PS2 capture | reMiami PS2 filter | Xbox capture |
 |---|---|---|---|
 | Noon road | 82 60 46 | 83 68 51 | 104 81 59 |
 | Noon white wall | 220 221 214 | 222 223 220 | |
@@ -118,7 +118,7 @@ How the Xbox draws it (reverse-engineered from the Xbox executable; local notes
   directional, no x2; peds, cars and objects get Amb_Obj(_bl) + directional.
 - Every world material has a per-model lightmap (`name@` textures in the Xbox `generic.txd`),
   combined as `V0*T0*(1 + LM*(T1-1))` with LM from `neo/worldTweakingTable.dat`. This is re3's
-  Neo world pipeline (`neoWorldVC`), i.e. revc's World Lightmaps option with the Xbox's own data.
+  Neo world pipeline (`neoWorldVC`), i.e. reMiami's World Lightmaps option with the Xbox's own data.
 - The colour filter is one pass over the previous displayed frame (feedback):
   `out = (1-k)*dst + col*T1 + (1+2k)*col*T0`, k = 30/255, col = BlurRGB/255, T1 the previous
   frame at the pixel, T0 one row up (PC: three passes with a +2,+2 px offset). Trails off draws
@@ -131,7 +131,7 @@ Both consoles default to trails on, and both draw them as the PC does with its T
 Xbox in one shader pass with the same weights, see 13b): the previous displayed frame, shifted,
 blended in with the time cycle's blur colour, feeding back. The per-channel persistence is about
 (2 + 2k) x BlurRGB/255 (noon: R 0.49, G 0.32, B 0.14), which matches the 0.25-0.32 measured on the
-console videos. revc's Motion Blur option draws exactly this (`CPostFX::RenderOverlayBlur`); for
+console videos. reMiami's Motion Blur option draws exactly this (`CPostFX::RenderOverlayBlur`); for
 the console look:
 
 - The PS2 and Xbox presets turn it on (`MotionBlur`).
@@ -149,7 +149,7 @@ controls, button prompts, console discs). The Xbox menu (Maestro `R3_Menu.anm`) 
 re3 at all.
 
 Proposal: a **menu skin** over the existing menu logic. Pages, entries and actions stay the PC
-menu's (so every revc option stays reachable); with the PS2 or Xbox UI style the drawing is
+menu's (so every reMiami option stays reachable); with the PS2 or Xbox UI style the drawing is
 replaced:
 - PS2: background, page frames, tabs and highlight from the PS2's own sprites (`FRONTEN2.TXD`,
   imported from the player's disc; `ps2-ui-remake` upscales), layout from `Frontend_PS2.cpp`'s
@@ -211,7 +211,7 @@ Finished (2026-11-11):
 - All eight tab pages checked in game (`REVC_TEST_MENU_INGAME=1 REVC_TEST_MENU_PAGE=n` with the
   saveload scenario opens the pause menu on that page).
 - Kept from the PC menu on purpose: row spacing (25 px at 448 lines vs the PS2's ~30, so 7 rows fit
-  above the tabs) and the PC page contents (revc's options), which the PS2 menu doesn't have.
+  above the tabs) and the PC page contents (reMiami's options), which the PS2 menu doesn't have.
 
 ## 13h: Xbox menu skin (in progress)
 
@@ -269,7 +269,7 @@ native 640x480 xemu captures:
   standard font in the Xbox's columns (110 / right at 527). The Xbox's Unlocked Items tab is not
   shown: the PC game keeps no unlocked-items list.
 - Panel shapes checked at 640x480 (`REVC_TEST_WINDOW=640x480` with a 640x480 config): within a few
-  pixels of the captures (Display: revc 84,84 / 578,366 vs Xbox 84,84 / 580,378).
+  pixels of the captures (Display: reMiami 84,84 / 578,366 vs Xbox 84,84 / 580,378).
 
 Still to do: the Xbox's "Fire missiles" callout, every page checked in play, the comparison shot set
 (research request: `REVC_TEST=menus`, every page per style, see below).
@@ -294,8 +294,8 @@ index packs in the import cache too. Details: research notes `importer/IMPORT_LI
 selected row, controller context, pad layout, map legend) captured one second after it is set,
 as `<set>_<id>.png` at the console size (PS2 640x448, shot at 640x480 and scaled since the game
 has no 448-line mode; Xbox 640x480) and `<set>_<id>_hi.png` at 1440x1080. The ids follow the
-research session's comparison list (`menu-compare/REQUEST.md`, local); states revc doesn't have
-are left out: the PS2's four controller setups (revc has Xbox Standard/Classic/Original PC
+research session's comparison list (`menu-compare/REQUEST.md`, local); states reMiami doesn't have
+are left out: the PS2's four controller setups (reMiami has Xbox Standard/Classic/Original PC
 layouts), DTS, widescreen and screen-position rows, the safehouse save flow, the Xbox tape-deck
 help and the controls-overwrite dialog. The Xbox set needs `REVC_IMPORT_DIR` (an import of the
 player's disc). Test hooks: `revc_test_menu_state`, `revc_test_menu_page_id`; `REVC_TEST_CONFIG`
@@ -315,7 +315,7 @@ local). Done:
 - Both: no PC cursor in the console skins; confirm dialogs start on No.
 - PS2 frame: logo 21 px right and 11 down, title 20 px left and 22 down of the PC's places; the
   help box at the console's place, about (438,303)-(626,376); the console's panel shape per page
-  (640x448 table in `Frontend.cpp`); the tab bar in the EU v3.00 layout (revc keeps eight tabs,
+  (640x448 table in `Frontend.cpp`); the tab bar in the EU v3.00 layout (reMiami keeps eight tabs,
   language too) with the active box just around its label; no PC scrollbar.
 - PS2 highlight: a box just around the selected label (not the PC's full-width bar).
 
@@ -336,7 +336,7 @@ Page contents, part 1:
 - The Audio page shows music, sfx and radio station in the console styles (the PC's MP3 boost,
   dynamic acoustics, restore defaults and back are taken out while a console style is shown:
   `ConsoleAudioRows`/`FilterRows` in `MenuScreensCustom.cpp`).
-- revc's other settings (the PC Display, Graphics, Audio and Controls pages) stay reachable through
+- reMiami's other settings (the PC Display, Graphics, Audio and Controls pages) stay reachable through
   the pause menu's Options entry until the console-style option lists (PS2 options tab, Xbox
   advanced sub-tab) exist.
 
@@ -361,7 +361,7 @@ Next: the Xbox full logo strip, "screen position", credits, the console-style op
 sub-tabs; load page layouts; map legend item; save page; the round-3 details (help-line items per
 page, the highlight's lighter tail and length). Plan for the extras (research, from the user's "add options without
 breaking cohesion", `menu-compare/OPTIONS_PLACEMENT.md`): console pages stay as on the console;
-revc's extra options go into patterns the consoles used: PS2 an "options" eighth tab (language
+reMiami's extra options go into patterns the consoles used: PS2 an "options" eighth tab (language
 becomes a row) with a Stats-style list; Xbox an "advanced" sub-tab on Display, Audio and
 Controls; merged settings (motion blur into trails, aspect ratio into wide screen, map legend into
 the map's legend item, user music into the station strip); console discs as a third Load entry;

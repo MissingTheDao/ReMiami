@@ -30,8 +30,8 @@ while (( $# )); do
   shift
 done
 if [[ -z "$BIN" ]]; then
-  BIN=$ROOT/rust/target/release/revc
-  [[ -x "$BIN" ]] || BIN=$ROOT/bin/revc
+  BIN=$ROOT/rust/target/release/remiami
+  [[ -x "$BIN" ]] || BIN=$ROOT/bin/remiami
 fi
 [[ -x "$BIN" ]] || { echo "no binary $BIN"; exit 1; }
 W=${SIZE%x*} H=${SIZE#*x}

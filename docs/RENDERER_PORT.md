@@ -382,7 +382,7 @@ no longer used for game data and can leave the game binary (they stay in the imp
 - **1b skipped:** loading all 1,295 game TXDs takes ~30 ms with either reader (main machine;
   PC textures are mostly DXT, copied as they are), so a converted cache would gain nothing.
 - **1b. Converted cache.** On first run (and after the game files or the converter version
-  change), every TXD in gta3.img and the loose ones is converted into one revc texture pack under
+  change), every TXD in gta3.img and the loose ones is converted into one reMiami texture pack under
   `userfiles/cache/` (header with a source hash and converter version; per texture the fields
   above and the GPU-ready levels: BC blocks or RGBA8 with mips already generated). Loading then
   copies levels straight into rasters. A progress screen like the original's "converting
@@ -654,7 +654,7 @@ there is logic, deletion where nothing calls it.
   the error record; RWERROR now prints through the Rust message table (parsed from base.err,
   so the C++ enum and the strings keep one source). error.cpp and prim.cpp are deleted, as are
   pipeline.cpp's instancing helpers, librw's managed memory functions and the null device,
-  none of which had callers. This is revc's own driver code or librw orchestration without
+  none of which had callers. This is reMiami's own driver code or librw orchestration without
   logic of its own, so the scenario suites check it on both backends. render.cpp (thin
   wrappers over the device table) goes with fakerw in 7d.
 - **7c. The debug font.** charset.cpp (RtCharset, used by the debug menu and debug text):
