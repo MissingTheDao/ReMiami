@@ -45,6 +45,8 @@ extern "C" void PadLayoutApply(int layout);
 #include "AnimBlendAssociation.h"
 #include "AnimBlendHierarchy.h"
 #include "OnscreenTimer.h"
+#include "CutsceneMgr.h"
+#include "Radar.h"
 #include "User.h"
 
 #ifdef AUDIO_OAL
@@ -126,6 +128,66 @@ void
 revc_test_quit(void)
 {
 	RsGlobal.quit = TRUE;
+}
+
+// Same steps as Start New Game in the menu (cutscenes scenario: the opening plays as for a
+// player). Returns 0 if not in the front end.
+int
+revc_test_new_game(void)
+{
+	if (gGameState != GS_FRONTEND)
+		return 0;
+	FrontEndMenuManager.DoSettingsBeforeStartingAGame();
+	return 1;
+}
+
+// Cutscenes scenario: puts the player on the nearest plain radar blip (a mission marker; within
+// 300 m, sprite-less, not one following an entity) like walking into it. Returns 0 if none.
+int
+revc_test_goto_marker(float *x, float *y, float *z)
+{
+	CVector me = FindPlayerCoors();
+	int best = -1;
+	float bestDist = 300.0f;
+	for (int i = 0; i < NUMRADARBLIPS; i++) {
+		const sRadarTrace &b = CRadar::ms_RadarTrace[i];
+		if (!b.m_bInUse || b.m_eRadarSprite != 0 || (b.m_eBlipType != BLIP_COORD && b.m_eBlipType != BLIP_CONTACT_POINT))
+			continue;
+		float d = (CVector2D(b.m_vecPos) - CVector2D(me)).Magnitude();
+		if (d < bestDist) {
+			bestDist = d;
+			best = i;
+		}
+	}
+	if (best < 0)
+		return 0;
+	CVector pos = CRadar::ms_RadarTrace[best].m_vecPos;
+	// (the save starts inside the hotel; the markers are outside: the main map, no room colours)
+	if (CGame::currArea != AREA_MAIN_MAP) {
+		CGame::currArea = AREA_MAIN_MAP;
+		CStreaming::RemoveBuildingsNotInArea(AREA_MAIN_MAP);
+		CTimeCycle::StopExtraColour(false);
+	}
+	CTimer::Suspend();
+	CStreaming::LoadScene(pos);
+	CTimer::Resume();
+	CColStore::EnsureCollisionIsInMemory(CVector2D(pos));
+	if (pos.z <= -100.0f || pos.z == 0.0f)
+		pos.z = CWorld::FindGroundZForCoord(pos.x, pos.y);
+	FindPlayerPed()->Teleport(pos + CVector(0.0f, 0.0f, 1.0f));
+	*x = pos.x;
+	*y = pos.y;
+	*z = pos.z;
+	return 1;
+}
+
+// The running cutscene's name into name (size n, "" when none); 1 while one runs.
+int
+revc_test_cutscene(char *name, int n)
+{
+	bool on = CCutsceneMgr::IsRunning();
+	snprintf(name, n, "%s", on ? CCutsceneMgr::GetCutsceneName() : "");
+	return on ? 1 : 0;
 }
 
 // Same steps as choosing a slot in the Load Game menu (Frontend.cpp, MENUPAGE_LOADING_IN_PROGRESS).
