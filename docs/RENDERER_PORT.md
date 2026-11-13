@@ -268,6 +268,44 @@ when game/neo/neo.txd exists. It stores nothing itself: it reads and sets the in
 (which stay in the menu and the ini), and shows CUSTOM for any other combination. Motion blur and
 antialiasing are not part of a style. Xbox/PS2 HUD and menus are a later step.
 
+## Layering (2026-11-13)
+
+The renderer follows the same layering as reSpringfield (shared architecture for both ports):
+
+| Layer | Crate / file | Knows |
+|---|---|---|
+| GPU core | `rust/retro-wgpu` (shared with reSpringfield, `docs/RETRO_WGPU.md`) | wgpu only: state model, textures, targets, MSAA/SSAA/FXAA/SMAA, output stage, programs |
+| RW translator, front end | `revc-rw/src/front.rs` (`Recorder`, `Frame`) | RenderWare device semantics; no GPU types, runs on the game thread |
+| RW translator, back ends | `revc-rw/src/frame.rs` (`WgpuBackend`, presenting today), `revc-rw/src/retro.rs` (`RetroBackend` on retro-wgpu) | drawing a recorded `Frame` |
+| Threading | `revc-rw/src/thread.rs` (`RenderThread`) | one frame queued, frames recycled, captures waited for |
+| Game glue | `revc/src/host/wgpu.rs` (+ the C++ WGPU device in `cpp/revc`) | SDL window, the game's C ABI, settings |
+
+**Front end / back end.** The device's calls (clears, uploads, Im2D/Im3D, model draws, targets,
+frame copies) are recorded into a `Frame`: commands plus their vertex, uniform, model and bone
+arenas, the resource uploads and destructions that came with them, and the frame's settings
+(MSAA, supersampling, FXAA/SMAA, render scale). Resource ids are allocated by the front end.
+A back end applies the uploads before the frame's draws (as before: queue writes land before
+the frame's command buffer) and frees destroyed resources after it. A settings change applies
+to the next frame, or to the current one while nothing is recorded yet, so recorded pipelines
+always match the passes they're drawn in.
+
+**Render thread** (`REVC_RENDER_THREAD=1`, off by default): presenter and back end move to
+`revc-render`; the game records frame n + 1 while frame n is drawn (at most one frame ahead).
+saveload and spots give the same images inline and threaded (within run-to-run noise).
+
+**retro-wgpu back end and shadow mode** (`REVC_RENDER_SHADOW=1`, inline renderer only): the
+wgpu back end presents as usual while `RetroBackend` draws the same frames off-screen. RW's
+shading (lighting with point/spot lights, MatFX env, Neo vehicle/world/gloss/rim, CPostFX colour
+filter and contrast, screen droplets, alpha window, fog) runs as retro-wgpu programs generated
+from `frame.rs`'s WGSL (one source; `retro::mesh_wgsl` remaps bindings and vertex locations).
+Every `REVC_RENDER_SHADOW_EVERY` frames (default 30) and on every capture both images are read
+back before the output stage and compared: the gate is 99.5 % of pixels within 2 levels. Frames
+below it are logged and, with `REVC_RENDER_SHADOW_DIR`, written as PNG pairs; a summary line is
+printed at exit. `revc-rw/tests/shadow.rs` runs the gate headless on a frame with every draw kind
+(both back ends match exactly on Vulkan and GL). Not translated yet: the overlay split (render
+scale, supersampling, post AA draw the HUD at window resolution in `WgpuBackend`); retro-wgpu
+needs its output-resolution overlay first.
+
 ## What the game calls
 
 The game reaches librw only through the RenderWare-style API in `cpp/re3-miami/src/fakerw`

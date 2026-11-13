@@ -6,7 +6,7 @@
 
 use crate::frame::{Frame, WgpuBackend};
 use crate::present::Presenter;
-use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, sync_channel};
+use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::thread::JoinHandle;
 
 /// An RGBA8 screenshot: width, height, pixels (top row first).
@@ -79,11 +79,8 @@ impl RenderThread {
                 }
             }
         } else {
-            loop {
-                match self.done.try_recv() {
-                    Ok(d) => out.push(d),
-                    Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
-                }
+            while let Ok(d) = self.done.try_recv() {
+                out.push(d);
             }
         }
         out

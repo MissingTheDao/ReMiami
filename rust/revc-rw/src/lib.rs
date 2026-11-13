@@ -18,6 +18,8 @@ pub mod present;
 mod prim;
 pub mod front;
 pub mod thread;
+pub mod retro;
+pub mod shadow;
 
 /// The graphics API to render with (the game's settings offer each one the platform has).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,6 +43,8 @@ impl Backend {
 }
 
 pub struct Gpu {
+    pub instance: wgpu::Instance,
+    pub backend: Backend,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -52,6 +56,17 @@ pub struct Gpu {
 }
 
 impl Gpu {
+    /// The same device as a retro-wgpu `Gpu` (for the retro-wgpu back end).
+    pub fn retro(&self) -> retro_wgpu::Gpu {
+        let backend = match self.backend {
+            Backend::Vulkan => retro_wgpu::Backend::Vulkan,
+            Backend::Gl => retro_wgpu::Backend::Gl,
+            #[allow(unreachable_patterns)]
+            _ => retro_wgpu::Backend::Dx12,
+        };
+        retro_wgpu::Gpu { backend, instance: self.instance.clone(), adapter: self.adapter.clone(), device: self.device.clone(), queue: self.queue.clone(), info: self.info.clone() }
+    }
+
     /// Whether DXT textures are sampled as BC formats (else they're decoded on the CPU).
     pub fn bc_textures(&self) -> bool {
         self.device.features().contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
@@ -100,7 +115,7 @@ impl Gpu {
         device.on_uncaptured_error(std::sync::Arc::new(|e: wgpu::Error| {
             eprintln!("revc-rw: wgpu error (frame continues): {e}");
         }));
-        Ok(Gpu { adapter, device, queue, info, model_storage })
+        Ok(Gpu { instance: instance.clone(), backend, adapter, device, queue, info, model_storage })
     }
 }
 

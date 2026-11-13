@@ -157,7 +157,7 @@ fn tex_format(d: TexData) -> wgpu::TextureFormat {
     }
 }
 
-const SHADER: &str = r#"
+pub(crate) const SHADER: &str = r#"
 struct U { xform: vec4<f32>, alpha: vec4<f32>, fog: vec4<f32>, fog_color: vec4<f32>, proj: mat4x4<f32>, view: mat4x4<f32>, world: mat4x4<f32>, p0: vec4<f32>, p1: vec4<f32> };
 @group(0) @binding(0) var<uniform> u: U;
 @group(1) @binding(0) var tex: texture_2d<f32>;
@@ -613,7 +613,7 @@ const ATTRS_2D_UV2: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => F
 
 // re3 im2d_UV2.vert + screenDroplet.frag: the droplet mask (tex) times the frame copy (tex1) at
 // the second coordinates, times the vertex colour; no perspective (w = 1), no fog, no alpha test.
-const UV2_SHADER: &str = r#"
+pub(crate) const UV2_SHADER: &str = r#"
 struct U { xform: vec4<f32>, alpha: vec4<f32>, fog: vec4<f32>, fog_color: vec4<f32>, proj: mat4x4<f32>, view: mat4x4<f32>, world: mat4x4<f32>, p0: vec4<f32>, p1: vec4<f32> };
 @group(0) @binding(0) var<uniform> u: U;
 @group(1) @binding(0) var tex: texture_2d<f32>;
@@ -666,7 +666,7 @@ fn blend_factor(f: u32) -> wgpu::BlendFactor {
 }
 
 /// REVC_RW_ANISOTROPY=1: anisotropic filtering on (see ensure_bind_group).
-fn anisotropy_enabled() -> bool {
+pub(crate) fn anisotropy_enabled() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| std::env::var("REVC_RW_ANISOTROPY").is_ok_and(|v| v == "1"))
 }
@@ -1147,14 +1147,15 @@ impl WgpuBackend {
     }
 
     /// Applies a frame's resource uploads (before its draws).
-    fn apply_uploads(&mut self, gpu: &Gpu, uploads: &mut Vec<Upload>) {
-        for up in uploads.drain(..) {
+    /// (Left in the frame: another back end may draw the same frame.)
+    fn apply_uploads(&mut self, gpu: &Gpu, uploads: &[Upload]) {
+        for up in uploads {
             match up {
                 Upload::Texture { id, width, height, data, levels, autogen } => {
                     let refs: Vec<&[u8]> = levels.iter().map(|l| l.as_slice()).collect();
-                    self.apply_texture(gpu, id, width, height, data, &refs, autogen);
+                    self.apply_texture(gpu, *id, *width, *height, *data, &refs, *autogen);
                 }
-                Upload::Geometry { id, vertices, indices } => self.apply_geometry(gpu, id, &vertices, &indices),
+                Upload::Geometry { id, vertices, indices } => self.apply_geometry(gpu, *id, vertices, indices),
             }
         }
     }
@@ -1444,7 +1445,7 @@ impl WgpuBackend {
         self.fxaa = settings.fxaa;
         self.smaa = settings.smaa;
         self.render_scale = settings.render_scale;
-        self.apply_uploads(gpu, &mut frame.uploads);
+        self.apply_uploads(gpu, &frame.uploads);
         // The scene is drawn at the supersampling scale times, in frames with an overlay marker,
         // the render scale; `window` is the output's size.
         let window = size;

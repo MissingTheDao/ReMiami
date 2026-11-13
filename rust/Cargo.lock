@@ -1453,8 +1453,10 @@ version = "0.1.0"
 name = "revc-rw"
 version = "0.1.0"
 dependencies = [
+ "naga",
  "png",
  "pollster",
+ "retro-wgpu",
  "revc-formats",
  "sdl3-sys",
  "wgpu",

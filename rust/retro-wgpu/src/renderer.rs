@@ -545,7 +545,7 @@ impl Renderer {
 
     /// Registers a front end's shader program (see `ProgramDesc`).
     pub fn create_program(&mut self, gpu: &Gpu, desc: &ProgramDesc) -> Result<ProgramId, String> {
-        if desc.block_size == 0 || desc.block_size % 16 != 0 {
+        if desc.block_size == 0 || !desc.block_size.is_multiple_of(16) {
             return Err(format!("program {}: block size {} is not a positive multiple of 16", desc.label, desc.block_size));
         }
         if desc.block_size > gpu.device.limits().max_uniform_buffer_binding_size as u32 {

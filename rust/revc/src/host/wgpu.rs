@@ -6,6 +6,7 @@
 use revc_rw::Backend;
 use revc_rw::frame::{Antialiasing, DrawState, EnvMap, FrameSettings, MAX_BONES, Mat4, MeshExtras, MeshVertex, ModelState, Recorder, SkinVertex, TexData, Vertex2D, Vertex2DUV2, Vertex3D, WgpuBackend, Xform};
 use revc_rw::present::{NativeWindow, Presenter};
+use revc_rw::shadow::{Comparison, GATE, Shadow};
 use revc_rw::thread::{Done, RenderThread};
 use sdl3_sys::everything::*;
 use std::cell::RefCell;
@@ -28,6 +29,50 @@ struct State {
     size: (u32, u32),
     /// supported_samples(wanted) for wanted 0..=16, so the game thread needs no device.
     samples: [u32; 17],
+    /// REVC_RENDER_SHADOW=1: the retro-wgpu back end draws every frame off-screen too.
+    shadow: Option<ShadowRun>,
+}
+
+/// Shadow mode: frames are compared every `every` frames and on every capture.
+struct ShadowRun {
+    shadow: Shadow,
+    every: u64,
+    n: u64,
+    checked: u64,
+    failed: u64,
+    worst: f64,
+    dir: Option<std::path::PathBuf>,
+}
+
+impl ShadowRun {
+    fn report(&mut self, c: Comparison, capture: bool) {
+        self.checked += 1;
+        self.worst = self.worst.min(c.within);
+        let pass = c.passed();
+        if !pass {
+            self.failed += 1;
+        }
+        if !pass || capture {
+            eprintln!("revc: shadow frame {}{}: {:.3} % of pixels within 2 levels, max diff {} ({})", c.frame, if capture { " (capture)" } else { "" }, c.within * 100.0, c.max_diff, if pass { "pass" } else { "BELOW GATE" });
+        }
+        if let (Some(dir), Some((a, b))) = (&self.dir, &c.images)
+            && self.failed <= 8
+        {
+            let _ = std::fs::create_dir_all(dir);
+            for (name, img) in [("wgpu", a), ("retro", b)] {
+                let path = dir.join(format!("shadow-{:06}-{name}.png", c.frame));
+                if let Err(e) = png_write(&path, c.width, c.height, img) {
+                    eprintln!("revc: shadow: {}: {e}", path.display());
+                }
+            }
+        }
+    }
+}
+
+impl Drop for ShadowRun {
+    fn drop(&mut self) {
+        eprintln!("revc: shadow summary: {} frames checked, {} below the gate ({:.1} % within 2 levels), worst {:.3} %", self.checked, self.failed, GATE * 100.0, self.worst * 100.0);
+    }
 }
 
 thread_local! {
@@ -99,13 +144,22 @@ pub fn create(window: *mut SDL_Window, samples: i32) -> Result<(), String> {
         eprintln!("revc: MSAA {used}x (asked {samples}x)");
     }
     let table: [u32; 17] = std::array::from_fn(|n| WgpuBackend::supported_samples(&p.gpu, n.max(1) as u32));
+    let shadow_wanted = matches!(std::env::var("REVC_RENDER_SHADOW").as_deref(), Ok("1") | Ok("on") | Ok("yes"));
+    let shadow = (shadow_wanted && !render_thread_wanted()).then(|| {
+        let every = std::env::var("REVC_RENDER_SHADOW_EVERY").ok().and_then(|v| v.parse().ok()).unwrap_or(30u64).max(1);
+        eprintln!("revc: shadow mode on: retro-wgpu draws every frame off-screen, compared every {every} frames and on captures");
+        ShadowRun { shadow: Shadow::new(&p.gpu), every, n: 0, checked: 0, failed: 0, worst: 1.0, dir: std::env::var_os("REVC_RENDER_SHADOW_DIR").map(Into::into) }
+    });
+    if shadow_wanted && shadow.is_none() {
+        eprintln!("revc: shadow mode needs the inline renderer (REVC_RENDER_THREAD off); not started");
+    }
     let out = if render_thread_wanted() {
         eprintln!("revc: render thread on");
         Out::Thread(RenderThread::spawn(p, back)?)
     } else {
         Out::Inline(Box::new((p, back)))
     };
-    STATE.with(|c| *c.borrow_mut() = Some(State { front: Recorder::new(used), out, window, size: (w, h), samples: table }));
+    STATE.with(|c| *c.borrow_mut() = Some(State { front: Recorder::new(used), out, window, size: (w, h), samples: table, shadow }));
     Ok(())
 }
 
@@ -317,6 +371,13 @@ pub extern "C" fn revc_rw_present(vsync: i32) {
                     eprintln!("revc: present: {e}");
                     None
                 });
+                if let Some(sh) = st.shadow.as_mut() {
+                    sh.n += 1;
+                    let check = capture || sh.n % sh.every == 0;
+                    if let Some(c) = sh.shadow.run(&p.gpu, back, &frame, p.size(), check) {
+                        sh.report(c, capture);
+                    }
+                }
                 st.front.recycle(frame);
                 shot
             }
@@ -329,4 +390,12 @@ pub extern "C" fn revc_rw_present(vsync: i32) {
     if capture {
         super::with(|h| h.captured = shot);
     }
+}
+
+fn png_write(path: &std::path::Path, w: u32, h: u32, rgba: &[u8]) -> Result<(), String> {
+    let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
+    let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w, h);
+    enc.set_color(png::ColorType::Rgba);
+    enc.set_depth(png::BitDepth::Eight);
+    enc.write_header().map_err(|e| e.to_string())?.write_image_data(rgba).map_err(|e| e.to_string())
 }

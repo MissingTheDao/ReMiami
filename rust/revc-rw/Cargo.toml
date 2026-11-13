@@ -10,8 +10,10 @@ rust-version.workspace = true
 wgpu = "30.0.1"
 pollster = "1.0.1"
 revc-formats = { path = "../revc-formats" }
+retro-wgpu = { path = "../retro-wgpu" }
 
 [dev-dependencies]
 png = "0.18"
+naga = { version = "30.0.1", features = ["wgsl-in"] }
 # The window_clear example opens an SDL3 window like the game host does.
 sdl3-sys = "0.7"
