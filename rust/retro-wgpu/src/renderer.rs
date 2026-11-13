@@ -463,7 +463,7 @@ impl Default for SceneSettings {
 }
 
 /// Hook for the output stage (built-in scaler or e.g. a slang shader chain).
-pub trait OutputStage {
+pub trait OutputStage: Send {
     /// Draws `image` (the post-processed game image at internal resolution) into `target`
     /// (`size` pixels, `format`).
     #[allow(clippy::too_many_arguments)]

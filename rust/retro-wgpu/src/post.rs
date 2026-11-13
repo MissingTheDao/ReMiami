@@ -13,7 +13,7 @@ pub const TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 /// One pass over a finished image: `input` (sampled, TARGET_FORMAT) drawn into `output` (same
 /// size and format).
-pub trait PostPass {
+pub trait PostPass: Send {
     fn name(&self) -> &str;
     fn run(&mut self, gpu: &Gpu, enc: &mut wgpu::CommandEncoder, input: &wgpu::Texture, output: &wgpu::TextureView);
 }

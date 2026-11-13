@@ -295,9 +295,10 @@ saveload and spots give the same images inline and threaded (within run-to-run n
 
 **Choosing the presenting back end** (`REVC_RENDERER=retro`, opt-in): retro-wgpu presents
 instead of `WgpuBackend` (through the `DrawFrames` trait both implement; screenshots read its
-final image). saveload, spots, texmods and gamepad pass against the references with it. It draws
-on the game thread for now: the render thread needs a `Send` back end, and retro-wgpu's post-pass
-and output-stage trait objects aren't `Send` yet. Shadow mode needs `WgpuBackend` presenting.
+final image). saveload, spots, texmods and gamepad pass against the references with it. It also runs
+on the render thread (`REVC_RENDER_THREAD=1`; retro-wgpu's post passes and output stages are
+`Send`): the four suites pass that way with both back ends. Shadow mode needs `WgpuBackend`
+presenting on the game thread.
 Speed (2026-11-13, RX 9070 XT, Vulkan, 1280x720, `scripts/perf.sh`, alternating runs, profiled
 with perf `cycles:u`): `WgpuBackend` 0.75 ms mean over the spots (worst p99 1.23 ms); retro-wgpu
 first 1.66 ms, 0.94 ms after a first pass, 0.81 ms (worst p99 1.34 ms) after its draw path was

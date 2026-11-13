@@ -41,3 +41,10 @@ pub use state::*;
 pub use replace::{ReplaceConfig, texture_key};
 pub use texture::{ClutLayout, Palette, TexFormat};
 pub use wgpu;
+
+/// The renderer can move to a render thread (its post passes and output stage are `Send`).
+#[allow(dead_code)]
+fn renderer_is_send() {
+    fn send<T: Send>() {}
+    send::<Renderer>();
+}
