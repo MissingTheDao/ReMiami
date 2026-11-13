@@ -344,6 +344,19 @@ pub unsafe extern "C" fn revc_texmod_free_blocks(blocks: *mut c_uchar, size: usi
 }
 
 /// # Safety
+/// `txd` and `texture` must be NUL-terminated strings.
+/// 1 when txd/texture's override comes from the PS2 world pack: it then keeps the original's mip
+/// state. Generated mips average thin details with what's around them; with alpha-tested
+/// textures (the frame of a shelf, `mob_metal1`: an opaque border round a transparent middle)
+/// the border's alpha drops below the test with distance and the bars vanish.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_texmod_from_world(txd: *const c_char, texture: *const c_char) -> c_int {
+    let (txd, tex) = unsafe { (CStr::from_ptr(txd).to_string_lossy(), CStr::from_ptr(texture).to_string_lossy()) };
+    let key = (txd.to_ascii_lowercase(), tex.to_ascii_lowercase());
+    (!index().contains_key(&key) && world_index().is_some_and(|w| w.contains_key(&key))) as c_int
+}
+
+/// # Safety
 /// `txd` a NUL-terminated string.
 /// The textures the PS2 world pack has for `txd` (while it is in use), newline-separated, as a
 /// string freed with revc_texmod_free_names; null if none. The PS2 models (ps2models.rs) use some

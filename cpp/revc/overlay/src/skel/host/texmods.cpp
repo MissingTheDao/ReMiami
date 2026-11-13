@@ -22,6 +22,7 @@ void revc_texmod_free_blocks(unsigned char *blocks, size_t size);
 // The PS2 world pack's texture names for a dictionary (newline-separated), freed with
 // revc_texmod_free_names; nil while the pack isn't in use.
 char *revc_texmod_world_names(const char *txd);
+int revc_texmod_from_world(const char *txd, const char *texture);
 void revc_texmod_free_names(char *names);
 }
 
@@ -67,6 +68,9 @@ ApplyNamed(rw::Texture *tex, const char *txdName, const char *texName)
 	bool mipmapped = (old && (old->format & rw::Raster::MIPMAP)) ||
 	                 tex->getFilter() >= rw::Texture::MIPNEAREST;
 	int32 format = rw::Raster::C8888 | rw::Raster::TEXTURE;
+	// (the PS2 world textures keep the original's mip state: texmods.rs)
+	if (mipmapped && old && !(old->format & rw::Raster::MIPMAP) && revc_texmod_from_world(txdName, texName))
+		mipmapped = false;
 	if (mipmapped)
 		format |= rw::Raster::MIPMAP | rw::Raster::AUTOMIPMAP;
 
