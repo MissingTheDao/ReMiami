@@ -642,7 +642,20 @@ MenuSkinPS2Input(CMenuManager *m)
 	if (!IsTabPage(m->m_nCurrScreen))
 		return false;
 	// the tab bar
-	if (pad->GetTriangleJustDown() || pad->GetEscapeJustDown()) {
+	// the PS2 closes the menu when triangle is let go (pressed here on the tab bar), and the game
+	// ignores triangle for 10 frames after it, so the same press doesn't enter a car (PS2 v1.40,
+	// research)
+	static bool closeArmed;
+	static uint32 closeSeen;
+	uint32 closeNow = CTimer::GetTimeInMillisecondsPauseMode();
+	if (closeNow - closeSeen > 200)	// (not on the tab bar a moment ago: an old press doesn't count)
+		closeArmed = false;
+	closeSeen = closeNow;
+	if (pad->GetTriangleJustDown())
+		closeArmed = true;
+	if ((closeArmed && !pad->GetTriangle()) || pad->GetEscapeJustDown()) {
+		closeArmed = false;
+		pad->JustOutOfFrontend = 10;
 		m->m_bShutDownFrontEndRequested = true;
 		return true;
 	}
