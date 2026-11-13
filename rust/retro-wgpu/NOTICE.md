@@ -1,7 +1,7 @@
 # retro-wgpu: notices and provenance
 
-retro-wgpu has **no licence yet**: the owner chooses one (e.g. MIT OR Apache-2.0) before the
-crate is published or shared. Until then `Cargo.toml` has no `license` field on purpose.
+retro-wgpu is licensed under **MIT OR Apache-2.0** (see LICENSE-MIT, LICENSE-APACHE and the
+License section in README.md). The third-party parts below keep their own licences.
 
 ## Origin of the code
 
