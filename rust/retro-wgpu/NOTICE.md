@@ -76,4 +76,4 @@ included**; Mega Bezel and other (often GPL) packs are user-supplied and only lo
 
 - The CRT/VHS shaders in `~/claude-n150/work/43mode` (crt-lottes, cathode-retro, vhs_and_crt)
   are **not** part of retro-wgpu yet; they would bring their own notices.
-- No Hit & Run code or data, no Mega Bezel or other GPL shader packs.
+- No game code or data, no Mega Bezel or other GPL shader packs.

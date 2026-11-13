@@ -1,7 +1,7 @@
 //! Shadow mode: the presenting back end (`WgpuBackend`) shows the game as usual, and the
 //! retro-wgpu back end draws the same recorded frames off-screen. Checked frames are read back
 //! from both and compared before the output stage: the retro-wgpu path passes when at least
-//! 99.5 % of pixels are within 2 levels per channel (the gate reSpringfield uses for pddi).
+//! 99.5 % of pixels are within 2 levels per channel.
 
 use crate::Gpu;
 use crate::frame::{Frame, WgpuBackend, readback_finish, readback_start};

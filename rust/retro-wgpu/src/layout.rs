@@ -2,7 +2,7 @@
 //!
 //! New code for retro-wgpu. The shader for a layout is generated from it (see `shader`), so
 //! any game's vertex structs can be drawn as they are in memory (D3D FVF, GX vertex
-//! descriptors, PS2 unpacked GIF data, Pure3D prim buffers...).
+//! descriptors, PS2 unpacked GIF data, other engines' vertex buffers...).
 
 /// What an attribute means to the shaders.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

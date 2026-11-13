@@ -3,8 +3,8 @@
 An engine-neutral renderer core on wgpu 30 for ports and remasters of fixed-function era games
 (PS2, GameCube, Xbox, PC Direct3D 8/9). It runs on **Vulkan, OpenGL and Direct3D 12**.
 
-- **Where:** `rust/retro-wgpu`, a member of the reMiami workspace (it came in as a patch series
-  from the reSpringfield work; reSpringfield uses the same crate). reMiami draws with it
+- **Where:** `rust/retro-wgpu`, a member of the reMiami workspace (game-agnostic, meant to be
+  shared with other ports). reMiami draws with it
   through `revc-rw`'s retro back end (see `docs/RENDERER_PORT.md`, "Layering").
 - **Licence:** MIT OR Apache-2.0 (`rust/retro-wgpu/LICENSE-*`).
 
@@ -164,12 +164,6 @@ identical blocks are deduplicated like the fixed-function ones.
 | RW lights | `Lighting` (directional + ambient). Point/spot and RW's lighting model need either the front end or a later extension (see follow-ups) |
 | RW skinning, MatFX env map | `BlendWeights`/`BlendIndices` + bones; env map = stage 1 with `TexCoordSource::SphereMap` or `Reflection` and a texture matrix |
 | re3 Neo / CPostFX shaders | Not portable as uniforms: implement as custom `PostPass`es (CPostFX) or front-end shaders (follow-up: custom pipelines) |
-| **Pure3D pddi (Hit & Run)** `pddiRenderContext` state stacks (render, view, lighting, fog, stencil) | The front end keeps the stacks and resolves the top of each into one `RenderState` + `DrawParams` per draw |
-| pddi shaders `simple` / `spheremap` / `environment` with TEX, BLMD, ATST, LIT, 2SID, FIMD, UVMD, SHMD | stage 0 texture + `Sampler` (FIMD → filter, UVMD → address); BLMD → `Blend`; ATST → `AlphaTest`; LIT → `Lighting.enabled`; 2SID → `cull: None`; spheremap/environment → stage 1 `SphereMap`/`Reflection` |
-| `pddiStencilState` (shadows) | `StencilState` with two-sided faces + `stencil_reference` |
-| `pddiPrimBuffer` | retained vertex/index buffers with a `VertexLayout` from the prim buffer's description |
-| `pddiExtFramebufferEffects` / `pddiExtBufferCopy` | render-to-texture targets and `copy_to_texture` |
-| `pddiExtHardwareSkinning` | skinned layouts + bones |
 | GC CMPR / DXT1 | `TexFormat::Bc1` |
 
 ## Provenance
@@ -305,7 +299,7 @@ Unit tests cover the stable key (pinned value, cross-checked with an independent
    shadow mode that proves it against the wgpu back end (`docs/RENDERER_PORT.md`, "Layering").
    Left: the output-resolution overlay (follow-up 7) for render scale / supersampling / post AA,
    then switching the default once the suites pass in shadow mode.
-3. **Lighting:** point and spot lights with D3D attenuation, specular (pddi SPEC/SHIN), per-pixel option.
+3. **Lighting:** point and spot lights with D3D attenuation, specular, per-pixel option.
 4. **Custom pipelines:** done as programs (above).
 5. **Stencil:** clear-by-rectangle and stencil-only targets. Depth/stencil sharing between targets, which D3D games sometimes expect.
 6. **Partial clears** (D3D `Clear` with rects or viewport): currently whole-target only.

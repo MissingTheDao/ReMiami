@@ -1,7 +1,7 @@
 //! The explicit draw state: what a fixed-function era device exposes, expressed in wgpu terms.
 //!
 //! New code for retro-wgpu. Comparison, blend and stencil enums are wgpu's own types, so a
-//! front end maps its API's numbering (D3D, GL, GS, pddi...) onto them in one place.
+//! front end maps its API's numbering (D3D, GL, GS...) onto them in one place.
 
 pub use wgpu::{BlendFactor, BlendOperation, CompareFunction, Face, FrontFace, StencilOperation};
 
