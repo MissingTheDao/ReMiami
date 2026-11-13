@@ -3,10 +3,23 @@
 An engine-neutral renderer core on wgpu 30 for ports and remasters of fixed-function era games
 (PS2, GameCube, Xbox, PC Direct3D 8/9). It runs on **Vulkan, OpenGL and Direct3D 12**.
 
-- **Where:** `rust/retro-wgpu`, a member of the reMiami workspace (game-agnostic, meant to be
-  shared with other ports). reMiami draws with it
-  through `revc-rw`'s retro back end (see `docs/RENDERER_PORT.md`, "Layering").
-- **Licence:** MIT OR Apache-2.0 (`rust/retro-wgpu/LICENSE-*`).
+- **Where:** github.com/MissingTheDao/retro-wgpu (public, MIT OR Apache-2.0). reMiami depends on
+  it as a git dependency pinned to a rev (`rust/revc-rw/Cargo.toml`); its own design document is
+  `DESIGN.md` there. This file keeps reMiami's notes on it.
+
+### Working on retro-wgpu
+
+Changes land in the retro-wgpu repository first (neutral commit messages, a tag), then the rev is
+bumped here. To try local changes before that, point Cargo at a checkout without committing it:
+an untracked `rust/.cargo/config.toml` with
+
+```toml
+[patch."https://github.com/MissingTheDao/retro-wgpu"]
+retro-wgpu = { path = "../../retro-wgpu" }
+```
+
+(the path relative to `rust/`). Cargo then rewrites `Cargo.lock` for the patch: don't commit that
+lock state; remove the file and rebuild before committing.
 
 ## Status per stage
 
@@ -237,7 +250,7 @@ Third-party parts keep their own licences:
 
 ## Third-party notices and dependency licences
 
-The full text is in `retro-wgpu/NOTICE.md`.
+The full text is in retro-wgpu's `NOTICE.md`.
 
 **Bundled third-party material:**
 - **SMAA** (`smaa.wgsl` port, lookup textures): MIT, (C) 2013 Jimenez, Echevarria, Masia, Navarro, Gutierrez. `assets/smaa/LICENSE.txt` must ship with binaries.

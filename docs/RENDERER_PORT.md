@@ -274,7 +274,7 @@ The renderer is layered so its lower parts stay engine-neutral and reusable:
 
 | Layer | Crate / file | Knows |
 |---|---|---|
-| GPU core | `rust/retro-wgpu` (engine-neutral, `docs/RETRO_WGPU.md`) | wgpu only: state model, textures, targets, MSAA/SSAA/FXAA/SMAA, output stage, programs |
+| GPU core | retro-wgpu, published at github.com/MissingTheDao/retro-wgpu and pinned by rev in `rust/revc-rw/Cargo.toml` (engine-neutral, `docs/RETRO_WGPU.md`) | wgpu only: state model, textures, targets, MSAA/SSAA/FXAA/SMAA, output stage, programs |
 | RW translator, front end | `revc-rw/src/front.rs` (`Recorder`, `Frame`) | RenderWare device semantics; no GPU types, runs on the game thread |
 | RW translator, back ends | `revc-rw/src/frame.rs` (`WgpuBackend`, presenting today), `revc-rw/src/retro.rs` (`RetroBackend` on retro-wgpu) | drawing a recorded `Frame` |
 | Threading | `revc-rw/src/thread.rs` (`RenderThread`) | one frame queued, frames recycled, captures waited for |
