@@ -12,7 +12,7 @@ pollster = "1.0.1"
 revc-formats = { path = "../revc-formats" }
 # The engine-neutral renderer core, published separately; pinned to a reviewed rev (both ports
 # use the same one). For local work on it, see docs/RETRO_WGPU.md ("Working on retro-wgpu").
-retro-wgpu = { git = "https://github.com/MissingTheDao/retro-wgpu", rev = "d2831a4d05b2acac3de0f0ca85de7bab6fc4c0ec" }
+retro-wgpu = { git = "https://github.com/MissingTheDao/retro-wgpu", rev = "263c611f8ea53150771c76d5595dfe0e2c8aba0f" }
 
 [dev-dependencies]
 png = "0.18"

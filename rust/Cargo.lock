@@ -727,8 +727,8 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
 name = "retro-wgpu"
-version = "0.2.1"
-source = "git+https://github.com/MissingTheDao/retro-wgpu?rev=d2831a4d05b2acac3de0f0ca85de7bab6fc4c0ec#d2831a4d05b2acac3de0f0ca85de7bab6fc4c0ec"
+version = "0.3.0"
+source = "git+https://github.com/MissingTheDao/retro-wgpu?rev=263c611f8ea53150771c76d5595dfe0e2c8aba0f#263c611f8ea53150771c76d5595dfe0e2c8aba0f"
 dependencies = [
  "png",
  "pollster",
