@@ -269,6 +269,12 @@ revc_test_hud_text(int kind)
 	case 9: CMessages::AddBigMessage(TheText.Get("TAXI5"), 8000, 4); break;
 	case 10: FindPlayerPed()->SetWantedLevel(2); break;
 	case 11: CMessages::AddMessage(TheText.Get("NOTAXI"), 8000, 0); break;
+	case 12: {	// a help text with button prompts (fire, target, sprint, change camera), as the prompts render per style
+		static wchar help[128];
+		AsciiToUnicode("Fire ~k~~PED_FIREWEAPON~ target ~k~~PED_LOCK_TARGET~ run ~k~~PED_SPRINT~ camera ~k~~CAMERA_CHANGE_VIEW_ALL_SITUATIONS~", help);
+		CHud::SetHelpMessage(help, false);
+		break;
+	}
 	}
 }
 

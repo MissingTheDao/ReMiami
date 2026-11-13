@@ -716,7 +716,17 @@
  	     UP,    /* VEHICLE_TURRETUP */                                                                                                                        \
  	     DOWN,    /* VEHICLE_TURRETDOWN */                                                                                                                      \
  	     L2,     /* PED_CYCLE_TARGET_LEFT */                                                                                                                   \
-@@ -2733,6 +2872,19 @@
+@@ -2692,7 +2831,8 @@
+ void CControllerConfigManager::GetWideStringOfCommandKeys(uint16 action, wchar *text, uint16 leight)
+ {
+ #ifdef DETECT_PAD_INPUT_SWITCH
+-	if (CPad::GetPad(0)->IsAffectedByController) {
++	// (revc: or the host's last used device is a pad, which also follows the tests' REVC_TEST_INPUT_KIND)
++	if (CPad::GetPad(0)->IsAffectedByController || hostActiveInputKind() != 0) {
+ 		wchar wstr[16];
+ 
+ 		const char* (*Buttons)[MAX_CONTROLLERACTIONS];
+@@ -2733,8 +2873,32 @@
  		}
  #endif
  
@@ -735,8 +745,21 @@
 +#endif
  		assert(Buttons[CPad::GetPad(0)->Mode][action] != nil); // we cannot use these
  		AsciiToUnicode(Buttons[CPad::GetPad(0)->Mode][action], wstr);
++#ifdef BUTTON_ICONS
++		{
++			// revc: the PS2 prints only the face buttons as symbols; shoulders, sticks, START and
++			// SELECT are words ("R1", "START"; PS2 v1.40, research)
++			extern int8 gUiStyle;
++			const char *icon = Buttons[CPad::GetPad(0)->Mode][action];
++			bool face = !strcmp(icon, "~X~") || !strcmp(icon, "~O~") || !strcmp(icon, "~Q~") || !strcmp(icon, "~T~");
++			if (gUiStyle == 1 && !face)
++				AsciiToUnicode(PlayStationButtons_noIcons[CPad::GetPad(0)->Mode][action], wstr);
++		}
++#endif
  
-@@ -2802,7 +2954,7 @@
+ 		CMessages::WideStringCopy(text, wstr, leight);
+ 		return;
+@@ -2802,7 +2966,7 @@
  		else
  			m_aButtonStates[i] = false;
  	}

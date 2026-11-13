@@ -44,7 +44,15 @@
 \ No newline at end of file
 --- a/src/renderer/Font.cpp
 +++ b/src/renderer/Font.cpp
-@@ -105,14 +105,17 @@
+@@ -7,6 +7,7 @@
+ #include "FileMgr.h"
+ #endif
+ #include "Timer.h"
++#include "Frontend.h"	// (revc: the PS2 glyph tint stays out of the menus)
+ 
+ void
+ AsciiToUnicode(const char *src, wchar *dst)
+@@ -105,14 +106,17 @@
  		//Characters that are referred as '*I' are characters that contain icons for PS2/XBOX, but contain regular characters on PC
  		//in order to display them properly in the Keyboard controls menu.
  		//!2,!, *I,(R),  $,  %,  &,  ',  [,  ], *I,  +,  ,   -,  ., *I,
@@ -65,7 +73,7 @@
  		#else
  		22, 22, 23, 20, 19, 23, 22, 31, 23, 23, 21, 25, 13, 30, 10, 19,
  		#endif
-@@ -398,6 +401,14 @@
+@@ -398,6 +402,14 @@
  		ButtonSprite[BUTTON_RSTICK_DOWN].SetTexture("thumbryd");
  		ButtonSprite[BUTTON_RSTICK_LEFT].SetTexture("thumbrxl");
  		ButtonSprite[BUTTON_RSTICK_RIGHT].SetTexture("thumbrxr");
@@ -80,7 +88,15 @@
  		CTxdStore::PopCurrentTxd();
  	}
  	else {
-@@ -505,7 +516,10 @@
+@@ -487,6 +499,7 @@
+ }
+ 
+ #ifdef BUTTON_ICONS
++extern "C" int revc_glyph_set_id(void);	// (rust host: pad kind in bits 16-23)
+ void
+ CFont::DrawButton(float x, float y)
+ {
+@@ -505,10 +518,27 @@
  		RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &vertexAlphaState);
  		RwRenderStateGet(rwRENDERSTATETEXTURERASTER, &raster);
  		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void *)TRUE);
@@ -90,9 +106,28 @@
 +			;
 +		else if (RenderState.bIsShadow)
  			ButtonSprite[PS2Symbol].Draw(rect, RenderState.color);
- 		else
- 			ButtonSprite[PS2Symbol].Draw(rect, CRGBA(255, 255, 255, RenderState.color.a));
-@@ -691,6 +705,13 @@
+-		else
+-			ButtonSprite[PS2Symbol].Draw(rect, CRGBA(255, 255, 255, RenderState.color.a));
++		else {
++			// revc: the PS2's face-button symbols in their own colours (its help text tints them:
++			// cross 132,146,197, circle 229,125,126, triangle 86,212,146, square 199,144,203; PS2
++			// v1.40, research)
++			// (only the PlayStation symbols: other pads' glyphs keep their own colours)
++			extern int8 gUiStyle;
++			const int padKind = (revc_glyph_set_id() >> 16) & 0xff;
++			CRGBA tint(255, 255, 255, RenderState.color.a);
++			if (gUiStyle == 1 && padKind >= 4 && padKind <= 6 && !FrontEndMenuManager.m_bMenuActive) {	// (the PS2 menu's help box keeps them white)
++				if (PS2Symbol == BUTTON_CROSS) tint = CRGBA(132, 146, 197, RenderState.color.a);
++				else if (PS2Symbol == BUTTON_CIRCLE) tint = CRGBA(229, 125, 126, RenderState.color.a);
++				else if (PS2Symbol == BUTTON_TRIANGLE) tint = CRGBA(86, 212, 146, RenderState.color.a);
++				else if (PS2Symbol == BUTTON_SQUARE) tint = CRGBA(199, 144, 203, RenderState.color.a);
++			}
++			ButtonSprite[PS2Symbol].Draw(rect, tint);
++		}
+ 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, raster);
+ 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void *)vertexAlphaState);
+ 	}
+@@ -691,6 +721,13 @@
  			}
  			if (!RenderState.bIsShadow)
  				RenderState.color = color;
@@ -106,7 +141,7 @@
  		}
  		wchar c = *pRenderStateBufPointer.pStr;
  		c -= ' ';
-@@ -833,7 +854,7 @@
+@@ -833,7 +870,7 @@
  void
  CFont::PrintStringFromBottom(float x, float y, wchar *str)
  {
@@ -115,7 +150,7 @@
  	if (Details.slant != 0.0f)
  		y -= ((Details.slantRefX - x) * Details.slant + Details.slantRefY);
  	PrintString(x, y, str);
-@@ -914,7 +935,7 @@
+@@ -914,7 +951,7 @@
  						y += 32.0f * Details.scaleY / 2.75f + 2.0f * Details.scaleY;
  					else
  #endif
@@ -124,7 +159,7 @@
  					start = s;
  				}else
  					break;
-@@ -1053,7 +1074,7 @@
+@@ -1053,7 +1090,7 @@
  				y += 32.0f * Details.scaleY / 2.75f + 2.0f * Details.scaleY;
  			else
  #endif
@@ -133,7 +168,7 @@
  		}else{
  			// still space in current line
  			t = GetNextSpace(s);
-@@ -1124,7 +1145,7 @@
+@@ -1124,7 +1161,7 @@
  				else
  					x = xstart;
  				numLines++;
@@ -142,7 +177,7 @@
  			}else{
  				// still space in current line
  				t = GetNextSpace(s);
-@@ -1156,7 +1177,7 @@
+@@ -1156,7 +1193,7 @@
  				rect->top = ystart - (4.0f / 2.75f);
  			} else {
  #endif
@@ -151,7 +186,7 @@
  				rect->top = ystart - 2.0f;
  #ifdef MORE_LANGUAGES
  			}
-@@ -1170,7 +1191,7 @@
+@@ -1170,7 +1207,7 @@
  				rect->top = ystart - (4.0f / 2.75f);
  			} else {
  #endif
@@ -160,7 +195,7 @@
  				rect->top = ystart - 2.0f;
  #ifdef MORE_LANGUAGES
  			}
-@@ -1186,10 +1207,24 @@
+@@ -1186,10 +1223,24 @@
  			rect->top = (32.0f * Details.scaleY / 2.75f + 2.0f * Details.scaleY) * numLines + ystart + 2.0f + (4.0f / 2.75f);
  		else
  #endif
@@ -186,7 +221,7 @@
  float
  CFont::GetCharacterWidth(wchar c)
  {
-@@ -1432,7 +1467,20 @@
+@@ -1432,7 +1483,20 @@
  {
  	Details.anonymous_23 = false;
  	wchar *s = str + 1;
@@ -208,7 +243,7 @@
  	{
  		switch (*s)
  		{
-@@ -1529,6 +1577,12 @@
+@@ -1529,6 +1593,12 @@
  		case 'L': PS2Symbol = BUTTON_RSTICK_DOWN; break;
  		case '(': PS2Symbol = BUTTON_RSTICK_LEFT; break;
  		case ')': PS2Symbol = BUTTON_RSTICK_RIGHT; break;
@@ -221,7 +256,7 @@
  #endif
  		default:
  			break;
-@@ -1582,6 +1636,12 @@
+@@ -1582,6 +1652,12 @@
  		case 'L': PS2Symbol = BUTTON_RSTICK_DOWN; break;
  		case '(': PS2Symbol = BUTTON_RSTICK_LEFT; break;
  		case ')': PS2Symbol = BUTTON_RSTICK_RIGHT; break;
@@ -234,7 +269,7 @@
  #endif
  		}
  	} else if (IsJapanese()) {
-@@ -1708,6 +1768,12 @@
+@@ -1708,6 +1784,12 @@
  		case 'L': PS2Symbol = BUTTON_RSTICK_DOWN; break;
  		case '(': PS2Symbol = BUTTON_RSTICK_LEFT; break;
  		case ')': PS2Symbol = BUTTON_RSTICK_RIGHT; break;

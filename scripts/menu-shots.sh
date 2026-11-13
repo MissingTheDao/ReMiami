@@ -48,7 +48,9 @@ for f in sys.argv[2:]:
 hud() {	# set, ui style, width, height, suffix[, HUD text kind, shot id]: the HUD on foot (scene S1, noon) in that style
   local cfg=$TMP/hud.ini wrap=()
   # (scenes.ini has its own UiStyle line: replace it, an inserted one would lose to it)
-  sed -e "s/^UiStyle=.*/UiStyle=$2/" -e "s/^Width=.*/Width=$3/" -e "s/^Height=.*/Height=$4/" \
+  local prompts=()	# (the PS2 style with the PS2's own button glyphs, as the menu shots)
+  [[ $2 == 1 ]] && prompts=(-e "s/^\[Controller\]/[Controller]\nButtonPrompts=2/")
+  sed -e "s/^UiStyle=.*/UiStyle=$2/" -e "s/^Width=.*/Width=$3/" -e "s/^Height=.*/Height=$4/" "${prompts[@]}" \
     "$ROOT/tests/config/scenes.ini" > "$cfg"
   [[ "$3x$4" == 2560x1080 ]] && wrap=("$ROOT/scripts/headless.sh" --size "$3x$4")
   REVC_TEST_HUD_TEXT=${6:-} REVC_TEST_CONFIG=$cfg REVC_SCENE_W=$3 REVC_SCENE_H=$4 REVC_TEST_SCENES=S1 \
@@ -91,10 +93,10 @@ for set in "${SETS[@]}"; do
       done ;;
     ps2_hudtext|xbox_hudtext)	# HUD texts (testhooks.cpp revc_test_hud_text kinds) at 4:3
       if [[ $set == ps2_hudtext ]]; then
-        st=1; kinds=(0:hud_zone_name 1:hud_in_car 2:hud_help 5:hud_taxi_timer 4:hud_mission_title 8:hud_mission_over
+        st=1; kinds=(0:hud_zone_name 1:hud_in_car 2:hud_help 12:hud_help_buttons 5:hud_taxi_timer 4:hud_mission_title 8:hud_mission_over
           9:hud_bonus 3:hud_title_small 6:hud_mission_passed 7:hud_mission_failed 10:hud_wanted 11:hud_subtitle)
       else
-        st=2; kinds=(0:hud_zone_name 1:hud_vehicle_name 2:hud_help 3:hud_mission_title 5:hud_mission_timer
+        st=2; kinds=(0:hud_zone_name 1:hud_vehicle_name 2:hud_help 12:hud_help_buttons 3:hud_mission_title 5:hud_mission_timer
           7:hud_mission_failed 10:hud_wanted 6:hud_mission_passed 4:hud_oddjob_title 11:hud_subtitle)
       fi
       for k in "${kinds[@]}"; do hud "${set%_hudtext}" $st 640 480 "" "${k%%:*}" "${k#*:}"; done ;;
