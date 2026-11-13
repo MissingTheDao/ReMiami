@@ -2,7 +2,7 @@
 name = "retro-wgpu"
 description = "Engine-neutral renderer core on wgpu for ports and remasters of fixed-function era games (Vulkan, OpenGL, Direct3D 12)"
 edition = "2024"
-version = "0.2.0"
+version = "0.2.1"
 publish = false
 rust-version = "1.99"
 license = "MIT OR Apache-2.0"
