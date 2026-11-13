@@ -6,7 +6,7 @@
 #   --wgpu   (accepted, no effect: the wgpu renderer is the only one; REVC_RENDERER_BACKEND=vulkan|gl
 #            picks its backend, Vulkan by default)
 # Needs a display (the game opens a window). Game data: REVC_GAME_DIR or ./game.
-# Scenarios: scenes (console reference scenes at 640x480, REVC_TEST_SCENES/REVC_TEST_SCENE pick them), boot, saveload, savegame (save slot 1's game to slot 2, then load slot 2: own reference), formats, texmods, gamepad, spots (default), motion, pedhit (car hits peds at 320 fps: drawn where the physics has them), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it).
+# Scenarios: scenes (console reference scenes at 640x480, REVC_TEST_SCENES/REVC_TEST_SCENE pick them), boot, saveload, savegame (save slot 1's game to slot 2, then load slot 2: own reference), formats, texmods, gamepad, spots (default), motion, pedhit (car hits peds at 320 fps: drawn where the physics has them), audio (scripted scene with sound; REVC_TEST_WAV=x.wav records it), cutscenes (new game: the opening's cutscenes, frames to $OUT/cutscenes/, fails on missing textures).
 # formats: compares what the C++ loaders read with the Rust parsers in rust/revc-formats.
 # oldsave: saveload of tests/saves/other/GTAVCsf1-64bit-gcc.b (slot 1's game as a 64-bit GCC build
 #   saves it) in slot 3: the game converts it (FixSave, keeps a .bak) and loads it; saveload's reference.
@@ -100,6 +100,12 @@ for s in "${SCENARIOS[@]}"; do
   # to $OUT/scenes/ for comparison with the PS2/Xbox captures (local only); no references.
   if [[ "$s" == menus ]]; then
     envs+=(REVC_TEST_SHOT_DIR="${REVC_TEST_SHOT_DIR:-$OUT}")
+  fi
+  # cutscenes (not in the default set): a new game's opening at 60 fixed fps; frames and the
+  # missing-texture check (tests/golden/missing-textures.txt: missing in the game's own data)
+  if [[ "$s" == cutscenes ]]; then
+    rm -rf "$OUT/cutscenes"; mkdir -p "$OUT/cutscenes"
+    envs+=(REVC_TEST_SHOT_DIR="$OUT/cutscenes" REVC_FIXED_FPS=60 REVC_TEST_TIMEOUT=${REVC_TEST_TIMEOUT:-900} REVC_TEST_MISSING_OK="$ROOT/tests/golden/missing-textures.txt")
   fi
   if [[ "$s" == scenes ]]; then
     mkdir -p "$OUT/scenes"

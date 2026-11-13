@@ -478,6 +478,24 @@ pub unsafe fn default_find(g: *mut TextureGlobals, name: *const c_char) -> *mut 
     }
 }
 
+/// Textures a model asked for that neither its dictionary nor a file had (drawn untextured or as
+/// a dummy): logged once per name, and kept for the tests (take_missing).
+static MISSING: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+fn note_missing(name: *const c_char) {
+    let n = unsafe { std::ffi::CStr::from_ptr(name) }.to_string_lossy().into_owned();
+    let mut m = MISSING.lock().unwrap_or_else(|e| e.into_inner());
+    if !m.contains(&n) {
+        eprintln!("rwtexture: missing texture '{n}'");
+    }
+    m.push(n);
+}
+
+/// The missing textures noted since the last call (one entry per lookup).
+pub fn take_missing() -> Vec<String> {
+    std::mem::take(&mut *MISSING.lock().unwrap_or_else(|e| e.into_inner()))
+}
+
 /// Texture::read: a found texture gets another reference; otherwise it is loaded (when loading
 /// is on) or, failing that, made as a named dummy (when dummies are on). New and found ones
 /// move into the current dictionary.
@@ -497,6 +515,9 @@ pub unsafe fn tex_read(g: *mut TextureGlobals, name: *const c_char, mask: *const
         } else {
             true
         };
+        if dummy {
+            note_missing(name);
+        }
         if dummy && (*g).make_dummies != 0 {
             tex = tex_create(g, std::ptr::null_mut());
             if tex.is_null() {

@@ -1,0 +1,3 @@
+# Textures the game's models ask for that its own data lacks (lower case, one per line; the
+# cutscenes test, testdrive.rs, fails on any other missing texture).
+lakerem	# int_d (boathouse, cargo ship): in no TXD of the PC release

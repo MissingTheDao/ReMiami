@@ -32,6 +32,16 @@
 //!                       it stood), both in the physics and as drawn; fails if a ped is drawn far
 //!                       above its physics position (render interpolation). scripts/test.sh runs it
 //!                       at 50 km/h (REVC_TEST_PEDHIT_KMH) and 320 fps (REVC_FIXED_FPS).
+//!   REVC_TEST=cutscenes loads save slot 1 (at the hotel; REVC_TEST_CUT_NEW=1: a new game, the
+//!                       opening's cutscenes first) and puts the player on the nearest mission
+//!                       marker once no cutscene ran for 6 s (REVC_TEST_CUT_MARKERS times, default 1;
+//!                       slot 1: the first mission's hotel cutscene). Ends 5 s after the last
+//!                       marker's cutscene, or after REVC_TEST_CUT_MS of game time (default 240 s). Every REVC_TEST_CUT_SHOT_MS (default 1000) of a running
+//!                       cutscene a frame goes to REVC_TEST_SHOT_DIR (cut_<name>_<ms>.png; outside
+//!                       them game_<ms>.png every 5 s). Fails on textures a model asked for during a
+//!                       cutscene that nobody had (drawn untextured), except the ones in
+//!                       tests/golden/missing-textures.txt (missing in the game's own data); the
+//!                       ones outside cutscenes are only logged.
 //!   REVC_TEST=motion    like saveload, then walks the player forward and turns (injected keys)
 //!                       while capturing every frame with its render interpolation (run with
 //!                       REVC_FIXED_FPS, e.g. 144). Writes the frames to REVC_TEST_VIDEO_DIR
@@ -59,6 +69,9 @@ unsafe extern "C" {
     fn revc_test_audio_fx(supported: *mut i32, mode: *mut i32, level: *mut f32);
     fn revc_test_quit();
     fn revc_test_load_slot(slot: i32) -> i32;
+    fn revc_test_new_game() -> i32;
+    fn revc_test_cutscene(name: *mut std::ffi::c_char, n: i32) -> i32;
+    fn revc_test_goto_marker(x: *mut f32, y: *mut f32, z: *mut f32) -> i32;
     fn revc_test_player_pos(x: *mut f32, y: *mut f32, z: *mut f32);
     fn revc_test_dump_formats(path: *const std::ffi::c_char) -> i32;
     fn revc_test_load_all_txds() -> i32;
@@ -123,6 +136,7 @@ enum Scenario {
     Menus,
     PadScript,
     MenuSweep,
+    Cutscenes,
 }
 
 #[derive(Debug)]
@@ -154,6 +168,8 @@ enum Phase {
     PadScript { frame: u32 },
     /// Button sweep: state `idx` (revc_test_sweep_state), pad button `button`, frames into it.
     MenuSweep { idx: i32, button: u32, frame: u32, flagged: u32 },
+    /// Cutscenes: game time `t0` the game started, `last` the last frame saved (game time).
+    Cutscenes { t0: u32, last: u32 },
     Done,
 }
 
@@ -675,7 +691,8 @@ pub fn init() -> Result<bool, String> {
         "menus" => Scenario::Menus,
         "padscript" => Scenario::PadScript,
         "menusweep" => Scenario::MenuSweep,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, scanner, scenes, menus, padscript)")),
+        "cutscenes" => Scenario::Cutscenes,
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, scanner, scenes, menus, padscript, menusweep, cutscenes)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -789,6 +806,24 @@ impl Driver {
                         self.phase = Phase::MenuShot { frames: 0 };
                         return false;
                     }
+                    Scenario::Cutscenes if std::env::var_os("REVC_TEST_CUT_NEW").is_none() => {
+                        crate::rwtexture::take_missing(); // (from the front end's loading)
+                        if unsafe { revc_test_load_slot(self.slot) } == 0 {
+                            self.fail(format!("save slot {} missing or invalid", self.slot + 1));
+                            return self.finish();
+                        }
+                        log(format!("loading slot {}", self.slot + 1));
+                        self.phase = Phase::WaitPlaying;
+                    }
+                    Scenario::Cutscenes => {
+                        crate::rwtexture::take_missing(); // (from the front end's loading)
+                        if unsafe { revc_test_new_game() } == 0 {
+                            self.fail("cutscenes: couldn't start a new game".into());
+                            return self.finish();
+                        }
+                        log("starting a new game");
+                        self.phase = Phase::WaitPlaying;
+                    }
                     Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::Scanner | Scenario::Scenes | Scenario::Menus | Scenario::PadScript | Scenario::MenuSweep => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
@@ -800,6 +835,12 @@ impl Driver {
                 }
             }
             Phase::WaitPlaying => {
+                if state == STATE_PLAYING && self.scenario == Scenario::Cutscenes {
+                    log(format!("playing after {:.1}s", self.started.elapsed().as_secs_f32()));
+                    let t0 = unsafe { revc_test_game_ms() };
+                    self.phase = Phase::Cutscenes { t0, last: 0 };
+                    return false;
+                }
                 if state == STATE_PLAYING {
                     log(format!("playing after {:.1}s", self.started.elapsed().as_secs_f32()));
                     crate::audio::take_stats(); // count sound effects and streams from here on
@@ -927,6 +968,7 @@ impl Driver {
                 }
                 self.phase = Phase::Script { t0, step };
             }
+            Phase::Cutscenes { t0, last } => return self.cutscenes_step(t0, last),
             Phase::Scanner { t0 } => {
                 if unsafe { revc_test_game_ms() }.wrapping_sub(t0) < 30000 {
                     return false;
@@ -1724,6 +1766,92 @@ impl Driver {
         }
     }
 
+    /// One frame of the cutscenes scenario (see the module notes).
+    fn cutscenes_step(&mut self, t0: u32, last: u32) -> bool {
+        let now = unsafe { revc_test_game_ms() };
+        let mut buf = [0 as std::ffi::c_char; 64];
+        let running = unsafe { revc_test_cutscene(buf.as_mut_ptr(), buf.len() as i32) } != 0;
+        let name = unsafe { std::ffi::CStr::from_ptr(buf.as_ptr()) }.to_string_lossy().to_ascii_lowercase();
+        let mut st = CUTSCENES.lock().unwrap_or_else(|e| e.into_inner());
+        let ctx = if running { name.clone() } else { "(game)".to_string() };
+        for m in crate::rwtexture::take_missing() {
+            let e = (ctx.clone(), m.to_ascii_lowercase());
+            if !st.missing.contains(&e) {
+                log(format!("missing texture '{}' in {}", e.1, e.0));
+                st.missing.push(e);
+            }
+        }
+        if running {
+            st.last_cut = now;
+            if st.trips > 0 {
+                st.cut_after_trip = true;
+            }
+        }
+        // the script waits for the player: walk into the nearest mission marker
+        let quiet = now.wrapping_sub(st.last_cut.max(t0));
+        let trips: u32 = env("REVC_TEST_CUT_MARKERS", 1);
+        if !running && quiet >= 6000 && st.trips < trips && unsafe { revc_test_fading() } == 0 {
+            let (mut x, mut y, mut z) = (0.0f32, 0.0f32, 0.0f32);
+            st.trips += 1;
+            st.cut_after_trip = false;
+            if unsafe { revc_test_goto_marker(&mut x, &mut y, &mut z) } != 0 {
+                log(format!("player put on the mission marker at ({x:.1}, {y:.1}, {z:.1})"));
+            } else {
+                log("no mission marker within 300 m".to_string());
+            }
+            st.last_cut = now;
+        }
+        let done = st.trips >= trips && st.cut_after_trip && !running && quiet >= 5000;
+        if running && !st.seen.contains(&name) {
+            log(format!("cutscene {name} at game time {}", now.wrapping_sub(t0)));
+            st.seen.push(name.clone());
+        }
+        if let Some((w, h, rgba)) = crate::host::take_capture() {
+            if let (Some(dir), Some(file)) = (std::env::var_os("REVC_TEST_SHOT_DIR"), st.pending.take()) {
+                let p = PathBuf::from(dir).join(file);
+                if let Err(e) = write_png(&p, w, h, &rgba) {
+                    drop(st);
+                    self.fail(format!("writing {}: {e}", p.display()));
+                    st = CUTSCENES.lock().unwrap_or_else(|e| e.into_inner());
+                }
+            }
+        }
+        let mut last = last;
+        let every: u32 = env("REVC_TEST_CUT_SHOT_MS", 1000);
+        // (outside cutscenes a frame every 5 s, to see where the opening stands)
+        let gap = if running { every } else { 5000 };
+        if st.pending.is_none() && now.wrapping_sub(last) >= gap {
+            let what = if running { format!("cut_{name}") } else { "game".to_string() };
+            st.pending = Some(format!("{what}_{:06}.png", now.wrapping_sub(t0)));
+            crate::host::request_capture();
+            last = now;
+        }
+        if !done && now.wrapping_sub(t0) < env("REVC_TEST_CUT_MS", 240_000u32) {
+            self.phase = Phase::Cutscenes { t0, last };
+            return false;
+        }
+        let allowed: Vec<String> = std::fs::read_to_string(std::env::var("REVC_TEST_MISSING_OK").unwrap_or_default())
+            .unwrap_or_default()
+            .lines()
+            .map(|l| l.split('#').next().unwrap_or("").trim().to_ascii_lowercase())
+            .filter(|l| !l.is_empty())
+            .collect();
+        let (seen, missing) = (st.seen.clone(), st.missing.clone());
+        drop(st);
+        log(format!("cutscenes played: {}", if seen.is_empty() { "none".to_string() } else { seen.join(", ") }));
+        if seen.is_empty() {
+            self.fail("cutscenes: no cutscene ran".into());
+        }
+        // (outside cutscenes only logged: there the game's own data lacks many, mostly LOD models
+        // whose LOD dictionaries don't have the texture)
+        for (ctx, tex) in missing {
+            if ctx != "(game)" && !allowed.contains(&tex) {
+                self.fail(format!("missing texture '{tex}' in {ctx}"));
+            }
+        }
+        self.finish()
+    }
+
     fn finish(&mut self) -> bool {
         self.phase = Phase::Done;
         self.finished = true;
@@ -1747,6 +1875,21 @@ impl Driver {
         true
     }
 }
+
+/// Cutscenes scenario state: cutscenes seen, (context, texture) missing, the frame file pending.
+#[derive(Default)]
+struct CutsceneState {
+    seen: Vec<String>,
+    missing: Vec<(String, String)>,
+    pending: Option<String>,
+    /// game time a cutscene last ran (or the player was last moved)
+    last_cut: u32,
+    /// marker trips made; whether a cutscene ran after the last one
+    trips: u32,
+    cut_after_trip: bool,
+}
+static CUTSCENES: std::sync::Mutex<CutsceneState> =
+    std::sync::Mutex::new(CutsceneState { seen: Vec::new(), missing: Vec::new(), pending: None, last_cut: 0, trips: 0, cut_after_trip: false });
 
 fn write_png(path: &PathBuf, w: u32, h: u32, rgba: &[u8]) -> Result<(), String> {
     let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
