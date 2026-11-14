@@ -8,7 +8,8 @@
 // (CSimpleModelInfo::SetAtomic) each PC vertex gets the coordinates of the Xbox vertex with its key
 // (the order and duplicates differ) and each material the lightmap; a geometry with any vertex
 // unmatched (a mod's model) stays as it is. Drawn in the Xbox UI style only
-// (custompipes_wgpu.cpp worldMeshes). Without an Xbox import nothing changes.
+// (custompipes_wgpu.cpp worldMeshes), and loaded and attached in it only (Load). Without an Xbox import
+// nothing changes.
 #include "common.h"
 #ifdef EXTENDED_PIPELINES
 #include "RwHelper.h"
@@ -18,6 +19,7 @@
 #include <vector>
 
 extern "C" ssize_t revc_import_read(int kind, const char *rel, uint8 *buf, size_t cap);
+extern int8 gUiStyle;
 extern "C" int32 revc_geo_add_lightmap_coords(rw::Geometry *g, const void *xbox, int32 n);
 
 namespace XboxLightmaps {
@@ -107,11 +109,16 @@ ReadTxd(void)
 	delete[] buf;
 }
 
-void
-Init(void)
+// Loads the lightmaps once, on the first model attached while the Xbox style is active: in other
+// styles nothing from the Xbox import is read or attached (a PC-style game with an imported Xbox
+// disc loads exactly what one without it does). A switch to the Xbox style later in a session
+// gives the models streamed in from then on their lightmaps; the rest get them at the next start.
+static bool tried;
+
+static void
+Load(void)
 {
-	if(txd)
-		return;
+	tried = true;
 	ReadTxd();
 	if(txd == nil)
 		return;
@@ -125,6 +132,12 @@ Init(void)
 }
 
 void
+Init(void)
+{
+	// (nothing read here; see Load)
+}
+
+void
 Shutdown(void)
 {
 	if(txd){
@@ -134,11 +147,16 @@ Shutdown(void)
 	models.clear();
 	data.clear();
 	data.shrink_to_fit();
+	tried = false;
 }
 
 void
 Attach(const char *modelName, int n, rw::Atomic *atomic)
 {
+	if(gUiStyle != 2)
+		return;
+	if(txd == nil && !tried)
+		Load();
 	if(txd == nil || atomic == nil || atomic->geometry == nil)
 		return;
 	auto it = models.find(Lower(modelName, strlen(modelName)));
