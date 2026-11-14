@@ -39,6 +39,7 @@ extern "C" void PadLayoutApply(int layout);
 #include "Font.h"
 #include "GenericGameStorage.h"
 #include "Messages.h"
+#include "Pools.h"
 #include "Automobile.h"
 #include "Explosion.h"
 #include "ParticleMgr.h"
@@ -1210,4 +1211,11 @@ revc_test_particle_frames(int kind)
 	if (kind < 0 || kind > 2)
 		return -1;
 	return mod_ParticleSystemManager.m_aParticles[types[kind]].m_nFinalAnimationFrame;
+}
+
+// The pools' use when a test run ends (testdrive.rs finish).
+extern "C" void
+revc_test_pool_report(void)
+{
+	CPools::Report("at the end");
 }

@@ -98,6 +98,7 @@ unsafe extern "C" {
     fn revc_test_hud_text(kind: i32);
     fn revc_test_fire(kind: i32);
     fn revc_test_map_skipped() -> i32;
+    fn revc_test_pool_report();
     fn revc_test_cut_load(cut: *const std::ffi::c_char, out: *mut std::ffi::c_char, len: i32) -> i32;
     fn revc_test_prompt_text(key: *const std::ffi::c_char, out: *mut std::ffi::c_char, len: i32) -> i32;
     fn revc_test_particle_frames(kind: i32) -> i32;
@@ -1924,6 +1925,7 @@ impl Driver {
         self.finished = true;
         // a map placement skipped because a pool was full (FileLoader.cpp): the pool limits are too
         // low for some style's map data again
+        unsafe { revc_test_pool_report() };
         let skipped = unsafe { revc_test_map_skipped() };
         if skipped > 0 {
             self.fail(format!("{skipped} map placement(s) skipped: a pool is full (core/config.h)"));

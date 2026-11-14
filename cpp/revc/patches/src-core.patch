@@ -945,7 +945,15 @@
  #include "PathFind.h"
  #include "ObjectData.h"
  #include "DummyObject.h"
-@@ -46,6 +47,30 @@
+@@ -24,6 +25,7 @@
+ #include "Zones.h"
+ #include "ZoneCull.h"
+ #include "CdStream.h"
++#include "Pools.h"
+ #include "FileLoader.h"
+ #include "MemoryHeap.h"
+ #include "Streaming.h"
+@@ -46,6 +48,30 @@
  	LoadingScreen("Loading the Game", gString, nil);
  }
  
@@ -976,7 +984,7 @@
  void
  CFileLoader::LoadLevel(const char *filename)
  {
-@@ -64,6 +89,19 @@
+@@ -64,6 +90,19 @@
  	fd = CFileMgr::OpenFile(filename, "r");
  	assert(fd > 0);
  
@@ -996,7 +1004,7 @@
  	for(line = LoadLine(fd); line; line = LoadLine(fd)){
  		if(*line == '#')
  			continue;
-@@ -92,7 +130,7 @@
+@@ -92,7 +131,7 @@
  			LoadClumpFile(line + 9);
  		}else if(strncmp(line, "IDE", 3) == 0){
  			LoadingScreenLoadingFile(line + 4);
@@ -1005,7 +1013,7 @@
  		}else if(strncmp(line, "IPL", 3) == 0){
  			if(!objectsLoaded){
  				LoadingScreenLoadingFile("Collision");
-@@ -110,7 +148,7 @@
+@@ -110,7 +149,7 @@
  			}
  			PUSH_MEMID(MEMID_WORLD);
  			LoadingScreenLoadingFile(line + 4);
@@ -1014,7 +1022,7 @@
  			POP_MEMID();
  		}else if(strncmp(line, "SPLASH", 6) == 0){
  #ifndef DISABLE_LOADING_SCREEN
-@@ -123,6 +161,19 @@
+@@ -123,6 +162,21 @@
  		}
  	}
  
@@ -1029,12 +1037,14 @@
 +	if(gMapStyleHidden)
 +		printf("revc: map style: %d PC placements hidden (%d of them dynamic objects)\n", gMapStyleHidden, gMapStyleHiddenObjects);
 +#endif
++	if(CGeneral::faststricmp(GetFilename(filename), "gta_vc.dat") == 0)
++		CPools::Report("after the level");
 +#undef MAP_STYLE_FILE
 +
  	CFileMgr::CloseFile(fd);
  	RwTexDictionarySetCurrent(savedTxd);
  
-@@ -162,6 +213,20 @@
+@@ -162,6 +216,20 @@
  		if(RwStreamFindChunk(stream, rwID_TEXDICTIONARY, nil, nil))
  			txd = RwTexDictionaryGtaStreamRead(stream);
  		RwStreamClose(stream, nil);
@@ -1055,7 +1065,7 @@
  	}
  	if(txd == nil)
  		txd = RwTexDictionaryCreate();
-@@ -1202,6 +1267,10 @@
+@@ -1202,6 +1270,10 @@
  	if(mi == nil)
  		return;
  	assert(mi->IsSimple());
@@ -1066,7 +1076,7 @@
  
  	if(!CStreaming::IsObjectInCdImage(id))
  		debug("Not in cdimage %s\n", mi->GetModelName());
-@@ -1217,6 +1286,12 @@
+@@ -1217,6 +1289,12 @@
  			ThePaths.RegisterMapObject((CTreadable*)entity);
  		}else
  			entity = new CBuilding;
@@ -1079,7 +1089,7 @@
  		entity->SetModelIndexNoCreate(id);
  		entity->GetMatrix() = CMatrix(xform);
  		entity->m_level = CTheZones::GetLevelFromPosition(&entity->GetPosition());
-@@ -1227,7 +1302,7 @@
+@@ -1227,7 +1305,7 @@
  			if(mi->m_isSubway)
  				entity->bIsSubway = true;
  		}
@@ -1088,7 +1098,7 @@
  			entity->bIsVisible = false;
  		CWorld::Add(entity);
  
-@@ -1237,11 +1312,23 @@
+@@ -1237,11 +1315,23 @@
  				CColStore::GetBoundingBox(col->level).ContainRect(entity->GetBoundRect());
  		}else
  			entity->bUsesCollision = false;
@@ -1112,7 +1122,7 @@
  		entity->SetModelIndexNoCreate(id);
  		entity->GetMatrix() = CMatrix(xform);
  		CWorld::Add(entity);
-@@ -1249,6 +1336,16 @@
+@@ -1249,6 +1339,16 @@
  			entity->bIsVisible = false;
  		entity->m_level = CTheZones::GetLevelFromPosition(&entity->GetPosition());
  		entity->m_area = area;
@@ -6265,6 +6275,40 @@
  #endif
  	if (CPad::bInvertLook4Pad)
  		axis = -axis;
+--- a/src/core/Pools.cpp
++++ b/src/core/Pools.cpp
+@@ -644,4 +644,19 @@
+ }
+ 
+ #undef CopyFromBuf
+-#undef CopyToBuf
+\ No newline at end of file
++#undef CopyToBuf
++
++// revc: how full each pool is (the map data per style adds placements; tests log it after the
++// level loads and when a run ends)
++void
++CPools::Report(const char *when)
++{
++#define POOLUSE(name, pool) pool ? pool->GetNoOfUsedSpaces() : -1, pool ? pool->GetSize() : -1
++	printf("revc: pools %s: ptrnodes %d/%d entryinfo %d/%d peds %d/%d vehicles %d/%d buildings %d/%d "
++	       "treadables %d/%d objects %d/%d dummies %d/%d audioobjs %d/%d colmodels %d/%d\n", when,
++	       POOLUSE(ptr, ms_pPtrNodePool), POOLUSE(entry, ms_pEntryInfoNodePool), POOLUSE(ped, ms_pPedPool),
++	       POOLUSE(veh, ms_pVehiclePool), POOLUSE(bld, ms_pBuildingPool), POOLUSE(tread, ms_pTreadablePool),
++	       POOLUSE(obj, ms_pObjectPool), POOLUSE(dum, ms_pDummyPool), POOLUSE(aud, ms_pAudioScriptObjectPool),
++	       POOLUSE(col, ms_pColModelPool));
++#undef POOLUSE
++}
+--- a/src/core/Pools.h
++++ b/src/core/Pools.h
+@@ -44,6 +44,7 @@
+ 	static CDummyPool *GetDummyPool(void) { return ms_pDummyPool; }
+ 	static CAudioScriptObjectPool *GetAudioScriptObjectPool(void) { return ms_pAudioScriptObjectPool; }
+ 	static CColModelPool *GetColModelPool(void) { return ms_pColModelPool; }
++	static void Report(const char *when);	// (revc: pool use and size, to the log)
+ 
+ 	static void Initialise(void);
+ 	static void ShutDown(void);
 --- a/src/core/Radar.cpp
 +++ b/src/core/Radar.cpp
 @@ -128,7 +128,8 @@
