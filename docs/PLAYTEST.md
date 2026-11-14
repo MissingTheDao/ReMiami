@@ -138,6 +138,8 @@ Around Ocean Beach:
       the menu brings back the orange ones. [R4]
 - [ ] The fireball particle (frames 30-43 of the Xbox flame), from car backfires and the
       flamethrower; no test scene reaches it. [R4]
+- [ ] In the PS2 style, burning cars and explosions look like on a PS2 (orange, as the PC); only
+      compared against stills from an unreliable savestate so far. [R4]
 
 - [ ] Map data (start in the Xbox style): the building at (390, -481) (`deco_polbuild`) has no
       invisible walls; North Beach's shop windows are there; billboards and Ocean Drive

@@ -409,7 +409,10 @@ The Xbox's flames burn white-hot and are animated; the PC and PS2 use one orange
   the PC's for the particle types both games have, matched by name (`merge_by_name` in
   `rust/revc/src/particlecfg.rs`; the file's line order differs, so a whole-file load would shift
   every later type). In practice that is the flame, fireball, car flame and car-fire smoke. The
-  PC and PS2 styles keep the PC table unchanged (the PS2's file is the PC's).
+  PC and PS2 styles keep the PC table unchanged (the PS2's file is the PC's). That PS2 = PC rests
+  on the identical file; the look was only compared against PS2 stills from an emulator
+  savestate that later proved unreliable (a partly loaded world), so it is not verified on the
+  PS2 (PLAYTEST).
 - **Animation speed:** the Xbox's file gives the flames a speed of 0.5, a fraction the PC's integer
   column can't hold. The Xbox steps such a flame one frame every second update; reMiami stores
   speed 0 plus a flag (`ANIM_EVERY_OTHER`) for that. Flames and car flames play their first 30
