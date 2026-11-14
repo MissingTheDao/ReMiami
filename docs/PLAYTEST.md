@@ -2,123 +2,120 @@
 
 Things the automated tests (`scripts/test.sh`) can't judge: they need a person at the machine,
 real hardware or a second machine. Tick items off here (or tell Claude the result) and the plan
-task can be marked Done.
+task in brackets can be marked Done.
 
-Start the game with `cargo run` in `rust/` (settings in `game/reVC.ini`).
+The checks are grouped by play session: what can be cleared in one sitting, in the order you
+reach it. Start the game with `cargo run` in `rust/` (settings in `game/reVC.ini`). Sessions 3
+and 4 need the PS2 or Xbox disc imported (Options > Import).
 
-## Task 8: fixed 30 Hz simulation with render interpolation (high refresh rate)
+Two renderers, both on wgpu: **retro-wgpu** (default since 2026-11-14) and the older wgpu back
+end (`REVC_RENDERER=wgpu`; it also presents by itself, with a `WARNING` in the log, if retro-wgpu
+fails to start). Either runs on `REVC_RENDERER_BACKEND=vulkan` (default) or `gl`. Untested:
+Windows and DX12.
 
-On a 120/144 Hz display, frame limiter off (Display Setup), VSync on:
+## Session 1: menus only (no driving; about 15 min)
 
-- [ ] Walk, run and turn the camera with the mouse: movement looks smooth, no judder or
-      "double images" compared with 30/60 fps.
+From the title screen and the pause menu of a loaded save.
+
+- [ ] Load Game lists your saves with names and dates; a damaged save shows as corrupted. [15]
+- [ ] Options > Language: switch through the languages; menus and in-game text change and look
+      right (accents in French/German/Spanish/Italian), then switch back. [15]
+- [ ] Display Setup: change the screen resolution in the menu (not only at start-up). [7]
+- [ ] Display Setup > Colour Filter: each of None, Simple, PS2/XBOX, Mobile, PC changes the look
+      at once and is kept after a restart (both renderers). [12]
+- [ ] Display Setup > Antialiasing: step through all 9 levels in game (SMAA smooths edges without
+      blurring HUD text as much as FXAA); the picture changes at once, edges get smoother the
+      higher the level, frame rate drops at SSAA; the level is kept after a restart. [12]
+- [ ] Graphics > Visual Style: left/right cycles PC, PS2, XBOX, MOBILE; each changes colour
+      filter, PS2 alpha test and (with game/neo) vehicle pipeline, rim light, lightmaps, road
+      gloss at once (those rows follow); changing one of them by hand shows CUSTOM; kept after a
+      restart. [12]
+- [ ] Controls menu, BUTTON PROMPTS: each style shows its glyphs; AUTO follows the pad again. [9]
+- [ ] Menus, HUD, text and radar look like the normal build. [12]
+- [ ] After `scripts/upscale_hud.py`, at your monitor's resolution (1440p/4K): HUD text, radar,
+      menus and the map screen look sharper; no halos around letters, no seams between radar
+      tiles, nothing upside down; menu background acceptable (or `--clean` and compare).
+      [docs/HUD_UPSCALING.md]
+
+## Session 2: PC style, a drive around Ocean Beach (about 45 min)
+
+On a 120/144 Hz display, frame limiter off (Display Setup), VSync on. Have a pad and the
+keyboard at hand; for the texture-mod checks, put the files in place before starting.
+
+Before starting:
+- [ ] A PNG (any size) at `game/mods/textures/<txd>/<texture>.png` for a texture you will see
+      (list names with `cargo run -p revc-formats --example txdlist -- ../game/models/gta3.img:<model>.txd`),
+      and one as DDS (DXT1 or DXT5); also one broken file. [11]
+
+At the start, on foot:
+- [ ] The modded textures show, correct way up, not blurry up close, fine in the distance; the
+      broken file prints `texmods: ... keeping the original` and the original shows. [11]
+- [ ] Walk, run and turn the camera with the mouse: smooth, no judder or "double images"
+      compared with 30/60 fps. [8]
+- [ ] Peds walk and animate normally (skinning); no stretched limbs; other peds look smooth. [8, 12]
+- [ ] Plug in each pad you have (Xbox, DualSense / DualShock, Switch Pro, Steam Deck, Steam
+      Controller): detected when plugged in after the game started, and when unplugged /
+      replugged. [9]
+- [ ] Prompts with buttons (a weapon pickup, tutorial tips) show the glyphs of that pad; a Switch
+      pad shows B on the bottom button. Use another pad, or the keyboard then a pad: prompts
+      switch to the pad just used. [9]
+- [ ] Two pads: the second one doesn't steal player 1's input. [9]
+
+In a car:
 - [ ] Drive fast along a straight road and through turns: car, wheels and camera smooth; no
-      jumps when the frame rate dips.
-- [ ] Other cars and peds look smooth too.
-- [ ] Handling feels the same as before (the simulation itself still runs at 30 Hz).
+      jumps when the frame rate dips; other cars smooth too; handling feels as before (the
+      simulation still runs at 30 Hz). [8]
+- [ ] Cars have their shiny reflections (MatFX environment map), on both renderers; nothing
+      looks inside out or too bright. [12]
+- [ ] Display Setup > Vehicle pipeline NEO, rim light, lightmaps, road gloss on: cars get the
+      Xbox-style reflections and specular highlights, peds a rim light, roads a gloss; nothing
+      flickers when turning the camera. [12]
+- [ ] Rumble: with `Vibration = 1` under `[Controller]` in `game/reVC.ini`, gunfire, explosions
+      and crashes vibrate, and it stops afterwards (no menu toggle on Linux yet). [9]
+
+A mission and the safehouse:
+- [ ] Start a mission: objectives and subtitles show and go away on time, no "... missing"; the
+      mission title and "MISSION PASSED" big messages appear. [15]
+- [ ] Pause menu > Brief: lists the last objectives / subtitles, newest first. [15]
+- [ ] Pager messages (e.g. when a phone mission becomes available): the text scrolls through the
+      pager at the top, restarts after cutscenes, and the next queued message follows. [15]
 - [ ] Teleports and respawns (death, Busted, cutscene starts, loading a save): no streak or
-      sliding from the old position.
+      sliding from the old position. [8]
+- [ ] Save in a safehouse, then load that slot. [15]
+
+At the end:
+- [ ] Restart with `REVC_RENDERER=wgpu` and play a few minutes: it looks the same as the
+      default. [12]
 
 Known limits, not bugs: shadows, lights and particles still move in 30 Hz steps; ped limbs
 animate at 30 Hz (only the body moves smoothly).
 
-## Task 9: controllers
+## Session 3: PS2 style (about 10 min; PS2 disc imported, menu language English)
 
-Plug in each pad you have (Xbox, DualSense / DualShock, Switch Pro, Steam Deck, Steam
-Controller):
+- [ ] Ocean Beach Ammu-Nation: the shop lists items in arrows ("< Hammer >", "< Grenades >"). [R4]
+- [ ] Stats shows "Best INSANE stunt so far:" with a colon (needs a save with stunts). [R4]
 
-- [ ] Detected when plugged in after the game started, and when unplugged / replugged.
-- [ ] Prompts with buttons (e.g. a weapon pickup's "Press ~ to ...", tutorial tips) show the
-      glyphs of that pad; a Switch pad shows B on the bottom button.
-- [ ] Use another pad, or the keyboard then a pad: prompts switch to the pad just used.
-- [ ] Controls menu, BUTTON PROMPTS: each style shows its glyphs; AUTO follows the pad again.
-- [ ] Rumble: set `Vibration = 1` under `[Controller]` in `game/reVC.ini`; gunfire, explosions
-      and crashes vibrate, and it stops afterwards (no menu toggle on Linux yet).
-- [ ] Two pads: the second one doesn't steal player 1's input.
+## Session 4: Xbox style (about 30 min; Xbox disc imported, menu language English)
 
-## Task 11: texture mods
+With an Xbox-type pad first, then the keyboard, then a PlayStation pad.
 
-- [ ] Put a PNG (any size) at `game/mods/textures/<txd>/<texture>.png` for a texture you can
-      see (list names with `cargo run -p revc-formats --example txdlist -- ../game/models/gta3.img:<model>.txd`),
-      restart: it shows in game, correct way up, not blurry up close, fine in the distance.
-- [ ] Same with a DDS (DXT1 or DXT5) file.
-- [ ] A broken file: the console says `texmods: ... keeping the original` and the game shows
-      the original texture.
+On foot near the start:
+- [ ] Help lines use the short Xbox wording with button words: entering a car, the horn,
+      steering, a weapon pickup. Remap a control in the Controls menu and the line follows
+      it. [R4]
+- [ ] Same with the keyboard: the lines print the bound keys. With a PlayStation pad: its usual
+      button names. In another menu language: the PC lines. [R4]
 
-## Task 12: wgpu renderer
+Around Ocean Beach:
+- [ ] A property for sale and the Ammu-Nation counter show the Xbox wording too. [R4]
+- [ ] Burning cars and explosions show white-hot, animated flames; switching to the PC style in
+      the menu brings back the orange ones. [R4]
+- [ ] The fireball particle (frames 30-43 of the Xbox flame), from car backfires and the
+      flamethrower; no test scene reaches it. [R4]
 
-`scripts/build.sh` (or `cd rust && cargo build`). Two renderers, both on wgpu:
+## Needs other hardware or a capture
 
-- **retro-wgpu (default since 2026-11-14):** the engine-neutral core
-  (github.com/MissingTheDao/retro-wgpu) with reMiami's RenderWare shading on top.
-- **The older wgpu back end (fallback):** `REVC_RENDERER=wgpu`. It also presents automatically,
-  with a `WARNING` in the log, if retro-wgpu fails to start.
-
-Either runs on `REVC_RENDERER_BACKEND=vulkan` (default) or `gl`. Untested: Windows and DX12.
-
-- [ ] Play a while with the default and once with `REVC_RENDERER=wgpu`: both look the same.
-
-## Console text (R4)
-
-- [ ] PS2 style, English: an Ammu-Nation shop lists items in arrows ("< Hammer >", "< Grenades >").
-- [ ] PS2 style: Stats shows "Best INSANE stunt so far:" with a colon (needs a save with stunts).
-- [ ] Xbox style (Xbox disc imported), English, with an Xbox-type pad: help lines use the short
-      Xbox wording with button words (enter a car, horn, steering, a property for sale, a weapon
-      pickup, an Ammu-Nation counter); remap a control and the line follows it.
-- [ ] Same with the keyboard: the lines print the bound keys; with a PlayStation pad, its usual
-      button names; in another menu language, the PC lines.
-
-## Xbox fire (R4)
-
-- [ ] Xbox style (with the Xbox disc imported): burning cars and explosions show white-hot,
-      animated flames; switching to the PC style in the menu brings back the orange ones.
-- [ ] Side by side with the real Xbox (xemu, ideally recorded at full frame rate): a burning car at
-      10-15 m, the blast and the smoke after it, in reMiami's Xbox style and on the Xbox. Not
-      compared to hardware yet (no capture could be staged).
-- [ ] Xbox style: the fireball particle (frames 30-43 of the Xbox flame), from car backfires and
-      the flamethrower; no test scene reaches it.
-
-- [ ] Cars have their shiny reflections (MatFX environment map) like the normal build, on both
-      backends; nothing looks inside out or too bright.
-- [ ] Peds walk and animate normally (skinning); no stretched limbs.
-- [ ] Display Setup > Vehicle pipeline NEO, rim light, lightmaps, road gloss on: cars get the
-      Xbox-style reflections and specular highlights (compare with the normal build), peds a rim
-      light, roads a gloss; nothing flickers when turning the camera.
-- [ ] Menus, HUD, text, radar look like the normal build.
-- [ ] Display Setup > Antialiasing: step through all 9 levels in game (SMAA smooths edges without blurring HUD text as much as FXAA); the picture changes at once,
-      edges get smoother the higher the level, frame rate drops at SSAA; the level is kept after a
-      restart.
-- [ ] Graphics > Visual Style: left/right cycles PC, PS2, XBOX, MOBILE; each changes colour
-      filter, PS2 alpha test and (with game/neo) vehicle pipeline, rim light, lightmaps, road gloss
-      at once (those rows follow); changing one of them by hand shows CUSTOM; kept after a restart.
-- [ ] Options > Display Setup > Colour Filter: each of None, Simple, PS2/XBOX, Mobile, PC
-      changes the look at once and is kept after a restart (both builds).
-
-## HUD/menu upscaling (docs/HUD_UPSCALING.md)
-
-- [ ] After `scripts/upscale_hud.py`, play at your monitor's resolution (1440p/4K): HUD text,
-      radar, menus and the map screen look sharper; no halos around letters, no seams between
-      radar tiles, nothing upside down; menu background acceptable (or `--clean` and compare).
-
-## Task 7 leftovers
-
-- [ ] Change the screen resolution in the in-game Display Setup menu (not only at start-up).
-
-## Task 15: game text now held in Rust
-
-- [ ] Options > Language: switch through the languages; menus and in-game text change and look
-      right (accents in French/German/Spanish/Italian), then switch back.
-- [ ] Start a mission (mission text loads): objectives and subtitles show and go away on time,
-      no "... missing"; the mission title and "MISSION PASSED" big messages appear.
-- [ ] Pause menu > Brief: lists the last objectives / subtitles, newest first.
-- [ ] Pager messages (e.g. when a phone mission becomes available): the text scrolls through the
-      pager at the top, restarts after cutscenes, and the next queued message follows.
-
-## Task 15: save files (file check now in Rust)
-
-- [ ] Load Game menu lists your saves with names and dates; a damaged save shows as corrupted.
-- [ ] Save in a safehouse, then load that slot.
-
-## Task 2: N150 frame times (needs the N150 box)
-
-- [ ] Record frame times at the fixed spots (the `spots` test places are a good set).
+- [ ] Side by side with the real Xbox (xemu, ideally recorded at full frame rate): a burning car
+      at 10-15 m, the blast and the smoke after it, in reMiami's Xbox style and on the Xbox. Not
+      compared to hardware yet (no capture could be staged). [R4]
+- [ ] N150: record frame times at the fixed spots (the `spots` test places are a good set). [2]
