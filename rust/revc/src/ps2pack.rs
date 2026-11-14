@@ -82,47 +82,102 @@ fn png_bytes(w: u32, h: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-/// A zip with stored (uncompressed) entries: the PNGs are compressed already.
+/// A zip with stored (uncompressed) entries: the PNGs are compressed already. ZIP64 records only
+/// where a value doesn't fit the classic fields (more than 65,535 entries, 4 GB); otherwise the
+/// classic layout, byte for byte.
 fn write_zip(path: &Path, files: &[(String, Vec<u8>)]) -> std::io::Result<()> {
+    let tmp = path.with_extension("zip.part");
+    std::fs::write(&tmp, zip_bytes(files))?;
+    std::fs::rename(&tmp, path)
+}
+
+const FULL32: u64 = 0xFFFF_FFFF;
+
+fn zip_bytes(files: &[(String, Vec<u8>)]) -> Vec<u8> {
     let mut data = Vec::new();
     let mut central = Vec::new();
     for (name, body) in files {
         let crc = crc32fast::hash(body);
-        let offset = data.len() as u32;
-        let (n, size) = (name.len() as u16, body.len() as u32);
+        let offset = data.len() as u64;
+        let size = body.len() as u64;
+        let n = name.len() as u16;
+        let big_size = size >= FULL32;
+        let big_offset = offset >= FULL32;
+        let size32 = if big_size { FULL32 as u32 } else { size as u32 };
+        let version: u8 = if big_size || big_offset { 45 } else { 20 };
+        // ZIP64 extra fields: the values that don't fit, in the order uncompressed, compressed, offset
+        let mut local_extra = Vec::new();
+        if big_size {
+            local_extra.extend_from_slice(&1u16.to_le_bytes());
+            local_extra.extend_from_slice(&16u16.to_le_bytes());
+            local_extra.extend_from_slice(&size.to_le_bytes());
+            local_extra.extend_from_slice(&size.to_le_bytes());
+        }
+        let mut cd_extra = Vec::new();
+        if big_size || big_offset {
+            let mut vals = Vec::new();
+            if big_size {
+                vals.extend_from_slice(&size.to_le_bytes());
+                vals.extend_from_slice(&size.to_le_bytes());
+            }
+            if big_offset {
+                vals.extend_from_slice(&offset.to_le_bytes());
+            }
+            cd_extra.extend_from_slice(&1u16.to_le_bytes());
+            cd_extra.extend_from_slice(&(vals.len() as u16).to_le_bytes());
+            cd_extra.extend_from_slice(&vals);
+        }
         // local header: signature, version, flags, method 0, time, date, crc, sizes, name length, extra
         data.extend_from_slice(&0x04034b50u32.to_le_bytes());
-        data.extend_from_slice(&[20, 0, 0, 0, 0, 0, 0, 0, 0x21, 0]);
+        data.extend_from_slice(&[version, 0, 0, 0, 0, 0, 0, 0, 0x21, 0]);
         data.extend_from_slice(&crc.to_le_bytes());
-        data.extend_from_slice(&size.to_le_bytes());
-        data.extend_from_slice(&size.to_le_bytes());
+        data.extend_from_slice(&size32.to_le_bytes());
+        data.extend_from_slice(&size32.to_le_bytes());
         data.extend_from_slice(&n.to_le_bytes());
-        data.extend_from_slice(&0u16.to_le_bytes());
+        data.extend_from_slice(&(local_extra.len() as u16).to_le_bytes());
         data.extend_from_slice(name.as_bytes());
+        data.extend_from_slice(&local_extra);
         data.extend_from_slice(body);
         central.extend_from_slice(&0x02014b50u32.to_le_bytes());
-        central.extend_from_slice(&[20, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0x21, 0]);
+        central.extend_from_slice(&[version, 0, version, 0, 0, 0, 0, 0, 0, 0, 0x21, 0]);
         central.extend_from_slice(&crc.to_le_bytes());
-        central.extend_from_slice(&size.to_le_bytes());
-        central.extend_from_slice(&size.to_le_bytes());
+        central.extend_from_slice(&size32.to_le_bytes());
+        central.extend_from_slice(&size32.to_le_bytes());
         central.extend_from_slice(&n.to_le_bytes());
-        central.extend_from_slice(&[0; 12]); // extra, comment, disk, internal and external attributes
-        central.extend_from_slice(&offset.to_le_bytes());
+        central.extend_from_slice(&(cd_extra.len() as u16).to_le_bytes());
+        central.extend_from_slice(&[0; 10]); // comment, disk, internal and external attributes
+        central.extend_from_slice(&(if big_offset { FULL32 as u32 } else { offset as u32 }).to_le_bytes());
         central.extend_from_slice(name.as_bytes());
+        central.extend_from_slice(&cd_extra);
     }
-    let cd_offset = data.len() as u32;
-    let count = files.len() as u16;
+    let cd_offset = data.len() as u64;
+    let cd_size = central.len() as u64;
+    let count = files.len() as u64;
     data.extend_from_slice(&central);
+    let zip64 = count > 0xFFFF || cd_offset >= FULL32 || cd_size >= FULL32;
+    if zip64 {
+        let end64 = data.len() as u64;
+        data.extend_from_slice(&0x06064b50u32.to_le_bytes());
+        data.extend_from_slice(&44u64.to_le_bytes()); // the record's size after this field
+        data.extend_from_slice(&[45, 0, 45, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // versions, disks
+        for v in [count, count, cd_size, cd_offset] {
+            data.extend_from_slice(&v.to_le_bytes());
+        }
+        data.extend_from_slice(&0x07064b50u32.to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&end64.to_le_bytes());
+        data.extend_from_slice(&1u32.to_le_bytes());
+    }
+    let count16 = if count > 0xFFFF { 0xFFFF } else { count as u16 };
+    let fit = |v: u64| if v >= FULL32 { FULL32 as u32 } else { v as u32 };
     data.extend_from_slice(&0x06054b50u32.to_le_bytes());
     data.extend_from_slice(&[0, 0, 0, 0]);
-    data.extend_from_slice(&count.to_le_bytes());
-    data.extend_from_slice(&count.to_le_bytes());
-    data.extend_from_slice(&(central.len() as u32).to_le_bytes());
-    data.extend_from_slice(&cd_offset.to_le_bytes());
+    data.extend_from_slice(&count16.to_le_bytes());
+    data.extend_from_slice(&count16.to_le_bytes());
+    data.extend_from_slice(&fit(cd_size).to_le_bytes());
+    data.extend_from_slice(&fit(cd_offset).to_le_bytes());
     data.extend_from_slice(&0u16.to_le_bytes());
-    let tmp = path.with_extension("zip.part");
-    std::fs::write(&tmp, &data)?;
-    std::fs::rename(&tmp, path)
+    data
 }
 
 /// Every texture of a TXD as (name, width, height, RGBA) or an error.
@@ -237,6 +292,72 @@ mod tests {
             assert_eq!(&e.name, name);
             assert_eq!(&e.read().unwrap(), body);
         }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+
+#[cfg(test)]
+mod zip_tests {
+    use super::*;
+
+    /// The writer as it was before ZIP64 (classic archives must come out the same).
+    fn classic(files: &[(String, Vec<u8>)]) -> Vec<u8> {
+        let mut data = Vec::new();
+        let mut central = Vec::new();
+        for (name, body) in files {
+            let crc = crc32fast::hash(body);
+            let offset = data.len() as u32;
+            let (n, size) = (name.len() as u16, body.len() as u32);
+            data.extend_from_slice(&0x04034b50u32.to_le_bytes());
+            data.extend_from_slice(&[20, 0, 0, 0, 0, 0, 0, 0, 0x21, 0]);
+            data.extend_from_slice(&crc.to_le_bytes());
+            data.extend_from_slice(&size.to_le_bytes());
+            data.extend_from_slice(&size.to_le_bytes());
+            data.extend_from_slice(&n.to_le_bytes());
+            data.extend_from_slice(&0u16.to_le_bytes());
+            data.extend_from_slice(name.as_bytes());
+            data.extend_from_slice(body);
+            central.extend_from_slice(&0x02014b50u32.to_le_bytes());
+            central.extend_from_slice(&[20, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0x21, 0]);
+            central.extend_from_slice(&crc.to_le_bytes());
+            central.extend_from_slice(&size.to_le_bytes());
+            central.extend_from_slice(&size.to_le_bytes());
+            central.extend_from_slice(&n.to_le_bytes());
+            central.extend_from_slice(&[0; 12]);
+            central.extend_from_slice(&offset.to_le_bytes());
+            central.extend_from_slice(name.as_bytes());
+        }
+        let cd_offset = data.len() as u32;
+        let count = files.len() as u16;
+        data.extend_from_slice(&central);
+        data.extend_from_slice(&0x06054b50u32.to_le_bytes());
+        data.extend_from_slice(&[0, 0, 0, 0]);
+        data.extend_from_slice(&count.to_le_bytes());
+        data.extend_from_slice(&count.to_le_bytes());
+        data.extend_from_slice(&(central.len() as u32).to_le_bytes());
+        data.extend_from_slice(&cd_offset.to_le_bytes());
+        data.extend_from_slice(&0u16.to_le_bytes());
+        data
+    }
+
+    #[test]
+    fn classic_archives_unchanged() {
+        let files: Vec<(String, Vec<u8>)> = (0..50).map(|i| (format!("t/{i}.png"), vec![i as u8; i * 7])).collect();
+        assert_eq!(zip_bytes(&files), classic(&files));
+    }
+
+    #[test]
+    fn many_entries_round_trip() {
+        let files: Vec<(String, Vec<u8>)> = (0..70_000).map(|i| (format!("{i:05}.png"), vec![(i % 251) as u8; 3])).collect();
+        let dir = std::env::temp_dir().join(format!("revc-zip64-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("big.zip");
+        write_zip(&path, &files).unwrap();
+        let entries = crate::ziparchive::list(&path).unwrap();
+        assert_eq!(entries.len(), 70_000);
+        assert_eq!(entries[69_999].name, "69999.png");
+        assert_eq!(entries[69_999].read().unwrap(), vec![(69_999 % 251) as u8; 3]);
         std::fs::remove_dir_all(&dir).ok();
     }
 }
