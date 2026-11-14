@@ -144,6 +144,14 @@ pub const MANIFEST: &[Lift] = &[
     Lift { kind: DiscKind::Ps2, dir: "TEXT/AMERICAN.GXT", exts: &[], dest: "text" },
 ];
 
+/// Where a PS2 radio or cutscene stream goes under the import's folder, or None:
+/// `AUDIO/MUSIC/FLASH.VB` -> `audio/music/flash.vb`, `AUDIO/CUTSCENE/COK/COK_4A.VB` -> `audio/cutscene/cok/cok_4a.vb`.
+fn ps2_audio_dest(path: &str) -> Option<PathBuf> {
+    let p = path.to_ascii_lowercase();
+    let rest = p.strip_prefix("audio/")?;
+    ((rest.starts_with("music/") || rest.starts_with("cutscene/")) && rest.ends_with(".vb")).then(|| Path::new("audio").join(rest))
+}
+
 /// Where a map file of the disc goes under the import's folder, or None: the map definitions and
 /// placements (IDE, IPL, ZON) and the area collision files below `data/` keep their folders under
 /// `maps/` (lower case; `DATA/MAPS/BANK/BANK.IPL` -> `maps/maps/bank/bank.ipl`), with the level file
@@ -167,8 +175,7 @@ fn lift_map_files(disc: &mut Disc, root: &Path, report: &mut Report) -> Result<u
     let wanted: Vec<(Entry, PathBuf)> = disc.entries.iter().filter_map(|e| Some((e.clone(), root.join(map_file_dest(&e.path)?)))).collect();
     for (e, dest) in &wanted {
         let data = disc.read(e).map_err(|err| format!("{}: {err}", e.path))?;
-        std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
-        std::fs::write(dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+        space::write_file(&dest, &data)?;
         report.written.push(dest.clone());
     }
     Ok(wanted.len())
@@ -211,13 +218,39 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
     if wanted.is_empty() {
         return Err("nothing to import from this disc".into());
     }
+    // Disk space: the files to write, an upper bound for the converted archive contents, plus a
+    // margin (space.rs); refused before anything is written when short
+    let ps2_audio: Vec<Entry> = if disc.kind == DiscKind::Ps2 {
+        disc.entries.iter().filter(|e| ps2_audio_dest(&e.path).is_some()).cloned().collect()
+    } else {
+        Vec::new()
+    };
+    let archives: u64 = disc.entries.iter().filter(|e| {
+        let p = e.path.to_ascii_lowercase();
+        (p.starts_with("models/gta3") && p.ends_with(".img")) || p == "anim/cuts.img"
+    }).map(|e| e.size).sum();
+    let needed: u64 = wanted.iter().map(|(e, _)| e.size).sum::<u64>()
+        + ps2_audio.iter().map(|e| e.size).sum::<u64>()
+        + disc.entries.iter().filter(|e| map_file_dest(&e.path).is_some()).map(|e| e.size).sum::<u64>()
+        + archives;
+    std::fs::create_dir_all(&root).map_err(|e| format!("{}: {e}", root.display()))?;
+    match space::check(&root, needed, space::free_bytes(&root))? {
+        Some(free) => eprintln!("revc-import: about {} to write, {} free", space::human(needed), space::human(free)),
+        None => eprintln!("revc-import: free disk space unknown here; writing about {} (a full disk stops the import cleanly)", space::human(needed)),
+    }
     let mut report = Report::default();
+    // The PS2's radio and cutscene streams (roadmap R5: the PS2 style plays them)
+    for e in &ps2_audio {
+        let dest = root.join(ps2_audio_dest(&e.path).unwrap());
+        let data = disc.read(e).map_err(|err| format!("{}: {err}", e.path))?;
+        space::write_file(&dest, &data)?;
+        report.written.push(dest);
+    }
     for (e, lift) in wanted {
         let name = e.path.rsplit('/').next().unwrap_or(&e.path).to_ascii_lowercase();
         let dest = root.join(lift.dest).join(name);
         let data = disc.read(&e).map_err(|err| format!("{}: {err}", e.path))?;
-        std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
-        std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+        space::write_file(&dest, &data)?;
         report.written.push(dest);
     }
     // Map data per style (roadmap R4): the definitions, placements and collision, read in the
@@ -251,8 +284,7 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                     match converted {
                         Ok(data) => {
                             let dest = root.join("models-world").join(&name);
-                            std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
-                            std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+                            space::write_file(&dest, &data)?;
                             report.written.push(dest);
                             models += 1;
                         }
@@ -267,8 +299,7 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                     let raw = disc.read_range(&i, off, size).map_err(|err| format!("{name}: {err}"))?;
                     let data = xboxlm::img_entry(&raw).map_err(|err| format!("{name}: {err}"))?;
                     let dest = root.join("coll").join(&name);
-                    std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
-                    std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+                    space::write_file(&dest, &data)?;
                     report.written.push(dest);
                     continue;
                 }
@@ -281,8 +312,7 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                 let raw = disc.read_range(&i, off, size).map_err(|err| format!("{name}: {err}"))?;
                 let data = xboxlm::img_entry(&raw).map_err(|err| format!("{name}: {err}"))?;
                 let dest = root.join("vehicles").join(&name);
-                std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
-                std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+                space::write_file(&dest, &data)?;
                 report.written.push(dest);
             }
             eprintln!("revc-import: {models} Xbox models converted; kept as PC models: {kept_pc:?}");
@@ -290,8 +320,7 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
         for (bin, txd) in lightmaps {
         for (file, data) in [("lightmaps.bin", bin), ("lightmaps.txd", txd)] {
             let dest = root.join("models").join(file);
-            std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
-            std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+            space::write_file(&dest, &data)?;
             report.written.push(dest);
         }
         }
@@ -346,8 +375,7 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                     } else {
                         (root.join("world").join(&name), data)
                     };
-                    std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
-                    std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+                    space::write_file(&dest, &data)?;
                     report.written.push(dest);
                 }
                 eprintln!("revc-import: {models} PS2 models converted; kept as PC models: {kept_pc:?}");
@@ -367,8 +395,7 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                 let size = u32::from_le_bytes(e[4..8].try_into().unwrap()) as usize * 2048;
                 let data = disc.read_range(&i, off, size).map_err(|err| format!("{name}: {err}"))?;
                 let dest = root.join("cuts").join(&name);
-                std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
-                std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+                space::write_file(&dest, &data)?;
                 report.written.push(dest);
             }
         }
@@ -377,8 +404,7 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
         if let Some(e) = disc.find("MODELS/GENERIC.TXD").cloned() {
             let data = disc.read(&e).map_err(|err| format!("GENERIC.TXD: {err}"))?;
             let dest = root.join("world").join("generic.txd");
-            std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
-            std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+            space::write_file(&dest, &data)?;
             if !report.written.contains(&dest) {
                 report.written.push(dest);
             }
@@ -436,3 +462,4 @@ pub fn imported(cache: &Path, kind: DiscKind) -> bool {
 
 #[cfg(test)]
 mod tests;
+pub mod space;

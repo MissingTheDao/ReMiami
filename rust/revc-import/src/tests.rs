@@ -188,3 +188,18 @@ fn map_files_keep_their_folders() {
     assert_eq!(d("DATA/TIMECYC.DAT"), None);
     assert_eq!(d("MODELS/GTA3.IMG"), None);
 }
+
+#[test]
+fn ps2_audio_keeps_its_folders() {
+    let d = |p: &str| ps2_audio_dest(p).map(|x| x.to_string_lossy().into_owned());
+    assert_eq!(d("AUDIO/MUSIC/FLASH.VB").as_deref(), Some("audio/music/flash.vb"));
+    assert_eq!(d("AUDIO/CUTSCENE/COK/COK_4A.VB").as_deref(), Some("audio/cutscene/cok/cok_4a.vb"));
+    assert_eq!(d("AUDIO/SFX/SET0.VB"), None);
+    assert_eq!(d("AUDIO/MUSIC/README.TXT"), None);
+}
+
+#[test]
+fn import_refuses_when_space_is_short() {
+    let err = space::check(std::path::Path::new("/x"), 1_600_000_000, Some(2_000_000_000)).unwrap_err();
+    assert!(err.contains("not enough disk space") && err.contains("2.67 GB") && err.contains("2.00 GB"), "{err}");
+}

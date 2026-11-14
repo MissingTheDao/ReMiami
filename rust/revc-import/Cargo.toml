@@ -7,3 +7,6 @@ publish.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+# statvfs for the free-space check before an import (space.rs; unix only)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
