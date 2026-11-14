@@ -105,9 +105,9 @@ Known limits, not bugs: shadows, lights and particles still move in 30 Hz steps;
 animate at 30 Hz (only the body moves smoothly). Random events (which peds and cars appear, and
 the like) are not the same at different frame rates, as drawing takes random numbers from the
 game, as in the original; nothing runs faster or slower because of it. Above 60 Hz the
-menu's open and close fades are not yet checked against the console recordings: the automated
-comparison doesn't match there (open and close of the PS2 menu from 144 Hz, the Xbox menu's close
-from 240 Hz), and it isn't settled yet whether the fades or the test's timing are at fault.
+menu's open and close fades step exactly as at 60 Hz (checked frame by frame at 240 Hz); the
+automated comparison with the console recordings still reports them as different there (a test
+limitation: its capture window starts a few frames early at those rates).
 
 ## Session 3: PS2 style (about 10 min; PS2 disc imported, menu language English)
 
