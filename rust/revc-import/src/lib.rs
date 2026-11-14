@@ -142,6 +142,11 @@ pub const MANIFEST: &[Lift] = &[
     Lift { kind: DiscKind::Xbox, dir: "data/particle.cfg", exts: &[], dest: "data" },
     Lift { kind: DiscKind::Xbox, dir: "models/particle.txd", exts: &[], dest: "models" },
     Lift { kind: DiscKind::Ps2, dir: "TEXT/AMERICAN.GXT", exts: &[], dest: "text" },
+    // The Xbox's cutscene hands (roadmap R4): which hands each cutscene character gets, and the
+    // finger poses (RenderWare hierarchy animations); the model is in models-world, its
+    // dictionary comes out of gta3.img below.
+    Lift { kind: DiscKind::Xbox, dir: "data/cutscenehands.xml", exts: &[], dest: "data" },
+    Lift { kind: DiscKind::Xbox, dir: "anim/", exts: &[".anm"], dest: "anim" },
 ];
 
 /// Where a PS2 radio or cutscene stream goes under the import's folder, or None:
@@ -304,6 +309,17 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                     continue;
                 }
                 let Some(stem) = name.strip_suffix(".txd") else { continue };
+                // the cutscene hands' textures (with the hands model, models-world/cshands.dff)
+                if stem == "cshands" {
+                    let off = u32::from_le_bytes(e[0..4].try_into().unwrap()) as u64 * 2048;
+                    let size = u32::from_le_bytes(e[4..8].try_into().unwrap()) as usize * 2048;
+                    let raw = disc.read_range(&i, off, size).map_err(|err| format!("{name}: {err}"))?;
+                    let data = xboxlm::img_entry(&raw).map_err(|err| format!("{name}: {err}"))?;
+                    let dest = root.join("models").join(&name);
+                    space::write_file(&dest, &data)?;
+                    report.written.push(dest);
+                    continue;
+                }
                 if !names.contains(stem) {
                     continue;
                 }
