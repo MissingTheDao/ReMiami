@@ -459,7 +459,26 @@ impl<'a> Builder<'a> {
             }
         }
         let mut skin = std::ptr::null();
-        if let Some(sk) = plugin_chunks(c).into_iter().find(|p| p.id == 0x116) {
+        let skin_chunk = plugin_chunks(c).into_iter().find(|p| p.id == 0x116);
+        if let Some(sk) = skin_chunk.as_ref().filter(|sk| revc_formats::xboxskin::is_xbox_native(sk.data)) {
+            // the Xbox's native layout (its cutscene models): converted to the arrays below
+            let x = revc_formats::xboxskin::xbox_native_skin(sk.data, nv).map_err(e)?;
+            let weights: Vec<u8> = x.weights.iter().flat_map(|w| w.to_le_bytes()).collect();
+            let s = Box::new(DffSkin {
+                header: x.header,
+                used_bones: x.used_bones.as_ptr(),
+                indices: x.indices.as_ptr(),
+                weights: weights.as_ptr(),
+                inverse_matrices: x.inverse_matrices.as_ptr(),
+                bone_limit: 0,
+                num_meshes: 0,
+                rle_size: 0,
+                split: std::ptr::null(),
+            });
+            skin = &*s as *const DffSkin;
+            self.o._bytes.extend([x.used_bones, x.indices, weights, x.inverse_matrices]);
+            self.o._skins.push(s);
+        } else if let Some(sk) = skin_chunk {
             let mut r = sk.reader();
             let h = r.bytes(4, "skin header").map_err(e)?;
             let header = [h[0], h[1], h[2], h[3]];
@@ -734,5 +753,32 @@ pub unsafe extern "C" fn revc_dff_read(data: *const u8, len: usize, out: *mut *c
 pub unsafe extern "C" fn revc_dff_free(handle: *mut std::ffi::c_void) {
     if !handle.is_null() {
         drop(unsafe { Box::from_raw(handle.cast::<Owned>()) });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// The Xbox cutscene models (local import, skipped without REVC_XBOX_MODELS): every cs*.dff
+    /// reads, and each skinned geometry gets the converted skin (used bones listed, so the new format).
+    #[test]
+    fn xbox_cutscene_models_read() {
+        let Some(dir) = std::env::var_os("REVC_XBOX_MODELS") else { return };
+        let (mut files, mut skins) = (0, 0);
+        for e in std::fs::read_dir(dir).unwrap() {
+            let p = e.unwrap().path();
+            let name = p.file_name().unwrap().to_string_lossy().to_lowercase();
+            if !(name.starts_with("cs") && name.ends_with(".dff")) {
+                continue;
+            }
+            let d = std::fs::read(&p).unwrap();
+            let o = super::read(&d).unwrap_or_else(|e| panic!("{name}: {e}"));
+            for s in &o._skins {
+                assert!(s.header[1] > 0 && !s.used_bones.is_null(), "{name}");
+                skins += 1;
+            }
+            files += 1;
+        }
+        eprintln!("{files} files, {skins} skins read");
+        assert!(files > 0 && skins > 0);
     }
 }

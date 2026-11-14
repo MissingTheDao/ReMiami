@@ -401,6 +401,20 @@ happens, no restart: tear gas hurts Tommy and mission characters (#68; `core/Wor
 SetPedsChoking). The PC and Xbox styles keep the PC's behaviour. Map data per style also changes
 what is where (above), but it takes effect at the next start.
 
+## Xbox models with native skins
+
+The Xbox's cutscene character models (all 74 `cs*.dff` on the disc, the cutscene hands among
+them) store their skin in the Xbox's own layout, not the PC's. The model reader converts it when
+it finds that layout and reads every other model exactly as before (`is_xbox_native` and
+`xbox_native_skin` in `rust/revc-formats/src/xboxskin.rs`, called from `rust/revc/src/dffload.rs`).
+A skin it doesn't recognise is refused with the reason in the log, and the model isn't loaded, as
+with any other bad file. Only the cutscene hands use these models today. The import copies the
+files unchanged; nothing is converted at import.
+
+Later: the import has no format version (`IMPORTED.txt` records only the disc image and the file
+count), so the first change to what an import writes will need one, to tell an old import from a
+current one.
+
 ## Xbox fire (R4)
 
 The Xbox's flames burn white-hot and are animated; the PC and PS2 use one orange flame texture.

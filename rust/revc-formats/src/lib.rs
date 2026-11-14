@@ -16,6 +16,7 @@ pub mod scm;
 pub mod text;
 pub mod txd;
 pub mod xboximg;
+pub mod xboxskin;
 
 use std::fmt;
 
