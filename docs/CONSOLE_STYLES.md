@@ -334,6 +334,47 @@ PC's script nothing would. Tied to the console-missions question (roadmap R4 ite
 Check: `REVC_TEST_CUT_LOAD=cut,cut…` (any scenario that visits scenes) loads each cut's data and
 logs its camera path end and animation lengths; the log says which parts came from the PS2.
 
+## Map data per style (R4)
+
+In the PS2 and Xbox styles, while the style draws the console's own world models
+(`Ps2WorldModels` / `XboxWorldModels`, default on), the level loads the console's map definitions
+and placements instead of the PC's (`rust/revc/src/mapstyle.rs`, `mapstyle_patch.rs`;
+`core/FileLoader.cpp`, `collision/ColStore.cpp`). It applies when the level loads, i.e. at start:
+changing the style in the menu shows "map data changes on next start".
+
+- **Objects (IDE)** match the PC's by model name and keep the PC's ids (the mission script names
+  objects by id): draw distances, flags and texture dictionaries come from the console. Objects only
+  the console has get free ids; their converted models (and empty dictionaries the console's texture
+  pack fills, for three PS2 dictionaries the PC lacks) come in a small extra image written next to
+  the import. `default.ide` (weapons, wheels, the Xbox's hand model entry) stays the PC's: it isn't
+  map data, so the Xbox's ten longer wheel draw distances aren't used.
+- **Placements (IPL)** match by model name and position rounded to a metre. A matched placement takes
+  the console's line (interior, exact position, rotation) with the PC's id; a PC placement the
+  console doesn't have is still created (the pools keep their order, which saves refer to) but
+  hidden and without collision; the console's extra placements load after all of the PC's. A moved
+  object counts as one removed and one added.
+- **Collision follows what the player sees** (the user's rule). The console's collision is taken
+  only where the console's drawn model changed with it, each checked to fit the drawn console mesh:
+  9 PS2 models (the mansion grounds `man_grnd5`, the Little Havana pieces and a Little Haiti house, the mansion hall's
+  reflection, which has none on the PS2, the hotel bush, the building site, the Ocean Drive
+  chariot) and 1 Xbox model (`deco_polbuild`); plus the PS2's collision for three objects it placed
+  differently, and the new objects' own collision. Everything else keeps the PC's collision, also
+  where the console's differs: about 64 PS2 and 28 Xbox models whose drawn mesh is the PC's, among
+  them every Xbox road and ground piece, the North Beach promenade fence (its Xbox hull reaches
+  73 m past the fence), an airport wall and an Ocean Drive alley. Never taken from a console:
+  vehicles, script props, gates and roadblocks (`generic.col`, `vehicles.col`), and collision
+  entries without an object.
+
+Counts (tests pin them, `mapstyle.rs` `real_data_counts`, on the local imports):
+
+| | objects added / removed | texture dict. | draw dist. | flags | placements added / removed | interior changes | collision taken |
+|---|---|---|---|---|---|---|---|
+| PS2 v1.40 | 19 / 39 (6 of them time objects) | 4 | 21 | 75 | 30 / 50 | 195 | 9 + 3, and 19 new |
+| Xbox | 4 / 1 | 0 | 96 | 3 | 17 / 7 | 134 | 1, and 4 new |
+
+The import writes the console's map files under `<import>/<ps2|xbox>/maps/` and `coll/`; the
+patched files go to `maps-patched/` there at start. Nothing from the discs is in the repo.
+
 ## Xbox fire (R4)
 
 The Xbox's flames burn white-hot and are animated; the PC and PS2 use one orange flame texture.

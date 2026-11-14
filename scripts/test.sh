@@ -41,7 +41,8 @@ GAME=${REVC_GAME_DIR:-$ROOT/game}
 [[ -d "$GAME/models" ]] || { echo "game data not found at $GAME (set REVC_GAME_DIR)" >&2; exit 2; }
 OUT=$ROOT/rust/target/test-output
 mkdir -p "$OUT"
-REF=$ROOT/tests/reference
+# REVC_TEST_REF_ROOT=<dir>: references from there instead (e.g. made in a console style with --bless)
+REF=${REVC_TEST_REF_ROOT:-$ROOT/tests/reference}
 # The wgpu references come from Vulkan. The GL backend matches them within 0.01 % except where
 # anisotropic filtering samples high-frequency textures at grazing angles (water sparkles, fences),
 # which the two drivers do slightly differently (up to ~1 %): allow 1.5 % there.

@@ -6,6 +6,8 @@ mod ps2pack;
 mod audio;
 mod formatcheck;
 mod prompts;
+mod mapstyle;
+mod mapstyle_patch;
 mod padtest;
 mod padscript;
 mod texmods;

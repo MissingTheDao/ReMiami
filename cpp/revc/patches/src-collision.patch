@@ -2060,6 +2060,32 @@
  }
  
  void
+--- a/src/collision/ColStore.cpp
++++ b/src/collision/ColStore.cpp
+@@ -103,11 +103,23 @@
+ 		def->maxIndex = modelIndex;
+ }
+ 
++#ifdef LIBRW_HOST
++// revc (map data per style): the console's collision for the reviewed models and its new objects (rust mapstyle.rs)
++extern "C" const uint8 *revc_map_style_col(const char *slot, const uint8 *buf, size_t len, size_t *outLen);
++#endif
++
+ bool
+ CColStore::LoadCol(int32 slot, uint8 *buffer, int32 bufsize)
+ {
+ 	bool success;
+ 	ColDef *def = GetSlot(slot);
++#ifdef LIBRW_HOST
++	size_t styledLen;
++	if(const uint8 *styled = revc_map_style_col(def->name, buffer, bufsize, &styledLen)){
++		buffer = (uint8*)styled;	// (only read)
++		bufsize = (int32)styledLen;
++	}
++#endif
+ 	if(def->minIndex > def->maxIndex)
+ 		success = CFileLoader::LoadCollisionFileFirstTime(buffer, bufsize, slot);
+ 	else
 --- a/src/collision/ColTriangle.cpp
 +++ b/src/collision/ColTriangle.cpp
 @@ -14,19 +14,12 @@

@@ -422,6 +422,15 @@
  }
 --- a/src/core/config.h
 +++ b/src/core/config.h
+@@ -38,7 +38,7 @@
+ 	NUMBUILDINGS = 7000,
+ 	NUMTREADABLES = 1,
+ 	NUMOBJECTS = 460,
+-	NUMDUMMIES = 2340,
++	NUMDUMMIES = 2400,	// (revc: 2340; the PC map uses 2336, the PS2's map data per style 2341)
+ 	NUMAUDIOSCRIPTOBJECTS = 192,
+ 	NUMCOLMODELS = 4400,
+ 	NUMCUTSCENEOBJECTS = 50,	// not a pool in VC
 @@ -336,10 +336,10 @@
  //#define DISABLE_CUTSCENE_SHADOWS
  
@@ -936,7 +945,96 @@
  #include "PathFind.h"
  #include "ObjectData.h"
  #include "DummyObject.h"
-@@ -162,6 +163,20 @@
+@@ -46,6 +47,30 @@
+ 	LoadingScreen("Loading the Game", gString, nil);
+ }
+ 
++#ifdef LIBRW_HOST
++// revc (roadmap R4, map data per style): the console's map files patched into the PC's (rust mapstyle.rs)
++extern "C" int revc_map_style_begin(const char *level, char *img, size_t cap);
++extern "C" int revc_map_style_file(const char *path, char *out, size_t cap);
++extern "C" int revc_map_style_extra_ipl(char *out, size_t cap);
++static int gMapStyleHidden, gMapStyleHiddenObjects;
++// the UI style the level loaded with (the menu notes when the style changes from it)
++int8 gMapStyleLevelStyle = -1;
++extern int8 gUiStyle;
++#endif
++// revc: the hidden dynamic objects stay dummies (CPopulation::ConvertToRealObject asks)
++static int gMapPlacementsSkipped;	// (pool full; a test failure: testdrive.rs)
++extern "C" int revc_test_map_skipped(void) { return gMapPlacementsSkipped; }
++static CEntity *gMapStyleHiddenDummies[256];
++static int gNumMapStyleHiddenDummies;
++bool
++CFileLoader::IsMapStyleHidden(CEntity *e)
++{
++	for(int i = 0; i < gNumMapStyleHiddenDummies; i++)
++		if(gMapStyleHiddenDummies[i] == e)
++			return true;
++	return false;
++}
++
+ void
+ CFileLoader::LoadLevel(const char *filename)
+ {
+@@ -64,6 +89,19 @@
+ 	fd = CFileMgr::OpenFile(filename, "r");
+ 	assert(fd > 0);
+ 
++#ifdef LIBRW_HOST
++	// the console style's patched map files, and its new objects' image (before the streaming
++	// directory is read at the first IPL)
++	char mapStylePath[512];
++	if(revc_map_style_begin(filename, mapStylePath, sizeof(mapStylePath)) && mapStylePath[0])
++		CdStreamAddImage(mapStylePath);
++	if(CGeneral::faststricmp(GetFilename(filename), "gta_vc.dat") == 0)
++		gMapStyleLevelStyle = gUiStyle;
++#define MAP_STYLE_FILE(f) (revc_map_style_file(f, mapStylePath, sizeof(mapStylePath)) ? mapStylePath : (f))
++#else
++#define MAP_STYLE_FILE(f) (f)
++#endif
++
+ 	for(line = LoadLine(fd); line; line = LoadLine(fd)){
+ 		if(*line == '#')
+ 			continue;
+@@ -92,7 +130,7 @@
+ 			LoadClumpFile(line + 9);
+ 		}else if(strncmp(line, "IDE", 3) == 0){
+ 			LoadingScreenLoadingFile(line + 4);
+-			LoadObjectTypes(line + 4);
++			LoadObjectTypes(MAP_STYLE_FILE(line + 4));
+ 		}else if(strncmp(line, "IPL", 3) == 0){
+ 			if(!objectsLoaded){
+ 				LoadingScreenLoadingFile("Collision");
+@@ -110,7 +148,7 @@
+ 			}
+ 			PUSH_MEMID(MEMID_WORLD);
+ 			LoadingScreenLoadingFile(line + 4);
+-			LoadScene(line + 4);
++			LoadScene(MAP_STYLE_FILE(line + 4));
+ 			POP_MEMID();
+ 		}else if(strncmp(line, "SPLASH", 6) == 0){
+ #ifndef DISABLE_LOADING_SCREEN
+@@ -123,6 +161,19 @@
+ 		}
+ 	}
+ 
++#ifdef LIBRW_HOST
++	// the console's extra placements, after all of the PC's (their pool slots come last, so saves
++	// keep pointing at the same buildings in every style)
++	if(revc_map_style_extra_ipl(mapStylePath, sizeof(mapStylePath))){
++		PUSH_MEMID(MEMID_WORLD);
++		LoadScene(mapStylePath);
++		POP_MEMID();
++	}
++	if(gMapStyleHidden)
++		printf("revc: map style: %d PC placements hidden (%d of them dynamic objects)\n", gMapStyleHidden, gMapStyleHiddenObjects);
++#endif
++#undef MAP_STYLE_FILE
++
+ 	CFileMgr::CloseFile(fd);
+ 	RwTexDictionarySetCurrent(savedTxd);
+ 
+@@ -162,6 +213,20 @@
  		if(RwStreamFindChunk(stream, rwID_TEXDICTIONARY, nil, nil))
  			txd = RwTexDictionaryGtaStreamRead(stream);
  		RwStreamClose(stream, nil);
@@ -957,6 +1055,90 @@
  	}
  	if(txd == nil)
  		txd = RwTexDictionaryCreate();
+@@ -1202,6 +1267,10 @@
+ 	if(mi == nil)
+ 		return;
+ 	assert(mi->IsSimple());
++	// revc (map data per style): a PC placement the console style doesn't have ('!' before the
++	// name in the patched file): still created, so the pools keep their order, but hidden and
++	// without collision
++	bool hidden = name[0] == '!';
+ 
+ 	if(!CStreaming::IsObjectInCdImage(id))
+ 		debug("Not in cdimage %s\n", mi->GetModelName());
+@@ -1217,6 +1286,12 @@
+ 			ThePaths.RegisterMapObject((CTreadable*)entity);
+ 		}else
+ 			entity = new CBuilding;
++		if(entity == nil){	// (revc: the pool is full; skip this one rather than crash)
++			printf("revc: LoadObjectInstance: building pool full, %s skipped\n", name);
++			gMapPlacementsSkipped++;
++			RwMatrixDestroy(xform);
++			return;
++		}
+ 		entity->SetModelIndexNoCreate(id);
+ 		entity->GetMatrix() = CMatrix(xform);
+ 		entity->m_level = CTheZones::GetLevelFromPosition(&entity->GetPosition());
+@@ -1227,7 +1302,7 @@
+ 			if(mi->m_isSubway)
+ 				entity->bIsSubway = true;
+ 		}
+-		if(mi->GetLargestLodDistance() < 2.0f)
++		if(mi->GetLargestLodDistance() < 2.0f || hidden)
+ 			entity->bIsVisible = false;
+ 		CWorld::Add(entity);
+ 
+@@ -1237,11 +1312,23 @@
+ 				CColStore::GetBoundingBox(col->level).ContainRect(entity->GetBoundRect());
+ 		}else
+ 			entity->bUsesCollision = false;
++		if(hidden){
++			entity->bUsesCollision = false;
++#ifdef LIBRW_HOST
++			gMapStyleHidden++;
++#endif
++		}
+ 
+ 		if(entity->GetPosition().z + col->boundingBox.min.z < 6.0f)
+ 			entity->bUnderwater = true;
+ 	}else{
+ 		entity = new CDummyObject;
++		if(entity == nil){	// (revc: the pool is full; skip this one rather than crash)
++			printf("revc: LoadObjectInstance: dummy pool full, %s skipped\n", name);
++			gMapPlacementsSkipped++;
++			RwMatrixDestroy(xform);
++			return;
++		}
+ 		entity->SetModelIndexNoCreate(id);
+ 		entity->GetMatrix() = CMatrix(xform);
+ 		CWorld::Add(entity);
+@@ -1249,6 +1336,16 @@
+ 			entity->bIsVisible = false;
+ 		entity->m_level = CTheZones::GetLevelFromPosition(&entity->GetPosition());
+ 		entity->m_area = area;
++		if(hidden){
++			entity->bIsVisible = false;
++			entity->bUsesCollision = false;
++			if(gNumMapStyleHiddenDummies < ARRAY_SIZE(gMapStyleHiddenDummies))
++				gMapStyleHiddenDummies[gNumMapStyleHiddenDummies++] = entity;
++#ifdef LIBRW_HOST
++			gMapStyleHidden++;
++			gMapStyleHiddenObjects++;
++#endif
++		}
+ 	}
+ 
+ 	RwMatrixDestroy(xform);
+--- a/src/core/FileLoader.h
++++ b/src/core/FileLoader.h
+@@ -36,6 +36,7 @@
+ 
+ 	static void LoadScene(const char *filename);
+ 	static void LoadObjectInstance(const char *line);
++	static bool IsMapStyleHidden(class CEntity *e);	// (revc: map data per style)
+ 	static void LoadZone(const char *line);
+ 	static void LoadCullZone(const char *line);
+ 	static void LoadPickup(const char *line);
 --- a/src/core/Frontend.cpp
 +++ b/src/core/Frontend.cpp
 @@ -53,7 +53,10 @@
@@ -1456,9 +1638,15 @@
  			break;
  		case 2:
  			CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN), TheText.Get("FET_HRD"));
-@@ -839,6 +1123,30 @@
+@@ -838,7 +1122,36 @@
+ 		case 5:
  			CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN), TheText.Get("FET_RSC"));
  			break;
++#ifdef LIBRW_HOST
++		case 6:	// revc: map data per style loads with the level (FileLoader.cpp)
++			CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN), TheText.Get("RVC_MSR"));
++			break;
++#endif
  		default:
 +#ifdef LIBRW_HOST
 +			// With a controller: entries that change with left/right show the stick glyphs
@@ -1487,7 +1675,7 @@
  			if (aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_NO)
  				return;
  
-@@ -846,7 +1154,7 @@
+@@ -846,7 +1159,7 @@
  				aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_SFXVOLUME) {
  
  				CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN),
@@ -1496,7 +1684,7 @@
  				return;
  			}
  
-@@ -857,10 +1165,10 @@
+@@ -857,10 +1170,10 @@
  #ifdef LIBRW_HOST
  				// The SDL3 host changes resolution live, so it's available in-game too.
  				CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN),
@@ -1509,7 +1697,7 @@
  #endif
  				return;
  			}
-@@ -869,7 +1177,7 @@
+@@ -869,7 +1182,7 @@
  				aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_SPEAKERCONF) {
  
  				CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN),
@@ -1518,7 +1706,7 @@
  				return;
  			}
  
-@@ -878,12 +1186,12 @@
+@@ -878,12 +1191,12 @@
  
  			if (aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_MP3VOLUMEBOOST) {
  				CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN),
@@ -1533,7 +1721,7 @@
  
  			break;
  	}
-@@ -892,6 +1200,9 @@
+@@ -892,6 +1205,9 @@
  int
  CMenuManager::DisplaySlider(float x, float y, float mostLeftBarSize, float mostRightBarSize, float rectSize, float progress, float spacing) 
  {
@@ -1543,7 +1731,7 @@
  	CRGBA color;
  	float maxBarHeight;
  
-@@ -943,8 +1254,18 @@
+@@ -943,8 +1259,18 @@
  void
  CMenuManager::DrawStandardMenus(bool activeScreen)
  {
@@ -1563,7 +1751,7 @@
  	CFont::SetBackgroundOff();
  	CFont::SetPropOn();
  	CFont::SetCentreOff();
-@@ -969,13 +1290,71 @@
+@@ -969,13 +1295,71 @@
  		case MENUPAGE_CHOOSE_LOAD_SLOT:
  		case MENUPAGE_CHOOSE_DELETE_SLOT:
  		case MENUPAGE_CHOOSE_SAVE_SLOT:
@@ -1635,7 +1823,7 @@
  			break;
  		case MENUPAGE_STATS:
  			PrintStats();
-@@ -983,22 +1362,95 @@
+@@ -983,22 +1367,95 @@
  		case MENUPAGE_BRIEFS:
  			PrintBriefs();
  			break;
@@ -1734,7 +1922,7 @@
  		CFont::SetWrapx(MENU_X_RIGHT_ALIGNED(MENULABEL_X_MARGIN));
  		CFont::SetRightJustifyWrap(MENU_X_LEFT_ALIGNED(MENULABEL_X_MARGIN));
  		CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
-@@ -1037,6 +1489,32 @@
+@@ -1037,6 +1494,32 @@
  			break;
  		}
  
@@ -1767,7 +1955,7 @@
  		CFont::PrintString(MENU_X_LEFT_ALIGNED(100.0f), MENU_Y(97.0f), str);
  		CFont::SetWrapx(MENU_X_RIGHT_ALIGNED(xMargin));
  		CFont::SetRightJustifyWrap(MENU_X_LEFT_ALIGNED(xMargin));
-@@ -1076,7 +1554,9 @@
+@@ -1076,7 +1559,9 @@
  				CFont::SetDropShadowPosition(0);
  			} else {
  				CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
@@ -1778,7 +1966,7 @@
  				CFont::SetDropShadowPosition(2);
  				CFont::SetDropColor(CRGBA(0, 0, 0, FadeIn(255)));
  				CFont::SetColor(CRGBA(MENUOPTION_COLOR.r, MENUOPTION_COLOR.g, MENUOPTION_COLOR.b, FadeIn(255)));
-@@ -1399,14 +1879,21 @@
+@@ -1399,14 +1884,21 @@
  				}
  
  				// Highlight trapezoid
@@ -1802,7 +1990,7 @@
  					
  					wchar *curOptionName = TheText.Get(aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_EntryName);
  					float curOptionWidth = CFont::GetStringWidth(curOptionName, true);
-@@ -1437,6 +1924,37 @@
+@@ -1437,6 +1929,37 @@
  						rightXMin = 600;
  						leftXMax = 40;
  					}
@@ -1840,7 +2028,7 @@
  
  					int y = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Y MINUS_SCROLL_OFFSET;
  					int topYMax = y;
-@@ -1446,7 +1964,7 @@
+@@ -1446,7 +1969,7 @@
  					// So this shows us either R* didn't use same struct for menu BG and highlight, or they just kept fields as x1,y1 etc. Yikes.
  
  					if (m_nOptionHighlightTransitionBlend == 0) {
@@ -1849,7 +2037,7 @@
  							CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(menuOptionHighlight.topLeft_x), MENU_Y(menuOptionHighlight.topLeft_y),
  								MENU_X_LEFT_ALIGNED(menuOptionHighlight.topRight_x), MENU_Y(menuOptionHighlight.topRight_y),
  								MENU_X_LEFT_ALIGNED(menuOptionHighlight.bottomRight_x), MENU_Y(menuOptionHighlight.bottomRight_y),
-@@ -1461,12 +1979,44 @@
+@@ -1461,12 +1984,44 @@
  						menuOptionHighlight.bottomLeft_y = bottomYMin + CGeneral::GetRandomNumber() % 7;
  						menuOptionHighlight.bottomRight_x = leftXMax - 5 - CGeneral::GetRandomNumber() % 10;
  						menuOptionHighlight.bottomRight_y = bottomYMin + CGeneral::GetRandomNumber() % 7;
@@ -1895,7 +2083,7 @@
  							CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(menuOptionHighlight.topLeft_x), MENU_Y(menuOptionHighlight.topLeft_y),
  								MENU_X_LEFT_ALIGNED(menuOptionHighlight.topRight_x), MENU_Y(menuOptionHighlight.topRight_y),
  								MENU_X_LEFT_ALIGNED(menuOptionHighlight.bottomRight_x), MENU_Y(menuOptionHighlight.bottomRight_y),
-@@ -1475,7 +2025,7 @@
+@@ -1475,7 +2030,7 @@
  					} else {
  						m_nOptionHighlightTransitionBlend = 255;
  						menuOptionHighlight.Translate(m_nOptionHighlightTransitionBlend);
@@ -1904,7 +2092,7 @@
  							CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(menuOptionHighlight.topLeft_x), MENU_Y(menuOptionHighlight.topLeft_y),
  								MENU_X_LEFT_ALIGNED(menuOptionHighlight.topRight_x), MENU_Y(menuOptionHighlight.topRight_y),
  								MENU_X_LEFT_ALIGNED(menuOptionHighlight.bottomRight_x), MENU_Y(menuOptionHighlight.bottomRight_y),
-@@ -1483,13 +2033,30 @@
+@@ -1483,13 +2038,30 @@
  						}
  					}
  
@@ -1936,7 +2124,7 @@
  							lastBlendChange = CTimer::GetTimeInMillisecondsPauseMode();
  							blendChangeCounter = 0;
  						}
-@@ -1501,6 +2068,548 @@
+@@ -1501,6 +2073,548 @@
  					}
  				}
  
@@ -2485,7 +2673,7 @@
  				if (section == 1) {
  					if (leftText) {
  						CFont::PrintString(MENU_X_LEFT_ALIGNED(aScreens[m_nCurrScreen].m_aEntries[i].m_X), MENU_Y(aScreens[m_nCurrScreen].m_aEntries[i].m_Y MINUS_SCROLL_OFFSET), leftText);
-@@ -1561,15 +2670,15 @@
+@@ -1561,15 +2675,15 @@
  					}
  
  #ifdef CUSTOM_FRONTEND_OPTIONS
@@ -2504,7 +2692,7 @@
  							break;
  						case MENUACTION_DRAWDIST:
  							ProcessSlider((m_PrefsLOD - 0.925f) / 0.875f, SLIDER_Y(99.0f), HOVEROPTION_INCREASE_DRAWDIST, HOVEROPTION_DECREASE_DRAWDIST, SCREEN_WIDTH, true);
-@@ -1617,7 +2726,7 @@
+@@ -1617,7 +2731,7 @@
  	#define SCROLLBAR_WIDTH 9.5f
  	#define SCROLLBAR_TOP_Y 84
  
@@ -2513,7 +2701,7 @@
  		// Scrollbar background
  		CSprite2d::DrawRect(CRect(MENU_X_RIGHT_ALIGNED(SCROLLBAR_RIGHT_X - 2), MENU_Y(SCROLLBAR_TOP_Y),
  			MENU_X_RIGHT_ALIGNED(SCROLLBAR_RIGHT_X - 2 - SCROLLBAR_WIDTH), SCREEN_SCALE_FROM_BOTTOM(SCROLLBAR_BOTTOM_Y)), CRGBA(30, 30, 30, FadeIn(150)));
-@@ -1650,6 +2759,7 @@
+@@ -1650,6 +2764,7 @@
  		case MENUPAGE_CONTROLLER_PC:
  		case MENUPAGE_SOUND_SETTINGS:
  		case MENUPAGE_DISPLAY_SETTINGS:
@@ -2521,7 +2709,7 @@
  		case MENUPAGE_MOUSE_CONTROLS:
  			DisplayHelperText(nil);
  			break;
-@@ -1671,11 +2781,9 @@
+@@ -1671,11 +2786,9 @@
  	if (m_nCurrScreen == MENUPAGE_DELETING_IN_PROGRESS) {
  		SmallMessageScreen("FEDL_WR");
  	}
@@ -2534,7 +2722,7 @@
  }
  
  int
-@@ -1728,6 +2836,12 @@
+@@ -1728,6 +2841,12 @@
  	for (int optionIdx = 0; optionIdx < numOptions; nextY = MENU_Y(++optionIdx * rowHeight + yStart)) {
  		int nextX = xStart;
  		int bindingsForThisOpt = 0;
@@ -2547,7 +2735,7 @@
  		int contSetOrder = SETORDER_1;
  		CFont::SetColor(CRGBA(255, 255, 255, FadeIn(255)));
  
-@@ -1943,9 +3057,18 @@
+@@ -1943,9 +3062,18 @@
  		for (; contSetOrder < MAX_SETORDERS && controllerAction != -1; contSetOrder++) {
  #endif
  			wchar *settingText = ControlsManager.GetControllerSettingTextWithOrderNumber((e_ControllerAction)controllerAction, (eContSetOrder)contSetOrder);
@@ -2567,7 +2755,7 @@
  					wchar *seperator = TheText.Get("FEC_IBT");
  					CFont::SetColor(CRGBA(255, 255, 255, FadeIn(255)));
  					CFont::PrintString(nextX, nextY, seperator);
-@@ -1960,9 +3083,9 @@
+@@ -1960,9 +3088,9 @@
  					nextX += CFont::GetStringWidth(settingText, true) + bindingMargin;
  			}
  		}
@@ -2579,7 +2767,7 @@
  
  		} else if (controllerAction == -2) {
  			CFont::SetColor(CRGBA(0, 0, 0, FadeIn(255)));
-@@ -2277,12 +3400,17 @@
+@@ -2277,12 +3405,17 @@
  	CFont::SetDropShadowPosition(2);
  	CFont::SetDropColor(CRGBA(0, 0, 0, FadeIn(255)));
  	CFont::SetColor(CRGBA(MENUOPTION_COLOR.r, MENUOPTION_COLOR.g, MENUOPTION_COLOR.b, FadeIn(255)));
@@ -2598,7 +2786,7 @@
  	CFont::SetAlphaFade(255.0f);
  	CSprite2d::InitPerFrame();
  	CFont::InitPerFrame();
-@@ -2293,7 +3421,8 @@
+@@ -2293,7 +3426,8 @@
  		if (m_bGameNotLoaded) {
  			m_nCurrScreen = MENUPAGE_START_MENU;
  		} else {
@@ -2608,7 +2796,7 @@
  		}
  		SETUP_SCROLLING(m_nCurrScreen)
  	}
-@@ -2307,6 +3436,8 @@
+@@ -2307,6 +3441,8 @@
  	DrawBackground(false);
  }
  
@@ -2617,7 +2805,7 @@
  void
  CMenuManager::DrawBackground(bool transitionCall)
  {
-@@ -2318,56 +3449,30 @@
+@@ -2318,56 +3454,30 @@
  	if (m_firstStartCounter < 255) {
  		CSprite2d::DrawRect(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(0, 0, 0, 255));
  	}
@@ -2698,7 +2886,7 @@
  		menuBg.SaveCurrentCoors();
  		switch (m_nCurrScreen) {
  			case MENUPAGE_STATS:
-@@ -2443,21 +3548,212 @@
+@@ -2443,21 +3553,212 @@
  				break;
  		}
  
@@ -2915,7 +3103,7 @@
  			}
  			LastFade = CTimer::GetTimeInMillisecondsPauseMode();
  #ifdef FIX_BUGS
-@@ -2474,11 +3770,16 @@
+@@ -2474,11 +3775,16 @@
  
  	if (!transitionCall && m_firstStartCounter == 255) {
  		int actualAlpha = m_nMenuFadeAlpha;
@@ -2934,7 +3122,7 @@
  			switch (m_nCurrScreen) {
  				case MENUPAGE_SKIN_SELECT:
  					DrawPlayerSetupScreen(false);
-@@ -2509,6 +3810,9 @@
+@@ -2509,6 +3815,9 @@
  			DrawQuitGameScreen();
  			break;
  		default:
@@ -2944,7 +3132,7 @@
  			DrawStandardMenus(true);
  			break;
  	}
-@@ -2516,11 +3820,11 @@
+@@ -2516,11 +3825,11 @@
  	CFont::DrawFonts();
  	SetFrontEndRenderStates();
  
@@ -2959,7 +3147,7 @@
  		}
  
  	if (m_ShowEmptyBindingError) {
-@@ -2538,7 +3842,16 @@
+@@ -2538,7 +3847,16 @@
  		}
  	}
  
@@ -2977,7 +3165,7 @@
  		CRect mouse(0.0f, 0.0f, MENU_X(35.0f), MENU_Y(35.0f));
  		CRect shad(MENU_X(10.0f), MENU_Y(3.0f), MENU_X(45.0f), MENU_Y(38.0f));
  
-@@ -2924,7 +4237,7 @@
+@@ -2924,7 +4242,7 @@
  	CFont::SetDropColor(CRGBA(0, 0, 0, FadeIn(255)));
  
  	// Back button
@@ -2986,7 +3174,7 @@
  	CFont::SetRightJustifyOff();
  
  	if (!strcmp(m_aSkinName, m_PrefsSkinFile)) {
-@@ -2938,9 +4251,195 @@
+@@ -2938,9 +4256,195 @@
  	CFont::SetDropShadowPosition(0);
  }
  
@@ -3182,7 +3370,7 @@
  	return Min(m_nMenuFadeAlpha, alpha);
  }
  
-@@ -3181,9 +4680,15 @@
+@@ -3181,9 +4685,15 @@
  		LoadINIControllerSettings();
  	}
  #endif
@@ -3199,7 +3387,7 @@
  #endif
  #ifdef PC_PLAYER_CONTROLS
  	CCamera::m_bUseMouse3rdPerson = m_ControlMethod == CONTROL_STANDARD;
-@@ -3349,14 +4854,45 @@
+@@ -3349,14 +4859,45 @@
  	CFont::PrintString(SCREEN_WIDTH / 2.f, y, TheText.Get(text));
  }
  
@@ -3247,7 +3435,7 @@
  	CFont::SetDropShadowPosition(0);
  
  	float nextY = BRIEFS_BOTTOM_MARGIN;
-@@ -3375,7 +4911,7 @@
+@@ -3375,7 +4916,7 @@
  			CFont::FilterOutTokensFromString(gUString);
  
  			nextY -= CFont::GetNumberLines(MENU_X_LEFT_ALIGNED(BRIEFS_LINE_X), nextY, gUString) * BRIEFS_LINE_HEIGHT + BRIEFS_LINE_SPACING;
@@ -3256,7 +3444,7 @@
  		}
  	}
  }
-@@ -3389,6 +4925,14 @@
+@@ -3389,6 +4930,14 @@
  	static float scrollY = 0;
  
  	int rowNum = CStats::ConstructStatLine(99999);
@@ -3271,7 +3459,7 @@
  	CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(90.0f), MENU_Y(142.0f),
  		MENU_X_LEFT_ALIGNED(543.0f), MENU_Y(142.f),
  		MENU_X_LEFT_ALIGNED(107.0f), MENU_Y(316.f),
-@@ -3413,13 +4957,21 @@
+@@ -3413,13 +4962,21 @@
  
  	static uint32 lastCheck = 0;
  
@@ -3296,7 +3484,7 @@
  		}
  		lastCheck = CTimer::GetTimeInMillisecondsPauseMode();
  	}
-@@ -3431,10 +4983,12 @@
+@@ -3431,10 +4988,12 @@
  
  	float nextYChange, y, alpha;
  
@@ -3311,7 +3499,7 @@
  			nextYChange = MENU_Y(totalHeight);
  		}
  
-@@ -3444,6 +4998,11 @@
+@@ -3444,6 +5003,11 @@
  		}
  		alpha = 0.f;
  
@@ -3323,7 +3511,7 @@
  		// If it's still on screen
  		if (y > MENU_Y(STATS_VISIBLE_START_Y) && y < MENU_Y(STATS_VISIBLE_END_Y)) {
  			CStats::ConstructStatLine(row);
-@@ -3464,27 +5023,49 @@
+@@ -3464,27 +5028,49 @@
  			if (y >= MENU_Y(STATS_TOP_Y + STATS_FADING_AREA_LENGTH) && y <= MENU_Y(STATS_BOTTOM_Y - STATS_FADING_AREA_LENGTH))
  				alpha = 255.0f;
  
@@ -3377,7 +3565,7 @@
  	AsciiToUnicode(gString, gUString);
  
  	UnicodeStrcpy(gUString2, CStats::FindCriminalRatingString());
-@@ -3496,18 +5077,22 @@
+@@ -3496,18 +5082,22 @@
  #else
  	CFont::SetScale(MENU_X(SMALLTEXT_X_SCALE), MENU_Y(SMALLTEXT_Y_SCALE));
  #endif
@@ -3404,7 +3592,7 @@
  
  	if (TheCamera.GetScreenFadeStatus() != FADE_0)
  		return;
-@@ -3587,7 +5172,9 @@
+@@ -3587,7 +5177,9 @@
  			}
  #else
  			// Adding marker
@@ -3415,7 +3603,7 @@
  				if (CPad::GetPad(0)->GetRightMouseJustDown() || CPad::GetPad(0)->GetCrossJustDown()) {
  					if (mapCrosshair.y > m_fMapCenterY - m_fMapSize && mapCrosshair.y < m_fMapCenterY + m_fMapSize &&
  						mapCrosshair.x > m_fMapCenterX - m_fMapSize && mapCrosshair.x < m_fMapCenterX + m_fMapSize) {
-@@ -3597,11 +5184,45 @@
+@@ -3597,11 +5189,45 @@
  						float x = ((mapCrosshair.x - diffX) / (m_fMapSize * 2)) * (WORLD_SIZE_X / MENU_MAP_WIDTH_SCALE) - (WORLD_SIZE_X / 2 + MENU_MAP_LEFT_OFFSET * MENU_MAP_LENGTH_UNIT);
  						float y = (WORLD_SIZE_Y / 2 - MENU_MAP_TOP_OFFSET * MENU_MAP_LENGTH_UNIT) - ((mapCrosshair.y - diffY) / (m_fMapSize * 2)) * (WORLD_SIZE_Y / MENU_MAP_HEIGHT_SCALE);
  						CRadar::ToggleTargetMarker(x, y);
@@ -3462,7 +3650,7 @@
  			if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
  				if (CPad::GetPad(0)->GetMouseWheelDown() && m_fMapSize > MENU_X(MAP_SIZE_TO_ALLOW_X_MOVE))
  					ZOOM(mapCrosshair.x, mapCrosshair.y, false);
-@@ -3715,11 +5336,11 @@
+@@ -3715,11 +5341,11 @@
  			break;
  		}
  		case MENUPAGE_SOUND_SETTINGS:
@@ -3476,7 +3664,7 @@
  					m_nHoverOption = HOVEROPTION_NEXT_RADIO;
  			}
  			break;
-@@ -3882,6 +5503,7 @@
+@@ -3882,6 +5508,7 @@
  CMenuManager::PrintRadioSelector(void)
  {
  	static uint32 lastRadioChange = 0;
@@ -3484,7 +3672,7 @@
  
  	CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(418.f), MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT),
  		MENU_X_LEFT_ALIGNED(228.f), MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT),
-@@ -3994,7 +5616,9 @@
+@@ -3994,7 +5621,9 @@
  
  	// Middle one(third) is colored differently depending on if it's in transition.
  	// If not in transition then this icon indicates selected radio, and should be on top of all icons. thus drawn last
@@ -3495,7 +3683,7 @@
  		m_aFrontEndSprites[third + MENUSPRITE_WILDSTYLE].Draw(m_LeftMostRadioX + MENU_X(MENURADIO_ICON_SIZE * 2), MENU_Y(MENURADIO_ICON_Y), MENU_X(MENURADIO_ICON_SIZE), MENU_Y(MENURADIO_ICON_SIZE),
  			CRGBA(INACTIVE_RADIO_COLOR.r, INACTIVE_RADIO_COLOR.g, INACTIVE_RADIO_COLOR.b, FadeIn(INACTIVE_RADIO_COLOR.a)));		
  	} else {
-@@ -4005,13 +5629,15 @@
+@@ -4005,13 +5634,15 @@
  
  	static bool radioChangeRequested = false;
  	static uint32 lastScrollCheck = 0;
@@ -3513,7 +3701,7 @@
  				radioChangeRequested = true;
  			}
  		}
-@@ -4020,7 +5646,7 @@
+@@ -4020,7 +5651,7 @@
  				m_LeftMostRadioX += MENU_X(6.f);
  			} else {
  				m_ScrollRadioBy = 0;
@@ -3522,7 +3710,7 @@
  				radioChangeRequested = true;
  			}
  		}
-@@ -4100,7 +5726,7 @@
+@@ -4100,7 +5731,7 @@
  	}
  
  	if (CPad::GetPad(0)->GetTabJustDown()) {
@@ -3531,7 +3719,7 @@
  		m_bShowMouse = false;
  		switch (m_nCurrExLayer) {
  		case HOVEROPTION_BACK:
-@@ -4136,7 +5762,7 @@
+@@ -4136,7 +5767,7 @@
  		if (!m_bPressedUpOnList) {
  			m_bPressedUpOnList = true;
  			lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
@@ -3540,7 +3728,7 @@
  			ScrollUpListByOne();
  		}
  	} else {
-@@ -4158,7 +5784,7 @@
+@@ -4158,7 +5789,7 @@
  		if (!m_bPressedDownOnList) {
  			m_bPressedDownOnList = true;
  			lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
@@ -3549,7 +3737,7 @@
  			ScrollDownListByOne();
  		}
  	} else {
-@@ -4174,7 +5800,7 @@
+@@ -4174,7 +5805,7 @@
  				m_bPressedPgUpOnList = true;
  				lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
  				m_bShowMouse = false;
@@ -3558,7 +3746,7 @@
  				PageUpList(false);
  			}
  		}
-@@ -4186,14 +5812,14 @@
+@@ -4186,14 +5817,14 @@
  				m_bPressedPgDnOnList = true;
  				lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
  				m_bShowMouse = false;
@@ -3575,7 +3763,7 @@
  			if (m_nTotalListRow >= MAX_VISIBLE_OPTION_ON_SCREEN) {
  				m_nFirstVisibleRowOnList = 0;
  			}
-@@ -4203,7 +5829,7 @@
+@@ -4203,7 +5834,7 @@
  		if (CPad::GetPad(0)->GetEnd()) {
  			m_nCurrExLayer = HOVEROPTION_LIST;
  			m_bShowMouse = false;
@@ -3584,7 +3772,7 @@
  			if (m_nTotalListRow >= MAX_VISIBLE_OPTION_ON_SCREEN) {
  				m_nFirstVisibleRowOnList = m_nTotalListRow - MAX_VISIBLE_OPTION_ON_SCREEN;
  			}
-@@ -4297,6 +5923,8 @@
+@@ -4297,6 +5928,8 @@
  
  	if (!m_AllowNavigation && m_firstStartCounter == 255)
  		m_AllowNavigation = true;
@@ -3593,7 +3781,7 @@
  	if (!m_bShowMouse && m_nCurrScreen != MENUPAGE_MAP && (m_nMouseOldPosX != m_nMousePosX || m_nMouseOldPosY != m_nMousePosY)) {
  		m_bShowMouse = true;
  	}
-@@ -4351,7 +5979,7 @@
+@@ -4351,7 +5984,7 @@
  				++m_nOptionMouseHovering;
  			}
  			m_nOptionHighlightTransitionBlend = 0;
@@ -3602,7 +3790,7 @@
  		}
  	}
  
-@@ -4458,16 +6086,21 @@
+@@ -4458,16 +6091,21 @@
  			|| CPad::GetPad(0)->GetAnaloguePadLeftJustUp() || CPad::GetPad(0)->GetAnaloguePadRightJustUp()
  			|| CPad::GetPad(0)->GetMouseWheelUpJustDown() || CPad::GetPad(0)->GetMouseWheelDownJustDown()) {
  			int option = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action;
@@ -3628,7 +3816,7 @@
  
  		}
  		if (CPad::GetPad(0)->GetBackJustDown() || CPad::GetPad(0)->GetEscapeJustDown()) {
-@@ -4547,7 +6180,8 @@
+@@ -4547,7 +6185,8 @@
  		}
  	}
  	if (changeValueBy != 0) {
@@ -3638,7 +3826,7 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_NOTHING
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_LABEL
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_YES
-@@ -4558,8 +6192,14 @@
+@@ -4558,8 +6197,14 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_RESTOREDEF
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_DRAWDIST
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_MOUSESENS
@@ -3655,7 +3843,7 @@
  		}
  	}
  	ProcessUserInput(goDown, goUp, optionSelected, goBack, changeValueBy);
-@@ -4661,7 +6301,7 @@
+@@ -4661,7 +6306,7 @@
  	int oldOption = m_nCurrOption;
  	if (goDown) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -3664,7 +3852,7 @@
  
  		m_nCurrOption++;
  		if (m_nCurrOption == NUM_MENUROWS || (aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_NOTHING)) {
-@@ -4672,7 +6312,7 @@
+@@ -4672,7 +6317,7 @@
  	}
  	if (goUp) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -3673,7 +3861,7 @@
  
  		if (m_nCurrOption == (aScreens[m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL)) {
  			while (m_nCurrOption != NUM_MENUROWS - 1
-@@ -4957,7 +6597,7 @@
+@@ -4957,7 +6602,7 @@
  					ControlsManager.MakeControllerActionsBlank();
  					ControlsManager.InitDefaultControlConfiguration();
  					ControlsManager.InitDefaultControlConfigMouse(MousePointerStateHelper.GetMouseSetUp());
@@ -3682,7 +3870,7 @@
  					if (AllValidWinJoys.m_aJoys[JOYSTICK1].m_bInitialised) {
  						DIDEVCAPS devCaps;
  						devCaps.dwSize = sizeof(DIDEVCAPS);
-@@ -5042,21 +6682,21 @@
+@@ -5042,21 +6687,21 @@
  			int saveSlot = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_SaveSlot;
  			if (saveSlot >= SAVESLOT_1 && saveSlot <= SAVESLOT_8 && Slots[m_nCurrOption] != SLOT_OK)
  #endif
@@ -3708,7 +3896,7 @@
  			m_ShowEmptyBindingError = true;
  		}
  	}
-@@ -5342,7 +6982,6 @@
+@@ -5342,7 +6987,6 @@
  		return SCREEN_STRETCH_Y(y);
  }
  
@@ -3716,7 +3904,7 @@
  void
  CMenuManager::CloseDialog(void)
  {
-@@ -5438,6 +7077,30 @@
+@@ -5438,6 +7082,30 @@
  
  	DefinedState();
  
@@ -3747,7 +3935,7 @@
  	CSprite2d::DrawRect(CRect(0, SCREEN_HEIGHT, SCREEN_WIDTH, 0), CRGBA(0, 0, 0, 160));
  
  	// Ofc this is not hardcoded like that on Xbox, it should be a texture
-@@ -5463,7 +7126,6 @@
+@@ -5463,7 +7131,6 @@
  	CFont::PrintString(x, y - SCREEN_SCALE_Y(numOfLines / 2.f), m_pDialogText);
  	CFont::DrawFonts();
  }
@@ -3755,7 +3943,7 @@
  
  void
  CMenuManager::ProcessFileActions()
-@@ -5488,13 +7150,11 @@
+@@ -5488,13 +7155,11 @@
  				CTheScripts::ScriptToLoad = 0;
  #endif
  
@@ -3773,7 +3961,7 @@
  				DoSettingsBeforeStartingAGame();
  				m_bWantToLoad = true;
  			} else
-@@ -5527,7 +7187,7 @@
+@@ -5527,7 +7192,7 @@
  		}
  		case MENUPAGE_SAVING_IN_PROGRESS:
  		{
@@ -3782,7 +3970,7 @@
  			if (m_bDialogOpen && DialogTextCmp("FESZ_WR")) {
  				uint32 startTime = CTimer::GetTimeInMillisecondsPauseMode();
  				int8 SaveSlot = PcSaveHelper.SaveSlot(m_nCurrSaveSlot);
-@@ -5561,7 +7221,7 @@
+@@ -5561,7 +7226,7 @@
  				SetDialogText("FESZ_WR");
  				ToggleDialog(true);
  			}
@@ -3791,7 +3979,7 @@
  			static bool waitedForScreen = false;
  
  			if (waitedForScreen) {
-@@ -5577,7 +7237,7 @@
+@@ -5577,7 +7242,7 @@
  				waitedForScreen = false;
  			} else if (m_nMenuFadeAlpha >= 255)
  				waitedForScreen = true;
@@ -3800,7 +3988,7 @@
  			break;
  		}
  	}
-@@ -5590,7 +7250,8 @@
+@@ -5590,7 +7255,8 @@
  
  		// Reminder: You need REGISTER_START_BUTTON defined to make it work.
  		if ((CPad::GetPad(0)->GetStartJustDown() || CPad::GetPad(0)->GetEscapeJustDown())
@@ -3810,7 +3998,7 @@
  			|| m_bShutDownFrontEndRequested || m_bStartUpFrontEndRequested
  #ifdef REGISTER_START_BUTTON
  			|| CPad::GetPad(0)->GetStartJustDown() && !m_bGameNotLoaded
-@@ -5598,9 +7259,7 @@
+@@ -5598,9 +7264,7 @@
  			) {
  
  			if (m_nCurrScreen != MENUPAGE_LOADING_IN_PROGRESS
@@ -3821,7 +4009,7 @@
  				) {
  				DoRWStuffStartOfFrame(0, 0, 0, 0, 0, 0, 255);
  				DoRWStuffEndOfFrame();
-@@ -5608,6 +7267,8 @@
+@@ -5608,6 +7272,8 @@
  				DoRWStuffEndOfFrame();
  			}
  
@@ -3830,7 +4018,7 @@
  			if (m_bShutDownFrontEndRequested)
  				m_bMenuActive = false;
  			else if (m_bStartUpFrontEndRequested)
-@@ -5626,6 +7287,11 @@
+@@ -5626,6 +7292,11 @@
  				CPad::StopPadsShaking();
  #endif
  			} else {
@@ -3842,7 +4030,7 @@
  #ifdef EXTENDED_COLOURFILTER
  				// we always expect CPostFX to be open
  				CMBlur::BlurOn = true;
-@@ -5708,22 +7374,22 @@
+@@ -5708,22 +7379,22 @@
  	m_bStartUpFrontEndRequested = false;
  	m_bShutDownFrontEndRequested = false;
  
@@ -3869,7 +4057,7 @@
  	DMAudio.ChangeMusicMode(MUSICMODE_GAME);
  	if (m_bSpritesLoaded) {
  		printf("REMOVE frontend\n");
-@@ -5827,56 +7493,62 @@
+@@ -5827,56 +7498,62 @@
  
  	// Because m_fMapSize is half of the map length(hence * 2), and map consists of 3x3 tiles(hence / 3).
  	float halfTile = m_fMapSize * 2.f / 3.f / 2.f;
@@ -3959,7 +4147,7 @@
  		CFont::SetWrapx(MENU_X_RIGHT_ALIGNED(40.0f));
  		CFont::SetRightJustifyWrap(MENU_X_LEFT_ALIGNED(84.0f));
  		CFont::SetBackGroundOnlyTextOff();
-@@ -5885,31 +7557,31 @@
+@@ -5885,31 +7562,31 @@
  		CFont::SetDropColor(CRGBA(0, 0, 0, FadeIn(255)));
  		CFont::SetCentreOn();
  		CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
@@ -3999,7 +4187,7 @@
  		int x = MENU_X_LEFT_ALIGNED(160.0f);
  
  		for (int16 i = 0; i < CRadar::MapLegendCounter; i++) {
-@@ -5917,9 +7589,9 @@
+@@ -5917,9 +7594,9 @@
  
  			if (i == secondColumnStart) {
  				x = MENU_X_LEFT_ALIGNED(350.0f);
@@ -4011,7 +4199,7 @@
  			}
  		}
  	}
-@@ -5933,12 +7605,15 @@
+@@ -5933,12 +7610,15 @@
  		mapCrosshair.y = m_nMousePosY;
  	}
  
@@ -4027,7 +4215,7 @@
  
  #endif
  	m_bMenuMapActive = false;
-@@ -5957,10 +7632,10 @@
+@@ -5957,10 +7637,10 @@
  	m_PrefsRadioStation += increaseBy;
  	m_ScrollRadioBy = increaseBy;
  	if (m_ScrollRadioBy == 1) {
@@ -4643,7 +4831,7 @@
  #else
  	#define DUALPASS_SELECTOR 
  #endif
-@@ -88,10 +95,27 @@
+@@ -88,10 +95,28 @@
  #endif
  
  #ifdef EXTENDED_COLOURFILTER
@@ -4659,6 +4847,7 @@
 +	void VisualStyleButtonPress(int8 action);
 +	// the console UI styles need their console's disc imported (UiStyleAfterChange)
 +	void UiStyleAfterChange(int8 before, int8 after);
++	void MapStyleRestartNote(void);
 +	CCFOSelect *uiStyleSelect;
 +	#define VISUAL_STYLE_SELECTOR MENUACTION_CFO_DYNAMIC, "RVC_VST", { new CCFODynamic(nil, nil, nil, VisualStyleDraw, VisualStyleButtonPress) }, 0, 0, MENUALIGN_LEFT, \
 +		MENUACTION_CFO_SELECT, "RVC_UIS", { uiStyleSelect = new CCFOSelect(&gUiStyle, "Graphics", "UiStyle", uiStyleOpts, ARRAY_SIZE(uiStyleOpts), false, UiStyleAfterChange) }, 0, 0, MENUALIGN_LEFT, \
@@ -4671,7 +4860,7 @@
  	#define POSTFX_SELECTORS
  #endif	
  
-@@ -107,31 +131,340 @@
+@@ -107,31 +132,354 @@
  	#define SELECT_CONTROLLER_TYPE
  #endif
  
@@ -4936,8 +5125,10 @@
 +void
 +UiStyleAfterChange(int8 before, int8 after)
 +{
-+	if (UiStyleAvailable(after))
++	if (UiStyleAvailable(after)) {
++		MapStyleRestartNote();
 +		return;
++	}
 +	// on past the console styles without a disc, the way the option was moving
 +	const int n = ARRAY_SIZE(uiStyleOpts);
 +	const int step = after == (before + 1) % n ? 1 : n - 1;
@@ -4948,6 +5139,17 @@
 +	if (uiStyleSelect)
 +		uiStyleSelect->displayedValue = uiStyleSelect->lastSavedValue = ui;
 +	FrontEndMenuManager.SaveSettings();
++	MapStyleRestartNote();
++}
++
++// revc (map data per style): the console's map data comes with the level, so a style other than
++// the one it loaded with takes its map data at the next start; the menu says so.
++extern int8 gMapStyleLevelStyle;
++void
++MapStyleRestartNote(void)
++{
++	if (gMapStyleLevelStyle >= 0 && gUiStyle != gMapStyleLevelStyle)
++		FrontEndMenuManager.SetHelperText(6);
 +}
 +
 +// At start: a saved console style whose disc is gone goes back to PC.
@@ -4979,6 +5181,7 @@
 +		next = action == FEOPTION_ACTION_LEFT ? (next + n - 1) % n : (next + 1) % n;
 +	ApplyVisualStyle(next);
 +	FrontEndMenuManager.SaveSettings();
++	MapStyleRestartNote();
 +}
 +
 +wchar*
@@ -5023,7 +5226,7 @@
  		FrontEndMenuManager.m_PrefsVsyncDisp = true;
  		#ifdef LEGACY_MENU_OPTIONS
  			FrontEndMenuManager.m_PrefsVsync = true;
-@@ -306,7 +639,7 @@
+@@ -306,7 +654,7 @@
  
  wchar* DetectJoystickDraw(bool* disabled, bool userHovering) {
  
@@ -5032,7 +5235,7 @@
  	int numButtons;
  	int found = -1;
  	const char *joyname;
-@@ -420,13 +753,11 @@
+@@ -420,13 +768,11 @@
  		MENUACTION_MUSICVOLUME,		"FEA_MUS", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 40, 76, MENUALIGN_LEFT,
  		MENUACTION_SFXVOLUME,		"FEA_SFX", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		MENUACTION_MP3VOLUMEBOOST,	"FEA_MPB", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
@@ -5049,7 +5252,7 @@
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 367, MENUALIGN_CENTER,
  #else
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 327, MENUALIGN_CENTER,
-@@ -441,9 +772,8 @@
+@@ -441,9 +787,8 @@
  		MENUACTION_DRAWDIST,	"FEM_LOD", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		DENSITY_SLIDERS
  #ifdef LEGACY_MENU_OPTIONS
@@ -5060,7 +5263,7 @@
  #if defined LEGACY_MENU_OPTIONS && !defined EXTENDED_COLOURFILTER
  		MENUACTION_TRAILS,		"FED_TRA", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  #endif
-@@ -455,7 +785,6 @@
+@@ -455,7 +800,6 @@
  		MENUACTION_SCREENRES,	"FED_RES", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  		MULTISAMPLING_SELECTOR
@@ -5068,7 +5271,7 @@
  		DUALPASS_SELECTOR
  		CUTSCENE_BORDERS_TOGGLE
  		FREE_CAM_TOGGLE
-@@ -492,7 +821,7 @@
+@@ -492,7 +836,7 @@
  
  	// MENUPAGE_MAP = 6
  	{ "FEH_MAP", MENUPAGE_NONE, nil, nil,
@@ -5077,7 +5280,7 @@
  	},
  
  	// MENUPAGE_NEW_GAME_RELOAD = 7
-@@ -640,6 +969,8 @@
+@@ -640,6 +984,8 @@
  #ifdef DETECT_JOYSTICK_MENU
  		MENUACTION_CHANGEMENU,	"FEC_JOD", {nil, SAVESLOT_NONE, MENUPAGE_DETECT_JOYSTICK}, 0, 0, MENUALIGN_CENTER,
  #endif
@@ -5086,7 +5289,7 @@
  		MENUACTION_CHANGEMENU,	"FEC_MOU", {nil, SAVESLOT_NONE, MENUPAGE_MOUSE_CONTROLS}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_RESTOREDEF,	"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_CONTROLLER_PC}, 320, 0, MENUALIGN_CENTER,
  		MENUACTION_GOBACK,		"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 320, 0, MENUALIGN_CENTER,
-@@ -659,6 +990,7 @@
+@@ -659,6 +1005,7 @@
  #endif
  		 MENUACTION_CHANGEMENU,		"FEO_LAN", {nil, SAVESLOT_NONE, MENUPAGE_LANGUAGE_SETTINGS}, 0, 0, MENUALIGN_CENTER,
  		 MENUACTION_PLAYERSETUP,	"FET_PS", {nil, SAVESLOT_NONE, MENUPAGE_SKIN_SELECT}, 0, 0, MENUALIGN_CENTER,
@@ -5094,7 +5297,7 @@
  		 MENUACTION_GOBACK,			"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -673,6 +1005,7 @@
+@@ -673,6 +1020,7 @@
  	{ "FEM_MM", MENUPAGE_DISABLED, nil, nil,
  		  MENUACTION_CHANGEMENU,	"FEP_STG",	{nil, SAVESLOT_NONE,	MENUPAGE_NEW_GAME}, 320, 170, MENUALIGN_CENTER,
  		  MENUACTION_CHANGEMENU,	"FEP_OPT",	{nil, SAVESLOT_NONE,	MENUPAGE_OPTIONS}, 0, 0, MENUALIGN_CENTER,
@@ -5102,7 +5305,7 @@
  		  MENUACTION_CHANGEMENU,	"FEP_QUI",	{nil, SAVESLOT_NONE,	MENUPAGE_EXIT}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -699,7 +1032,7 @@
+@@ -699,7 +1047,7 @@
  		MENUACTION_CHANGEMENU,	"FEH_MAP",	{nil, SAVESLOT_NONE, MENUPAGE_MAP}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_CHANGEMENU,	"FEP_STA",	{nil, SAVESLOT_NONE, MENUPAGE_STATS}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_CHANGEMENU,	"FEH_BRI",	{nil, SAVESLOT_NONE, MENUPAGE_BRIEFS}, 0, 0, MENUALIGN_CENTER,
@@ -5111,7 +5314,7 @@
  		MENUACTION_CHANGEMENU,	"FEP_QUI",	{nil, SAVESLOT_NONE, MENUPAGE_EXIT}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -783,13 +1116,12 @@
+@@ -783,13 +1131,12 @@
  		MENUACTION_WIDESCREEN,	"FED_WIS", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  #ifdef LEGACY_MENU_OPTIONS
@@ -5127,7 +5330,7 @@
  		POSTFX_SELECTORS
  #elif defined LEGACY_MENU_OPTIONS
  		MENUACTION_TRAILS,		"FED_TRA", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
-@@ -809,6 +1141,46 @@
+@@ -809,6 +1156,46 @@
  	},
  #endif
  
@@ -5174,7 +5377,7 @@
  		
  #ifdef MISSION_REPLAY
  	// MENUPAGE_MISSION_RETRY = 57 on mobile
-@@ -826,3 +1198,269 @@
+@@ -826,3 +1213,269 @@
  
  #endif
  #endif

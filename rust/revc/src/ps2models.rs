@@ -22,6 +22,16 @@ pub extern "C" fn revc_xbox_models_set(on: c_int) {
     XBOX_ON.store(on != 0, Ordering::Relaxed);
 }
 
+/// Whether the console style `style` (1 PS2, 2 Xbox) draws the console's own world models (its
+/// option on); the map data per style follows it (mapstyle.rs).
+pub(crate) fn world_models_on(style: i32) -> bool {
+    match style {
+        1 => ON.load(Ordering::Relaxed),
+        2 => XBOX_ON.load(Ordering::Relaxed),
+        _ => false,
+    }
+}
+
 /// The converted console model for `name` (a model name, no extension) while the PS2 or Xbox
 /// style and its option are on: its bytes (freed with revc_ps2_model_free) and their length; null otherwise.
 ///

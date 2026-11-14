@@ -299,7 +299,15 @@
  			if (TheCamera.PlayerWeaponMode.Mode != CCam::MODE_M16_1STPERSON
 --- a/src/peds/Population.cpp
 +++ b/src/peds/Population.cpp
-@@ -545,7 +545,7 @@
+@@ -4,6 +4,7 @@
+ #include "General.h"
+ #include "World.h"
+ #include "Population.h"
++#include "FileLoader.h"
+ #include "CopPed.h"
+ #include "Wanted.h"
+ #include "FileMgr.h"
+@@ -545,7 +546,7 @@
  				(CCarCtrl::NumLawEnforcerCars >= wantedInfo->m_MaximumLawEnforcerVehicles
  				|| CCarCtrl::NumRandomCars >= playerInfo->m_nTrafficMultiplier * CCarCtrl::CarDensityMultiplier
  				|| CCarCtrl::NumFiretrucksOnDuty + CCarCtrl::NumAmbulancesOnDuty + CCarCtrl::NumParkedCars
@@ -308,7 +316,7 @@
  			addCop = true;
  			minDist = PedCreationDistMultiplier() * MIN_CREATION_DIST;
  			maxDist = PedCreationDistMultiplier() * (MIN_CREATION_DIST + CREATION_RANGE);
-@@ -561,7 +561,7 @@
+@@ -561,7 +562,7 @@
  	}
  	if (CDarkel::FrenzyOnGoing())
  		missionAndWeatherMult = 1.0f;
@@ -317,3 +325,12 @@
  
  	// Yeah, float
  	float maxPossiblePedsForArea = (zoneInfo.pedDensity + zoneInfo.carDensity) * playerInfo->m_fRoadDensity * PedDensityMultiplier
+@@ -926,6 +927,8 @@
+ {
+ 	if (!TestSafeForRealObject(dummy))
+ 		return;
++	if (CFileLoader::IsMapStyleHidden(dummy))	// (revc: a placement the console style doesn't have)
++		return;
+ 
+ 	CObject *obj = new CObject(dummy);
+ 	if (!obj)

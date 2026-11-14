@@ -97,6 +97,7 @@ unsafe extern "C" {
     fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
     fn revc_test_hud_text(kind: i32);
     fn revc_test_fire(kind: i32);
+    fn revc_test_map_skipped() -> i32;
     fn revc_test_cut_load(cut: *const std::ffi::c_char, out: *mut std::ffi::c_char, len: i32) -> i32;
     fn revc_test_prompt_text(key: *const std::ffi::c_char, out: *mut std::ffi::c_char, len: i32) -> i32;
     fn revc_test_particle_frames(kind: i32) -> i32;
@@ -1921,6 +1922,12 @@ impl Driver {
     fn finish(&mut self) -> bool {
         self.phase = Phase::Done;
         self.finished = true;
+        // a map placement skipped because a pool was full (FileLoader.cpp): the pool limits are too
+        // low for some style's map data again
+        let skipped = unsafe { revc_test_map_skipped() };
+        if skipped > 0 {
+            self.fail(format!("{skipped} map placement(s) skipped: a pool is full (core/config.h)"));
+        }
         if let Some(path) = std::env::var_os("REVC_TEST_WAV") {
             let path = PathBuf::from(path);
             match crate::audio::finish_recording(&path) {

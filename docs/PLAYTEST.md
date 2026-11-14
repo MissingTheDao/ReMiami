@@ -99,6 +99,15 @@ animate at 30 Hz (only the body moves smoothly).
       dealer and in `stripa` the dancer's hands move naturally, `tex_3` holds its last shot about
       3 s longer than on PC; `cok_4a`, `fin`, `rok_2` play their PS2 camera moves. [R4]
 
+- [ ] Map data (start the game in the PS2 style): walk or drive past the spots whose collision
+      follows the PS2's rebuilt models (map coordinates): the mansion grounds and hall
+      (-380, -570; stand where the floor reflects, jump on the banister), Little Havana's car
+      showroom and two pieces near it (-990, -850 / -900, -575 / -1130, -450), a house in
+      Little Haiti (-1105, 346), the
+      hotel garden bush (219, -1284), the building site (305, -247), the chariot sculpture
+      (569, -5). Nothing to walk through or get stuck on. The bank, the mansion pool and the mall
+      show the PS2's extra floors, water and tree shadows. [R4]
+
 ## Session 4: Xbox style (about 30 min; Xbox disc imported, menu language English)
 
 With an Xbox-type pad first, then the keyboard, then a PlayStation pad.
@@ -116,6 +125,11 @@ Around Ocean Beach:
       the menu brings back the orange ones. [R4]
 - [ ] The fireball particle (frames 30-43 of the Xbox flame), from car backfires and the
       flamethrower; no test scene reaches it. [R4]
+
+- [ ] Map data (start in the Xbox style): the building at (390, -481) (`deco_polbuild`) has no
+      invisible walls; North Beach's shop windows are there; billboards and Ocean Drive
+      buildings stay drawn from further away. Then switch to PC in the menu: it says "map data
+      changes on next start", and after a restart the PC's map is back. [R4]
 
 ## Needs other hardware or a capture
 
