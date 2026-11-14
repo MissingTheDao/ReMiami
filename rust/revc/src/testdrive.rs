@@ -2073,6 +2073,14 @@ impl Driver {
                 Err(e) => self.fail(format!("cannot write {}: {e}", path.display())),
             }
         }
+        // The shadow back end's output over the same span (REVC_AUDIO_SHADOW=1 and REVC_TEST_WAV set).
+        if let Some(path) = std::env::var_os("REVC_TEST_WAV_SHADOW") {
+            let path = PathBuf::from(path);
+            match crate::audio::finish_recording_shadow(&path) {
+                Ok(frames) => log(format!("audio shadow: {frames} frames -> {}", path.display())),
+                Err(e) => self.fail(format!("cannot write {}: {e}", path.display())),
+            }
+        }
         if self.failures.is_empty() {
             log(format!("PASS {:?} in {:.1}s", self.scenario, self.started.elapsed().as_secs_f32()));
         } else {
