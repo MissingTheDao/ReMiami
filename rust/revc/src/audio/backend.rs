@@ -304,3 +304,175 @@ impl AudioBackend for RevcBackend {
         self.streams.as_mut().map(|s| s.take_frames_mixed())
     }
 }
+#[cfg(test)]
+mod tests {
+    //! RevcBackend must render exactly what the engine did before it moved behind the trait
+    //! (streams mixed first, then sound effects), and two back ends given the same commands must
+    //! render the same samples (the shadow mode's premise).
+    use super::*;
+
+    const BLOCK: usize = 512; // stereo frames per render call
+
+    fn sine(freq: f32, rate: u32, n: usize) -> Vec<i16> {
+        (0..n).map(|i| ((2.0 * std::f32::consts::PI * freq * i as f32 / rate as f32).sin() * 16384.0) as i16).collect()
+    }
+
+    fn reverb() -> ReverbParams {
+        ReverbParams { decay_time: 2.0, gain: 0.5, ..Default::default() }
+    }
+
+    /// The pre-trait engine: a mixer and the AL streams, driven directly.
+    struct Direct {
+        mixer: Mixer,
+        streams: AlStreams,
+    }
+
+    impl Direct {
+        fn render(&mut self, out: &mut [f32]) {
+            self.streams.mix(out);
+            self.mixer.mix(out);
+        }
+    }
+
+    /// The command script, once for a back end and once for the direct engine; returns the source.
+    fn script_backend(b: &mut dyn AudioBackend, s440: &[i16], s1k: &[i16], s300: &[i16]) -> u32 {
+        b.sfx_open(8);
+        b.reverb_set(&reverb());
+        b.sfx_set_2d(0, true);
+        b.sfx_start(0, s440, 22050);
+        b.sfx_set_2d(3, false);
+        b.sfx_start(3, s1k, 22050);
+        b.sfx_set_position(3, 1.0, 0.0, 0.0);
+        b.sfx_set_distances(3, 10.0, 1.0);
+        b.sfx_set_pitch(3, 1.2);
+        b.sfx_set_gain(3, 0.8);
+        b.sfx_set_reverb_mix(3, 0.5);
+        let src = b.al_gen_sources(1)[0];
+        for buf in b.al_gen_buffers(3) {
+            b.al_buffer_data(buf, s300, 32000);
+            b.al_queue_buffer(src, buf);
+        }
+        b.al_play(src);
+        src
+    }
+
+    fn script_direct(d: &mut Direct, s440: &[i16], s1k: &[i16], s300: &[i16]) -> u32 {
+        // sfx_open: a new mixer with the stored reverb preset applied (RevcBackend does the same)
+        d.mixer.set_reverb_params(&reverb());
+        d.mixer.set_2d(0, true);
+        d.mixer.start(0, s440, 22050);
+        d.mixer.set_2d(3, false);
+        d.mixer.start(3, s1k, 22050);
+        d.mixer.set_position(3, 1.0, 0.0, 0.0);
+        d.mixer.set_distances(3, 10.0, 1.0);
+        d.mixer.set_pitch(3, 1.2);
+        d.mixer.set_gain(3, 0.8);
+        d.mixer.set_reverb_mix(3, 0.5);
+        let src = d.streams.gen_sources(1)[0];
+        for buf in d.streams.gen_buffers(3) {
+            d.streams.buffer_data(buf, s300, 32000);
+            d.streams.queue_buffer(src, buf);
+        }
+        d.streams.play(src);
+        src
+    }
+
+    /// Unqueues the processed buffers and queues them again; returns their ids.
+    fn requeue_backend(b: &mut dyn AudioBackend, src: u32) -> Vec<u32> {
+        let n = b.al_buffers_processed(src);
+        let ids: Vec<u32> = (0..n).filter_map(|_| b.al_unqueue_buffer(src)).collect();
+        ids.iter().for_each(|&id| b.al_queue_buffer(src, id));
+        ids
+    }
+
+    fn requeue_direct(d: &mut Direct, src: u32) -> Vec<u32> {
+        let n = d.streams.buffers_processed(src);
+        let ids: Vec<u32> = (0..n).filter_map(|_| d.streams.unqueue_buffer(src)).collect();
+        ids.iter().for_each(|&id| d.streams.queue_buffer(src, id));
+        ids
+    }
+
+    fn assert_same(a: &[f32], b: &[f32], what: &str) {
+        for (i, (x, y)) in a.iter().zip(b).enumerate() {
+            assert_eq!(x.to_bits(), y.to_bits(), "{what}: sample {i}: {x} vs {y}");
+        }
+    }
+
+    #[test]
+    fn same_as_direct() {
+        let (s440, s1k, s300) = (sine(440.0, 22050, 11025), sine(1000.0, 22050, 11025), sine(300.0, 32000, 4096));
+        let mut b = RevcBackend::new();
+        let mut d = Direct { mixer: Mixer::new(8), streams: AlStreams::default() };
+        let src_b = script_backend(&mut b, &s440, &s1k, &s300);
+        let src_d = script_direct(&mut d, &s440, &s1k, &s300);
+        assert_eq!(src_b, src_d);
+        let (mut ob, mut od) = (vec![0.0f32; BLOCK * 2], vec![0.0f32; BLOCK * 2]);
+        let mut requeued = 0;
+        for block in 0..100 {
+            if block == 50 {
+                // a mid-run change on both sides
+                b.sfx_set_pitch(0, 2.0);
+                d.mixer.set_pitch(0, 2.0);
+                b.al_set_gain(src_b, 0.5);
+                d.streams.set_gain(src_d, 0.5);
+            }
+            if block % 10 == 9 {
+                let (ib, id) = (requeue_backend(&mut b, src_b), requeue_direct(&mut d, src_d));
+                assert_eq!(ib, id, "block {block}: unqueued buffers");
+                requeued += ib.len();
+            }
+            ob.fill(0.0);
+            od.fill(0.0);
+            b.render(&mut ob);
+            d.render(&mut od);
+            assert_same(&ob, &od, &format!("block {block}"));
+        }
+        assert!(requeued > 0, "the script never recycled a buffer");
+        assert!(ob.iter().any(|&x| x != 0.0), "the script rendered silence");
+        assert_eq!(b.take_stats(), Some(d.mixer.take_stats()));
+        assert_eq!(b.take_stream_frames(), Some(d.streams.take_frames_mixed()));
+    }
+
+    #[test]
+    fn two_backends_identical() {
+        let (s440, s1k, s300) = (sine(440.0, 22050, 11025), sine(1000.0, 22050, 11025), sine(300.0, 32000, 4096));
+        let mut a: Box<dyn AudioBackend> = Box::new(RevcBackend::new());
+        let mut c: Box<dyn AudioBackend> = Box::new(RevcBackend::new());
+        let (sa, sc) = (script_backend(a.as_mut(), &s440, &s1k, &s300), script_backend(c.as_mut(), &s440, &s1k, &s300));
+        let (mut oa, mut oc) = (vec![0.0f32; BLOCK * 2], vec![0.0f32; BLOCK * 2]);
+        for block in 0..100 {
+            if block % 10 == 9 {
+                assert_eq!(requeue_backend(a.as_mut(), sa), requeue_backend(c.as_mut(), sc));
+            }
+            oa.fill(0.0);
+            oc.fill(0.0);
+            a.render(&mut oa);
+            c.render(&mut oc);
+            assert_same(&oa, &oc, &format!("block {block}"));
+        }
+        assert_eq!(a.take_stats(), c.take_stats());
+        assert_eq!(a.take_stream_frames(), c.take_stream_frames());
+    }
+
+    #[test]
+    fn closed_mixer_is_silent_for_sfx() {
+        let mut b = RevcBackend::new();
+        b.sfx_set_2d(0, true);
+        b.sfx_start(0, &sine(440.0, 22050, 1000), 22050);
+        b.sfx_set_pitch(0, 2.0);
+        assert!(!b.sfx_is_playing(0));
+        assert!(b.take_stats().is_none());
+        let mut out = vec![0.0f32; BLOCK * 2];
+        b.render(&mut out);
+        assert!(out.iter().all(|&x| x == 0.0), "no voices and no streams: silence");
+        // streams work without an open mixer
+        let src = b.al_gen_sources(1)[0];
+        let buf = b.al_gen_buffers(1)[0];
+        b.al_buffer_data(buf, &sine(440.0, 22050, 4096), 22050);
+        b.al_queue_buffer(src, buf);
+        b.al_play(src);
+        b.render(&mut out);
+        assert_eq!(b.al_state(src), revc_audio::al::State::Playing);
+        assert!(out.iter().any(|&x| x != 0.0), "the stream rendered silence");
+    }
+}
