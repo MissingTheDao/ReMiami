@@ -65,6 +65,11 @@ extern int usingEAX, usingEAX3;
 extern float _fEffectsLevel;
 #endif
 
+class CBuilding;
+#ifdef FIX_BUGS
+void SwapBuildingLod(CBuilding *building, int32 from, int32 to);	// control/Script4.cpp
+#endif
+
 extern "C" {
 
 // Reverb state: whether effects are available/enabled and the current effects (reverb send) level.
@@ -1239,6 +1244,12 @@ revc_test_swap_building(float x, float y, float z, const char *from, const char 
 	if(total == 0)
 		return 0;
 	((CBuilding*)found[0])->ReplaceWithNewModel(mi2);
+#ifdef FIX_BUGS
+	SwapBuildingLod((CBuilding*)found[0], mi1, mi2);
+#endif
 	CTheScripts::AddToBuildingSwapArray((CBuilding*)found[0], mi1, mi2);
+	// REVC_TEST_SWAP_BACK=1: and undone again, as the script does (the LOD must come back too)
+	if(getenv("REVC_TEST_SWAP_BACK"))
+		CTheScripts::UndoBuildingSwaps();
 	return 1;
 }

@@ -506,7 +506,18 @@
  			pObject->m_nEndOfLifeTime = CTimer::GetTimeInMilliseconds() + 600000;
 --- a/src/control/Script4.cpp
 +++ b/src/control/Script4.cpp
-@@ -785,6 +785,9 @@
+@@ -38,6 +38,10 @@
+ #include "WaterLevel.h"
+ #include "World.h"
+ #include "Zones.h"
++
++#ifdef FIX_BUGS
++void SwapBuildingLod(CBuilding *building, int32 from, int32 to);	// (revc: below)
++#endif
+ #include "Bike.h"
+ #include "Wanted.h"
+ 
+@@ -785,6 +789,9 @@
  				pPed->bRenderPedInCar = true;
  			if (pPed->m_pMyVehicle->pDriver == pPed){
  				pPed->m_pMyVehicle->RemoveDriver();
@@ -516,6 +527,92 @@
  				pPed->m_pMyVehicle->SetStatus(STATUS_ABANDONED);
  				pPed->m_pMyVehicle->bEngineOn = false;
  				pPed->m_pMyVehicle->AutoPilot.m_nCruiseSpeed = 0;
+@@ -1670,6 +1677,9 @@
+ 		}
+ 		CBuilding* pReplacedBuilding = ((CBuilding*)pClosestEntity);
+ 		pReplacedBuilding->ReplaceWithNewModel(mi2);
++#ifdef FIX_BUGS
++		SwapBuildingLod(pReplacedBuilding, mi1, mi2);
++#endif
+ 		CTheScripts::AddToBuildingSwapArray(pReplacedBuilding, mi1, mi2);
+ 		return 0;
+ 	}
+@@ -2264,6 +2274,65 @@
+ 	ScriptSphereArray[index].m_Id = 0;
+ }
+ 
++#ifdef FIX_BUGS
++// revc (SilentPatch VC #62): a building swap takes the building's LOD with it. A LOD (named "LOD"
++// plus the building's name from its fourth letter, placed with it) is drawn whenever its own
++// detailed model isn't loaded and faded in; once the building shows another model, that never
++// happens, so the old LOD showed from afar and under the new building. Now the LOD becomes the
++// new model's LOD if there is one, else it's hidden; swapping back shows it again. Nothing is
++// stored: the save's swap list re-applies through here (CTheScripts::Load).
++static int32
++LodModelOf(int32 mi)
++{
++	if (mi < 0 || CModelInfo::GetModelInfo(mi) == nil)
++		return -1;
++	const char *n = CModelInfo::GetModelInfo(mi)->GetModelName();
++	if (strlen(n) < 4)
++		return -1;
++	char lod[MAX_MODEL_NAME + 4];
++	snprintf(lod, sizeof(lod), "LOD%s", n + 3);
++	int32 id;
++	return CModelInfo::GetModelInfo(lod, &id) ? id : -1;
++}
++
++static int16
++FindLods(int32 lodModel, const CVector &pos, CEntity **found)
++{
++	int16 total = 0;
++	CWorld::FindObjectsOfTypeInRange(lodModel, pos, 10.0f, true, &total, 4, found, true, false, false, false, false);
++	if (total == 0)
++		CWorld::FindObjectsOfTypeInRangeSectorList(lodModel, CWorld::GetBigBuildingList(LEVEL_GENERIC), pos, 10.0f, true, &total, 4, found);
++	if (total == 0)
++		CWorld::FindObjectsOfTypeInRangeSectorList(lodModel, CWorld::GetBigBuildingList(CTheZones::GetLevelFromPosition(&pos)), pos, 10.0f, true, &total, 4, found);
++	return total;
++}
++
++void
++SwapBuildingLod(CBuilding *building, int32 from, int32 to)
++{
++	if (building == nil)
++		return;
++	int32 lodFrom = LodModelOf(from), lodTo = LodModelOf(to);
++	if (lodFrom == lodTo)
++		return;
++	CEntity *found[4];
++	if (lodFrom >= 0) {
++		int16 n = FindLods(lodFrom, building->GetPosition(), found);
++		for (int16 i = 0; i < n; i++) {
++			if (lodTo >= 0)
++				((CBuilding*)found[i])->ReplaceWithNewModel(lodTo);
++			else
++				found[i]->bIsVisible = false;
++		}
++	} else if (lodTo >= 0) {
++		// back to a model with a LOD: the hidden one shows again
++		int16 n = FindLods(lodTo, building->GetPosition(), found);
++		for (int16 i = 0; i < n; i++)
++			found[i]->bIsVisible = true;
++	}
++}
++#endif
++
+ void CTheScripts::AddToBuildingSwapArray(CBuilding* pBuilding, int32 old_model, int32 new_model)
+ {
+ 	int i = 0;
+@@ -2331,6 +2400,9 @@
+ 	for (int i = 0; i < MAX_NUM_BUILDING_SWAPS; i++) {
+ 		if (BuildingSwapArray[i].m_pBuilding) {
+ 			BuildingSwapArray[i].m_pBuilding->ReplaceWithNewModel(BuildingSwapArray[i].m_nOldModel);
++#ifdef FIX_BUGS
++			SwapBuildingLod(BuildingSwapArray[i].m_pBuilding, BuildingSwapArray[i].m_nNewModel, BuildingSwapArray[i].m_nOldModel);
++#endif
+ 			BuildingSwapArray[i].m_pBuilding = nil;
+ 			BuildingSwapArray[i].m_nOldModel = BuildingSwapArray[i].m_nNewModel = -1;
+ 		}
 --- a/src/control/Script5.cpp
 +++ b/src/control/Script5.cpp
 @@ -19,6 +19,9 @@
@@ -580,7 +677,21 @@
  	switch (button) {
  	case 0: return pPad->NewState.LeftStickX;
  	case 1: return pPad->NewState.LeftStickY;
-@@ -2664,6 +2709,9 @@
+@@ -2218,6 +2263,13 @@
+ 		ReadSaveBuf(&BuildingSwapArray[i].m_nOldModel, buf);
+ 		if (BuildingSwapArray[i].m_pBuilding)
+ 			BuildingSwapArray[i].m_pBuilding->ReplaceWithNewModel(BuildingSwapArray[i].m_nNewModel);
++#ifdef FIX_BUGS
++			{
++				void SwapBuildingLod(CBuilding *building, int32 from, int32 to);
++				if (BuildingSwapArray[i].m_pBuilding)
++					SwapBuildingLod(BuildingSwapArray[i].m_pBuilding, BuildingSwapArray[i].m_nOldModel, BuildingSwapArray[i].m_nNewModel);
++			}
++#endif
+ 	}
+ 	for (uint32 i = 0; i < MAX_NUM_INVISIBILITY_SETTINGS; i++) {
+ 		ReadSaveBuf(&type, buf);
+@@ -2664,6 +2716,9 @@
  		if (pPed->InVehicle() && pPed->m_pMyVehicle) {
  			if (pPed->m_pMyVehicle->pDriver == pPed) {
  				pPed->m_pMyVehicle->RemoveDriver();
