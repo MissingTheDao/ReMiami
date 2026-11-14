@@ -8431,14 +8431,27 @@
 -}
 --- a/src/core/World.cpp
 +++ b/src/core/World.cpp
-@@ -1862,7 +1862,11 @@
+@@ -1855,6 +1855,8 @@
+ 	}
+ }
+ 
++extern int8 gUiStyle;	// (revc: the UI style, Frontend)
++
+ void
+ CWorld::SetPedsChoking(float x, float y, float z, float radius, CEntity* reason)
+ {
+@@ -1862,7 +1864,15 @@
  	for (int32 i = poolSize - 1; i >= 0; i--) {
  		CPed* pPed = CPools::GetPedPool()->GetSlot(i);
  		// suspicious copypaste
 -		if (pPed && pPed->m_nPedState != PED_DEAD && !pPed->bInVehicle && !pPed->m_pFire && !pPed->bFireProof && pPed->CharCreatedBy != MISSION_CHAR) {
 +		if (pPed && pPed->m_nPedState != PED_DEAD && !pPed->bInVehicle && !pPed->m_pFire && !pPed->bFireProof
-+#ifndef FIX_BUGS
-+		    && pPed->CharCreatedBy != MISSION_CHAR	// (revc, SilentPatch VC: tear gas hurts Tommy and mission peds too, as on the PS2)
++#ifdef FIX_BUGS
++		    // (revc, SilentPatch VC #68: in the PS2 style tear gas hurts Tommy and mission peds too, as
++		    // on the PS2; the other styles keep the PC's behaviour; the style at the moment of the gas)
++		    && (pPed->CharCreatedBy != MISSION_CHAR || gUiStyle == 1)
++#else
++		    && pPed->CharCreatedBy != MISSION_CHAR
 +#endif
 +		    ) {
  			if (Abs(pPed->GetPosition().z - z) < 5.0f && Abs(pPed->GetPosition().x - x) < radius &&
