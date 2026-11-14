@@ -4,6 +4,12 @@ What players notice, newest first. Developer details are in the commit messages.
 
 ## Unreleased
 
+- **High frame rates (above 30 fps):** things drawn on screen no longer run faster or flicker at
+  60, 144 or 320 Hz: buildings fade in at the original speed, the sea scrolls at its speed, glass
+  windows, mission markers and shop price texts stay visible on every frame, rain, sea birds,
+  ships, fish and beach toys appear as often as at 30 fps, and HUD flashes, the media-attention
+  text, the photo flash, the replay blink and the menus' fades keep their timing. The crosshair
+  and helicopter rotors spin in real time. Nothing changes at 30 fps.
 - **PS2 style:** cutscenes with the PS2's own animations and camera moves where the PS2 data
   differs; the PS2's map data (objects, placements, interiors, draw distances, and collision where
   the PS2 rebuilt a model) at the next start after choosing the style.

@@ -793,6 +793,16 @@ pub extern "C" fn hostCaptureRequested() -> c_int {
     with(|h| h.capture_requested) as c_int
 }
 
+/// Display time of the frame being drawn, in seconds (f32 bits; at most 0.1 s).
+static FRAME_SECONDS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3D08_8889); // 1/30
+
+/// Display time of the frame being drawn (set by hostSimStepsDue), for drawing-side animation
+/// that follows real time rather than game steps (R6).
+#[unsafe(no_mangle)]
+pub extern "C" fn hostFrameSeconds() -> f32 {
+    f32::from_bits(FRAME_SECONDS.load(std::sync::atomic::Ordering::Relaxed))
+}
+
 /// 30 Hz simulation steps due this frame (see revc_timing::FixedStep); `alpha` gets the
 /// position between the last step and the next one, for render interpolation.
 #[unsafe(no_mangle)]
@@ -807,6 +817,7 @@ pub unsafe extern "C" fn hostSimStepsDue(alpha: *mut f32) -> c_int {
             None => c.1.map_or(std::time::Duration::ZERO, |t| now - t),
         };
         c.1 = Some(now);
+        FRAME_SECONDS.store(elapsed.as_secs_f32().min(0.1).to_bits(), std::sync::atomic::Ordering::Relaxed);
         c.0.advance(elapsed)
     });
     // A frame captured by the regression harness shows the simulated state itself (alpha 1),

@@ -34,6 +34,19 @@
  
  	CustomMatOffset = rw::Material::registerPlugin(sizeof(CustomMatExt), MAKECHUNKID(rwVENDORID_ROCKSTAR, 0x80),
  		CustomMatCtor, nil, CustomMatCopy);
+--- a/src/extras/debugmenu.cpp
++++ b/src/extras/debugmenu.cpp
+@@ -1060,7 +1060,9 @@
+ 	toplevel.r.h = screenHeight - 10 - toplevel.r.y;
+ 	toplevel.update();
+ 	toplevel.draw();
+-	processInput();
++	// revc (R6): key presses are read once per game step (gStepDraw), not per displayed frame
++	if (gStepDraw)
++		processInput();
+ 	RtCharsetBufferFlush();
+ 
+ 	drawMouse();
 --- a/src/extras/postfx.cpp
 +++ b/src/extras/postfx.cpp
 @@ -11,7 +11,9 @@
@@ -258,17 +271,21 @@
  #endif
  }
  
-@@ -396,7 +387,8 @@
+@@ -396,8 +387,11 @@
  	assert(pFrontBuffer);
  	assert(pBackBuffer);
  
 -	if(type == MOTION_BLUR_LIGHT_SCENE){
+-		SmoothColor(red, green, blue, blur);
 +	extern int8 gUiStyle;
 +	if(type == MOTION_BLUR_LIGHT_SCENE && gUiStyle == 0){	// (revc: the consoles use each frame's time-cycle colour as it is; research)
- 		SmoothColor(red, green, blue, blur);
++		// revc (R6): the average runs over game steps, not displayed frames
++		if(gStepDraw)
++			SmoothColor(red, green, blue, blur);
  		red = AvgRed;
  		green = AvgGreen;
-@@ -426,7 +418,7 @@
+ 		blue = AvgBlue;
+@@ -426,7 +420,7 @@
  		if(MotionBlurOn){
  			if(!bJustInitialised)
  				RenderOverlayBlur(cam, red, green, blue, blur);
@@ -277,7 +294,7 @@
  			RenderOverlayShader(cam, red, green, blue, blur);
  		}
  		break;
-@@ -445,10 +437,27 @@
+@@ -445,10 +439,27 @@
  	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
  

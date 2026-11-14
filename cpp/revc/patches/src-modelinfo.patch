@@ -1,6 +1,12 @@
 --- a/src/modelinfo/SimpleModelInfo.cpp
 +++ b/src/modelinfo/SimpleModelInfo.cpp
-@@ -6,6 +6,7 @@
+@@ -1,11 +1,13 @@
+ #include "common.h"
+ 
+ #include "General.h"
++#include "Timer.h"
+ #include "Camera.h"
+ #include "Renderer.h"
  #include "ModelInfo.h"
  #include "AnimManager.h"
  #include "custompipes.h"
@@ -8,13 +14,24 @@
  
  void
  CSimpleModelInfo::DeleteRwObject(void)
-@@ -88,6 +89,7 @@
+@@ -88,6 +90,7 @@
  		debug("%s has %d polys\n", m_name, RpGeometryGetNumTriangles(geo));
  
  #ifdef EXTENDED_PIPELINES
 +	XboxLightmaps::Attach(GetModelName(), n, atomic);
  	if(m_wetRoadReflection)
  		CustomPipes::AttachGlossPipe(atomic);
+ 	else
+@@ -106,6 +109,10 @@
+ void
+ CSimpleModelInfo::IncreaseAlpha(void)
+ {
++	// revc (R6): called for every visible entity each time the render list is built; the fade-in
++	// advances once per game step, not once per displayed frame.
++	if(!gStepDraw)
++		return;
+ 	if(m_alpha >= 0xEF)
+ 		m_alpha = 0xFF;
  	else
 --- a/src/modelinfo/VehicleModelInfo.cpp
 +++ b/src/modelinfo/VehicleModelInfo.cpp

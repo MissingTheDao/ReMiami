@@ -27,6 +27,22 @@
  	CObject::Render();
  	SetCullMode(rwCULLMODECULLBACK);
  }
+--- a/src/objects/Object.cpp
++++ b/src/objects/Object.cpp
+@@ -230,6 +230,13 @@
+ 		mi->SetVehicleColour(m_colour1, m_colour2);
+ 	}
+ 
++	// revc (R6): the yacht's spray below (and the random number every object draws for it) is added
++	// once per game step, not per displayed frame
++	if (!gStepDraw) {
++		CEntity::Render();
++		return;
++	}
++
+ 	float red = (0.8f * CTimeCycle::GetDirectionalRed() + CTimeCycle::GetAmbientRed_Obj()) * 165.75f;
+ 	float green = (0.8f * CTimeCycle::GetDirectionalGreen() + CTimeCycle::GetAmbientGreen_Obj()) * 165.75f;
+ 	float blue = (0.8f * CTimeCycle::GetDirectionalBlue() + CTimeCycle::GetAmbientBlue_Obj()) * 165.75f;
 --- a/src/objects/ObjectData.cpp
 +++ b/src/objects/ObjectData.cpp
 @@ -8,128 +8,39 @@

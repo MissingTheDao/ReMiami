@@ -65,6 +65,9 @@ In a car:
 - [ ] Drive fast along a straight road and through turns: car, wheels and camera smooth; no
       jumps when the frame rate dips; other cars smooth too; handling feels as before (the
       simulation still runs at 30 Hz). [8]
+- [ ] At your display's full rate (e.g. 144 or 320 Hz): buildings fade in as slowly as at 30 fps,
+      the sea's ripples drift at the same speed, a yellow mission marker and glass shop windows
+      don't flicker, a shop's price text stays steady, rain looks as dense as at 30 fps. [R6]
 - [ ] Cars have their shiny reflections (MatFX environment map), on both renderers; nothing
       looks inside out or too bright. [12]
 - [ ] Display Setup > Vehicle pipeline NEO, rim light, lightmaps, road gloss on: cars get the
@@ -99,7 +102,12 @@ At the end:
       default. [12]
 
 Known limits, not bugs: shadows, lights and particles still move in 30 Hz steps; ped limbs
-animate at 30 Hz (only the body moves smoothly).
+animate at 30 Hz (only the body moves smoothly). Random events (which peds and cars appear, and
+the like) are not the same at different frame rates, as drawing takes random numbers from the
+game, as in the original; nothing runs faster or slower because of it. Above 60 Hz the
+menu's open and close fades are not yet checked against the console recordings: the automated
+comparison doesn't match there (open and close of the PS2 menu from 144 Hz, the Xbox menu's close
+from 240 Hz), and it isn't settled yet whether the fades or the test's timing are at fault.
 
 ## Session 3: PS2 style (about 10 min; PS2 disc imported, menu language English)
 

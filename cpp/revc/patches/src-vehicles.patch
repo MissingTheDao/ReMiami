@@ -450,6 +450,18 @@
  	int32 GetHandlingId(const char *name);
  	tHandlingData *GetHandlingData(tVehicleType id) { return &HandlingData[id]; }
  	tBikeHandlingData *GetBikePointer(uint8 id) { return &BikeHandlingData[id-HANDLING_BIKE]; }
+--- a/src/vehicles/Heli.cpp
++++ b/src/vehicles/Heli.cpp
+@@ -570,7 +570,8 @@
+ 	mat.Translate(pos);
+ 	mat.UpdateRW();
+ 
+-	m_fRotorRotation += 3.14f/6.5f;
++	// revc (R6): a visual spin, in display time (3.14/6.5 per 30 Hz frame before)
++	m_fRotorRotation += 3.14f/6.5f * gRenderFrameSeconds * 30.0f;
+ 	if(m_fRotorRotation > 6.28f)
+ 		m_fRotorRotation -= 6.28f;
+ 
 --- a/src/vehicles/Transmission.cpp
 +++ b/src/vehicles/Transmission.cpp
 @@ -4,38 +4,13 @@

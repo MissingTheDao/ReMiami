@@ -42,6 +42,11 @@
 //!                       cutscene that nobody had (drawn untextured), except the ones in
 //!                       tests/golden/missing-textures.txt (missing in the game's own data); the
 //!                       ones outside cutscenes are only logged.
+//!   REVC_TEST=fpsparity like saveload, then a fixed scene (beach, rain, a mission sphere, a shop
+//!                       pickup) for 150 game steps and a scripted drive for 300 more; logs per game
+//!                       step what must not depend on the display rate (fades, scrolls, per-step
+//!                       lists, counters, random-number state, the car) to REVC_TEST_FPS_LOG.
+//!                       scripts/fps-parity.sh runs it at several REVC_FIXED_FPS and compares (R6).
 //!   REVC_TEST=motion    like saveload, then walks the player forward and turns (injected keys)
 //!                       while capturing every frame with its render interpolation (run with
 //!                       REVC_FIXED_FPS, e.g. 144). Writes the frames to REVC_TEST_VIDEO_DIR
@@ -57,7 +62,7 @@
 //! Results are printed as `[revc-test] ...` lines; the exit code is 0 pass, 1 fail, 3 timeout.
 
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -85,6 +90,8 @@ unsafe extern "C" {
     fn revc_test_save_slot(slot: i32, state: *mut i32, name: *mut u16, date: *mut u16) -> i32;
     fn revc_test_motion_sample(out: *mut f32);
     fn revc_test_pedhit_setup(kmh: f32) -> i32;
+    fn revc_test_fpsparity_setup() -> i32;
+    fn revc_test_fpsparity_done() -> i32;
     fn revc_test_scanner_setup() -> i32;
     fn revc_test_pedhit_sample() -> i32;
     fn revc_test_pedhit_result(max_rise: *mut f32, car_dist: *mut f32);
@@ -147,6 +154,7 @@ enum Scenario {
     Cutscenes,
     Screenshot,
     MenuWalk,
+    FpsParity,
 }
 
 #[derive(Debug)]
@@ -178,6 +186,8 @@ enum Phase {
     PadScript { frame: u32 },
     Screenshot { frame: u32 },
     MenuWalk,
+    /// fps parity: the scene is set up once the game time reaches `base`.
+    FpsParity { base: u32, started: bool },
     /// Button sweep: state `idx` (revc_test_sweep_state), pad button `button`, frames into it.
     MenuSweep { idx: i32, button: u32, frame: u32, flagged: u32 },
     /// Cutscenes: game time `t0` the game started, `last` the last frame saved (game time).
@@ -331,6 +341,9 @@ const MENU_SHOTS_PS2_MAPZOOM: &[MenuShot] = &[("mapzoom_still", "map", 0, -1, -1
 /// The UI style comes from the config (the id's ps2_/xbox_ prefix in the script).
 type Motion = (&'static str, &'static str, i32, i32, i32, &'static str, u32);
 const MOTION_INPUT_FRAME: u32 = 30;
+/// Pad script runs: the frame its clock started on (u32::MAX: not yet) and the game step seen last.
+static PAD_START: AtomicU32 = AtomicU32::new(u32::MAX);
+static PAD_LAST_STEP: AtomicU32 = AtomicU32::new(0);
 const MOTIONS: &[Motion] = &[
     // PS2
     ("ps2_page_change_right", "audio", 0, -1, -1, "page:console_display", 90),
@@ -704,13 +717,14 @@ pub fn init() -> Result<bool, String> {
         "pedhit" => Scenario::PedHit,
         "screenshot" => Scenario::Screenshot,
         "menuwalk" => Scenario::MenuWalk,
+        "fpsparity" => Scenario::FpsParity,
         "scanner" => Scenario::Scanner,
         "scenes" => Scenario::Scenes,
         "menus" => Scenario::Menus,
         "padscript" => Scenario::PadScript,
         "menusweep" => Scenario::MenuSweep,
         "cutscenes" => Scenario::Cutscenes,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, scanner, scenes, menus, padscript, menusweep, cutscenes)")),
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, scanner, scenes, menus, padscript, menusweep, cutscenes, screenshot, menuwalk, fpsparity)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -875,7 +889,7 @@ impl Driver {
                         log("starting a new game");
                         self.phase = Phase::WaitPlaying;
                     }
-                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::Scanner | Scenario::Scenes | Scenario::Menus | Scenario::PadScript | Scenario::MenuSweep | Scenario::Screenshot | Scenario::MenuWalk => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::Scanner | Scenario::Scenes | Scenario::Menus | Scenario::PadScript | Scenario::MenuSweep | Scenario::Screenshot | Scenario::MenuWalk | Scenario::FpsParity => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -943,6 +957,13 @@ impl Driver {
                     // readback came back empty; now the host saves the next frame
                     crate::host::inject_key(1012, true);
                     self.phase = Phase::Screenshot { frame: 0 };
+                    return false;
+                }
+                if self.scenario == Scenario::FpsParity {
+                    // set up at a round game time, so every run starts on the same game step
+                    // (the water's scroll follows the game clock)
+                    let base = (unsafe { revc_test_game_ms() } / 1000 + 1) * 1000;
+                    self.phase = Phase::FpsParity { base, started: false };
                     return false;
                 }
                 if self.scenario == Scenario::PedHit {
@@ -1035,6 +1056,24 @@ impl Driver {
                 if unsafe { revc_test_game_ms() }.wrapping_sub(t0) < 30000 {
                     return false;
                 }
+                return self.finish();
+            }
+            Phase::FpsParity { base, started } => {
+                if !started {
+                    if unsafe { revc_test_game_ms() } < base {
+                        return false;
+                    }
+                    if unsafe { revc_test_fpsparity_setup() } == 0 {
+                        self.fail("fpsparity: REVC_TEST_FPS_LOG unset or not writable".into());
+                        return self.finish();
+                    }
+                    self.phase = Phase::FpsParity { base, started: true };
+                    return false;
+                }
+                if unsafe { revc_test_fpsparity_done() } == 0 {
+                    return false;
+                }
+                log("fpsparity: done".to_string());
                 return self.finish();
             }
             Phase::PedHit => {
@@ -1317,7 +1356,8 @@ impl Driver {
             Phase::PadScript { frame } => {
                 // A pad script (padscript.rs) from a named start state: menu_base = scene S1
                 // (in game, on foot, menu closed). The start state is set, settles PAD_SETTLE
-                // frames, then the script plays on pad 0 at 60 Hz (run with REVC_FIXED_FPS=60).
+                // frames, then the script plays on pad 0 at 60 Hz: its frames are 60 Hz frames of
+                // display time (REVC_FIXED_FPS, default 60; R6 runs the motions at 144-360 Hz too).
                 // Frames from 30 before mark:input (or the start) to mark:end (or 60 after the last
                 // step) go to REVC_TEST_VIDEO_DIR as frame_%05d.png.
                 const PAD_SETTLE: u32 = 150;
@@ -1329,6 +1369,7 @@ impl Driver {
                     }
                 };
                 if frame == 0 {
+                    PAD_START.store(u32::MAX, Ordering::Relaxed);
                     // Start states (research autopad README): menu_base = scene S1; world motions
                     // on foot / in an Infernus / on a PCJ-600 (testhooks.cpp revc_test_world_start)
                     let (_, x, y, heading, hour, minute, weather) = SCENES[0];
@@ -1362,8 +1403,18 @@ impl Driver {
                         }
                     }
                 }
-                if frame >= PAD_SETTLE {
-                    let t = frame - PAD_SETTLE;
+                let fps = std::env::var("REVC_FIXED_FPS").ok().and_then(|v| v.parse::<u32>().ok()).filter(|&f| f > 0).unwrap_or(60);
+                // above 60 Hz the script's clock starts on the first frame of a game step after the
+                // settle time, so its inputs fall on step boundaries; at 60 Hz it starts at
+                // PAD_SETTLE as the reference motions were recorded
+                let step = unsafe { revc_test_frame() };
+                let last_step = PAD_LAST_STEP.swap(step, Ordering::Relaxed);
+                if frame >= PAD_SETTLE * fps / 60 && PAD_START.load(Ordering::Relaxed) == u32::MAX && (fps == 60 || step != last_step) {
+                    PAD_START.store(frame, Ordering::Relaxed);
+                }
+                let start = PAD_START.load(Ordering::Relaxed);
+                if frame >= start {
+                    let t = ((frame - start) as u64 * 60 / fps as u64) as u32;
                     telemetry_line(t);
                     let st = script.state_at(t);
                     let a = st.axes;

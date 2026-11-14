@@ -12,6 +12,8 @@
 #   Writes <out>/<id>/frame_*.png, <out>/motions.json and motiontest.py's out/motion plots, and for
 #   motions revc reaches by the console's button route (MOTION_ROUTES) <out>/<id>.pad.json.
 #   Exit 1 if any motion fails (or a run fails).
+#   REVC_MOTION_FPS=n: run at n fps instead of 60 (the pad script keeps its 60 Hz timing; R6 checks
+#   that the menus' timing doesn't depend on the display rate).
 # Wrap it in scripts/headless.sh like the other game runs.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -19,6 +21,7 @@ JSON=$(realpath "${1:?usage: motion-tests.sh <motions.json> [out dir] [id ...]}"
 OUT=$(realpath -m "${2:-$ROOT/rust/target/test-output/motion}")
 shift $(( $# >= 2 ? 2 : 1 ))
 mkdir -p "$OUT"
+FPS=${REVC_MOTION_FPS:-60}
 mapfile -t IDS < <(python3 - "$JSON" "$@" <<'EOF'
 import json, sys
 motions = json.load(open(sys.argv[1]))
@@ -58,7 +61,7 @@ for id in "${IDS[@]}"; do
     "$ROOT/tests/config/reVC.ini" > "$cfg"
   rm -rf "${OUT:?}/$id"; mkdir -p "$OUT/$id"
   # (volumes above 0 for the bars, but no sound: OpenAL's null device)
-  if ALSOFT_DRIVERS=null REVC_TEST_CONFIG=$cfg REVC_TEST_WINDOW=640x480 REVC_TEST_MOTION=$id REVC_TEST_PAD_OUT="$OUT" REVC_FIXED_FPS=60 \
+  if ALSOFT_DRIVERS=null REVC_TEST_CONFIG=$cfg REVC_TEST_WINDOW=640x480 REVC_TEST_MOTION=$id REVC_TEST_PAD_OUT="$OUT" REVC_FIXED_FPS=$FPS \
       REVC_TEST_VIDEO_DIR="$OUT/$id" REVC_TEST_TIMEOUT=300 "$ROOT/scripts/test.sh" menus > "$OUT/$id.log" 2>&1; then
     RAN+=("$id"); echo "motion $id: $(ls "$OUT/$id" | wc -l) frames"
   else
@@ -66,9 +69,10 @@ for id in "${IDS[@]}"; do
   fi
 done
 # the json with the revc side pointing at the runs (frames relative to the input frame, 30)
-python3 - "$JSON" "$OUT" "${RAN[@]}" <<'EOF'
+python3 - "$JSON" "$OUT" "$FPS" "${RAN[@]}" <<'EOF'
 import json, os, sys
-src, out, ran = sys.argv[1], sys.argv[2], set(sys.argv[3:])
+src, out, fps, ran = sys.argv[1], sys.argv[2], int(sys.argv[3]), set(sys.argv[4:])
+f = lambda n: -(-n * fps // 60)	# a 60 Hz frame to this run's first frame at or after its time
 base = os.path.dirname(src)
 ms = json.load(open(src))
 for m in ms:
@@ -79,7 +83,7 @@ for m in ms:
         d = os.path.join(out, m['id']); n = len([f for f in os.listdir(d) if f.startswith('frame_')])
         r = dict(m.get('revc', {})); run = m.get('revc_run', {})
         r.update({k: v for k, v in run.items() if k not in ('start', 'end')})	# (keeps key etc.)
-        r.update(video=d, fps=60, start=30 + run.get('start', -3), end=min(n, 30 + run.get('end', n - 30)),
+        r.update(video=d, fps=fps, start=f(30 + run.get('start', -3)), end=min(n, f(30 + run['end'])) if 'end' in run else n,
                  roi=run.get('roi', r.get('roi', m['ref']['roi'])))
         m['revc'] = r
 json.dump(ms, open(os.path.join(out, 'motions.json'), 'w'), indent=1)

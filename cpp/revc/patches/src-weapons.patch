@@ -44,6 +44,18 @@
  
  		uint8 shakeFreq = 80.0 * raisedNotFiringRate + 130.0;
  		CPad::GetPad(0)->StartShake(20000.0f * CTimer::GetTimeStep() / shakeFreq, shakeFreq);
+--- a/src/weapons/WeaponEffects.cpp
++++ b/src/weapons/WeaponEffects.cpp
+@@ -119,7 +119,8 @@
+ 				107, 134, 247, 158,
+ 				recipz2, TWOPI - gCrossHair.m_fRotation, gCrossHair.m_nAlpha);
+ 						
+-			gCrossHair.m_fRotation += 0.02f;
++			// revc (R6): a visual spin, in display time (0.02 per 30 Hz frame before)
++			gCrossHair.m_fRotation += 0.02f * gRenderFrameSeconds * 30.0f;
+ 			if ( gCrossHair.m_fRotation > TWOPI )
+ 				gCrossHair.m_fRotation = 0.0;
+ 
 --- a/src/weapons/WeaponInfo.cpp
 +++ b/src/weapons/WeaponInfo.cpp
 @@ -137,131 +137,39 @@

@@ -1346,3 +1346,214 @@ revc_test_swap_building(float x, float y, float z, const char *from, const char 
 		CTheScripts::UndoBuildingSwaps();
 	return 1;
 }
+
+// fps-parity check (REVC_TEST=fpsparity, R6): a fixed scene (beach at noon in the rain, a mission
+// sphere, a shop pickup with its price) for FP_STAND game steps, then a scripted drive until FP_END.
+// Once per game step, values that must not depend on the display rate go to REVC_TEST_FPS_LOG;
+// scripts/fps-parity.sh compares runs at several REVC_FIXED_FPS rates.
+#include "Glass.h"
+#include "Pickups.h"
+#include "SpecialFX.h"
+#include "WeaponEffects.h"
+#include "postfx.h"
+#include "Weapon.h"
+#include "General.h"
+extern CWeaponEffects gCrossHair;	// weapons/WeaponEffects.cpp
+extern float TEXTURE_ADDU, TEXTURE_ADDV, _TEXTURE_MASK_ADDU, _TEXTURE_MASK_ADDV, _TEXTURE_WAKE_ADDU, _TEXTURE_WAKE_ADDV;
+#ifdef USE_PS2_RAND
+extern unsigned long long myrand_seed;
+#else
+extern unsigned long int myrand_seed;
+#endif
+
+static int fpStep;
+static int fpFrames;
+static int glassMin, glassMax, msgMin, msgMax, mkMin, mkMax;
+static FILE *fpLog;
+static unsigned long long fpRngDraw;
+static uint32 fpDrawMs;
+static float fpDrawWind;
+static bool fpDone;
+static const int FP_STAND = 150, FP_END = 450;
+
+// Once per drawn frame: what the frame draws from the per-step lists.
+static void
+FpsRender(void)
+{
+	if (fpFrames++ == 0)
+	{
+		fpRngDraw = (unsigned long long)myrand_seed;	// after the step, before its first draw
+		fpDrawMs = CTimer::GetTimeInMilliseconds();
+		fpDrawWind = CWeather::WindClipped;
+	}
+	int g = (int)CGlass::GetNumGlassEntities();
+	int m = (int)CPickups::GetNumMessages();
+	int k = C3dMarkers::NumActiveMarkers;
+	glassMin = Min(glassMin, g); glassMax = Max(glassMax, g);
+	msgMin = Min(msgMin, m); msgMax = Max(msgMax, m);
+	mkMin = Min(mkMin, k); mkMax = Max(mkMax, k);
+}
+
+// Once per game step: logs the step just drawn, then drives the scripted part.
+static void
+FpsStep(void)
+{
+	if (fpStep > 0) {
+		uint32 lod = 0;
+		for (int i = 0; i < MODELINFOSIZE; i++) {
+			CBaseModelInfo *mi = CModelInfo::GetModelInfo(i);
+			// models fading in (fully faded-in and never-drawn ones depend on what was loaded and seen
+			// before the scene)
+			if (mi && mi->IsSimple() && ((CSimpleModelInfo*)mi)->m_alpha > 0 && ((CSimpleModelInfo*)mi)->m_alpha < 255)
+				lod += ((CSimpleModelInfo*)mi)->m_alpha;
+		}
+
+		int gMin = fpFrames == 0 ? -1 : glassMin;
+		int gMax = fpFrames == 0 ? -1 : glassMax;
+		int mMin = fpFrames == 0 ? -1 : msgMin;
+		int mMax = fpFrames == 0 ? -1 : msgMax;
+		int kMin = fpFrames == 0 ? -1 : mkMin;
+		int kMax = fpFrames == 0 ? -1 : mkMax;
+
+		int pfx = CPostFX::Next;
+		float crossRot = gCrossHair.m_fRotation;
+
+		CVector pp = FindPlayerCoors();
+		float px = pp.x, py = pp.y, pz = pp.z;
+
+		CVehicle *veh = FindPlayerVehicle();
+		float vx = 0.0f, vy = 0.0f, vz = 0.0f;
+		if (veh) {
+			CVector speed = veh->GetMoveSpeed();
+			vx = speed.x; vy = speed.y; vz = speed.z;
+		}
+
+		fprintf(fpLog, "step=%d frames=%d lod=%u wu=%.6f wv=%.6f mu=%.6f mv=%.6f ku=%.6f kv=%.6f glassmin=%d glassmax=%d msgmin=%d msgmax=%d mkmin=%d mkmax=%d sprite=%d tflash=%d oddjob=%.3f pfx=%d cross=%.5f rng=%llx rngd=%llx ms=%u wind=%.7f px=%.4f py=%.4f pz=%.4f vx=%.4f vy=%.4f vz=%.4f\n",
+			fpStep - 1, fpFrames, lod,
+			TEXTURE_ADDU, TEXTURE_ADDV,
+			_TEXTURE_MASK_ADDU, _TEXTURE_MASK_ADDV,
+			_TEXTURE_WAKE_ADDU, _TEXTURE_WAKE_ADDV,
+			gMin, gMax, mMin, mMax, kMin, kMax,
+			CHud::SpriteBrightness, CHud::TimerFlashTimer,
+			CHud::OddJob2XOffset, pfx, crossRot,
+			(unsigned long long)myrand_seed, fpRngDraw, fpDrawMs, fpDrawWind,
+			px, py, pz, vx, vy, vz);
+		fflush(fpLog);
+
+		fpFrames = 0;
+		glassMin = msgMin = mkMin = (1 << 30);
+		glassMax = msgMax = mkMax = -1;
+	}
+
+	if (fpStep == FP_STAND) {
+		CStreaming::RequestModel(MI_ADMIRAL, STREAMFLAGS_DEPENDENCY);
+		CStreaming::LoadAllRequestedModels(false);
+		if (!CStreaming::HasModelLoaded(MI_ADMIRAL)) {
+			printf("[revc-test] fpsparity: car model didn't load\n");
+			fpDone = true;
+			gTestStepHook = nil;
+			gTestRenderHook = nil;
+			return;
+		}
+
+		// the drive on the beach (flat and open, see revc_test_pedhit_setup)
+		revc_test_goto_spot(470.0f, -1400.0f, -100.0f, -10.0f, -12.0f, 8.0f, 12, 0);
+		CPlayerPed *player = FindPlayerPed();
+		CVector carPos = player->GetPosition() + CVector(6.0f, 0.0f, 0.0f);
+		CAutomobile *car = new CAutomobile(MI_ADMIRAL, MISSION_VEHICLE);
+		carPos.z = CWorld::FindGroundZForCoord(carPos.x, carPos.y) + car->GetDistanceFromCentreOfMassToBaseOfModel();
+		car->SetPosition(carPos);
+		car->SetHeading(0.0f);
+		CTheScripts::ClearSpaceForMissionEntity(carPos, car);
+		car->SetStatus(STATUS_ABANDONED);
+		CWorld::Add(car);
+
+		player->SetObjective(OBJECTIVE_ENTER_CAR_AS_DRIVER, car);
+		player->WarpPedIntoCar(car);
+		TheCamera.RestoreWithJumpCut();
+	}
+
+	if (fpStep >= FP_STAND) {
+		gRevcTestPadOn = true;
+		gRevcTestPad.Clear();
+		if (fpStep < FP_END - 60) {
+			gRevcTestPad.Cross = 255;
+		} else {
+			gRevcTestPad.Square = 255;
+		}
+		gRevcTestPad.LeftStickX = (int16)(90.0f * Sin(fpStep * 0.05f));
+	}
+
+	if (fpStep == FP_END) {
+		fpDone = true;
+		gRevcTestPadOn = false;
+		fclose(fpLog);
+		gTestStepHook = nil;
+		gTestRenderHook = nil;
+		return;
+	}
+
+	fpStep++;
+}
+
+extern "C" int
+revc_test_fpsparity_setup(void)
+{
+	const char *path = getenv("REVC_TEST_FPS_LOG");
+	if (!path) return 0;
+	fpLog = fopen(path, "w");
+	if (!fpLog) return 0;
+
+	// next to the breakable glass pane nearest to the beach (drawn only through the per-step glass
+	// list), the camera behind the player looking past it at the pane
+	CVector glass(480.0f, -1390.0f, 0.0f);
+	float best = 1.0e9f;
+	CDummyPool *pool = CPools::GetDummyPool();
+	for (int i = 0; i < pool->GetSize(); i++) {
+		CDummy *d = pool->GetSlot(i);
+		if (d && IsGlass(d->GetModelIndex())) {
+			float dist = (CVector2D(d->GetPosition()) - CVector2D(470.0f, -1400.0f)).Magnitude();
+			if (dist < best) { best = dist; glass = d->GetPosition(); }
+		}
+	}
+	printf("[revc-test] fpsparity: glass pane at (%.0f, %.0f), %.0f m from the beach\n", glass.x, glass.y, best);
+	float gz = revc_test_goto_spot(glass.x - 4.0f, glass.y - 4.0f, -100.0f, -10.0f, -12.0f, 8.0f, 12, 0);
+	CWeather::ForceWeatherNow(WEATHER_RAINY);
+
+	CVector pPos = FindPlayerCoors();
+	pPos.z = gz;
+
+	// a mission sphere beside the player, a shop pistol with its price between player and camera
+	// (price texts show within 14 m of the camera)
+	CVector spherePos(pPos.x + 3.0f, pPos.y - 3.0f, CWorld::FindGroundZForCoord(pPos.x + 3.0f, pPos.y - 3.0f));
+	CTheScripts::AddScriptSphere(1, spherePos, 2.0f);
+
+	// the pistol's model loaded now, not streamed in at a time that depends on the wall clock
+	CStreaming::RequestModel(MI_COLT45, STREAMFLAGS_DEPENDENCY);
+	CStreaming::LoadAllRequestedModels(false);
+	CVector pickupPos(pPos.x - 4.0f, pPos.y - 5.0f, CWorld::FindGroundZForCoord(pPos.x - 4.0f, pPos.y - 5.0f) + 0.5f);
+	CPickups::GenerateNewOne_WeaponType(pickupPos, WEAPONTYPE_COLT45, PICKUP_IN_SHOP, 1);
+
+	// the same start in every run: what the front end and the loading took from the random-number
+	// generator and how far the water scrolled meanwhile depend on the frame rate
+	CGeneral::SetRandomSeed(1);
+	TEXTURE_ADDU = TEXTURE_ADDV = _TEXTURE_MASK_ADDU = _TEXTURE_MASK_ADDV = _TEXTURE_WAKE_ADDU = _TEXTURE_WAKE_ADDV = 0.0f;
+
+	fpStep = 0;
+	fpFrames = 0;
+	fpDone = false;
+	glassMin = msgMin = mkMin = (1 << 30);
+	glassMax = msgMax = mkMax = -1;
+
+	gTestStepHook = FpsStep;
+	gTestRenderHook = FpsRender;
+
+	printf("[revc-test] fpsparity: scene ready\n");
+	return 1;
+}
+
+extern "C" int
+revc_test_fpsparity_done(void)
+{
+	return fpDone ? 1 : 0;
+}
