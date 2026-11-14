@@ -430,7 +430,8 @@
 +	NUMENTRYINFOS = 4000,	// (revc: 3200; at the end of a test run 2979 used in the PC style, 2997 with the PS2's map data)
  	NUMPEDS = 140,
  	NUMVEHICLES = 110,
- 	NUMBUILDINGS = 7000,
+-	NUMBUILDINGS = 7000,
++	NUMBUILDINGS = 7200,	// revc: 7000 (PS2 map data uses 6803; headroom)
  	NUMTREADABLES = 1,
  	NUMOBJECTS = 460,
 -	NUMDUMMIES = 2340,
