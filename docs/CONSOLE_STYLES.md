@@ -379,11 +379,19 @@ patched files go to `maps-patched/` there at start. Nothing from the discs is in
 
 The PC style loads exactly what it loads without imports: every reader of the import folder is
 limited to its console's style (models, map data, cutscenes, text, particles, time cycle, ped
-animations, texture packs, the Xbox lightmaps). One exception, on purpose: reMiami's own
-controller-layout page draws the Xbox pad outline from the import (its only art source) and asks
-for the Xbox disc when it's missing. A test guards this: `REVC_TEST_IMPORT_GUARD=1` records every
-file read from the import folder and fails a PC-style run that read anything but that outline
-(`rust/revc/src/discimport.rs` note_access, `testdrive.rs`).
+animations, texture packs, the Xbox lightmaps). Two exceptions, on purpose, both reMiami's own
+pages rather than game data:
+- the controller-layout page draws the Xbox pad outline from the import (its only art source)
+  and asks for the Xbox disc when it's missing;
+- the brief's tutorial-hint and unlocked-item lists read which text keys belong to them from the
+  Xbox disc's two list files (`neo/hints.txt`, `neo/unlockeditems.txt`), in every style, the first
+  time a mission text is printed. What the lists collect is kept in a sidecar file next to the
+  save (`<save>.lists`), never in the save itself, so a PC-style save stays byte-compatible with
+  the PC game.
+
+A test guards this: `REVC_TEST_IMPORT_GUARD=1` records every file read from the import folder and
+fails a PC-style run that read anything but those three files (`rust/revc/src/discimport.rs`
+note_access, `testdrive.rs`).
 
 ## Behaviour per style
 

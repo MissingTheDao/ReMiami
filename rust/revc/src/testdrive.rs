@@ -1940,7 +1940,10 @@ impl Driver {
         // import folder may be read but the allowlist (the controller-layout page's pad outline,
         // its only art source; docs/CONSOLE_STYLES.md)
         if std::env::var_os("REVC_TEST_IMPORT_GUARD").is_some() {
-            const ALLOW: &[&str] = &["xbox/ui/r3_menu_336.dds"];
+            // the pad outline, and the brief lists' key files (read in every style; what the
+            // lists collect goes to the save's sidecar, not the save)
+            const ALLOW: &[&str] =
+                &["xbox/ui/r3_menu_336.dds", "xbox/neo/hints.txt", "xbox/neo/unlockeditems.txt"];
             let read = crate::discimport::accessed();
             log(format!("import guard: style {}, {} import file(s) read: {read:?}", crate::texmods::style(), read.len()));
             if crate::texmods::style() == 0 {
