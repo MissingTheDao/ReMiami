@@ -285,9 +285,33 @@ menu language English:
 - **PS2:** the Ammu-Nation items, which the PS2 shows in arrows ("< Hammer >": `ARMOUR`, `BASEBAT`,
   `CHAINSA`, `CLEVER`, `GRENADE`, `HAMMER`), and the stunt stats line with its colon (`BSTSTU`).
 
-Left out on purpose: the consoles' button prompts (they name the console's default buttons and
-would be wrong once controls are remapped; reMiami's prompts show the bound buttons), the
-memory card and bonus-disc texts, and the menu labels (the skins draw their own, checked against
+- **Xbox gameplay prompts:** a help line takes the Xbox's shorter wording when its action codes
+  stand for the same presses as the PC line's (`rust/revc/src/prompts.rs`). Each Xbox action
+  code is replaced by the PC action it stands for, so the line still shows the player's own
+  binding; on an Xbox-type pad that binding is named in the Xbox's own button words (its `C_…`
+  text; LB and RB, which the Xbox pad doesn't have, keep their usual names), on other pads and
+  the keyboard as usual. A key qualifies by one of three rules: every code pairs with a listed
+  synonym in the same order (53 keys), its one stick code stands for the PC's pair of directions
+  (part of those 53), or it was reviewed by hand and is on the allowlist (50 keys: the property
+  and weapon pickup prompts, the shop exit, Ammu-Nation buy and exit). 103 keys in all; a test on
+  the imported text pins that set, so a table change can't widen it unreviewed.
+
+  Known places where the Xbox style keeps the PC sentence, on purpose:
+  - `HELP37`, `HELP60` (car-jacking without getting in): the Xbox does it with the stick, the PC
+    with the sprint key; the Xbox sentence would point at the wrong control.
+  - `HELP50`-`HELP52`: the Xbox names its camera control there, the PC line the phone key.
+  - `HELP58`, `HELP59` (cycling targets): the two lines name right and left in opposite orders,
+    so pairing codes by position would swap them.
+  - `BOLLOX` (RC plane): the codes don't mean the same controls.
+  - `HELP15`, `HELP53`, `PLANE_H`: the lines name a different number of controls.
+  - Lines whose PC text names no control, and the mission and Xbox-only keys (not in the PC's
+    main table): later, if at all.
+
+  The Xbox prints the target and look-behind prompts with no button name (its action table has
+  no entry for those two codes); reMiami prints the bound key instead.
+
+Left out on purpose: the PS2's button prompts (they name the PS2's default buttons and would be
+wrong once controls are remapped), the memory card and bonus-disc texts, and the menu labels (the skins draw their own, checked against
 the captures: the Xbox titles and rows in the heading font's lowercase, the PS2's "subtitles :
 off" rows).
 

@@ -97,6 +97,7 @@ unsafe extern "C" {
     fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
     fn revc_test_hud_text(kind: i32);
     fn revc_test_fire(kind: i32);
+    fn revc_test_prompt_text(key: *const std::ffi::c_char, out: *mut std::ffi::c_char, len: i32) -> i32;
     fn revc_test_particle_frames(kind: i32) -> i32;
     #[allow(clippy::too_many_arguments)]
     fn revc_test_pad(on: i32, buttons: u32, lx: f32, ly: f32, rx: f32, ry: f32, l2: f32, r2: f32);
@@ -763,6 +764,25 @@ pub fn tick() {
 }
 
 impl Driver {
+    /// REVC_TEST_PROMPTS=KEY,KEY…: logs each key's text as the HUD shows it (controls filled in);
+    /// REVC_TEST_EXPECT_PROMPTS=KEY=text;KEY=text…: fails unless KEY's text contains that text.
+    fn check_prompts(&mut self) {
+        let Ok(keys) = std::env::var("REVC_TEST_PROMPTS") else { return };
+        let expect = std::env::var("REVC_TEST_EXPECT_PROMPTS").unwrap_or_default();
+        for key in keys.split(',').filter(|k| !k.is_empty()) {
+            let Ok(k) = std::ffi::CString::new(key) else { continue };
+            let mut buf = [0 as std::ffi::c_char; 512];
+            let n = unsafe { revc_test_prompt_text(k.as_ptr(), buf.as_mut_ptr(), buf.len() as i32) };
+            let text: String = buf[..n.max(0) as usize].iter().map(|&c| c as u8 as char).collect();
+            log(format!("prompt {key}: {text}"));
+            for want in expect.split(';').filter_map(|e| e.strip_prefix(key)?.strip_prefix('=')) {
+                if !text.contains(want) {
+                    self.fail(format!("prompt {key}: {text:?} lacks {want:?}"));
+                }
+            }
+        }
+    }
+
     fn fail(&mut self, msg: String) {
         log(format!("FAIL {msg}"));
         self.failures.push(msg);
@@ -1345,6 +1365,7 @@ impl Driver {
                             unsafe { revc_test_fire(0) };
                         }
                         self.fire_done = false;
+                        self.check_prompts();
                         log(format!("scene {name}: ({x}, {y}, {z:.2}) heading {heading} at {hour:02}:{minute:02} weather {weather}"));
                         self.phase = Phase::Scene { idx, base, stage: SpotStage::Settle };
                     }

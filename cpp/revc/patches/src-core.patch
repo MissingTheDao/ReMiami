@@ -729,8 +729,17 @@
  	     UP,    /* VEHICLE_TURRETUP */                                                                                                                        \
  	     DOWN,    /* VEHICLE_TURRETDOWN */                                                                                                                      \
  	     L2,     /* PED_CYCLE_TARGET_LEFT */                                                                                                                   \
-@@ -2692,7 +2831,8 @@
- void CControllerConfigManager::GetWideStringOfCommandKeys(uint16 action, wchar *text, uint16 leight)
+@@ -2689,12 +2828,42 @@
+ #undef CONTROLLER_BUTTONS
+ #undef VFB
+ 
+-void CControllerConfigManager::GetWideStringOfCommandKeys(uint16 action, wchar *text, uint16 leight)
++// revc: the Xbox's words for the pad buttons by joystick key (JoyGlyphTokens order), its own text's
++// C_ keys; nil: no word on the Xbox's pad (LB/RB) and the usual name stays
++static const char *XboxButtonWords[17] = { nil, "C_B", "C_A", "C_X", "C_Y", "C_LT", "C_RT", nil, nil,
++	"C_BAC", "C_LTB", "C_RTB", "C_STA", "C_DPU", "C_DPR", "C_DPD", "C_DPL" };
++
++void CControllerConfigManager::GetWideStringOfCommandKeys(uint16 action, wchar *text, uint16 leight, bool xboxWords)
  {
  #ifdef DETECT_PAD_INPUT_SWITCH
 -	if (CPad::GetPad(0)->IsAffectedByController) {
@@ -738,8 +747,34 @@
 +	if (CPad::GetPad(0)->IsAffectedByController || hostActiveInputKind() != 0) {
  		wchar wstr[16];
  
++		// revc: an Xbox-worded prompt (Messages.cpp) on an Xbox-type pad names the bound button the way
++		// the Xbox does ("A button"); other pads, the PS2 setups and unbound actions print as usual
++		bool xboxPad = true;
++#ifdef GAMEPAD_MENU
++		switch (FrontEndMenuManager.m_PrefsControllerType)
++		{
++		case CMenuManager::CONTROLLER_DUALSHOCK2:
++		case CMenuManager::CONTROLLER_DUALSHOCK3:
++		case CMenuManager::CONTROLLER_DUALSHOCK4:
++		case CMenuManager::CONTROLLER_NINTENDO_SWITCH:
++			xboxPad = false;
++			break;
++		default:
++			break;
++		}
++#endif
++		if (xboxWords && xboxPad && !Ps2SetupActive()) {
++			int key = GetControllerKeyAssociatedWithAction((e_ControllerAction)action, JOYSTICK);
++			if (key > 0 && key < 17 && XboxButtonWords[key]) {
++				CMessages::WideStringCopy(text, TheText.Get(XboxButtonWords[key]), leight);
++				return;
++			}
++		}
++
  		const char* (*Buttons)[MAX_CONTROLLERACTIONS];
-@@ -2733,8 +2873,32 @@
+ 
+ #ifdef BUTTON_ICONS
+@@ -2733,8 +2902,32 @@
  		}
  #endif
  
@@ -772,7 +807,7 @@
  
  		CMessages::WideStringCopy(text, wstr, leight);
  		return;
-@@ -2802,7 +2966,7 @@
+@@ -2802,7 +2995,7 @@
  		else
  			m_aButtonStates[i] = false;
  	}
@@ -801,6 +836,15 @@
  	GlfwJoyState           m_OldState;
  	GlfwJoyState           m_NewState;
  #else
+@@ -209,7 +209,7 @@
+ 	wchar *GetControllerSettingTextJoystick       (e_ControllerAction action);
+ 
+ 	int32 GetNumOfSettingsForAction(e_ControllerAction action);
+-	void  GetWideStringOfCommandKeys(uint16 action, wchar *text, uint16 leight);
++	void  GetWideStringOfCommandKeys(uint16 action, wchar *text, uint16 leight, bool xboxWords = false);
+ 	int32 GetControllerKeyAssociatedWithAction(e_ControllerAction action, eControllerType type);
+ 
+ 	void  UpdateJoyButtonState(int32 padnumber);
 @@ -222,7 +222,7 @@
  	void  ResetSettingOrder                   (e_ControllerAction action);
  };

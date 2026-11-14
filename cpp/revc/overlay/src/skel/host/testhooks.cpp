@@ -1132,6 +1132,21 @@ revc_test_scanner_setup(void)
 	return 1;
 }
 
+// Prompt check (REVC_TEST_PROMPTS): key's text as the HUD shows it, the controls filled in by the
+// prompt filler (Messages.cpp), in ASCII ('?' for the rest); returns its length.
+extern "C" int
+revc_test_prompt_text(const char *key, char *out, int len)
+{
+	wchar buf[256];
+	CMessages::WideStringCopy(buf, TheText.Get(key), 256);
+	CMessages::InsertPlayerControlKeysInString(buf);
+	int i = 0;
+	for (; buf[i] && i < len - 1; i++)
+		out[i] = buf[i] < 128 ? (char)buf[i] : '?';
+	out[i] = '\0';
+	return i;
+}
+
 // Fire comparison shots (REVC_TEST_FIRE): 0 a burning car about 12 m in front of the player (health
 // below the engine-fire threshold, as a badly damaged car burns before it blows up; facing the
 // camera, so its burning engine is in view), 1 a car explosion at that spot (the fireball).

@@ -5,6 +5,7 @@ mod ps2models;
 mod ps2pack;
 mod audio;
 mod formatcheck;
+mod prompts;
 mod padtest;
 mod padscript;
 mod texmods;

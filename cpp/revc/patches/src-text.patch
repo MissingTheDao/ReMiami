@@ -459,7 +459,27 @@
  }
  
  void
-@@ -493,323 +235,67 @@
+@@ -461,13 +203,18 @@
+ 		if (str[i] == '~' && str[i + 1] == 'k' && str[i + 2] == '~') {
+ #endif
+ 			i += 4;
++			// revc: "~k~~*NAME~" is an Xbox-worded prompt (rust text.rs/prompts.rs): the binding in the
++			// Xbox's button words on an Xbox-type pad
++			bool xboxWords = str[i] == '*';
++			if (xboxWords)
++				i++;
+ 			bool done = false;
+ 			for (int32 cont = 0; cont < MAX_CONTROLLERACTIONS && !done; cont++) {
+ 				uint16 contSize = GetWideStringLength(ControlsManager.m_aActionNames[cont]);
+ 				if (contSize != 0) {
+ 					if (WideStringCompare(&str[i], ControlsManager.m_aActionNames[cont], contSize)) {
+ 						done = true;
+-						ControlsManager.GetWideStringOfCommandKeys(cont, keybuf, 256);
++						ControlsManager.GetWideStringOfCommandKeys(cont, keybuf, 256, xboxWords);
+ 						uint16 keybuf_size = GetWideStringLength(keybuf);
+ 						for (uint16 j = 0; j < keybuf_size; j++) {
+ 							*(_outstr++) = keybuf[j];
+@@ -493,323 +240,67 @@
  void
  CMessages::AddMessageWithNumber(wchar *str, uint32 time, uint16 flag, int32 n1, int32 n2, int32 n3, int32 n4, int32 n5, int32 n6)
  {

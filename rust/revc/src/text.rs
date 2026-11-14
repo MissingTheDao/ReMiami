@@ -28,6 +28,11 @@ impl Table {
     fn get(&self, key: &[u8]) -> Option<*const u16> {
         self.index.get(key).map(|&i| self.strings[i].as_ptr())
     }
+
+    /// The string for `key` without its NUL.
+    fn text(&self, key: &[u8]) -> Option<&[u16]> {
+        self.index.get(key).map(|&i| &self.strings[i][..self.strings[i].len() - 1])
+    }
 }
 
 struct Store {
@@ -306,12 +311,37 @@ pub extern "C" fn revc_text_console_get(key: *const c_char) -> *const u16 {
     if !ENGLISH.load(std::sync::atomic::Ordering::Relaxed) {
         return std::ptr::null();
     }
-    let Some((console, k)) = console_source(crate::texmods::style(), &key_bytes(key)) else { return std::ptr::null() };
+    let style = crate::texmods::style();
+    let key = key_bytes(key);
+    let Some((console, k)) = console_source(style, &key) else {
+        return if style == 2 { xbox_prompt_get(&key) } else { std::ptr::null() };
+    };
     let store = match console {
         Console::Ps2 => console_store(&PS2, "ps2", "PS2"),
         Console::Xbox => console_store(&XBOX, "xbox", "Xbox"),
     };
     store.and_then(|s| s.main.and_then(|m| s.tables[m].get(&k))).unwrap_or(std::ptr::null())
+}
+
+/// The Xbox prompts built so far, by key (None: the key keeps the PC text). Never freed: the C++
+/// keeps the pointers.
+static XBOX_PROMPTS: Mutex<Option<HashMap<Vec<u8>, Option<Box<[u16]>>>>> = Mutex::new(None);
+
+/// The Xbox wording of a gameplay prompt with the PC's actions in it (prompts.rs), or null.
+fn xbox_prompt_get(key: &[u8]) -> *const u16 {
+    let mut guard = XBOX_PROMPTS.lock().unwrap();
+    let map = guard.get_or_insert_with(HashMap::new);
+    let entry = map.entry(key.to_vec()).or_insert_with(|| {
+        let xbox = console_store(&XBOX, "xbox", "Xbox")?;
+        let x = xbox.main.and_then(|m| xbox.tables[m].text(key))?;
+        let pc_guard = STORE.lock().unwrap();
+        let pc_store = pc_guard.as_ref()?;
+        let pc = pc_store.main.and_then(|m| pc_store.tables[m].text(key))?;
+        let mut s = crate::prompts::xbox_prompt(std::str::from_utf8(key).ok()?, x, pc)?;
+        s.push(0);
+        Some(s.into_boxed_slice())
+    });
+    entry.as_ref().map_or(std::ptr::null(), |s| s.as_ptr())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

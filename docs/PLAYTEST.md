@@ -62,6 +62,11 @@ Either runs on `REVC_RENDERER_BACKEND=vulkan` (default) or `gl`. Untested: Windo
 
 - [ ] PS2 style, English: an Ammu-Nation shop lists items in arrows ("< Hammer >", "< Grenades >").
 - [ ] PS2 style: Stats shows "Best INSANE stunt so far:" with a colon (needs a save with stunts).
+- [ ] Xbox style (Xbox disc imported), English, with an Xbox-type pad: help lines use the short
+      Xbox wording with button words (enter a car, horn, steering, a property for sale, a weapon
+      pickup, an Ammu-Nation counter); remap a control and the line follows it.
+- [ ] Same with the keyboard: the lines print the bound keys; with a PlayStation pad, its usual
+      button names; in another menu language, the PC lines.
 
 ## Xbox fire (R4)
 
