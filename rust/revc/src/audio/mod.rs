@@ -127,6 +127,15 @@ fn ensure_device() -> bool {
     }
     STREAM.store(stream, Ordering::Release);
     unsafe { SDL_ResumeAudioStreamDevice(stream) };
+    // what the device actually runs at once opened (SDL converts our fixed 48 kHz stream to it:
+    // a different rate means an extra resampling stage); the latency measurements record it
+    unsafe {
+        let mut dev = SDL_AudioSpec { format: SDL_AUDIO_F32, channels: 0, freq: 0 };
+        let mut frames: c_int = 0;
+        if SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(stream), &mut dev, &mut frames) {
+            eprintln!("revc: audio: requested {OUTPUT_RATE} Hz stereo f32; the device runs at {} Hz, {} channels, {frames} frames per period", dev.freq, dev.channels);
+        }
+    }
     true
 }
 
