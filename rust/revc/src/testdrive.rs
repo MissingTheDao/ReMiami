@@ -97,6 +97,7 @@ unsafe extern "C" {
     fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
     fn revc_test_hud_text(kind: i32);
     fn revc_test_fire(kind: i32);
+    fn revc_test_particle_frames(kind: i32) -> i32;
     #[allow(clippy::too_many_arguments)]
     fn revc_test_pad(on: i32, buttons: u32, lx: f32, ly: f32, rx: f32, ry: f32, l2: f32, r2: f32);
     fn revc_test_menu_where(open: *mut i32, page: *mut i32, row: *mut i32) -> i32;
@@ -1374,6 +1375,15 @@ impl Driver {
                                 }
                             }
                             log(format!("{name}: captured {w}x{h} at game time {now}"));
+                            // REVC_TEST_EXPECT_FIRE_FRAMES=n: the car flame's final frame must be n
+                            // (29 in the Xbox style, 0 otherwise), also after the save's reload.
+                            if let Some(want) = std::env::var("REVC_TEST_EXPECT_FIRE_FRAMES").ok().and_then(|v| v.parse::<i32>().ok()) {
+                                let got: Vec<i32> = (0..3).map(|k| unsafe { revc_test_particle_frames(k) }).collect();
+                                log(format!("particle final frames (car flame, flame, fireball): {got:?}"));
+                                if got[0] != want {
+                                    self.fail(format!("car flame final frame {} (want {want})", got[0]));
+                                }
+                            }
                             if idx + 1 < scenes.len() {
                                 self.phase = Phase::Scene { idx: idx + 1, base, stage: SpotStage::Travel };
                             } else {

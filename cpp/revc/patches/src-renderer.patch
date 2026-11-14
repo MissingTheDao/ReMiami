@@ -1147,7 +1147,16 @@
  void CParticle::ReloadConfig()
  {
  	debug("Initialising CParticleMgr...");
-@@ -671,6 +722,9 @@
+@@ -303,6 +354,8 @@
+ 
+ 		gParticleArray[i].m_nRotationStep = 0;
+ 	}
++
++	ApplyStyle();	// revc: the reloaded table is the PC's; the UI style's values and frames again
+ }
+ 
+ void CParticle::Initialise()
+@@ -671,6 +724,9 @@
  		}
  	}
  
@@ -1157,7 +1166,39 @@
  	debug("CParticle ready");
  }
  
-@@ -1740,7 +1794,8 @@
+@@ -1127,6 +1183,31 @@
+ 	if ( CTimer::GetIsPaused() )
+ 		return;
+ 
++	// revc: REVC_TEST_PARTICLE_TRACE=1 logs, per update, the frame range (lowest..highest current
++	// frame) of the live car-flame, flame and fireball particles, to check the animation timing.
++	static int trace = -1;
++	if ( trace < 0 )
++		trace = getenv("REVC_TEST_PARTICLE_TRACE") != nil;
++	if ( trace )
++	{
++		static uint32 traceUpdate;
++		const tParticleType traced[3] = { PARTICLE_CARFLAME, PARTICLE_FLAME, PARTICLE_FIREBALL };
++		const char *names[3] = { "carflame", "flame", "fireball" };
++		for ( int32 t = 0; t < 3; t++ )
++		{
++			int32 lo = 999, hi = -1, count = 0;
++			for ( CParticle *p = mod_ParticleSystemManager.m_aParticles[traced[t]].m_pParticles; p; p = p->m_pNext )
++			{
++				count++;
++				lo = Min(lo, (int32)p->m_nCurrentFrame);
++				hi = Max(hi, (int32)p->m_nCurrentFrame);
++			}
++			if ( count )
++				debug("particletrace %u %s n=%d frames %d..%d\n", traceUpdate, names[t], count, lo, hi);
++		}
++		traceUpdate++;
++	}
++
+ 	CRGBA color(0, 0, 0, 0);
+ 	
+ 	float fFricDeccel50 = pow(0.50f, CTimer::GetTimeStep());
+@@ -1740,7 +1821,8 @@
  					++particle->m_nZRadiusTimer;
  			}
  

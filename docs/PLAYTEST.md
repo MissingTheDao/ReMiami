@@ -67,6 +67,9 @@ Either runs on `REVC_RENDERER_BACKEND=vulkan` (default) or `gl`. Untested: Windo
 
 - [ ] Xbox style (with the Xbox disc imported): burning cars and explosions show white-hot,
       animated flames; switching to the PC style in the menu brings back the orange ones.
+- [ ] Side by side with the real Xbox (xemu, ideally recorded at full frame rate): a burning car at
+      10-15 m, the blast and the smoke after it, in reMiami's Xbox style and on the Xbox. Not
+      compared to hardware yet (no capture could be staged).
 
 - [ ] Cars have their shiny reflections (MatFX environment map) like the normal build, on both
       backends; nothing looks inside out or too bright.

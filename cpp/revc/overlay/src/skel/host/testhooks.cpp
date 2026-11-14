@@ -41,6 +41,7 @@ extern "C" void PadLayoutApply(int layout);
 #include "Messages.h"
 #include "Automobile.h"
 #include "Explosion.h"
+#include "ParticleMgr.h"
 #include "ModelIndices.h"
 #include "Bike.h"
 #include "RpAnimBlend.h"
@@ -1160,4 +1161,15 @@ revc_test_fire(int kind)
 	car->m_nDoorLock = CARLOCK_UNLOCKED;
 	car->m_fHealth = 240.0f;
 	CWorld::Add(car);
+}
+
+// The live particle table's final animation frame for `kind` (0 car flame, 1 flame, 2 fireball):
+// the fire scenes check that the UI style's values hold after the game reloaded its particles.
+extern "C" int
+revc_test_particle_frames(int kind)
+{
+	const tParticleType types[3] = { PARTICLE_CARFLAME, PARTICLE_FLAME, PARTICLE_FIREBALL };
+	if (kind < 0 || kind > 2)
+		return -1;
+	return mod_ParticleSystemManager.m_aParticles[types[kind]].m_nFinalAnimationFrame;
 }
