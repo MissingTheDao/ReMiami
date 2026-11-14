@@ -40,6 +40,8 @@ extern "C" void PadLayoutApply(int layout);
 #include "GenericGameStorage.h"
 #include "Messages.h"
 #include "Pools.h"
+#include "Zones.h"
+#include "Building.h"
 #include "Automobile.h"
 #include "Explosion.h"
 #include "ParticleMgr.h"
@@ -1218,4 +1220,25 @@ extern "C" void
 revc_test_pool_report(void)
 {
 	CPools::Report("at the end");
+}
+
+// Building swap check (REVC_TEST_SWAP=x,y,z,from,to; SilentPatch #62): what the script's
+// SWAP_NEAREST_BUILDING_MODEL does, on the nearest building of model `from` within 80 m.
+extern "C" int
+revc_test_swap_building(float x, float y, float z, const char *from, const char *to)
+{
+	int mi1, mi2;
+	if(!CModelInfo::GetModelInfo(from, &mi1) || !CModelInfo::GetModelInfo(to, &mi2))
+		return 0;
+	CVector pos(x, y, z);
+	int16 total;
+	CEntity *found[16];
+	CWorld::FindObjectsOfTypeInRange(mi1, pos, 80.0f, true, &total, 16, found, true, false, false, false, false);
+	if(total == 0)
+		CWorld::FindObjectsOfTypeInRangeSectorList(mi1, CWorld::GetBigBuildingList(CTheZones::GetLevelFromPosition(&pos)), pos, 80.0f, true, &total, 16, found);
+	if(total == 0)
+		return 0;
+	((CBuilding*)found[0])->ReplaceWithNewModel(mi2);
+	CTheScripts::AddToBuildingSwapArray((CBuilding*)found[0], mi1, mi2);
+	return 1;
 }

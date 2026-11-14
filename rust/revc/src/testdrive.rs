@@ -99,6 +99,7 @@ unsafe extern "C" {
     fn revc_test_fire(kind: i32);
     fn revc_test_map_skipped() -> i32;
     fn revc_test_pool_report();
+    fn revc_test_swap_building(x: f32, y: f32, z: f32, from: *const std::ffi::c_char, to: *const std::ffi::c_char) -> i32;
     fn revc_test_cut_load(cut: *const std::ffi::c_char, out: *mut std::ffi::c_char, len: i32) -> i32;
     fn revc_test_prompt_text(key: *const std::ffi::c_char, out: *mut std::ffi::c_char, len: i32) -> i32;
     fn revc_test_particle_frames(kind: i32) -> i32;
@@ -1383,6 +1384,15 @@ impl Driver {
                         self.fire_done = false;
                         self.check_prompts();
                         self.check_cut_loads();
+                        // REVC_TEST_SWAP=x,y,z,from,to: a script-style building swap (testhooks.cpp)
+                        if let Ok(v) = std::env::var("REVC_TEST_SWAP") {
+                            let f: Vec<&str> = v.split(',').collect();
+                            if let [x, y, z, a, b] = f[..] {
+                                let (a, b) = (std::ffi::CString::new(a).unwrap(), std::ffi::CString::new(b).unwrap());
+                                let ok = unsafe { revc_test_swap_building(x.parse().unwrap_or(0.0), y.parse().unwrap_or(0.0), z.parse().unwrap_or(0.0), a.as_ptr(), b.as_ptr()) };
+                                log(format!("swap {v}: {}", if ok != 0 { "done" } else { "no such building" }));
+                            }
+                        }
                         log(format!("scene {name}: ({x}, {y}, {z:.2}) heading {heading} at {hour:02}:{minute:02} weather {weather}"));
                         self.phase = Phase::Scene { idx, base, stage: SpotStage::Settle };
                     }
