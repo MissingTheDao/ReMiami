@@ -173,3 +173,18 @@ fn vehicle_txds_come_from_the_cars_section() {
     assert_eq!(names.len(), 2);
     assert!(names.contains("landstal") && names.contains("idaho"));
 }
+
+#[test]
+fn map_files_keep_their_folders() {
+    let d = |p: &str| map_file_dest(p).map(|x| x.to_string_lossy().into_owned());
+    assert_eq!(d("DATA/MAPS/BANK/BANK.IPL").as_deref(), Some("maps/maps/bank/bank.ipl"));
+    assert_eq!(d("data/maps/bank/bank.col").as_deref(), Some("maps/maps/bank/bank.col"));
+    assert_eq!(d("DATA/MAPS/GENERIC.IDE").as_deref(), Some("maps/maps/generic.ide"));
+    assert_eq!(d("DATA/DEFAULT.IDE").as_deref(), Some("maps/default.ide"));
+    assert_eq!(d("DATA/GTA_VC.DAT").as_deref(), Some("maps/gta_vc.dat"));
+    assert_eq!(d("DATA/MAP.ZON").as_deref(), Some("maps/map.zon"));
+    assert_eq!(d("MODELS/COLL/GENERIC.COL").as_deref(), Some("coll/generic.col"));
+    assert_eq!(d("DATA/MAPS/MAP0.DAT"), None);
+    assert_eq!(d("DATA/TIMECYC.DAT"), None);
+    assert_eq!(d("MODELS/GTA3.IMG"), None);
+}

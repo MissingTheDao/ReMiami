@@ -144,6 +144,36 @@ pub const MANIFEST: &[Lift] = &[
     Lift { kind: DiscKind::Ps2, dir: "TEXT/AMERICAN.GXT", exts: &[], dest: "text" },
 ];
 
+/// Where a map file of the disc goes under the import's folder, or None: the map definitions and
+/// placements (IDE, IPL, ZON) and the area collision files below `data/` keep their folders under
+/// `maps/` (lower case; `DATA/MAPS/BANK/BANK.IPL` -> `maps/maps/bank/bank.ipl`), with the level file
+/// and `default.ide`; the loose collision files of `models/coll/` go to `coll/`.
+fn map_file_dest(path: &str) -> Option<PathBuf> {
+    let p = path.to_ascii_lowercase();
+    let ext = |xs: &[&str]| xs.iter().any(|x| p.ends_with(x));
+    if let Some(rest) = p.strip_prefix("data/") {
+        let wanted = (rest.starts_with("maps/") && ext(&[".ide", ".ipl", ".zon", ".col"]))
+            || rest == "default.ide"
+            || rest == "gta_vc.dat"
+            || (!rest.contains('/') && ext(&[".zon"]));
+        return wanted.then(|| Path::new("maps").join(rest));
+    }
+    let name = p.strip_prefix("models/coll/")?;
+    (!name.contains('/') && name.ends_with(".col")).then(|| Path::new("coll").join(name))
+}
+
+/// Copies the disc's map files (map_file_dest) into the import; the number written.
+fn lift_map_files(disc: &mut Disc, root: &Path, report: &mut Report) -> Result<usize, String> {
+    let wanted: Vec<(Entry, PathBuf)> = disc.entries.iter().filter_map(|e| Some((e.clone(), root.join(map_file_dest(&e.path)?)))).collect();
+    for (e, dest) in &wanted {
+        let data = disc.read(e).map_err(|err| format!("{}: {err}", e.path))?;
+        std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
+        std::fs::write(dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+        report.written.push(dest.clone());
+    }
+    Ok(wanted.len())
+}
+
 /// The PS2 cutscene entries the PS2 style plays instead of the PC's: three animations (a deal
 /// re-keyed, a door and a dancer's fingers) and four camera paths.
 pub const PS2_CUTS: &[&str] = &["int_d.ifp", "law_4.ifp", "stripa.ifp", "cok_4a.dat", "fin.dat", "rok_2.dat", "tex_3.dat"];
@@ -190,6 +220,10 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
         std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
         report.written.push(dest);
     }
+    // Map data per style (roadmap R4): the definitions, placements and collision, read in the
+    // console's style in place of the PC's (matched by model name)
+    let maps = lift_map_files(disc, &root, &mut report)?;
+    eprintln!("revc-import: {maps} map files");
     if disc.kind == DiscKind::Xbox {
         // World lightmaps (the textures of the Xbox's MatFX dual pass, `<model>@`, and the second
         // coordinates; xboxlm)
@@ -224,6 +258,18 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                         }
                         Err(why) => *kept_pc.entry(why.split(" (").next().unwrap_or("").to_string()).or_default() += 1,
                     }
+                    continue;
+                }
+                // Area collision files (map data per style)
+                if name.ends_with(".col") {
+                    let off = u32::from_le_bytes(e[0..4].try_into().unwrap()) as u64 * 2048;
+                    let size = u32::from_le_bytes(e[4..8].try_into().unwrap()) as usize * 2048;
+                    let raw = disc.read_range(&i, off, size).map_err(|err| format!("{name}: {err}"))?;
+                    let data = xboxlm::img_entry(&raw).map_err(|err| format!("{name}: {err}"))?;
+                    let dest = root.join("coll").join(&name);
+                    std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
+                    std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+                    report.written.push(dest);
                     continue;
                 }
                 let Some(stem) = name.strip_suffix(".txd") else { continue };
@@ -266,7 +312,8 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                 for e in dir.chunks_exact(32) {
                     let name = String::from_utf8_lossy(e[8..32].split(|&c| c == 0).next().unwrap_or(&[])).to_ascii_lowercase();
                     let is_dff = name.ends_with(".dff");
-                    if !name.ends_with(".txd") && !is_dff {
+                    let is_col = name.ends_with(".col");
+                    if !name.ends_with(".txd") && !is_dff && !is_col {
                         continue;
                     }
                     let mut pos = u32::from_le_bytes(e[0..4].try_into().unwrap()) as u64 * 2048;
@@ -293,6 +340,9 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                                 continue;
                             }
                         }
+                    } else if is_col {
+                        // area collision files (map data per style)
+                        (root.join("coll").join(&name), data)
                     } else {
                         (root.join("world").join(&name), data)
                     };
