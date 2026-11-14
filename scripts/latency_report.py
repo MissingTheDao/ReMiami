@@ -89,57 +89,46 @@ def parse_probe_csv(path: str):
 
 def parse_mon_wav(path: str):
     """
-    Parse mon.wav (stereo or mono, 48000 Hz).
-    Supports fmt tag 1 (PCM) and 3 (IEEE float).
-    Returns list of left-channel float samples.
+    Parse mon.wav (mono or stereo): fmt tag 1 (PCM 16/32-bit), 3 (IEEE float 32-bit) or
+    0xFFFE (extensible, with one of those as the subformat). Returns the left channel as floats,
+    or None. (Python's wave module refuses tag 3, which pw-record writes for f32.)
     """
+    import struct
     if not os.path.exists(path):
         return None
-    
-    samples = []
     try:
-        with wave_mod.open(path, "rb") as wf:
-            n_channels = wf.getnchannels()
-            sampwidth = wf.getsampwidth()
-            rate = wf.getframerate()
-            n_frames = wf.getnframes()
-            comp_type = wf.getcomptype()
-            
-            # We expect 48000 Hz, but proceed regardless
-            raw_data = wf.readframes(n_frames)
-            
-            num_samples = n_frames * n_channels
-            
-            if sampwidth == 2:
-                # 16-bit PCM
-                import struct
-                fmt = "<" + "h" * num_samples
-                data = struct.unpack(fmt, raw_data)
-                samples = [v / 32768.0 for v in data]
-            elif sampwidth == 4:
-                # 32-bit
-                if comp_type == b'NONE':
-                    # Assume float
-                    import struct
-                    fmt = "<" + "f" * num_samples
-                    data = struct.unpack(fmt, raw_data)
-                    samples = list(data)
-                else:
-                    # Assume PCM
-                    import struct
-                    fmt = "<" + "i" * num_samples
-                    data = struct.unpack(fmt, raw_data)
-                    samples = [v / 2147483648.0 for v in data]
-            else:
-                return None
-            
-            # Extract left channel if stereo
-            if n_channels == 2:
-                samples = samples[0::2]
-            
-            return samples
-    except Exception:
+        d = open(path, "rb").read()
+    except OSError:
         return None
+    if d[:4] != b"RIFF" or d[8:12] != b"WAVE":
+        return None
+    at, fmt, data = 12, None, None
+    while at + 8 <= len(d):
+        cid, size = d[at:at + 4], struct.unpack_from("<I", d, at + 4)[0]
+        body = d[at + 8:at + 8 + size]
+        if cid == b"fmt ":
+            fmt = body
+        elif cid == b"data":
+            data = body
+        at += 8 + size + (size & 1)
+    if fmt is None or data is None or len(fmt) < 16:
+        return None
+    tag, ch, _rate, _bps, align, bits = struct.unpack_from("<HHIIHH", fmt, 0)
+    if tag == 0xFFFE and len(fmt) >= 26:
+        tag = struct.unpack_from("<H", fmt, 24)[0]
+    if ch < 1 or align != ch * bits // 8:
+        return None
+    n = len(data) // align
+    if tag == 3 and bits == 32:
+        v = struct.unpack_from("<%df" % (n * ch), data, 0)
+        return list(v[0::ch])
+    if tag == 1 and bits == 16:
+        v = struct.unpack_from("<%dh" % (n * ch), data, 0)
+        return [x / 32768.0 for x in v[0::ch]]
+    if tag == 1 and bits == 32:
+        v = struct.unpack_from("<%di" % (n * ch), data, 0)
+        return [x / 2147483648.0 for x in v[0::ch]]
+    return None
 
 
 def find_onsets_in_wav(samples, sample_rate=48000):
@@ -255,49 +244,50 @@ def compute_cb_stats(callbacks):
     return (med, p99, max_val)
 
 
-def compute_jitter(events, mon_samples, sample_rate=48000):
+def compute_jitter(events, mon_samples, sample_rate=48000, window_ms=30.0):
     """
-    Compute jitter J from monitor wav.
-    d_i = (m_i - m_0)/sample_rate * 1000 - (t_e_i - t_e_0)/1e6 ms
-    J sd = pstdev(d), spread = p95 - p5, max |d|
+    Jitter J from the monitor capture. Monitor onsets are paired with probes by time, not by
+    order, so a foreign sound (another application on the same sink) cannot shift the pairing:
+    the clock offset is the candidate (onset - event) that pairs the most probes within
+    +-window_ms, then each probe takes its nearest onset inside the window.
+    d_i = (m_i - m_0) - (t_e_i - t_e_0) in ms over the paired probes.
+    Returns (sd, p5..p95 spread, max |d|, paired, stray onsets) or Nones.
     """
+    import bisect
+    none = (None, None, None, 0, 0)
     if mon_samples is None or len(events) < 2:
-        return None, None, None
-    
+        return none
     onsets = find_onsets_in_wav(mon_samples, sample_rate)
-    
     if len(onsets) < 2:
-        return None, None, None
-    
-    # Pair onsets with events in order
-    n_pairs = min(len(onsets), len(events))
-    onsets = onsets[:n_pairs]
-    event_times = [e[1] for e in events[:n_pairs]]
-    
-    # Convert to ms
-    t0_e = event_times[0]
-    t0_m = onsets[0] / sample_rate * 1000.0
-    
-    d_values = []
-    for i in range(n_pairs):
-        t_e_i = event_times[i]
-        t_m_i = onsets[i] / sample_rate * 1000.0
-        
-        # d_i = (m_i - m_0) - (t_e_i - t_e_0) in ms
-        d_i = (t_m_i - t0_m) - (t_e_i - t0_e) / 1e6
-        d_values.append(d_i)
-    
-    if not d_values:
-        return None, None, None
-    
-    sd = statistics.pstdev(d_values)
-    sorted_d = sorted(d_values)
-    p5 = percentile_nearest_rank(sorted_d, 5)
-    p95 = percentile_nearest_rank(sorted_d, 95)
-    spread = p95 - p5
-    max_abs_d = max(abs(d) for d in d_values)
-    
-    return (sd, spread, max_abs_d)
+        return none
+    m = [o / sample_rate * 1000.0 for o in onsets]
+    e = [t / 1e6 for _, t in events]
+
+    def pair(off):
+        out = []
+        for i, t in enumerate(e):
+            k = bisect.bisect_left(m, t + off)
+            best = None
+            for j in (k - 1, k):
+                if 0 <= j < len(m) and abs(m[j] - (t + off)) <= window_ms:
+                    if best is None or abs(m[j] - (t + off)) < abs(m[best] - (t + off)):
+                        best = j
+            if best is not None:
+                out.append((i, best))
+        return out
+
+    cands = [mj - e[0] for mj in m[:20]] + [m[0] - ei for ei in e[:20]]
+    best = max((pair(c) for c in cands), key=len)
+    if len(best) < 2:
+        return none
+    used = {j for _, j in best}
+    i0, j0 = best[0]
+    d = [(m[j] - m[j0]) - (e[i] - e[i0]) for i, j in best]
+    sd = statistics.pstdev(d)
+    sd_sorted = sorted(d)
+    spread = percentile_nearest_rank(sd_sorted, 95) - percentile_nearest_rank(sd_sorted, 5)
+    return (sd, spread, max(abs(x) for x in d), len(best), len(onsets) - len(used))
+
 
 
 def format_ms(val):
@@ -403,7 +393,7 @@ def process_run(run_dir):
     
     # Jitter
     mon_samples = parse_mon_wav(mon_path)
-    j_sd, j_spread, j_max = compute_jitter(events, mon_samples)
+    j_sd, j_spread, j_max, j_pairs, j_stray = compute_jitter(events, mon_samples)
     
     # Format L_sw stats
     lsw_med_str = format_ms(statistics.median(lsw_values)) if lsw_values else "n/a"
@@ -426,6 +416,8 @@ def process_run(run_dir):
         "l_total_med": format_ms(l_total_med) if l_total_med is not None else "n/a",
         "j_sd": format_ms(j_sd) if j_sd is not None else "n/a",
         "j_spread": format_ms(j_spread) if j_spread is not None else "n/a",
+        "j_pairs": str(j_pairs) if j_sd is not None else "n/a",
+        "stray_onsets": str(j_stray) if j_sd is not None else "n/a",
         "c_cb_med": format_us(cb_med),
         "c_cb_p99": format_us(cb_p99),
         "c_cb_max": format_us(cb_max),
@@ -453,6 +445,8 @@ def print_table(rows):
         "l_total_med",
         "j_sd",
         "j_spread",
+        "j_pairs",
+        "stray_onsets",
         "c_cb_med",
         "c_cb_p99",
         "c_cb_max",
