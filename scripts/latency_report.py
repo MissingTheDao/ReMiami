@@ -241,7 +241,7 @@ def compute_cb_stats(callbacks):
     cb_durations_us = []
     for c in callbacks:
         t_in, t_out, _, _, _, _ = c
-        duration_us = (t_out - t_in)
+        duration_us = (t_out - t_in) / 1000.0  # timestamps are ns
         cb_durations_us.append(duration_us)
     
     if not cb_durations_us:
@@ -594,6 +594,10 @@ def run_selftest():
         lsw_med = float(lsw_med_str)
         assert abs(lsw_med - 15.0) < 0.01, f"L_sw median {lsw_med} != 15.0"
         
+        # Assert C_cb median == 100 us (the synthetic callbacks take 100_000 ns): a unit slip fails here
+        cb_med = float(rows[0]["c_cb_med"])
+        assert abs(cb_med - 100.0) < 0.5, f"C_cb median {cb_med} us != 100 us"
+
         # Assert J sd < 0.05
         j_sd_str = rows[0]["j_sd"]
         if j_sd_str != "n/a":
