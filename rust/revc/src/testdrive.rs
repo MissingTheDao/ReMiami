@@ -96,6 +96,7 @@ unsafe extern "C" {
     fn revc_test_map_zoom(dir: i32);
     fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
     fn revc_test_hud_text(kind: i32);
+    fn revc_test_fire(kind: i32);
     #[allow(clippy::too_many_arguments)]
     fn revc_test_pad(on: i32, buttons: u32, lx: f32, ly: f32, rx: f32, ry: f32, l2: f32, r2: f32);
     fn revc_test_menu_where(open: *mut i32, page: *mut i32, row: *mut i32) -> i32;
@@ -656,6 +657,8 @@ struct Driver {
     /// Motion scenario: the player's rendered body and bone positions per captured frame.
     motion: Vec<[f32; 6]>,
     video_dir: Option<PathBuf>,
+    /// Scenes with REVC_TEST_FIRE=explosion: the current scene's explosion was set off.
+    fire_done: bool,
 }
 
 thread_local! {
@@ -713,6 +716,7 @@ pub fn init() -> Result<bool, String> {
         perf: Vec::new(),
         motion: Vec::new(),
         video_dir: std::env::var_os("REVC_TEST_VIDEO_DIR").map(PathBuf::from),
+        fire_done: false,
     };
     log(format!("scenario {scenario:?} started"));
     if std::env::var_os("REVC_TEST_WAV").is_some() {
@@ -1335,8 +1339,22 @@ impl Driver {
                         if let Some(k) = std::env::var("REVC_TEST_HUD_TEXT").ok().and_then(|v| v.parse().ok()) {
                             unsafe { revc_test_hud_text(k) };
                         }
+                        // REVC_TEST_FIRE=car: a burning car in front of the player (testhooks.cpp).
+                        if std::env::var("REVC_TEST_FIRE").as_deref() == Ok("car") {
+                            unsafe { revc_test_fire(0) };
+                        }
+                        self.fire_done = false;
                         log(format!("scene {name}: ({x}, {y}, {z:.2}) heading {heading} at {hour:02}:{minute:02} weather {weather}"));
                         self.phase = Phase::Scene { idx, base, stage: SpotStage::Settle };
+                    }
+                    // REVC_TEST_FIRE=explosion: a car explosion REVC_TEST_FIRE_MS (300) before the capture.
+                    SpotStage::Settle
+                        if !self.fire_done
+                            && std::env::var("REVC_TEST_FIRE").as_deref() == Ok("explosion")
+                            && now + std::env::var("REVC_TEST_FIRE_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(300u32) >= visit + SCENE_WAIT_MS =>
+                    {
+                        unsafe { revc_test_fire(1) };
+                        self.fire_done = true;
                     }
                     SpotStage::Settle if now >= visit + SCENE_WAIT_MS && unsafe { revc_test_fading() } == 0 => {
                         crate::host::request_capture();

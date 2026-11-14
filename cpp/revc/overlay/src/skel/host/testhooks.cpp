@@ -40,6 +40,8 @@ extern "C" void PadLayoutApply(int layout);
 #include "GenericGameStorage.h"
 #include "Messages.h"
 #include "Automobile.h"
+#include "Explosion.h"
+#include "ModelIndices.h"
 #include "Bike.h"
 #include "RpAnimBlend.h"
 #include "AnimBlendAssociation.h"
@@ -1127,4 +1129,35 @@ revc_test_scanner_setup(void)
 	TheCamera.RestoreWithJumpCut();
 	CHud::m_Wants_To_Draw_Hud = true;
 	return 1;
+}
+
+// Fire comparison shots (REVC_TEST_FIRE): 0 a burning car about 12 m in front of the player (health
+// below the engine-fire threshold, as a badly damaged car burns before it blows up; facing the
+// camera, so its burning engine is in view), 1 a car explosion at that spot (the fireball).
+extern "C" void
+revc_test_fire(int kind)
+{
+	CPlayerPed *ped = FindPlayerPed();
+	if (ped == nil)
+		return;
+	CVector spot = ped->GetPosition() + ped->GetForward() * 12.0f;
+	spot.z = CWorld::FindGroundZForCoord(spot.x, spot.y) + 1.0f;
+	if (kind == 1) {
+		CExplosion::AddExplosion(nil, nil, EXPLOSION_CAR, spot, 0, true);
+		return;
+	}
+	int model = MI_ADMIRAL;
+	CStreaming::RequestModel(model, STREAMFLAGS_DONT_REMOVE);
+	CStreaming::LoadAllRequestedModels(false);
+	if (CStreaming::ms_aInfoForModel[model].m_loadState != STREAMSTATE_LOADED) {
+		debug("revc_test_fire: no car model\n");
+		return;
+	}
+	CAutomobile *car = new CAutomobile(model, RANDOM_VEHICLE);
+	car->SetPosition(spot);
+	car->SetOrientation(0.0f, 0.0f, ped->m_fRotationCur + PI);
+	car->SetStatus(STATUS_ABANDONED);
+	car->m_nDoorLock = CARLOCK_UNLOCKED;
+	car->m_fHealth = 240.0f;
+	CWorld::Add(car);
 }

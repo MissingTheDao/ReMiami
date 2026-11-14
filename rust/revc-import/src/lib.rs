@@ -138,6 +138,9 @@ pub const MANIFEST: &[Lift] = &[
     // The consoles' English text (the console styles' menus and credits: revc/src/text.rs). The
     // Xbox's is one flat TKEY/TDAT table.
     Lift { kind: DiscKind::Xbox, dir: "TEXT/american.gxt", exts: &[], dest: "text" },
+    // The Xbox's fire: its particle values (merged by name in the Xbox style) and flame frames.
+    Lift { kind: DiscKind::Xbox, dir: "data/particle.cfg", exts: &[], dest: "data" },
+    Lift { kind: DiscKind::Xbox, dir: "models/particle.txd", exts: &[], dest: "models" },
     Lift { kind: DiscKind::Ps2, dir: "TEXT/AMERICAN.GXT", exts: &[], dest: "text" },
 ];
 

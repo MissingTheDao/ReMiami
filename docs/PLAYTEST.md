@@ -63,6 +63,11 @@ Either runs on `REVC_RENDERER_BACKEND=vulkan` (default) or `gl`. Untested: Windo
 - [ ] PS2 style, English: an Ammu-Nation shop lists items in arrows ("< Hammer >", "< Grenades >").
 - [ ] PS2 style: Stats shows "Best INSANE stunt so far:" with a colon (needs a save with stunts).
 
+## Xbox fire (R4)
+
+- [ ] Xbox style (with the Xbox disc imported): burning cars and explosions show white-hot,
+      animated flames; switching to the PC style in the menu brings back the orange ones.
+
 - [ ] Cars have their shiny reflections (MatFX environment map) like the normal build, on both
       backends; nothing looks inside out or too bright.
 - [ ] Peds walk and animate normally (skinning); no stretched limbs.

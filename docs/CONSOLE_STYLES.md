@@ -291,6 +291,30 @@ memory card and bonus-disc texts, and the menu labels (the skins draw their own,
 the captures: the Xbox titles and rows in the heading font's lowercase, the PS2's "subtitles :
 off" rows).
 
+## Xbox fire (R4)
+
+The Xbox's flames burn white-hot and are animated; the PC and PS2 use one orange flame texture.
+
+- **Values:** the import lifts the Xbox's `data/particle.cfg`. In the Xbox style its values replace
+  the PC's for the particle types both games have, matched by name (`merge_by_name` in
+  `rust/revc/src/particlecfg.rs`; the file's line order differs, so a whole-file load would shift
+  every later type). In practice that is the flame, fireball, car flame and car-fire smoke. The
+  PC and PS2 styles keep the PC table unchanged (the PS2's file is the PC's).
+- **Animation speed:** the Xbox's file gives the flames a speed of 0.5, a fraction the PC's integer
+  column can't hold. The Xbox steps such a flame one frame every second update; reMiami stores
+  speed 0 plus a flag (`ANIM_EVERY_OTHER`) for that. Flames and car flames play their first 30
+  frames once and hold the last, fireballs frames 30-43.
+- **Frames:** the import lifts the Xbox's `models/particle.txd`; its 45 flame frames go into one
+  array that the flame, car flame and fireball draw from in the Xbox style. A missing frame
+  stays the PC's single flame, and without the Xbox textures the frame columns fall back to the
+  single flame, so nothing reads past a raster.
+- **Style switch:** `CParticle::ApplyStyle` reloads the PC values, applies the style's, and points
+  the flame types at the frames; it runs at start and when the UI style changes.
+- **Test:** `REVC_TEST_FIRE=car|explosion` in the scenes scenario (a burning car or an explosion
+  12 m in front of the player, `REVC_TEST_FIRE_MS` before the shot for the explosion).
+- **Not done:** the Xbox's extra flame for moving burning cars (a particle type the PC game doesn't
+  have); a later item.
+
 ## 13i: texture packs per UI style
 
 `mods/packs/pc-*.zip`, `ps2-*.zip`, `xbox-*.zip` apply only in that UI style; other packs in every

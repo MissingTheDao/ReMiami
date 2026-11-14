@@ -11,6 +11,7 @@
 #include "Font.h"
 #include "Sprite2d.h"
 #include "TxdStore.h"
+#include "Particle.h"
 #include "Hud.h"
 
 extern "C" {
@@ -135,6 +136,7 @@ HostUpdateButtonGlyphs(void)
 		CFont::Shutdown();
 		CFont::Initialise();
 		CHud::ReloadTextures();
+		CParticle::ApplyStyle();	// the Xbox style's fire (particle values and flame frames)
 		LoadedGlyphSet = 0;	// CFont::Initialise put back the game's buttons
 	}
 	int set = revc_glyph_set_id();

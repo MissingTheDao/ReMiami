@@ -1080,6 +1080,103 @@
  }
  
  static uint8 DrunkBlurRed = 128;
+--- a/src/renderer/Particle.cpp
++++ b/src/renderer/Particle.cpp
+@@ -195,6 +195,13 @@
+ RwRaster  *gpBoatWakeRaster;
+ RwRaster  *gpFlame1Raster;
+ RwRaster  *gpFlame5Raster;
++#define REVC_FLAME_FRAMES 45
++RwRaster *gpFlameFrames[REVC_FLAME_FRAMES];	// revc: the Xbox's animated flame (flame01..flame45)
++static int32 gFlameFramesFound;
++extern "C" {
++	const char *revc_particle_xbox_txd_path(void);
++	int32 revc_particle_cfg_apply_style(tParticleSystemData *table, int32 framesAvailable);
++}
+ RwRaster  *gpRainDropSmallRaster;
+ RwRaster  *gpBloodRaster;
+ RwRaster  *gpLeafRaster[MAX_LEAF_FILES];
+@@ -250,6 +257,50 @@
+ 
+ 
+ 
++static void LoadXboxFlameFrames(void) {
++	int32 i;
++	for (i = 0; i < REVC_FLAME_FRAMES; i++)
++		gpFlameFrames[i] = gpFlame1Raster;
++	gFlameFramesFound = 0;
++
++	const char *path = revc_particle_xbox_txd_path();
++	if (path == nil) return;
++
++	int32 slot = CTxdStore::FindTxdSlot("particlexbox");
++	if (slot == -1) slot = CTxdStore::AddTxdSlot("particlexbox");
++
++	if (CTxdStore::GetSlot(slot)->texDict == nil) {
++		if (!CTxdStore::LoadTxd(slot, path)) return;
++		CTxdStore::AddRef(slot);
++	}
++
++	CTxdStore::PushCurrentTxd();
++	CTxdStore::SetCurrentTxd(slot);
++
++	char buf[16];
++	for (i = 0; i < REVC_FLAME_FRAMES; i++) {
++		sprintf(buf, "flame%02d", i + 1);
++		RwTexture *tex = RwTextureRead(buf, nil);
++		if (tex) {
++			gpFlameFrames[i] = RwTextureGetRaster(tex);
++			gFlameFramesFound++;
++		}
++	}
++
++	CTxdStore::PopCurrentTxd();
++	debug("CParticle: %d Xbox flame frames\n", gFlameFramesFound);
++}
++
++void CParticle::ApplyStyle() {
++	// revc: the particle table for the UI style. The Xbox style takes the Xbox's values for the particle types both games have (merged by name in rust/revc/src/particlecfg.rs) and animates its flames through its own frames; other styles get the PC's table and single flame. Called at start and when the UI style changes.
++	mod_ParticleSystemManager.LoadParticleData();
++	int32 merged = revc_particle_cfg_apply_style(mod_ParticleSystemManager.m_aParticles, gFlameFramesFound > 0);
++	bool frames = merged > 0 && gFlameFramesFound > 0;
++	mod_ParticleSystemManager.m_aParticles[PARTICLE_FLAME].m_ppRaster = frames ? gpFlameFrames : &gpFlame1Raster;
++	mod_ParticleSystemManager.m_aParticles[PARTICLE_CARFLAME].m_ppRaster = frames ? gpFlameFrames : &gpFlame1Raster;
++	mod_ParticleSystemManager.m_aParticles[PARTICLE_FIREBALL].m_ppRaster = frames ? gpFlameFrames : &gpFlame5Raster;
++}
++
+ void CParticle::ReloadConfig()
+ {
+ 	debug("Initialising CParticleMgr...");
+@@ -671,6 +722,9 @@
+ 		}
+ 	}
+ 
++	LoadXboxFlameFrames();
++	ApplyStyle();
++
+ 	debug("CParticle ready");
+ }
+ 
+@@ -1740,7 +1794,8 @@
+ 					++particle->m_nZRadiusTimer;
+ 			}
+ 
+-			if ( psystem->m_nAnimationSpeed != 0 )
++			// revc: a fractional speed (Xbox values): a frame every second update
++			if ( psystem->m_nAnimationSpeed != 0 || (psystem->Flags & ANIM_EVERY_OTHER) )
+ 			{
+ 				if ( particle->m_nAnimationSpeedTimer > psystem->m_nAnimationSpeed )
+ 				{
+--- a/src/renderer/Particle.h
++++ b/src/renderer/Particle.h
+@@ -56,6 +56,7 @@
+ 	static float Cos(int32 value) { return m_CosTable[value]; }
+ 	
+ 	static void ReloadConfig();
++	static void ApplyStyle();	// revc: particle values and flame frames for the UI style
+ 	static void Initialise();
+ 	static void Shutdown();
+ 	
 --- a/src/renderer/ParticleMgr.cpp
 +++ b/src/renderer/ParticleMgr.cpp
 @@ -21,235 +21,14 @@
@@ -1324,6 +1421,18 @@
 -	}
 +	revc_particle_cfg_load(work_buff, len < 0 ? 0 : len, m_aParticles);
  }
+--- a/src/renderer/ParticleMgr.h
++++ b/src/renderer/ParticleMgr.h
+@@ -19,7 +19,8 @@
+ 	DRAWTOP2D         = BIT(10),
+ 	CLIPOUT2D         = BIT(11),
+ 	ZCHECK_BUMP       = BIT(12),
+-	ZCHECK_BUMP_FIRST = BIT(13)
++	ZCHECK_BUMP_FIRST = BIT(13),
++	ANIM_EVERY_OTHER  = BIT(14)	// revc: animation speed below 1 (Xbox particle.cfg): a frame every second update (particlecfg.rs FLAG_ANIM_EVERY_OTHER)
+ };
+ 
+ 
 --- a/src/renderer/PlayerSkin.cpp
 +++ b/src/renderer/PlayerSkin.cpp
 @@ -10,6 +10,9 @@
