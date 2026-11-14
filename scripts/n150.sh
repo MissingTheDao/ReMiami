@@ -166,6 +166,12 @@ case "$cmd" in
       SRC=revc-src-$rev
       ssh -o BatchMode=yes "$HOST" "test -d $SRC" ||
         git -C "$ROOT" archive --format=tar "$rev" | ssh -o BatchMode=yes "$HOST" "mkdir -p $SRC && tar xf - -C $SRC" || exit 1
+      # the reVC C++ tree isn't in the archive: prepare it there from this machine's verified
+      # original files (as for the working tree below) plus that commit's cpp/revc
+      ssh -o BatchMode=yes "$HOST" "test -d $SRC/cpp/re3-miami/src" || {
+        rsync -a --delete "$ROOT/cpp/re3-miami/.reVC-original/" "$HOST:revc-original/" || exit 1
+        ssh -o BatchMode=yes "$HOST" "bash -c 'set -e; cd ~/$SRC; scripts/revc-source.sh prepare ~/revc-original > /dev/null'" || exit 1
+      }
       echo "building $rev on $HOST (bin/$AS)"
       ssh -o BatchMode=yes "$HOST" "bash -c '$TOOLS; set -o pipefail; cd $SRC/rust && nice cargo build -q --release 2>&1 | tail -30 && mkdir -p ~/$DIR/bin && { cp target/release/remiami ~/$DIR/bin/$AS 2>/dev/null || cp target/release/revc ~/$DIR/bin/$AS; }'" || exit 1
       echo "deployed $rev as $HOST:$DIR/bin/$AS"
