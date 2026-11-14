@@ -260,10 +260,12 @@ impl Voice {
         (g * att * (1.0 - pan) / 2.0, g * att * (1.0 + pan) / 2.0, g * att * send)
     }
 
-    /// OpenAL ignores invalid loop points and loops the whole buffer.
+    /// The region set with explicit loop points (start >= 0, end after start, within the buffer;
+    /// a region may start at 0); otherwise, as OpenAL does with invalid points, and with the
+    /// game's "no region" (0, -1), the whole buffer.
     fn loop_region(&self) -> (usize, usize) {
         let len = self.data.len();
-        if self.loop_start > 0 && self.loop_end > self.loop_start && self.loop_end as usize <= len {
+        if self.loop_start >= 0 && self.loop_end > self.loop_start && self.loop_end as usize <= len {
             (self.loop_start as usize, self.loop_end as usize)
         } else {
             (0, len)
@@ -320,6 +322,21 @@ impl Voice {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn loop_region_may_start_at_zero() {
+        let mut v = Voice { data: vec![0; 100], ..Voice::default() };
+        v.loop_start = 0;
+        v.loop_end = 94;
+        assert_eq!(v.loop_region(), (0, 94));
+        v.loop_end = -1; // the game's "no region"
+        assert_eq!(v.loop_region(), (0, 100));
+        v.loop_start = 10;
+        v.loop_end = 50;
+        assert_eq!(v.loop_region(), (10, 50));
+        v.loop_end = 200; // beyond the buffer: invalid, whole buffer
+        assert_eq!(v.loop_region(), (0, 100));
+    }
+
     use super::*;
 
     const LEN: usize = 480;

@@ -17,4 +17,7 @@ What players notice, newest first. Developer details are in the commit messages.
   - Muggers actually rob their victims (every style).
   - Busted with the free-arrest perk keeps your weapons; only real aiming alarms shopkeepers with
     Classic controls; fist shake with brass knuckles.
+- **Looped sounds:** sounds whose loop region starts at the very beginning now loop exactly that
+  region instead of the whole sample (e.g. the helicopter rotor loop no longer repeats a few
+  samples of tail each cycle), so some looped sounds sound slightly different, as intended.
 - **Large texture packs:** packs with more than 65,535 files or over 4 GB work (ZIP64).
