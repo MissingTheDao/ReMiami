@@ -1096,15 +1096,24 @@
  RwRaster  *gpRainDropSmallRaster;
  RwRaster  *gpBloodRaster;
  RwRaster  *gpLeafRaster[MAX_LEAF_FILES];
-@@ -250,6 +257,50 @@
+@@ -250,6 +257,63 @@
  
  
  
-+static void LoadXboxFlameFrames(void) {
-+	int32 i;
-+	for (i = 0; i < REVC_FLAME_FRAMES; i++)
++// The flame frames default to the PC's single flame (at start); the Xbox's are loaded the first
++// time the Xbox style is active (ApplyStyle), so no other style reads the Xbox import.
++static bool gXboxFlameFramesTried;
++
++static void InitFlameFrames(void) {
++	for (int32 i = 0; i < REVC_FLAME_FRAMES; i++)
 +		gpFlameFrames[i] = gpFlame1Raster;
 +	gFlameFramesFound = 0;
++	gXboxFlameFramesTried = false;
++}
++
++static void LoadXboxFlameFrames(void) {
++	int32 i;
++	gXboxFlameFramesTried = true;
 +
 +	const char *path = revc_particle_xbox_txd_path();
 +	if (path == nil) return;
@@ -1134,7 +1143,11 @@
 +	debug("CParticle: %d Xbox flame frames\n", gFlameFramesFound);
 +}
 +
++extern int8 gUiStyle;
++
 +void CParticle::ApplyStyle() {
++	if (gUiStyle == 2 && !gXboxFlameFramesTried)
++		LoadXboxFlameFrames();
 +	// revc: the particle table for the UI style. The Xbox style takes the Xbox's values for the particle types both games have (merged by name in rust/revc/src/particlecfg.rs) and animates its flames through its own frames; other styles get the PC's table and single flame. Called at start and when the UI style changes.
 +	mod_ParticleSystemManager.LoadParticleData();
 +	int32 merged = revc_particle_cfg_apply_style(mod_ParticleSystemManager.m_aParticles, gFlameFramesFound > 0);
@@ -1147,7 +1160,7 @@
  void CParticle::ReloadConfig()
  {
  	debug("Initialising CParticleMgr...");
-@@ -303,6 +354,8 @@
+@@ -303,6 +367,8 @@
  
  		gParticleArray[i].m_nRotationStep = 0;
  	}
@@ -1156,17 +1169,17 @@
  }
  
  void CParticle::Initialise()
-@@ -671,6 +724,9 @@
+@@ -671,6 +737,9 @@
  		}
  	}
  
-+	LoadXboxFlameFrames();
++	InitFlameFrames();
 +	ApplyStyle();
 +
  	debug("CParticle ready");
  }
  
-@@ -1127,6 +1183,31 @@
+@@ -1127,6 +1196,31 @@
  	if ( CTimer::GetIsPaused() )
  		return;
  
@@ -1198,7 +1211,7 @@
  	CRGBA color(0, 0, 0, 0);
  	
  	float fFricDeccel50 = pow(0.50f, CTimer::GetTimeStep());
-@@ -1740,7 +1821,8 @@
+@@ -1740,7 +1834,8 @@
  					++particle->m_nZRadiusTimer;
  			}
  
