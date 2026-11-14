@@ -83,6 +83,17 @@ A mission and the safehouse:
       sliding from the old position. [8]
 - [ ] Save in a safehouse, then load that slot. [15]
 
+SilentPatch fixes (all styles):
+- [ ] Mouse aim: up/down feels as fast as left/right (the vertical sensitivity equals the
+      horizontal now; a change for anyone used to the old feel), and the saved sensitivity is kept
+      after a restart. Mouse look keeps working while the screen fades in. [SP 16/57/17]
+- [ ] With Classic controls (pad), looking towards a shopkeeper doesn't count as aiming at them;
+      aiming does. [SP 61]
+- [ ] Tommy shakes his fist at stopped traffic with brass knuckles too, and drivers react to
+      Vice City's weapons. [SP 64/65]
+- [ ] Busted with the free-arrest perk: Tommy keeps his weapons. [SP 104]
+- [ ] Muggers on the street rob their victims instead of giving up at once (every style). [SP 71]
+
 At the end:
 - [ ] Restart with `REVC_RENDERER=wgpu` and play a few minutes: it looks the same as the
       default. [12]
@@ -99,6 +110,8 @@ animate at 30 Hz (only the body moves smoothly).
       dealer and in `stripa` the dancer's hands move naturally, `tex_3` holds its last shot about
       3 s longer than on PC; `cok_4a`, `fin`, `rok_2` play their PS2 camera moves. [R4]
 
+- [ ] PS2 style: tear gas (e.g. a thrown canister near Tommy and a mission character) hurts both;
+      in the PC or Xbox style the same scene leaves Tommy and mission characters unhurt. [SP 68]
 - [ ] Map data (start the game in the PS2 style): walk or drive past the spots whose collision
       follows the PS2's rebuilt models (map coordinates): the mansion grounds and hall
       (-380, -570; stand where the floor reflects, jump on the banister), Little Havana's car

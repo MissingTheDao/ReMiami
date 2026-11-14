@@ -375,6 +375,14 @@ Counts (tests pin them, `mapstyle.rs` `real_data_counts`, on the local imports):
 The import writes the console's map files under `<import>/<ps2|xbox>/maps/` and `coll/`; the
 patched files go to `maps-patched/` there at start. Nothing from the discs is in the repo.
 
+## Behaviour per style
+
+Most of what the styles change is looks. The PS2 style also carries one behaviour difference (a
+SilentPatch VC fix the user wanted as on the PS2 only), decided by the style at the moment it
+happens, no restart: tear gas hurts Tommy and mission characters (#68; `core/World.cpp`
+SetPedsChoking). The PC and Xbox styles keep the PC's behaviour. Map data per style also changes
+what is where (above), but it takes effect at the next start.
+
 ## Xbox fire (R4)
 
 The Xbox's flames burn white-hot and are animated; the PC and PS2 use one orange flame texture.
