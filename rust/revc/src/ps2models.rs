@@ -46,6 +46,7 @@ pub unsafe extern "C" fn revc_ps2_model(name: *const c_char, len: *mut usize) ->
     };
     let name = unsafe { CStr::from_ptr(name) }.to_string_lossy().to_ascii_lowercase();
     let path = crate::discimport::cache_dir().join(console).join("models-world").join(format!("{name}.dff"));
+    crate::discimport::note_access(&path);
     match std::fs::read(&path) {
         Ok(d) => {
             let b = d.into_boxed_slice();

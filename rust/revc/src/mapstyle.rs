@@ -446,6 +446,7 @@ pub unsafe extern "C" fn revc_map_style_begin(level: *const c_char, img: *mut c_
         _ => return 0,
     };
     let console = crate::discimport::cache_dir().join(kind);
+    crate::discimport::note_access(&console.join("maps"));
     if !crate::ps2models::world_models_on(style) || !console.join("maps").is_dir() {
         return 0;
     }

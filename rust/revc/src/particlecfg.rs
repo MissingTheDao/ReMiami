@@ -505,7 +505,9 @@ fn merge_wanted(style: i32) -> bool {
 
 /// Returns the path to an Xbox-imported file within the cache directory.
 fn xbox_file(name: &str) -> std::path::PathBuf {
-    crate::discimport::cache_dir().join("xbox").join(name)
+    let p = crate::discimport::cache_dir().join("xbox").join(name);
+    crate::discimport::note_access(&p);
+    p
 }
 
 /// Returns a pointer to the C-string path of the Xbox particle textures file if it exists.

@@ -28,6 +28,26 @@ static FILTERS: Filters = Filters([
 ]);
 
 /// `userfiles/import`, or REVC_IMPORT_DIR (tests point it at an import made beforehand).
+/// Files read from the import folder this run, relative to it (the PC-style guard in the test
+/// driver: a PC-style game must not read console data, apart from an allowlist).
+static ACCESSED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Records a read of `path` if it lies in the import folder.
+pub fn note_access(path: &Path) {
+    if let Ok(rel) = path.strip_prefix(cache_dir()) {
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        let mut v = ACCESSED.lock().unwrap_or_else(|e| e.into_inner());
+        if !v.contains(&rel) {
+            v.push(rel);
+        }
+    }
+}
+
+/// The import-folder files read so far (see note_access).
+pub fn accessed() -> Vec<String> {
+    ACCESSED.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
 pub fn cache_dir() -> PathBuf {
     std::env::var_os("REVC_IMPORT_DIR").map_or_else(|| PathBuf::from("userfiles/import"), PathBuf::from)
 }
@@ -100,7 +120,9 @@ pub unsafe extern "C" fn revc_import_read(kind: c_int, rel: *const c_char, buf: 
         return -1;
     }
     let rel = unsafe { CStr::from_ptr(rel) }.to_string_lossy().into_owned();
-    let Ok(data) = std::fs::read(cache_dir().join(kind.dir()).join(rel)) else { return -1 };
+    let path = cache_dir().join(kind.dir()).join(rel);
+    let Ok(data) = std::fs::read(&path) else { return -1 };
+    note_access(&path);
     let n = data.len().min(cap);
     unsafe { std::ptr::copy_nonoverlapping(data.as_ptr(), buf, n) };
     n as isize
@@ -122,6 +144,7 @@ pub unsafe extern "C" fn revc_import_path(kind: c_int, rel: *const c_char, out: 
     if !path.is_file() {
         return 0;
     }
+    note_access(&path);
     let bytes = path.to_string_lossy().into_owned().into_bytes();
     if bytes.len() + 1 > cap {
         return 0;
@@ -137,6 +160,7 @@ pub unsafe extern "C" fn revc_import_path(kind: c_int, rel: *const c_char, out: 
 /// ("ui", "r3_menu_241"), wins: remakes at a higher resolution (callers size sprites by layout,
 /// not by pixels).
 fn decode_imported(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
+    note_access(path);
     let folder = path.parent().and_then(|p| p.file_name()).map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
     let stem = path.file_stem().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
     match crate::texmods::find_rgba(&folder, &stem) {

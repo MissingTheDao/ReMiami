@@ -292,7 +292,8 @@ static PS2: std::sync::OnceLock<Option<Store>> = std::sync::OnceLock::new();
 fn console_store(lock: &'static std::sync::OnceLock<Option<Store>>, folder: &str, name: &str) -> Option<&'static Store> {
     lock.get_or_init(|| {
         let path = crate::discimport::cache_dir().join(folder).join("text").join("american.gxt");
-        let data = std::fs::read(path).ok()?;
+        let data = std::fs::read(&path).ok()?;
+        crate::discimport::note_access(&path);
         match Gxt::parse(&data) {
             Ok(g) => Some(build(g)),
             Err(e) => {

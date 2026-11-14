@@ -262,6 +262,7 @@ pub fn build_world(cache: &Path) -> Result<usize, String> {
 pub fn ensure(cache: &Path) {
     for (console, kind) in [(Console::Ps2, revc_import::DiscKind::Ps2), (Console::Xbox, revc_import::DiscKind::Xbox)] {
         if revc_import::imported(cache, kind) && !pack_path(cache, console).is_file() {
+            crate::discimport::note_access(&pack_path(cache, console));
             if let Err(e) = build(cache, console) {
                 eprintln!("ps2pack: {e}");
             }
@@ -271,6 +272,7 @@ pub fn ensure(cache: &Path) {
         && cache.join("ps2").join("world").is_dir()
         && !world_dir(cache).join("ps2-world.zip").is_file()
     {
+        crate::discimport::note_access(&world_dir(cache).join("ps2-world.zip"));
         if let Err(e) = build_world(cache) {
             eprintln!("ps2pack: {e}");
         }

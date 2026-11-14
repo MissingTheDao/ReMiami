@@ -1936,6 +1936,19 @@ impl Driver {
         // a map placement skipped because a pool was full (FileLoader.cpp): the pool limits are too
         // low for some style's map data again
         unsafe { revc_test_pool_report() };
+        // REVC_TEST_IMPORT_GUARD=1: in the PC style, with console imports present, nothing from the
+        // import folder may be read but the allowlist (the controller-layout page's pad outline,
+        // its only art source; docs/CONSOLE_STYLES.md)
+        if std::env::var_os("REVC_TEST_IMPORT_GUARD").is_some() {
+            const ALLOW: &[&str] = &["xbox/ui/r3_menu_336.dds"];
+            let read = crate::discimport::accessed();
+            log(format!("import guard: style {}, {} import file(s) read: {read:?}", crate::texmods::style(), read.len()));
+            if crate::texmods::style() == 0 {
+                for f in read.iter().filter(|f| !ALLOW.contains(&f.as_str())) {
+                    self.fail(format!("PC style read console data from the import: {f}"));
+                }
+            }
+        }
         let skipped = unsafe { revc_test_map_skipped() };
         if skipped > 0 {
             self.fail(format!("{skipped} map placement(s) skipped: a pool is full (core/config.h)"));

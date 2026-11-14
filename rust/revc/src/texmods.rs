@@ -108,6 +108,7 @@ fn add_packs(index: &mut Index, dir: &Path, style: i32) {
         .collect();
     zips.sort_by_key(|p| (pack_style(p).is_none(), p.clone()));
     for zip in zips {
+        crate::discimport::note_access(&zip);
         let entries = match crate::ziparchive::list(&zip) {
             Ok(e) => e,
             Err(e) => {
