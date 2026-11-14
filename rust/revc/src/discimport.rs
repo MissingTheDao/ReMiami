@@ -106,6 +106,33 @@ pub unsafe extern "C" fn revc_import_read(kind: c_int, rel: *const c_char, buf: 
     n as isize
 }
 
+/// The path of an imported file (`rel` inside the kind's folder) for the C++ file functions,
+/// NUL-terminated in `out`: its length, or 0 if the import doesn't have it or `cap` is too small.
+///
+/// # Safety
+/// `rel` is a NUL-terminated string; `out` holds `cap` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_import_path(kind: c_int, rel: *const c_char, out: *mut c_char, cap: usize) -> c_int {
+    let kind = if kind == 1 { DiscKind::Ps2 } else { DiscKind::Xbox };
+    if !revc_import::imported(&cache_dir(), kind) || rel.is_null() || out.is_null() {
+        return 0;
+    }
+    let rel = unsafe { CStr::from_ptr(rel) }.to_string_lossy().into_owned();
+    let path = cache_dir().join(kind.dir()).join(rel);
+    if !path.is_file() {
+        return 0;
+    }
+    let bytes = path.to_string_lossy().into_owned().into_bytes();
+    if bytes.len() + 1 > cap {
+        return 0;
+    }
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), out as *mut u8, bytes.len());
+        *out.add(bytes.len()) = 0;
+    }
+    bytes.len() as c_int
+}
+
 /// An imported image decoded to RGBA; a texture mod or pack for (folder, name), e.g.
 /// ("ui", "r3_menu_241"), wins: remakes at a higher resolution (callers size sprites by layout,
 /// not by pixels).

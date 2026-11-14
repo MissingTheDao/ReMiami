@@ -315,6 +315,25 @@ wrong once controls are remapped), the memory card and bonus-disc texts, and the
 the captures: the Xbox titles and rows in the heading font's lowercase, the PS2's "subtitles :
 off" rows).
 
+## PS2 cutscenes (R4)
+
+The PS2's `ANIM/CUTS.IMG` has the PC's 148 entries. Most that differ do so only in padding;
+seven differ in substance and the PS2 style plays the PS2's versions (imported into
+`ps2/cuts/`, read by `animation/CutsceneMgr.cpp` in place of the PC's entry):
+
+- animations: `int_d` (the dealer re-keyed), `law_4` (the door: fewer keys, same swing, held
+  from 15 s instead of stored to 61 s; never looped by the script, so the cut's length and sound
+  are unchanged), `stripa` (finger bones);
+- camera paths: `cok_4a`, `fin`, `rok_2`, `tex_3`. Only `tex_3` changes the cut's length: its PS2
+  path ends about 3 s later (45 s instead of 42 s) with the same animations, as on the PS2.
+
+Left out: the cuts with characters only the PS2 has (crowd fans in `cub_1`-`cub_3`, a character
+in `bud_2`, the player's own animation in `col_1`). The PS2's mission script spawns them; with the
+PC's script nothing would. Tied to the console-missions question (roadmap R4 item 6).
+
+Check: `REVC_TEST_CUT_LOAD=cut,cut…` (any scenario that visits scenes) loads each cut's data and
+logs its camera path end and animation lengths; the log says which parts came from the PS2.
+
 ## Xbox fire (R4)
 
 The Xbox's flames burn white-hot and are animated; the PC and PS2 use one orange flame texture.

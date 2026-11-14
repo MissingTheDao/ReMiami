@@ -144,6 +144,10 @@ pub const MANIFEST: &[Lift] = &[
     Lift { kind: DiscKind::Ps2, dir: "TEXT/AMERICAN.GXT", exts: &[], dest: "text" },
 ];
 
+/// The PS2 cutscene entries the PS2 style plays instead of the PC's: three animations (a deal
+/// re-keyed, a door and a dancer's fingers) and four camera paths.
+pub const PS2_CUTS: &[&str] = &["int_d.ifp", "law_4.ifp", "stripa.ifp", "cok_4a.dat", "fin.dat", "rok_2.dat", "tex_3.dat"];
+
 fn matches(lift: &Lift, path: &str) -> bool {
     let p = path.to_ascii_lowercase();
     let dir = lift.dir.to_ascii_lowercase();
@@ -297,6 +301,25 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                     report.written.push(dest);
                 }
                 eprintln!("revc-import: {models} PS2 models converted; kept as PC models: {kept_pc:?}");
+            }
+        }
+        // Cutscenes whose animation or camera path differ from the PC's in substance (not only in
+        // padding): the PS2 style plays these (animation/CutsceneMgr.cpp). The cuts with PS2-only
+        // characters are left out: nothing would spawn those characters.
+        if let (Some(d), Some(i)) = (disc.find("ANIM/CUTS.DIR").cloned(), disc.find("ANIM/CUTS.IMG").cloned()) {
+            let dir = disc.read(&d).map_err(|e| format!("CUTS.DIR: {e}"))?;
+            for e in dir.chunks_exact(32) {
+                let name = String::from_utf8_lossy(e[8..32].split(|&c| c == 0).next().unwrap_or(&[])).to_ascii_lowercase();
+                if !PS2_CUTS.contains(&name.as_str()) {
+                    continue;
+                }
+                let off = u32::from_le_bytes(e[0..4].try_into().unwrap()) as u64 * 2048;
+                let size = u32::from_le_bytes(e[4..8].try_into().unwrap()) as usize * 2048;
+                let data = disc.read_range(&i, off, size).map_err(|err| format!("{name}: {err}"))?;
+                let dest = root.join("cuts").join(&name);
+                std::fs::create_dir_all(dest.parent().unwrap()).map_err(|err| format!("{}: {err}", dest.display()))?;
+                std::fs::write(&dest, data).map_err(|err| format!("{}: {err}", dest.display()))?;
+                report.written.push(dest);
             }
         }
         // The game fills the "generic" slot from the standalone MODELS/GENERIC.TXD, not from the

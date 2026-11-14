@@ -94,6 +94,10 @@ animate at 30 Hz (only the body moves smoothly).
 
 - [ ] Ocean Beach Ammu-Nation: the shop lists items in arrows ("< Hammer >", "< Grenades >"). [R4]
 - [ ] Stats shows "Best INSANE stunt so far:" with a colon (needs a save with stunts). [R4]
+- [ ] Cutscenes with PS2 data (needs saves before those missions; cut names as in
+      docs/CONSOLE_STYLES.md): in `law_4` the office door opens and stays open, in `int_d` the
+      dealer and in `stripa` the dancer's hands move naturally, `tex_3` holds its last shot about
+      3 s longer than on PC; `cok_4a`, `fin`, `rok_2` play their PS2 camera moves. [R4]
 
 ## Session 4: Xbox style (about 30 min; Xbox disc imported, menu language English)
 

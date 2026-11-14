@@ -97,6 +97,7 @@ unsafe extern "C" {
     fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
     fn revc_test_hud_text(kind: i32);
     fn revc_test_fire(kind: i32);
+    fn revc_test_cut_load(cut: *const std::ffi::c_char, out: *mut std::ffi::c_char, len: i32) -> i32;
     fn revc_test_prompt_text(key: *const std::ffi::c_char, out: *mut std::ffi::c_char, len: i32) -> i32;
     fn revc_test_particle_frames(kind: i32) -> i32;
     #[allow(clippy::too_many_arguments)]
@@ -766,6 +767,19 @@ pub fn tick() {
 impl Driver {
     /// REVC_TEST_PROMPTS=KEY,KEY…: logs each key's text as the HUD shows it (controls filled in);
     /// REVC_TEST_EXPECT_PROMPTS=KEY=text;KEY=text…: fails unless KEY's text contains that text.
+    /// REVC_TEST_CUT_LOAD=cut,cut…: loads each cut's animations and camera path and logs what came
+    /// in (testhooks.cpp revc_test_cut_load).
+    fn check_cut_loads(&mut self) {
+        let Ok(cuts) = std::env::var("REVC_TEST_CUT_LOAD") else { return };
+        for cut in cuts.split(',').filter(|c| !c.is_empty()) {
+            let Ok(c) = std::ffi::CString::new(cut) else { continue };
+            let mut buf = [0 as std::ffi::c_char; 2048];
+            let n = unsafe { revc_test_cut_load(c.as_ptr(), buf.as_mut_ptr(), buf.len() as i32) };
+            let text: String = buf[..n.clamp(0, buf.len() as i32 - 1) as usize].iter().map(|&c| c as u8 as char).collect();
+            log(format!("cut {cut}: {text}"));
+        }
+    }
+
     fn check_prompts(&mut self) {
         let Ok(keys) = std::env::var("REVC_TEST_PROMPTS") else { return };
         let expect = std::env::var("REVC_TEST_EXPECT_PROMPTS").unwrap_or_default();
@@ -1366,6 +1380,7 @@ impl Driver {
                         }
                         self.fire_done = false;
                         self.check_prompts();
+                        self.check_cut_loads();
                         log(format!("scene {name}: ({x}, {y}, {z:.2}) heading {heading} at {hour:02}:{minute:02} weather {weather}"));
                         self.phase = Phase::Scene { idx, base, stage: SpotStage::Settle };
                     }

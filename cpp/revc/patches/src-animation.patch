@@ -105,7 +105,78 @@
  const struct {
  	const char *szTrackName;
  	int iTrackId;
-@@ -540,6 +543,7 @@
+@@ -178,6 +181,28 @@
+ 	delete ms_pCutsceneDir;
+ }
+ 
++#ifdef LIBRW_HOST
++extern "C" int revc_import_path(int kind, const char *rel, char *out, size_t cap);
++extern int8 gUiStyle;
++#endif
++
++// revc: the imported PS2 file for this cut's animation or camera path ("ifp"/"dat"), in the PS2 UI style
++static bool
++CutscenePs2File(const char *cut, const char *ext, char *out, size_t cap)
++{
++#ifdef LIBRW_HOST
++	if (gUiStyle != 1)
++		return false;
++	char rel[64];
++	snprintf(rel, sizeof(rel), "cuts/%s.%s", cut, ext);
++	for (char *c = rel; *c; c++)
++		*c = tolower(*c);
++	return revc_import_path(1, rel, out, cap) > 0;
++#else
++	return false;
++#endif
++}
++
+ void
+ CCutsceneMgr::LoadCutsceneData(const char *szCutsceneName)
+ {
+@@ -200,8 +225,16 @@
+ 
+ 	strcpy(ms_cutsceneName, szCutsceneName);
+ 
++	// revc (R4): the PS2 UI style plays the PS2's own animation and camera path for the cuts where
++	// they differ from the PC's (imported from the player's disc: cuts/<name>.ifp|.dat)
++	char ps2Ifp[512], ps2Dat[512];
++	bool usePs2Ifp = CutscenePs2File(szCutsceneName, "ifp", ps2Ifp, sizeof(ps2Ifp));
++	bool usePs2Dat = CutscenePs2File(szCutsceneName, "dat", ps2Dat, sizeof(ps2Dat));
++	if (usePs2Ifp || usePs2Dat)
++		printf("revc: cutscene %s: the PS2's%s%s\n", szCutsceneName, usePs2Ifp ? " animations" : "", usePs2Dat ? " camera path" : "");
++
+ 	RwStream *stream;
+-	stream = RwStreamOpen(rwSTREAMFILENAME, rwSTREAMREAD, "ANIM\\CUTS.IMG");
++	stream = RwStreamOpen(rwSTREAMFILENAME, rwSTREAMREAD, usePs2Ifp ? ps2Ifp : "ANIM\\CUTS.IMG");
+ 	assert(stream);
+ 
+ 	// Load animations
+@@ -209,7 +242,8 @@
+ 	if (ms_pCutsceneDir->FindItem(gString, offset, size)) {
+ 		CStreaming::MakeSpaceFor(size << 11);
+ 		CStreaming::ImGonnaUseStreamingMemory();
+-		RwStreamSkip(stream,  offset << 11);
++		if (!usePs2Ifp)
++			RwStreamSkip(stream,  offset << 11);
+ 		CAnimManager::LoadAnimFile(stream, true, uncompressedAnims);
+ 		ms_cutsceneAssociations.CreateAssociations(szCutsceneName);
+ 		CStreaming::IHaveUsedStreamingMemory();
+@@ -220,11 +254,11 @@
+ 	RwStreamClose(stream, nil);
+ 
+ 	// Load camera data
+-	file = CFileMgr::OpenFile("ANIM\\CUTS.IMG", "rb");
++	file = CFileMgr::OpenFile(usePs2Dat ? ps2Dat : "ANIM\\CUTS.IMG", "rb");
+ 	sprintf(gString, "%s.DAT", szCutsceneName);
+ 	if (ms_pCutsceneDir->FindItem(gString, offset, size)) {
+ 		CStreaming::ImGonnaUseStreamingMemory();
+-		CFileMgr::Seek(file, offset << 11, SEEK_SET);
++		CFileMgr::Seek(file, usePs2Dat ? 0 : offset << 11, SEEK_SET);
+ 		TheCamera.LoadPathSplines(file);
+ 		CStreaming::IHaveUsedStreamingMemory();
+ 		bCamLoaded = true;
+@@ -540,6 +574,7 @@
  	if (bCamLoaded)
  		if (CGeneral::faststricmp(ms_cutsceneName, "finale") && TheCamera.Cams[TheCamera.ActiveCam].Mode == CCam::MODE_FLYBY && ms_cutsceneLoadStatus == CUTSCENE_LOADING_0) {
  			if (CPad::GetPad(0)->GetCrossJustDown()
@@ -113,3 +184,13 @@
  				|| (CGame::playingIntro && CPad::GetPad(0)->GetStartJustDown())
  				|| CPad::GetPad(0)->GetLeftMouseJustDown()
  				|| CPad::GetPad(0)->GetEnterJustDown()
+--- a/src/animation/CutsceneMgr.h
++++ b/src/animation/CutsceneMgr.h
+@@ -37,6 +37,7 @@
+ 	static CCutsceneObject* GetCutsceneObject(int id) { return ms_pCutsceneObjects[id]; }
+ 	static int GetCutsceneTimeInMilleseconds(void) { return 1000.0f * ms_cutsceneTimer; }
+ 	static char *GetCutsceneName(void) { return ms_cutsceneName; }
++	static CAnimBlendAssocGroup *GetCutsceneAssociations(void) { return &ms_cutsceneAssociations; }	// (revc: tests)
+ 	static void SetCutsceneOffset(const CVector& vec) { ms_cutsceneOffset = vec; }
+ 	static bool HasCutsceneFinished(void);
+ 

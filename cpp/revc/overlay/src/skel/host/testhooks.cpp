@@ -47,6 +47,8 @@ extern "C" void PadLayoutApply(int layout);
 #include "RpAnimBlend.h"
 #include "AnimBlendAssociation.h"
 #include "AnimBlendHierarchy.h"
+#include "AnimBlendAssocGroup.h"
+#include "AnimBlendAssociation.h"
 #include "OnscreenTimer.h"
 #include "CutsceneMgr.h"
 #include "Radar.h"
@@ -1130,6 +1132,27 @@ revc_test_scanner_setup(void)
 	TheCamera.RestoreWithJumpCut();
 	CHud::m_Wants_To_Draw_Hud = true;
 	return 1;
+}
+
+// Cutscene data check (REVC_TEST_CUT_LOAD): loads a cut's animations and camera path as a mission
+// does, describes them into out (camera end in ms, each animation's length) and unloads them.
+extern "C" int
+revc_test_cut_load(const char *cut, char *out, int len)
+{
+	CCutsceneMgr::LoadCutsceneData(cut);
+	// the camera path's end as the fly-by camera computes it (Cam.cpp Process_FlyBy)
+	float *path = TheCamera.m_arrPathArray[2].m_arr_PathData;
+	int points = path ? (int)path[0] : 0;
+	int n = snprintf(out, len, "camera %d points, end %.2f s;", points, points > 0 ? path[10 * (points - 1) + 1] : 0.0f);
+	// the cut's animations (the associations need the cut's models, which the script loads)
+	if (CAnimBlock *block = CAnimManager::GetAnimationBlock(cut)) {
+		for (int i = 0; i < block->numAnims && n < len - 40; i++) {
+			CAnimBlendHierarchy *h = CAnimManager::GetAnimation(block->firstIndex + i);
+			n += snprintf(out + n, len - n, " %s %.2f s", h->name, h->totalLength);
+		}
+	}
+	CCutsceneMgr::DeleteCutsceneData();
+	return n;
 }
 
 // Prompt check (REVC_TEST_PROMPTS): key's text as the HUD shows it, the controls filled in by the
