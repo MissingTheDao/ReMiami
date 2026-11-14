@@ -70,6 +70,8 @@ Either runs on `REVC_RENDERER_BACKEND=vulkan` (default) or `gl`. Untested: Windo
 - [ ] Side by side with the real Xbox (xemu, ideally recorded at full frame rate): a burning car at
       10-15 m, the blast and the smoke after it, in reMiami's Xbox style and on the Xbox. Not
       compared to hardware yet (no capture could be staged).
+- [ ] Xbox style: the fireball particle (frames 30-43 of the Xbox flame), from car backfires and
+      the flamethrower; no test scene reaches it.
 
 - [ ] Cars have their shiny reflections (MatFX environment map) like the normal build, on both
       backends; nothing looks inside out or too bright.
