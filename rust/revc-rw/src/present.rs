@@ -14,6 +14,8 @@ use wgpu::rwh;
 pub enum NativeWindow {
     Wayland { display: NonNull<c_void>, surface: NonNull<c_void> },
     X11 { display: Option<NonNull<c_void>>, screen: i32, window: u64 },
+    /// SDL_PROP_WINDOW_WIN32_HWND_POINTER / _INSTANCE_POINTER
+    Win32 { hwnd: NonNull<c_void>, hinstance: Option<NonNull<c_void>> },
 }
 
 impl NativeWindow {
@@ -27,6 +29,11 @@ impl NativeWindow {
                 rwh::RawDisplayHandle::Xlib(rwh::XlibDisplayHandle::new(display, screen)),
                 rwh::RawWindowHandle::Xlib(rwh::XlibWindowHandle::new(window as _)),
             ),
+            NativeWindow::Win32 { hwnd, hinstance } => {
+                let mut handle = rwh::Win32WindowHandle::new(std::num::NonZeroIsize::new(hwnd.as_ptr() as isize).unwrap());
+                handle.hinstance = hinstance.and_then(|h| std::num::NonZeroIsize::new(h.as_ptr() as isize));
+                (rwh::RawDisplayHandle::Windows(rwh::WindowsDisplayHandle::new()), rwh::RawWindowHandle::Win32(handle))
+            }
         }
     }
 }

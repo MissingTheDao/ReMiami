@@ -128,6 +128,11 @@ fn native(window: *mut SDL_Window) -> Result<NativeWindow, String> {
                 let window = SDL_GetNumberProperty(props, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0) as u64;
                 Ok(NativeWindow::X11 { display: NonNull::new(display), screen, window })
             }
+            "windows" => {
+                let hwnd = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_WIN32_HWND_POINTER, std::ptr::null_mut());
+                let hinstance = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_WIN32_INSTANCE_POINTER, std::ptr::null_mut());
+                Ok(NativeWindow::Win32 { hwnd: NonNull::new(hwnd).ok_or("no HWND")?, hinstance: NonNull::new(hinstance) })
+            }
             other => Err(format!("video driver {other} not supported by the wgpu renderer")),
         }
     }
