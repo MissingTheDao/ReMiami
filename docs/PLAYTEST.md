@@ -101,13 +101,16 @@ At the end:
 - [ ] Restart with `REVC_RENDERER=wgpu` and play a few minutes: it looks the same as the
       default. [12]
 
-Known limits, not bugs: shadows, lights and particles still move in 30 Hz steps; ped limbs
+Known limits, not bugs: shadows and lights still move in 30 Hz steps; ped limbs
 animate at 30 Hz (only the body moves smoothly). Random events (which peds and cars appear, and
 the like) are not the same at different frame rates, as drawing takes random numbers from the
 game, as in the original; nothing runs faster or slower because of it. Above 60 Hz the
 menu's open and close fades step exactly as at 60 Hz (checked frame by frame at 240 Hz); the
 automated comparison with the console recordings still reports them as different there (a test
 limitation: its capture window starts a few frames early at those rates).
+With the original PC colour filter (Colour filter: PC) the trails take a new copy every displayed
+frame, so they are shorter at high frame rates than at 30 fps (the other colour filters keep the
+30 Hz trail length and blend smoothly between steps; a candidate for the same treatment later).
 
 ## Session 3: PS2 style (about 10 min; PS2 disc imported, menu language English)
 

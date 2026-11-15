@@ -61,7 +61,7 @@
  
  RwRaster *CPostFX::pFrontBuffer;
  RwRaster *CPostFX::pBackBuffer;
-@@ -22,28 +26,53 @@
+@@ -22,28 +26,54 @@
  
  static RwIm2DVertex Vertex[4];
  static RwIm2DVertex Vertex2[4];
@@ -88,6 +88,7 @@
 +static bool sTrailHavePrev;                   // sTrailPrev holds a valid copy
 +extern bool gStepDraw;                        // main.cpp: first draw after a game step
 +static float sTrailT = 1.0f;                  // blend prev -> current (pFrontBuffer) for this frame
++static bool sTrailHold;                       // the PS2 menu-close fade: per-step copies, no blend until the next rotation
 +
  #ifdef RW_D3D9
  void *colourfilterVC_PS;
@@ -127,7 +128,7 @@
  }
  
  void
-@@ -57,6 +86,9 @@
+@@ -57,6 +87,9 @@
  	uint32 depth  = RwRasterGetDepth(RwCameraGetRaster(cam));
  	pFrontBuffer = RwRasterCreate(width, height, depth, rwRASTERTYPECAMERATEXTURE);
  	pBackBuffer = RwRasterCreate(width, height, depth, rwRASTERTYPECAMERATEXTURE);
@@ -137,7 +138,7 @@
  	bJustInitialised = true;
  
  	float zero, xmax, ymax;
-@@ -108,8 +140,12 @@
+@@ -108,8 +141,12 @@
  	RwIm2DVertexSetIntRGBA(&Vertex[3], 255, 255, 255, 255);
  
  
@@ -152,7 +153,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[0], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[0], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[0], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -117,8 +153,8 @@
+@@ -117,8 +154,8 @@
  	RwIm2DVertexSetV(&Vertex2[0], 0.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[0], 255, 255, 255, 255);
  
@@ -163,7 +164,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[1], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[1], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[1], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -126,8 +162,8 @@
+@@ -126,8 +163,8 @@
  	RwIm2DVertexSetV(&Vertex2[1], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[1], 255, 255, 255, 255);
  
@@ -174,7 +175,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[2], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[2], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[2], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -135,8 +171,8 @@
+@@ -135,8 +172,8 @@
  	RwIm2DVertexSetV(&Vertex2[2], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[2], 255, 255, 255, 255);
  
@@ -185,7 +186,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[3], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[3], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[3], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -151,28 +187,6 @@
+@@ -151,28 +188,6 @@
  #include "shaders/obj/contrastPS.inc"
  	contrast_PS = rw::d3d::createPixelShader(contrastPS_cso);
  #endif
@@ -214,7 +215,7 @@
  }
  
  void
-@@ -186,6 +200,14 @@
+@@ -186,6 +201,14 @@
  		RwRasterDestroy(pBackBuffer);
  		pBackBuffer = nil;
  	}
@@ -229,7 +230,7 @@
  #ifdef RW_D3D9
  	if(colourfilterVC_PS){
  		rw::d3d::destroyPixelShader(colourfilterVC_PS);
-@@ -196,53 +218,100 @@
+@@ -196,53 +219,100 @@
  		contrast_PS = nil;
  	}
  #endif
@@ -372,7 +373,7 @@
  }
  
  void
-@@ -282,11 +351,9 @@
+@@ -282,11 +352,9 @@
  
  		rw::d3d::im2dOverridePS = contrast_PS;
  #endif
@@ -387,7 +388,7 @@
  #endif
  	}else{
  		float f = Intensity;
-@@ -299,18 +366,17 @@
+@@ -299,18 +367,17 @@
  		rw::d3d::d3ddevice->SetPixelShaderConstantF(10, blurcolors, 1);
  		rw::d3d::im2dOverridePS = colourfilterVC_PS;
  #endif
@@ -411,19 +412,29 @@
  #endif
  }
  
-@@ -396,8 +462,19 @@
+@@ -396,8 +463,29 @@
  	assert(pFrontBuffer);
  	assert(pBackBuffer);
  
 -	if(type == MOTION_BLUR_LIGHT_SCENE){
 -		SmoothColor(red, green, blue, blur);
 +	bool trailsOnly = MotionBlurOn && type != MOTION_BLUR_SNIPER && CMBlur::Drunkness == 0.0f;
-+	if(trailsOnly && EffectSwitch == POSTFX_NORMAL && !bJustInitialised && gStepDraw){
++	bool closeBlack = false, closeFade = false;
++#ifdef LIBRW_HOST
++	extern bool Ps2MenuCloseBlack(void);
++	extern bool Ps2MenuCloseFade(void);
++	closeBlack = Ps2MenuCloseBlack();
++	closeFade = Ps2MenuCloseFade();
++#endif
++	if(closeFade)
++		sTrailHold = true;	// the PS2 menu-close fade: per-step feed into the current copy, no blend
++	if(trailsOnly && EffectSwitch == POSTFX_NORMAL && !bJustInitialised && gStepDraw && !closeFade){
 +		// rotate at a step's first draw: the frame captured last (spare) becomes current, current becomes prev
 +		RwRaster *old = sTrailPrev; sTrailPrev = pFrontBuffer; pFrontBuffer = sTrailSpare; sTrailSpare = old;
 +		sTrailHavePrev = true;
++		sTrailHold = false;
 +	}
-+	sTrailT = (trailsOnly && sTrailHavePrev) ? Interpolation::DisplayBlend() : 1.0f;
++	sTrailT = (trailsOnly && sTrailHavePrev && !sTrailHold) ? Interpolation::DisplayBlend() : 1.0f;
 +
 +	extern int8 gUiStyle;
 +	if(type == MOTION_BLUR_LIGHT_SCENE && gUiStyle == 0){	// (revc: the consoles use each frame's time-cycle colour as it is; research)
@@ -433,7 +444,7 @@
  		red = AvgRed;
  		green = AvgGreen;
  		blue = AvgBlue;
-@@ -426,7 +503,7 @@
+@@ -426,7 +514,7 @@
  		if(MotionBlurOn){
  			if(!bJustInitialised)
  				RenderOverlayBlur(cam, red, green, blue, blur);
@@ -442,7 +453,7 @@
  			RenderOverlayShader(cam, red, green, blue, blur);
  		}
  		break;
-@@ -445,10 +522,36 @@
+@@ -445,10 +533,43 @@
  	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
  
@@ -450,8 +461,7 @@
 +	// revc: the PS2's two black frames after its menu closes go into the trails like any frame
 +	// (the console's motion blur then brings the game in from black over ~100 ms; research)
 +	{
-+		extern bool Ps2MenuCloseBlack(void);
-+		if(Ps2MenuCloseBlack())
++		if(closeBlack)
 +			CSprite2d::DrawRect(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(0, 0, 0, 255));
 +	}
 +#endif
@@ -465,6 +475,14 @@
 +			RwRasterPushContext(sTrailSpare);
 +			RwRasterRenderFast(RwCameraGetRaster(cam), 0, 0);
 +			RwRasterPopContext();
++			if(closeFade && gStepDraw && !bJustInitialised){
++				// the PS2 menu close (its black frames and the trails' fade back to the game): the step's
++				// first draw goes straight into the current copy and is used unblended until the next
++				// step, as the per-step feed did, so the fade's timing matches the console at 60 Hz too
++				RwRasterPushContext(pFrontBuffer);
++				RwRasterRenderFast(RwCameraGetRaster(cam), 0, 0);
++				RwRasterPopContext();
++			}
 +			if(bJustInitialised){
 +				// first frame: current = this frame too (the spare keeps it as well, so the next step's
 +				// rotation promotes this frame), no previous yet
