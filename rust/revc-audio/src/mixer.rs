@@ -46,6 +46,8 @@ pub struct Mixer {
     /// 3D voices beyond their max distance go silent (DirectSound's mute-at-max-distance buffers);
     /// off: they hold the level at max distance (OpenAL's clamped model).
     mute_beyond_max: bool,
+    /// Level of 3D voices relative to 2D ones (1 = today's; the original's EAX path: 0.8394).
+    level_3d: f32,
 }
 
 /// Counters for diagnostics and the regression harness, since the last `take_stats()`.
@@ -93,7 +95,13 @@ impl Mixer {
             reverb: Reverb::new(OUTPUT_RATE),
             wet: Vec::new(),
             mute_beyond_max: false,
+            level_3d: 1.0,
         }
+    }
+
+    /// See `level_3d`. The change is ramped like any gain change.
+    pub fn set_level_3d(&mut self, level: f32) {
+        self.level_3d = level;
     }
 
     /// See `mute_beyond_max`. The change is ramped like any gain change.
@@ -219,7 +227,7 @@ impl Mixer {
                 if !v.playing || v.pan_logged {
                     continue;
                 }
-                let (l, r, _) = v.gains(false);
+                let (l, r, _) = v.gains(false, 1.0);
                 if l.max(r) > 0.02 && (l - r).abs() > 0.6 * l.max(r) {
                     eprintln!("[revc-audio] voice {i} one-sided: L {l:.3} R {r:.3} pos {:?} 2d {} freq {} len {}", v.pos, v.is_2d, v.freq, v.data.len());
                     v.pan_logged = true;
@@ -230,12 +238,12 @@ impl Mixer {
         self.wet.clear();
         self.wet.resize(frames, 0.0);
         let mut active = 0;
-        let mute = self.mute_beyond_max;
+        let (mute, level_3d) = (self.mute_beyond_max, self.level_3d);
         for voice in &mut self.voices {
             if voice.playing {
                 active += 1;
                 self.stats.max_send = self.stats.max_send.max(voice.reverb_mix);
-                voice.mix_into(out, &mut self.wet, mute);
+                voice.mix_into(out, &mut self.wet, mute, level_3d);
             }
         }
         // The reverb always runs, so tails ring out after their voices stop.
@@ -253,7 +261,7 @@ impl Voice {
     /// use OpenAL's inverse distance clamped model (rolloff 1) and OpenAL Soft's stereo pan, which
     /// is linear in the sideways component: L = (1-p)/2, R = (1+p)/2 (0.5 each when centred).
     /// The send follows the source gain and distance attenuation, scaled by the send level.
-    fn gains(&self, mute_beyond_max: bool) -> (f32, f32, f32) {
+    fn gains(&self, mute_beyond_max: bool, level_3d: f32) -> (f32, f32, f32) {
         let g = self.gain.clamp(0.0, 1.0);
         let send = self.reverb_mix.clamp(0.0, 1.0);
         if self.is_2d {
@@ -270,7 +278,9 @@ impl Voice {
             1.0
         };
         let pan = if dist > 1e-4 { (self.pos[0] / dist).clamp(-1.0, 1.0) } else { 0.0 };
-        (g * att * (1.0 - pan) / 2.0, g * att * (1.0 + pan) / 2.0, g * att * send)
+        // the 3D level is part of the panning (direct path), not of the reverb send
+        let direct = att * level_3d;
+        (g * direct * (1.0 - pan) / 2.0, g * direct * (1.0 + pan) / 2.0, g * att * send)
     }
 
     /// The region set with explicit loop points (start >= 0, end after start, within the buffer;
@@ -285,7 +295,7 @@ impl Voice {
         }
     }
 
-    fn mix_into(&mut self, out: &mut [f32], wet: &mut [f32], mute_beyond_max: bool) {
+    fn mix_into(&mut self, out: &mut [f32], wet: &mut [f32], mute_beyond_max: bool, level_3d: f32) {
         let len = self.data.len();
         let step = self.freq as f64 * self.pitch.max(0.0) as f64 / OUTPUT_RATE as f64;
         if len == 0 || step <= 0.0 {
@@ -294,7 +304,7 @@ impl Voice {
             }
             return;
         }
-        let target = self.gains(mute_beyond_max);
+        let target = self.gains(mute_beyond_max, level_3d);
         let from = self.applied.unwrap_or(target);
         self.applied = Some(target);
         let (rs, re) = self.loop_region();

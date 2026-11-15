@@ -94,6 +94,8 @@ mod tonelist {
                 let (l, r, dur) = measure(b.as_mut(), data, *gain, *pos, *min, *max, *rate, *loops);
                 if *g == "volume" && *i == 0 {
                     reference = (l + r) / 2.0;
+                    // absolute level of the 1 m front tone (a full-scale tone's rms per channel would be 0.5 * 0.7071)
+                    println!("{name} reference_rms {reference:.5} ({:.2} dB vs 0.5 * full-scale rms)", 20.0 * (reference / (0.5 * 0.5 * std::f32::consts::FRAC_1_SQRT_2)).log10());
                 }
                 let db = |v: f32| if v <= 0.0 || reference <= 0.0 { REFERENCE_DB } else { 20.0 * (v / reference).log10() };
                 let shown = if *g == "pitch" || *g == "loop" { dur } else { 0.0 };

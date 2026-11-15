@@ -71,6 +71,9 @@ impl AudioBackend for RevcBackend {
     fn sfx_open(&mut self, voices: usize) {
         let mut mixer = Mixer::new(voices);
         mixer.set_mute_beyond_max(super::eax_laws());
+        if super::eax_laws() {
+            mixer.set_level_3d(super::retro::LEVEL_3D);
+        }
         if let Some(p) = &self.reverb {
             mixer.set_reverb_params(p);
         }

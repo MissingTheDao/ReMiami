@@ -39,6 +39,16 @@ struct ChannelState {
     loop_count: i32,
 }
 
+/// The original plays 3D sound effects at this level relative to 2D ones (audio step 4: its
+/// EAX path renders game positions, which lie in the lateral-up plane of its listener, at
+/// 0.4197 * (1 -/+ pan) per side, i.e. the linear law times 0.8394, -1.52 dB).
+pub(crate) const LEVEL_3D: f32 = 0.8394;
+
+/// The volume a channel's voice plays at (3D voices at LEVEL_3D).
+fn voice_volume(st: &ChannelState) -> f32 {
+    if st.is_2d { st.gain } else { st.gain * LEVEL_3D }
+}
+
 /// The channel's 3D source (the game's positions are listener-relative; inverse distance clamped).
 fn source_3d(st: &ChannelState) -> Source3D {
     Source3D {
@@ -146,6 +156,7 @@ impl AudioBackend for RetroBackend {
             state.is_2d = is_2d;
             if let (Some(eng), Some(vid)) = (&mut self.engine, state.voice_id) {
                 let _ = eng.set_3d(vid, if is_2d { None } else { Some(source_3d(state)) });
+                let _ = eng.set_volume(vid, Volume::linear(voice_volume(state)));
             }
         }
     }
@@ -176,7 +187,7 @@ impl AudioBackend for RetroBackend {
             };
             let buf = Arc::new(SoundBuffer::from_i16(&buffer_data, Channels::Mono, freq));
             let params = VoiceParams {
-                volume: state.gain,
+                volume: voice_volume(state),
                 pitch: state.pitch,
                 looping: count == 0,
                 loop_start: if count == 0 { rs } else { 0 },
@@ -254,7 +265,7 @@ impl AudioBackend for RetroBackend {
         if let (Some(eng), Some(state)) = (&mut self.engine, self.channel_state.get_mut(id)) {
             state.gain = gain;
             if let Some(vid) = state.voice_id {
-                let _ = eng.set_volume(vid, Volume::linear(gain));
+                let _ = eng.set_volume(vid, Volume::linear(voice_volume(state)));
             }
         }
     }
