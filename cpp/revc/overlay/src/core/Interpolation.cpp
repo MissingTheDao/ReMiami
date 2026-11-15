@@ -19,6 +19,8 @@ void *gBrightLightOwner[NUMBRIGHTLIGHTS];
 // transforms (ApplyForRender is undone by RestoreAfterRender right after the frame is drawn).
 // Effects registered during a step (shadows, lights, particles) stay where the step put them.
 
+extern bool gStepDraw;	// main.cpp: a simulation step ran before this drawn frame
+
 namespace Interpolation
 {
 bool bEnabled = true;
@@ -322,7 +324,7 @@ BeginStep(void)
 
 // Regression harness (REVC_TEST=motion): the player's body and one bone as this frame draws
 // them, in world space, so the test can measure how smoothly they move from frame to frame.
-static float gMotionSample[6];
+static float gMotionSample[10];	// body, bone, camera (as drawn), step ran before this frame
 static void RecordMotion(void);
 
 // Coronas and bright lights (car head/tail lights, ...) are registered during PreRender at the
@@ -466,6 +468,9 @@ RecordMotion(void)
 	}
 	gMotionSample[0] = body.x; gMotionSample[1] = body.y; gMotionSample[2] = body.z;
 	gMotionSample[3] = bone.x; gMotionSample[4] = bone.y; gMotionSample[5] = bone.z;
+	CVector cam = TheCamera.GetPosition();
+	gMotionSample[6] = cam.x; gMotionSample[7] = cam.y; gMotionSample[8] = cam.z;
+	gMotionSample[9] = gStepDraw ? 1.0f : 0.0f;
 }
 
 void
@@ -495,6 +500,6 @@ Reset(void)
 extern "C" void
 revc_test_motion_sample(float *out)
 {
-	for (int i = 0; i < 6; i++)
+	for (int i = 0; i < 10; i++)
 		out[i] = Interpolation::gMotionSample[i];
 }

@@ -134,7 +134,7 @@ for s in "${SCENARIOS[@]}"; do
   [[ "$s" == boot ]] && envs+=(REVC_TEST_SHOT="$OUT/$s.png")
   if [[ "$s" == motion ]]; then
     rm -rf "$OUT/motion-frames"; mkdir -p "$OUT/motion-frames"
-    envs+=(REVC_FIXED_FPS=144 REVC_TEST_VIDEO_DIR="$OUT/motion-frames")
+    envs+=(REVC_FIXED_FPS=${REVC_MOTION_FPS:-144} REVC_TEST_VIDEO_DIR="$OUT/motion-frames")
   fi
   if [[ "$s" == saveload || "$s" == texmods ]]; then
     envs+=(REVC_TEST_SHOT="$OUT/$s.png")

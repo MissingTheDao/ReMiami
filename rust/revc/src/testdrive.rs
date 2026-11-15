@@ -692,7 +692,7 @@ struct Driver {
     /// Per spot: (name, mean ms, p99 ms) for the summary.
     perf: Vec<(&'static str, f32, f32)>,
     /// Motion scenario: the player's rendered body and bone positions per captured frame.
-    motion: Vec<[f32; 6]>,
+    motion: Vec<[f32; 10]>,
     video_dir: Option<PathBuf>,
     /// Scenes with REVC_TEST_FIRE=explosion: the current scene's explosion was set off.
     fire_done: bool,
@@ -1132,6 +1132,10 @@ impl Driver {
                 let (mut spawned, mut recoveries) = (0i32, 0i32);
                 unsafe { revc_test_wreckbike_result(&mut spawned, &mut recoveries) };
                 log(format!("wreckbike: {spawned} wrecked bikes, {recoveries} NaN recoveries"));
+                // since the wheel contact points are initialised (Bike.cpp, FIX_BUGS) none may occur
+                if recoveries > 0 {
+                    self.fail(format!("wreckbike: {recoveries} physics NaN recoveries (the guard caught a NaN)"));
+                }
                 return self.finish();
             }
             Phase::PedHit => {
@@ -1172,8 +1176,12 @@ impl Driver {
                     step += 1;
                 }
                 self.phase = Phase::Motion { t0, step };
+                // REVC_TEST_PEDLOG: heights of the peds near the player every 2 s (sunk-ped check)
+                if std::env::var_os("REVC_TEST_PEDLOG").is_some() && t / 2000 != t.wrapping_sub(33) / 2000 {
+                    unsafe { revc_test_pedlog() };
+                }
                 if let Some((w, h, rgba)) = crate::host::take_capture() {
-                    let mut sample = [0.0f32; 6];
+                    let mut sample = [0.0f32; 10];
                     unsafe { revc_test_motion_sample(sample.as_mut_ptr()) };
                     let n = self.motion.len();
                     self.motion.push(sample);
@@ -1979,8 +1987,8 @@ impl Driver {
     /// rest moves at the display rate shows up as large second differences.
     fn check_motion(&mut self) {
         let limit: f64 = env("REVC_TEST_MAX_JITTER", 0.5);
-        let frames = &self.motion[MOTION_SKIP.min(self.motion.len())..];
-        let series = |f: &dyn Fn(&[f32; 6]) -> [f64; 3]| -> f64 {
+        let frames = &self.motion[MOTION_SKIP.min(self.motion.len())..].to_vec();
+        let series = |f: &dyn Fn(&[f32; 10]) -> [f64; 3]| -> f64 {
             let p: Vec<[f64; 3]> = frames.iter().map(f).collect();
             let len = |v: [f64; 3]| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
             let mut d1 = 0.0;
@@ -2003,6 +2011,15 @@ impl Driver {
         }
         if body > limit || bone > limit {
             self.fail(format!("motion: jerky movement (body {body:.3}, bone {bone:.3}, limit {limit})"));
+        }
+        // The step-locked jolt: drawn motion per frames-since-step, as a ratio of the mean (R6: what a frame shows must
+        // not depend on where it falls between two 30 Hz steps).
+        let (rows, rc, rb, worst, per_step) = step_phase_jolt(frames);
+        let table: Vec<String> = rows.iter().map(|(p, _, c, b)| format!("p{p} c {c:.2} b {b:.2}")).collect();
+        log(format!("motion: per frames-since-step (camera, body as a ratio of their mean; {per_step:.1} frames/step): {}", table.join(", ")));
+        let lim: f64 = env("REVC_TEST_MAX_STEP_JOLT", 1.25);
+        if per_step >= 3.0 && (rc > lim || rb > lim) {
+            self.fail(format!("motion: step-locked jolt (camera {rc:.2}x, body {rb:.2}x the mean motion at phase {worst}; limit {lim})"));
         }
     }
 
@@ -2265,4 +2282,125 @@ fn all_dffs() -> Vec<(String, Vec<u8>)> {
         }
     }
     out
+}
+
+/// Step-phase uniformity of drawn motion (motion scenario).
+fn step_phase_jolt(frames: &[[f32; 10]]) -> (Vec<(usize, usize, f64, f64)>, f64, f64, usize, f64) {
+    let mut counts = [0usize; 16];
+    let mut sum_dcs = [0.0f64; 16];
+    let mut sum_dbs = [0.0f64; 16];
+    let mut count_all = 0usize;
+    let mut sum_dc_all = 0.0f64;
+    let mut sum_db_all = 0.0f64;
+    let mut step_frame_count = 0usize;
+    let mut phase = 0usize;
+    let mut first_step_found = false;
+
+    for k in 0..frames.len() {
+        let is_step = frames[k][9] > 0.5;
+        if is_step {
+            phase = 0;
+        } else {
+            phase += 1;
+        }
+
+        if !first_step_found {
+            if phase == 0 {
+                first_step_found = true;
+            } else {
+                continue;
+            }
+        }
+
+        if phase > 15 {
+            continue;
+        }
+
+        count_all += 1;
+        counts[phase] += 1;
+        if is_step { step_frame_count += 1; }
+
+        if k > 0 {
+            let dc = (frames[k][6] as f64 - frames[k-1][6] as f64)
+                .hypot(frames[k][7] as f64 - frames[k-1][7] as f64)
+                .hypot(frames[k][8] as f64 - frames[k-1][8] as f64);
+            let db = (frames[k][0] as f64 - frames[k-1][0] as f64)
+                .hypot(frames[k][1] as f64 - frames[k-1][1] as f64)
+                .hypot(frames[k][2] as f64 - frames[k-1][2] as f64);
+            sum_dc_all += dc;
+            sum_db_all += db;
+            sum_dcs[phase] += dc;
+            sum_dbs[phase] += db;
+        }
+    }
+
+    let overall_mean_dc = if count_all > 0 { sum_dc_all / count_all as f64 } else { 0.0 };
+    let overall_mean_db = if count_all > 0 { sum_db_all / count_all as f64 } else { 0.0 };
+
+    let mut rows = Vec::new();
+    let mut max_cam = 0.0f64;
+    let mut max_body = 0.0f64;
+
+    for p in 0..16 {
+        if counts[p] >= 8 {
+            let cam_r = if overall_mean_dc >= 1e-9 {
+                (sum_dcs[p] / counts[p] as f64) / overall_mean_dc
+            } else {
+                0.0
+            };
+            let body_r = if overall_mean_db >= 1e-9 {
+                (sum_dbs[p] / counts[p] as f64) / overall_mean_db
+            } else {
+                0.0
+            };
+            rows.push((p, counts[p], cam_r, body_r));
+            if cam_r > max_cam { max_cam = cam_r; }
+            if body_r > max_body { max_body = body_r; }
+        }
+    }
+
+    let worst_phase = if rows.is_empty() {
+        0
+    } else if max_cam >= max_body {
+        rows.iter().find(|r| (r.2 - max_cam).abs() < 1e-9).unwrap().0
+    } else {
+        rows.iter().find(|r| (r.3 - max_body).abs() < 1e-9).unwrap().0
+    };
+
+    let frames_per_step = count_all as f64 / (step_frame_count.max(1) as f64);
+
+    (rows, max_cam, max_body, worst_phase, frames_per_step)
+}
+
+
+#[cfg(test)]
+mod step_phase_tests {
+    use super::*;
+
+    #[test]
+    fn test_step_phase_jolt() {
+        let mut frames = vec![[0.0; 10]; 400];
+        for step in 0..40 {
+            let base = step * 10;
+            frames[base][9] = 1.0;
+            if base > 0 {
+                frames[base][6] = frames[base - 1][6] + 1.0;
+                frames[base][0] = frames[base - 1][0] + 1.0;
+            }
+            for i in 1..10 {
+                let k = base + i;
+                let phase = i;
+                let cam_move = if phase == 2 { 2.0 } else { 1.0 };
+                frames[k][6] = frames[k-1][6] + cam_move as f32;
+                frames[k][0] = frames[k-1][0] + 1.0;
+            }
+        }
+
+        let (rows, ratio_cam, ratio_body, worst_phase, frames_per_step) = step_phase_jolt(&frames);
+        
+        assert!(ratio_cam > 1.5, "ratio_cam {} should be > 1.5", ratio_cam);
+        assert_eq!(worst_phase, 2, "worst_phase should be 2, got {}", worst_phase);
+        assert!(ratio_body > 0.99 && ratio_body < 1.01, "ratio_body {} should be in 0.99..1.01", ratio_body);
+        assert!(frames_per_step > 9.9 && frames_per_step < 10.1, "frames_per_step {} should be in 9.9..10.1", frames_per_step);
+    }
 }
