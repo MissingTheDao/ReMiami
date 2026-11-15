@@ -12,6 +12,7 @@
 #include "Script.h"
 #include "ModelIndices.h"
 #include "NanGuard.h"
+#include "Camera.h"
 #include <cmath>
 #include <cstdlib>
 #include <vector>
@@ -21,6 +22,7 @@
 
 extern void (*gTestStepHook)(void);
 extern void (*gTestRenderHook)(void);
+extern bool gStepDraw;	// main.cpp: a simulation step ran before this drawn frame
 extern "C" void revc_test_goto_spot(float x, float y, float z, float dx, float dy, float dz, int hour, int minute);
 
 // === A. Bike Rider Check ===
@@ -72,8 +74,9 @@ BikeRender(void)
 
     const char *logEnv = getenv("REVC_TEST_BIKERIDE_LOG");
     if (logEnv && logEnv[0]) {
-        printf("[revc-test] bikeride frame %d ms %u local %.3f %.3f %.3f jump %.3f\n",
-               brTotalFrames, t, local.x, local.y, local.z, jump);
+        CVector bp = brBike->GetPosition(), cp = TheCamera.GetPosition();
+        printf("[revc-test] bikeride frame %d ms %u local %.3f %.3f %.3f jump %.3f bike %.4f %.4f %.4f cam %.4f %.4f %.4f step %d\n",
+               brTotalFrames, t, local.x, local.y, local.z, jump, bp.x, bp.y, bp.z, cp.x, cp.y, cp.z, gStepDraw ? 1 : 0);
     }
 }
 
@@ -99,6 +102,9 @@ revc_test_bikeride_setup(float mps)
 
     CPlayerPed *player = FindPlayerPed();
     player->WarpPedIntoCar(brBike);
+    // REVC_TEST_BIKERIDE_FOLLOW: the game's own follow camera instead of the fixed test camera
+    if (getenv("REVC_TEST_BIKERIDE_FOLLOW"))
+        TheCamera.Restore();
 
     brSpeedVec = brBike->GetForward() * (mps / 50.0f);
     brStartMs = CTimer::GetTimeInMilliseconds();
@@ -232,4 +238,16 @@ revc_test_pedlog(void)
                ped->GetModelIndex(), pos.x, pos.y, pos.z, ground, diff,
                ped->GetPedState(), ped->bInVehicle);
     }
+}
+
+// Ped heights at a chosen spot with normal traffic (REVC_TEST=pedspot, REVC_TEST_PEDSPOT="x,y"): the spot, the game's
+// own camera, normal ped and car density; the driver logs revc_test_pedlog() every 2 s.
+extern "C" int
+revc_test_pedspot_setup(float x, float y)
+{
+    revc_test_goto_spot(x, y, -100.0f, -6.0f, -6.0f, 3.0f, 15, 0);
+    CPopulation::PedDensityMultiplier = 1.0f;
+    CCarCtrl::CarDensityMultiplier = 1.0f;
+    TheCamera.Restore();
+    return 1;
 }

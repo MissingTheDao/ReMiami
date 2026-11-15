@@ -100,6 +100,7 @@ unsafe extern "C" {
     fn revc_test_bikeride_sample() -> i32;
     fn revc_test_bikeride_result(max_jump: *mut f32, jumps: *mut i32, frames: *mut i32);
     fn revc_test_wreckbike_setup() -> i32;
+    fn revc_test_pedspot_setup(x: f32, y: f32) -> i32;
     fn revc_test_wreckbike_sample() -> i32;
     fn revc_test_wreckbike_result(spawned: *mut i32, recoveries: *mut i32);
     fn revc_test_pedlog();
@@ -155,6 +156,7 @@ enum Scenario {
     PedHit,
     BikeRide,
     WreckBike,
+    PedSpot,
     Scanner,
     Scenes,
     Menus,
@@ -191,6 +193,7 @@ enum Phase {
     PedHit,
     BikeRide,
     WreckBike { next_log: i32 },
+    PedSpot { t0: u32, next_log: u32 },
     /// Scanner check: recording since game time `t0`.
     Scanner { t0: u32 },
     /// Pad script (REVC_TEST_PAD_SCRIPT): frames since the start state was set.
@@ -728,6 +731,7 @@ pub fn init() -> Result<bool, String> {
         "pedhit" => Scenario::PedHit,
         "bikeride" => Scenario::BikeRide,
         "wreckbike" => Scenario::WreckBike,
+        "pedspot" => Scenario::PedSpot,
         "screenshot" => Scenario::Screenshot,
         "menuwalk" => Scenario::MenuWalk,
         "fpsparity" => Scenario::FpsParity,
@@ -737,7 +741,7 @@ pub fn init() -> Result<bool, String> {
         "padscript" => Scenario::PadScript,
         "menusweep" => Scenario::MenuSweep,
         "cutscenes" => Scenario::Cutscenes,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, bikeride, wreckbike, scanner, scenes, menus, padscript, menusweep, cutscenes, screenshot, menuwalk, fpsparity)")),
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, bikeride, wreckbike, pedspot, scanner, scenes, menus, padscript, menusweep, cutscenes, screenshot, menuwalk, fpsparity)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -902,7 +906,7 @@ impl Driver {
                         log("starting a new game");
                         self.phase = Phase::WaitPlaying;
                     }
-                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::BikeRide | Scenario::WreckBike | Scenario::Scanner | Scenario::Scenes | Scenario::Menus | Scenario::PadScript | Scenario::MenuSweep | Scenario::Screenshot | Scenario::MenuWalk | Scenario::FpsParity => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::BikeRide | Scenario::WreckBike | Scenario::PedSpot | Scenario::Scanner | Scenario::Scenes | Scenario::Menus | Scenario::PadScript | Scenario::MenuSweep | Scenario::Screenshot | Scenario::MenuWalk | Scenario::FpsParity => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -997,6 +1001,19 @@ impl Driver {
                     }
                     log(format!("bikeride: player on a bike held at {mps} m/s"));
                     self.phase = Phase::BikeRide;
+                    return false;
+                }
+                if self.scenario == Scenario::PedSpot {
+                    let spot = std::env::var("REVC_TEST_PEDSPOT").unwrap_or_else(|_| "220,-1470".to_string());
+                    let xy: Vec<f32> = spot.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+                    if xy.len() != 2 {
+                        self.fail("pedspot: REVC_TEST_PEDSPOT must be x,y".into());
+                        return self.finish();
+                    }
+                    let (x, y) = (xy[0], xy[1]);
+                    unsafe { revc_test_pedspot_setup(x, y) };
+                    log(format!("pedspot: normal traffic at ({x}, {y}), ped heights every 2 s for 20 s"));
+                    self.phase = Phase::PedSpot { t0: unsafe { revc_test_game_ms() }, next_log: 2000 };
                     return false;
                 }
                 if self.scenario == Scenario::WreckBike {
@@ -1135,6 +1152,17 @@ impl Driver {
                 // since the wheel contact points are initialised (Bike.cpp, FIX_BUGS) none may occur
                 if recoveries > 0 {
                     self.fail(format!("wreckbike: {recoveries} physics NaN recoveries (the guard caught a NaN)"));
+                }
+                return self.finish();
+            }
+            Phase::PedSpot { t0, next_log } => {
+                let t = unsafe { revc_test_game_ms() }.wrapping_sub(t0);
+                if t >= next_log {
+                    unsafe { revc_test_pedlog() };
+                    self.phase = Phase::PedSpot { t0, next_log: next_log + 2000 };
+                }
+                if t < 20000 {
+                    return false;
                 }
                 return self.finish();
             }
