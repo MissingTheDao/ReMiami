@@ -424,9 +424,20 @@ RestoreOwnedLights(void)
 	gBrightMovedCount = 0;
 }
 
+static bool gPrevFrameStep = true;
+static float gDisplayBlend = 1.0f;
+
+float
+DisplayBlend(void)
+{
+	return gDisplayBlend;
+}
+
 void
 ApplyForRender(float alpha)
 {
+	gDisplayBlend = (bEnabled && alpha > 0.0f && alpha < 1.0f && !(gStepDraw && gPrevFrameStep)) ? alpha : 1.0f;
+	gPrevFrameStep = gStepDraw;
 	gCamApplied = false;
 	if (!bEnabled || !gHavePrev || alpha <= 0.0f || alpha >= 1.0f) {
 		RecordMotion();

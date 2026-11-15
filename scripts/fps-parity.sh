@@ -2,7 +2,8 @@
 # fps parity (R6): the game simulates at 30 Hz and draws as many frames as the display allows; what
 # it shows per game step must not depend on that. Runs the fpsparity scenario (testdrive.rs: a fixed
 # scene, then a scripted drive) at REVC_FIXED_FPS 30 and each RATES value, and compares every
-# per-step value with the 30 fps run. Ends with a table; exit 1 if any value differs.
+# per-step value with the 30 fps run. Ends with a table; exit 1 if any value differs. Then the image
+# step fold with trails on (see the end).
 # usage: scripts/fps-parity.sh [rate ...]      (default: 60 144 320)
 #   REVC_TEST_BIN, REVC_GAME_DIR as for scripts/test.sh. Logs: rust/target/test-output/fps-parity/
 set -uo pipefail
@@ -92,3 +93,22 @@ if failed:
     print('runs failed: ' + ', '.join(failed))
 sys.exit(1 if fail else 0)
 PY
+RC=$?
+# Image step fold with trails (the user's settings: colour filter normal, MotionBlur on, Trails on): a
+# straight follow ride at 320 fps, at noon and at dusk; every frame grabbed (REVC_GRAB_RAW). With the
+# trail source blended between the last two step copies the fold stays near the trails-off level
+# (1.25); before, the step frame swapped in a fresh copy (3.0 at dusk). scripts/step-fold.py.
+sed -e 's/^MotionBlur=.*/MotionBlur=1/' -e 's/^Trails=.*/Trails=1/' -e 's/^ColourFilter=.*/ColourFilter=2/' \
+  "$ROOT/tests/config/reVC.ini" > "$OUT/trails.ini"
+for tm in 12:00 19:39; do
+  name=trails_${tm/:/}
+  if REVC_FIXED_FPS=320 REVC_TEST_CONFIG="$OUT/trails.ini" REVC_TEST_BIKERIDE_FOLLOW=1 REVC_TEST_BIKERIDE_TIME=$tm \
+     REVC_GRAB_RAW="$OUT/$name.raw" REVC_GRAB_SKIP=3100 REVC_GRAB_FRAMES=1370 \
+     "$ROOT/scripts/test.sh" bikeride > "$OUT/$name.out" 2>&1 \
+     && python3 -I "$ROOT/scripts/step-fold.py" "$OUT/$name.raw" --from 0 --max 1.5 > "$OUT/$name.fold" 2>&1; then
+    echo "== trails $tm: PASS ($(tail -1 "$OUT/$name.fold"))"
+  else
+    echo "== trails $tm: FAIL ($(tail -1 "$OUT/$name.fold" 2>/dev/null || echo "run failed, see $OUT/$name.out"))"; RC=1
+  fi
+done
+exit $RC

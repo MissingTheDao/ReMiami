@@ -13,6 +13,12 @@ namespace Interpolation
 	void RestoreAfterRender(void);
 	// Forget the previous transforms (new session, loading).
 	void Reset(void);
+	// The blend for things drawn between the last two game steps besides the transforms (trail
+	// copies, particles, HUD fades): the render alpha on a frame drawn between two steps, 1 (the
+	// step's own value) otherwise. A step's first draw that follows another step's first draw (30 fps,
+	// one frame per step) counts as not interpolated even if float error leaves the alpha above 0,
+	// so 30 fps draws exactly what it drew before (R6).
+	float DisplayBlend(void);
 	// Runtime switch (also for testing); on by default.
 	extern bool bEnabled;
 }

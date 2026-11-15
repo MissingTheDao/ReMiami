@@ -49,18 +49,19 @@
  	drawMouse();
 --- a/src/extras/postfx.cpp
 +++ b/src/extras/postfx.cpp
-@@ -11,7 +11,10 @@
+@@ -11,7 +11,11 @@
  #include "RwHelper.h"
  #include "Camera.h"
  #include "MBlur.h"
 +#include "Timer.h"
  #include "postfx.h"
++#include "Interpolation.h"
 +bool RevcFrozen(const char *name);	// testhooks_bikes.cpp: REVC_FREEZE (step-phase analysis)
 +#include "Sprite2d.h"
  
  RwRaster *CPostFX::pFrontBuffer;
  RwRaster *CPostFX::pBackBuffer;
-@@ -22,28 +25,46 @@
+@@ -22,28 +26,53 @@
  
  static RwIm2DVertex Vertex[4];
  static RwIm2DVertex Vertex2[4];
@@ -81,6 +82,13 @@
 +}
  static RwImVertexIndex Index[6] = { 0, 1, 2, 0, 2, 3 };
  
++// revc: trails above 30 Hz blend the last two per-step frame copies (render alpha) instead of one copy
++// that jumps once per step; three rotating rasters (pFrontBuffer = current).
++static RwRaster *sTrailPrev, *sTrailSpare;   // with pFrontBuffer: the three rotating trail rasters
++static bool sTrailHavePrev;                   // sTrailPrev holds a valid copy
++extern bool gStepDraw;                        // main.cpp: first draw after a game step
++static float sTrailT = 1.0f;                  // blend prev -> current (pFrontBuffer) for this frame
++
  #ifdef RW_D3D9
  void *colourfilterVC_PS;
  void *contrast_PS;
@@ -119,7 +127,17 @@
  }
  
  void
-@@ -108,8 +129,12 @@
+@@ -57,6 +86,9 @@
+ 	uint32 depth  = RwRasterGetDepth(RwCameraGetRaster(cam));
+ 	pFrontBuffer = RwRasterCreate(width, height, depth, rwRASTERTYPECAMERATEXTURE);
+ 	pBackBuffer = RwRasterCreate(width, height, depth, rwRASTERTYPECAMERATEXTURE);
++	sTrailPrev = RwRasterCreate(width, height, depth, rwRASTERTYPECAMERATEXTURE);
++	sTrailSpare = RwRasterCreate(width, height, depth, rwRASTERTYPECAMERATEXTURE);
++	sTrailHavePrev = false;
+ 	bJustInitialised = true;
+ 
+ 	float zero, xmax, ymax;
+@@ -108,8 +140,12 @@
  	RwIm2DVertexSetIntRGBA(&Vertex[3], 255, 255, 255, 255);
  
  
@@ -134,7 +152,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[0], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[0], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[0], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -117,8 +142,8 @@
+@@ -117,8 +153,8 @@
  	RwIm2DVertexSetV(&Vertex2[0], 0.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[0], 255, 255, 255, 255);
  
@@ -145,7 +163,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[1], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[1], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[1], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -126,8 +151,8 @@
+@@ -126,8 +162,8 @@
  	RwIm2DVertexSetV(&Vertex2[1], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[1], 255, 255, 255, 255);
  
@@ -156,7 +174,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[2], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[2], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[2], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -135,8 +160,8 @@
+@@ -135,8 +171,8 @@
  	RwIm2DVertexSetV(&Vertex2[2], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[2], 255, 255, 255, 255);
  
@@ -167,7 +185,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[3], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[3], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[3], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -151,28 +176,6 @@
+@@ -151,28 +187,6 @@
  #include "shaders/obj/contrastPS.inc"
  	contrast_PS = rw::d3d::createPixelShader(contrastPS_cso);
  #endif
@@ -196,7 +214,22 @@
  }
  
  void
-@@ -196,16 +199,6 @@
+@@ -186,6 +200,14 @@
+ 		RwRasterDestroy(pBackBuffer);
+ 		pBackBuffer = nil;
+ 	}
++	if(sTrailPrev){
++		RwRasterDestroy(sTrailPrev);
++		sTrailPrev = nil;
++	}
++	if(sTrailSpare){
++		RwRasterDestroy(sTrailSpare);
++		sTrailSpare = nil;
++	}
+ #ifdef RW_D3D9
+ 	if(colourfilterVC_PS){
+ 		rw::d3d::destroyPixelShader(colourfilterVC_PS);
+@@ -196,53 +218,100 @@
  		contrast_PS = nil;
  	}
  #endif
@@ -213,27 +246,133 @@
  }
  
  void
-@@ -226,7 +219,9 @@
- 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
- 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
- 
+ CPostFX::RenderOverlayBlur(RwCamera *cam, int32 r, int32 g, int32 b, int32 a)
+ {
+-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, pFrontBuffer);
+-	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+-
+-	RwIm2DVertexSetIntRGBA(&Vertex[0], r*2, g*2, b*2, 30);
+-	RwIm2DVertexSetIntRGBA(&Vertex[1], r*2, g*2, b*2, 30);
+-	RwIm2DVertexSetIntRGBA(&Vertex[2], r*2, g*2, b*2, 30);
+-	RwIm2DVertexSetIntRGBA(&Vertex[3], r*2, g*2, b*2, 30);
+-	RwIm2DVertexSetIntRGBA(&Vertex2[0], r*2, g*2, b*2, 30);
+-	RwIm2DVertexSetIntRGBA(&Vertex2[1], r*2, g*2, b*2, 30);
+-	RwIm2DVertexSetIntRGBA(&Vertex2[2], r*2, g*2, b*2, 30);
+-	RwIm2DVertexSetIntRGBA(&Vertex2[3], r*2, g*2, b*2, 30);
+-
+-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+-	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+-
 -	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, BlurOn ? Vertex2 : Vertex, 4, Index, 6);
-+	// revc: the previous frame is always drawn shifted, as on PS2/Xbox/PC with trails on.
-+	SetTrailShift();
-+	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex2, 4, Index, 6);
- 
- 
- 	RwIm2DVertexSetIntRGBA(&Vertex2[0], r, g, b, a);
-@@ -242,7 +237,7 @@
- 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
- 
- 	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
+-
+-
+-	RwIm2DVertexSetIntRGBA(&Vertex2[0], r, g, b, a);
+-	RwIm2DVertexSetIntRGBA(&Vertex[0], r, g, b, a);
+-	RwIm2DVertexSetIntRGBA(&Vertex2[1], r, g, b, a);
+-	RwIm2DVertexSetIntRGBA(&Vertex[1], r, g, b, a);
+-	RwIm2DVertexSetIntRGBA(&Vertex2[2], r, g, b, a);
+-	RwIm2DVertexSetIntRGBA(&Vertex[2], r, g, b, a);
+-	RwIm2DVertexSetIntRGBA(&Vertex2[3], r, g, b, a);
+-	RwIm2DVertexSetIntRGBA(&Vertex[3], r, g, b, a);
+-
+-	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
+-	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+-
+-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
 -	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, BlurOn ? Vertex2 : Vertex, 4, Index, 6);
-+	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex2, 4, Index, 6);
++	if (sTrailT >= 1.0f || !sTrailHavePrev) {
++		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, pFrontBuffer);
++		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
++
++		RwIm2DVertexSetIntRGBA(&Vertex[0], r*2, g*2, b*2, 30);
++		RwIm2DVertexSetIntRGBA(&Vertex[1], r*2, g*2, b*2, 30);
++		RwIm2DVertexSetIntRGBA(&Vertex[2], r*2, g*2, b*2, 30);
++		RwIm2DVertexSetIntRGBA(&Vertex[3], r*2, g*2, b*2, 30);
++		RwIm2DVertexSetIntRGBA(&Vertex2[0], r*2, g*2, b*2, 30);
++		RwIm2DVertexSetIntRGBA(&Vertex2[1], r*2, g*2, b*2, 30);
++		RwIm2DVertexSetIntRGBA(&Vertex2[2], r*2, g*2, b*2, 30);
++		RwIm2DVertexSetIntRGBA(&Vertex2[3], r*2, g*2, b*2, 30);
++
++		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
++		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
++
++		SetTrailShift();
++		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex2, 4, Index, 6);
++
++
++		RwIm2DVertexSetIntRGBA(&Vertex2[0], r, g, b, a);
++		RwIm2DVertexSetIntRGBA(&Vertex[0], r, g, b, a);
++		RwIm2DVertexSetIntRGBA(&Vertex2[1], r, g, b, a);
++		RwIm2DVertexSetIntRGBA(&Vertex[1], r, g, b, a);
++		RwIm2DVertexSetIntRGBA(&Vertex2[2], r, g, b, a);
++		RwIm2DVertexSetIntRGBA(&Vertex[2], r, g, b, a);
++		RwIm2DVertexSetIntRGBA(&Vertex2[3], r, g, b, a);
++		RwIm2DVertexSetIntRGBA(&Vertex[3], r, g, b, a);
++
++		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
++		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
++
++		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
++		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex2, 4, Index, 6);
++	} else {
++		float t = sTrailT;
++		float al = 30.0f / 255.0f;
++		int A0 = (int)(255.0f * al * (1.0f - t) / (1.0f - al * t) + 0.5f);
++		int A1 = (int)(255.0f * al * t + 0.5f);
++
++		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
++
++		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, sTrailPrev);
++		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
++		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
++		SetTrailShift();
++		RwIm2DVertexSetIntRGBA(&Vertex2[0], r*2, g*2, b*2, A0);
++		RwIm2DVertexSetIntRGBA(&Vertex2[1], r*2, g*2, b*2, A0);
++		RwIm2DVertexSetIntRGBA(&Vertex2[2], r*2, g*2, b*2, A0);
++		RwIm2DVertexSetIntRGBA(&Vertex2[3], r*2, g*2, b*2, A0);
++		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex2, 4, Index, 6);
++
++		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, pFrontBuffer);
++		RwIm2DVertexSetIntRGBA(&Vertex2[0], r*2, g*2, b*2, A1);
++		RwIm2DVertexSetIntRGBA(&Vertex2[1], r*2, g*2, b*2, A1);
++		RwIm2DVertexSetIntRGBA(&Vertex2[2], r*2, g*2, b*2, A1);
++		RwIm2DVertexSetIntRGBA(&Vertex2[3], r*2, g*2, b*2, A1);
++		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex2, 4, Index, 6);
++
++		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, sTrailPrev);
++		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
++		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
++		int A_prev_add = (int)(255.0f * (1.0f - t) + 0.5f);
++		RwIm2DVertexSetIntRGBA(&Vertex[0], r, g, b, A_prev_add);
++		RwIm2DVertexSetIntRGBA(&Vertex[1], r, g, b, A_prev_add);
++		RwIm2DVertexSetIntRGBA(&Vertex[2], r, g, b, A_prev_add);
++		RwIm2DVertexSetIntRGBA(&Vertex[3], r, g, b, A_prev_add);
++		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
++
++		RwIm2DVertexSetIntRGBA(&Vertex2[0], r, g, b, A_prev_add);
++		RwIm2DVertexSetIntRGBA(&Vertex2[1], r, g, b, A_prev_add);
++		RwIm2DVertexSetIntRGBA(&Vertex2[2], r, g, b, A_prev_add);
++		RwIm2DVertexSetIntRGBA(&Vertex2[3], r, g, b, A_prev_add);
++		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex2, 4, Index, 6);
++
++		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, pFrontBuffer);
++		int A_curr_add = (int)(255.0f * t + 0.5f);
++		RwIm2DVertexSetIntRGBA(&Vertex[0], r, g, b, A_curr_add);
++		RwIm2DVertexSetIntRGBA(&Vertex[1], r, g, b, A_curr_add);
++		RwIm2DVertexSetIntRGBA(&Vertex[2], r, g, b, A_curr_add);
++		RwIm2DVertexSetIntRGBA(&Vertex[3], r, g, b, A_curr_add);
++		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
++
++		RwIm2DVertexSetIntRGBA(&Vertex2[0], r, g, b, A_curr_add);
++		RwIm2DVertexSetIntRGBA(&Vertex2[1], r, g, b, A_curr_add);
++		RwIm2DVertexSetIntRGBA(&Vertex2[2], r, g, b, A_curr_add);
++		RwIm2DVertexSetIntRGBA(&Vertex2[3], r, g, b, A_curr_add);
++		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex2, 4, Index, 6);
++	}
  }
  
  void
-@@ -282,11 +277,9 @@
+@@ -282,11 +351,9 @@
  
  		rw::d3d::im2dOverridePS = contrast_PS;
  #endif
@@ -248,7 +387,7 @@
  #endif
  	}else{
  		float f = Intensity;
-@@ -299,18 +292,17 @@
+@@ -299,18 +366,17 @@
  		rw::d3d::d3ddevice->SetPixelShaderConstantF(10, blurcolors, 1);
  		rw::d3d::im2dOverridePS = colourfilterVC_PS;
  #endif
@@ -272,12 +411,20 @@
  #endif
  }
  
-@@ -396,8 +388,11 @@
+@@ -396,8 +462,19 @@
  	assert(pFrontBuffer);
  	assert(pBackBuffer);
  
 -	if(type == MOTION_BLUR_LIGHT_SCENE){
 -		SmoothColor(red, green, blue, blur);
++	bool trailsOnly = MotionBlurOn && type != MOTION_BLUR_SNIPER && CMBlur::Drunkness == 0.0f;
++	if(trailsOnly && EffectSwitch == POSTFX_NORMAL && !bJustInitialised && gStepDraw){
++		// rotate at a step's first draw: the frame captured last (spare) becomes current, current becomes prev
++		RwRaster *old = sTrailPrev; sTrailPrev = pFrontBuffer; pFrontBuffer = sTrailSpare; sTrailSpare = old;
++		sTrailHavePrev = true;
++	}
++	sTrailT = (trailsOnly && sTrailHavePrev) ? Interpolation::DisplayBlend() : 1.0f;
++
 +	extern int8 gUiStyle;
 +	if(type == MOTION_BLUR_LIGHT_SCENE && gUiStyle == 0){	// (revc: the consoles use each frame's time-cycle colour as it is; research)
 +		// revc (R6): the average runs over game steps, not displayed frames
@@ -286,7 +433,7 @@
  		red = AvgRed;
  		green = AvgGreen;
  		blue = AvgBlue;
-@@ -426,7 +421,7 @@
+@@ -426,7 +503,7 @@
  		if(MotionBlurOn){
  			if(!bJustInitialised)
  				RenderOverlayBlur(cam, red, green, blue, blur);
@@ -295,7 +442,7 @@
  			RenderOverlayShader(cam, red, green, blue, blur);
  		}
  		break;
-@@ -445,10 +440,27 @@
+@@ -445,10 +522,36 @@
  	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
  
@@ -312,16 +459,25 @@
 -		RwRasterPushContext(pFrontBuffer);
 -		RwRasterRenderFast(RwCameraGetRaster(cam), 0, 0);
 -		RwRasterPopContext();
-+		// revc (plan task 13): the trails feed back once per game step (30 Hz) as on the
-+		// consoles, whatever the display rate: frames drawn between two steps blend with the
-+		// same previous image, so the trail length and colour don't depend on the frame rate.
-+		static uint32 lastStep = ~0u;
-+		bool trailsOnly = MotionBlurOn && type != MOTION_BLUR_SNIPER && CMBlur::Drunkness == 0.0f;
-+		if(!trailsOnly || bJustInitialised || CTimer::GetFrameCounter() != lastStep){
++		if(trailsOnly && EffectSwitch == POSTFX_NORMAL){
++			// every frame's output (before the HUD) goes into the spare raster; it becomes the trail source at
++			// the next step's first draw (3 above). At 30 fps every frame is a step's first draw: as before.
++			RwRasterPushContext(sTrailSpare);
++			RwRasterRenderFast(RwCameraGetRaster(cam), 0, 0);
++			RwRasterPopContext();
++			if(bJustInitialised){
++				// first frame: current = this frame too (the spare keeps it as well, so the next step's
++				// rotation promotes this frame), no previous yet
++				RwRasterPushContext(pFrontBuffer);
++				RwRasterRenderFast(RwCameraGetRaster(cam), 0, 0);
++				RwRasterPopContext();
++				sTrailHavePrev = false;
++			}
++		}else{
 +			RwRasterPushContext(pFrontBuffer);
 +			RwRasterRenderFast(RwCameraGetRaster(cam), 0, 0);
 +			RwRasterPopContext();
-+			lastStep = CTimer::GetFrameCounter();
++			sTrailHavePrev = false;
 +		}
  		bJustInitialised = false;
  	}else
