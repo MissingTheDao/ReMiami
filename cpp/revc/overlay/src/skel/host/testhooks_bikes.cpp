@@ -23,6 +23,7 @@
 extern void (*gTestStepHook)(void);
 extern void (*gTestRenderHook)(void);
 extern bool gStepDraw;	// main.cpp: a simulation step ran before this drawn frame
+extern float gRenderAlpha;	// main.cpp: interpolation alpha of this drawn frame
 extern "C" void revc_test_goto_spot(float x, float y, float z, float dx, float dy, float dz, int hour, int minute);
 
 // === A. Bike Rider Check ===
@@ -42,7 +43,15 @@ BikeStep(void)
     uint32 t = CTimer::GetTimeInMilliseconds() - brStartMs;
     if (t < 6000) {
         brBike->SetIsStatic(false);
-        brBike->SetMoveSpeed(brSpeedVec);
+        if (getenv("REVC_TEST_BIKERIDE_SLALOM")) {
+            // slalom with braking/accelerating: yaw rate +-0.8 rad/s over 2.5 s, speed 40..100 % over 3 s
+            float s = t / 1000.0f;
+            float yaw = 0.8f * sinf(2.0f * PI * s / 2.5f);
+            float k = 0.7f + 0.3f * sinf(2.0f * PI * s / 3.0f);
+            brBike->SetTurnSpeed(0.0f, 0.0f, yaw / 50.0f);
+            brBike->SetMoveSpeed(brBike->GetForward() * (brSpeedVec.Magnitude() * k));
+        } else
+            brBike->SetMoveSpeed(brSpeedVec);
     }
 }
 
@@ -75,8 +84,13 @@ BikeRender(void)
     const char *logEnv = getenv("REVC_TEST_BIKERIDE_LOG");
     if (logEnv && logEnv[0]) {
         CVector bp = brBike->GetPosition(), cp = TheCamera.GetPosition();
-        printf("[revc-test] bikeride frame %d ms %u local %.3f %.3f %.3f jump %.3f bike %.4f %.4f %.4f cam %.4f %.4f %.4f step %d\n",
-               brTotalFrames, t, local.x, local.y, local.z, jump, bp.x, bp.y, bp.z, cp.x, cp.y, cp.z, gStepDraw ? 1 : 0);
+        // the camera as RenderWare draws it (frame matrix): position and forward (at)
+        RwMatrix *rm = RwFrameGetMatrix(RwCameraGetFrame(TheCamera.m_pRwCamera));
+        RwV3d *rp = RwMatrixGetPos(rm), *ra = RwMatrixGetAt(rm);
+        printf("[revc-test] bikeride frame %d ms %u local %.3f %.3f %.3f jump %.3f bike %.4f %.4f %.4f cam %.4f %.4f %.4f step %d"
+               " rwpos %.4f %.4f %.4f rwat %.5f %.5f %.5f alpha %.4f\n",
+               brTotalFrames, t, local.x, local.y, local.z, jump, bp.x, bp.y, bp.z, cp.x, cp.y, cp.z, gStepDraw ? 1 : 0,
+               rp->x, rp->y, rp->z, ra->x, ra->y, ra->z, gRenderAlpha);
     }
 }
 
@@ -233,10 +247,12 @@ revc_test_pedlog(void)
 
         float ground = CWorld::FindGroundZForCoord(pos.x, pos.y);
         float diff = pos.z - ground;
-        
-        printf("[revc-test] pedlog model %d pos %.2f %.2f %.2f ground %.2f diff %.2f state %d invehicle %d\n",
+        // first surface below the ped (stacked surfaces: differs from the top-most ground)
+        bool found = false;
+        float below = CWorld::FindGroundZFor3DCoord(pos.x, pos.y, pos.z + 0.5f, &found);
+        printf("[revc-test] pedlog model %d pos %.2f %.2f %.2f ground %.2f diff %.2f state %d invehicle %d below %.2f found %d standing %d surface %d\n",
                ped->GetModelIndex(), pos.x, pos.y, pos.z, ground, diff,
-               ped->GetPedState(), ped->bInVehicle);
+               ped->GetPedState(), ped->bInVehicle, below, found, ped->bIsStanding, ped->m_nSurfaceTouched);
     }
 }
 

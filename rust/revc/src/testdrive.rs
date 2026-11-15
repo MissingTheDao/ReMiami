@@ -1012,8 +1012,8 @@ impl Driver {
                     }
                     let (x, y) = (xy[0], xy[1]);
                     unsafe { revc_test_pedspot_setup(x, y) };
-                    log(format!("pedspot: normal traffic at ({x}, {y}), ped heights every 2 s for 20 s"));
-                    self.phase = Phase::PedSpot { t0: unsafe { revc_test_game_ms() }, next_log: 2000 };
+                    log(format!("pedspot: normal traffic at ({x}, {y}), ped heights every 1 s for 40 s"));
+                    self.phase = Phase::PedSpot { t0: unsafe { revc_test_game_ms() }, next_log: 1000 };
                     return false;
                 }
                 if self.scenario == Scenario::WreckBike {
@@ -1159,9 +1159,9 @@ impl Driver {
                 let t = unsafe { revc_test_game_ms() }.wrapping_sub(t0);
                 if t >= next_log {
                     unsafe { revc_test_pedlog() };
-                    self.phase = Phase::PedSpot { t0, next_log: next_log + 2000 };
+                    self.phase = Phase::PedSpot { t0, next_log: next_log + 1000 };
                 }
-                if t < 20000 {
+                if t < 40000 {
                     return false;
                 }
                 return self.finish();
