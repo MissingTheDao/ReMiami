@@ -11,6 +11,8 @@
 
 mod backend;
 mod retro;
+#[cfg(test)]
+mod tonelist;
 pub use backend::{AudioBackend, RevcBackend};
 pub use retro::RetroBackend;
 
