@@ -150,7 +150,8 @@ def main():
         sys.exit(0)
 
     sr = active_sr
-    block_samples = int(sr * args.block_ms / 1000.0)
+    # the data are interleaved stereo: a block of block_ms holds two samples per frame
+    block_samples = 2 * int(sr * args.block_ms / 1000.0)
     if block_samples <= 0:
         print("Error: Block size results in 0 samples", file=sys.stderr)
         sys.exit(2)

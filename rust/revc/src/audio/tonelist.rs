@@ -106,6 +106,11 @@ mod tonelist {
 
     /// One click through a fresh backend with the reverb set as the game sets it (both calls).
     fn reverb_render(kind: &str, v: &[f32], mix: f32) -> Vec<f32> {
+        reverb_render_at(kind, v, mix, 1.0, 100.0, 1.0)
+    }
+
+    /// As `reverb_render`, with the source at distance `d` in front and the given distances.
+    fn reverb_render_at(kind: &str, v: &[f32], mix: f32, d: f32, max: f32, min: f32) -> Vec<f32> {
         let mb = |x: f32| if x > -10000.0 { 10f32.powf(x / 2000.0) } else { 0.0 };
         let params = revc_audio::reverb::ReverbParams {
             density: (v[0] * v[0] * v[0] / 16.0).clamp(0.0, 1.0),
@@ -148,8 +153,8 @@ mod tonelist {
         b.reverb_set_listener(&listener);
         b.sfx_set_2d(0, false);
         b.sfx_set_gain(0, 1.0);
-        b.sfx_set_position(0, 0.0, 0.0, 1.0);
-        b.sfx_set_distances(0, 100.0, 1.0);
+        b.sfx_set_position(0, 0.0, 0.0, d);
+        b.sfx_set_distances(0, max, min);
         b.sfx_set_pitch(0, 1.0);
         b.sfx_set_loop_count(0, 1);
         b.sfx_set_reverb_mix(0, mix);
@@ -198,6 +203,25 @@ mod tonelist {
                     println!("{kind} {name}{suffix} mix {m:.3} dry_db {d:.2} wet_db {w:.2} wet_minus_dry {:.2}", w - d);
                 }
             }
+        }
+    }
+
+
+    /// The reverb environment must not change a 3D sound's direct path: with a large room set
+    /// (strong air absorption), a dry click 300 units away is as loud as with no reverb set.
+    #[test]
+    fn reverb_environment_leaves_direct_path() {
+        // generic large-room listener in millibels (not a game preset)
+        let room: [f32; 21] = [50.0, 1.0, 0.0, -1000.0, 0.0, 10.0, 1.0, 1.0, 0.0, 0.05, 0.0, 0.05,
+                               0.25, 0.0, 0.25, 0.0, -18.0, 3500.0, 250.0, 0.0, 0x3f as f32];
+        let mut none = room;
+        none[16] = 0.0; // no air absorption
+        let e = |b: &[f32]| b.iter().map(|x| x * x).sum::<f32>();
+        for kind in ["revc", "retro"] {
+            let with = e(&reverb_render_at(kind, &room, 0.0, 300.0, 500.0, 50.0));
+            let without = e(&reverb_render_at(kind, &none, 0.0, 300.0, 500.0, 50.0));
+            let db = 10.0 * (with / without).log10();
+            assert!(with > 0.0 && db.abs() < 0.5, "{kind}: direct path changed by {db:.1} dB");
         }
     }
 

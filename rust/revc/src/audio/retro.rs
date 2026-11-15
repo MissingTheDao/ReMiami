@@ -69,6 +69,10 @@ fn source_3d(st: &ChannelState) -> Source3D {
         room_rolloff_factor: 0.0,
         // the original's DS3D buffers mute beyond max distance (measured in audio step 4)
         mute_at_max_distance: true,
+        // no air absorption on the direct path: the listener's air absorption reaches only the
+        // reverb (HF limit) until it is measured against the original (reverb item 3c). With the
+        // engine's default factor 1, distant sounds were low-passed to near silence.
+        air_absorption_factor: 0.0,
         ..Default::default()
     }
 }
