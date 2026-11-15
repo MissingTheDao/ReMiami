@@ -7,6 +7,11 @@
 #include "Vehicle.h"
 #include "Object.h"
 #include "RwHelper.h"
+#include "Timer.h"
+#include <cstdio>
+#include <cstdlib>
+
+extern float gRenderAlpha;	// main.cpp: interpolation alpha of this drawn frame
 #include <vector>
 #include "Coronas.h"
 #include "SpecialFX.h"
@@ -449,6 +454,21 @@ ApplyForRender(float alpha)
 static void
 RecordMotion(void)
 {
+	// REVC_CAM_LOG=<file>: the camera as drawn (RenderWare frame) every frame, with the step flag and
+	// alpha, for step-phase analysis under real input
+	static FILE *camLog = nil;
+	static bool camLogInit = false;
+	if (!camLogInit) {
+		camLogInit = true;
+		if (const char *p = getenv("REVC_CAM_LOG"))
+			camLog = fopen(p, "w");
+	}
+	if (camLog && TheCamera.m_pRwCamera) {
+		RwMatrix *m = RwFrameGetMatrix(RwCameraGetFrame(TheCamera.m_pRwCamera));
+		fprintf(camLog, "%u %d %.4f %.4f %.4f %.4f %.6f %.6f %.6f %.6f %.6f %.6f\n", CTimer::GetTimeInMilliseconds(),
+		        gStepDraw ? 1 : 0, ::gRenderAlpha, m->pos.x, m->pos.y, m->pos.z, m->at.x, m->at.y, m->at.z,
+		        m->up.x, m->up.y, m->up.z);
+	}
 	CPed *ped = FindPlayerPed();
 	if (ped == nil)
 		return;

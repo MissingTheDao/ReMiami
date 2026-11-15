@@ -823,7 +823,12 @@ pub unsafe extern "C" fn hostSimStepsDue(alpha: *mut f32) -> c_int {
     // A frame captured by the regression harness shows the simulated state itself (alpha 1),
     // not a blend that depends on wall-clock timing, so screenshots are repeatable; motion
     // captures (videos) keep the blend.
-    let a = if with(|h| h.capture_requested) && !CAPTURE_KEEPS_ALPHA.load(std::sync::atomic::Ordering::Relaxed) { 1.0 } else { a };
+    // REVC_GRAB_RAW: grab this frame as drawn (alpha kept)
+    let grabbing = grab_frame_wanted();
+    if grabbing {
+        with(|h| h.capture_requested = true);
+    }
+    let a = if grabbing { a } else if with(|h| h.capture_requested) && !CAPTURE_KEEPS_ALPHA.load(std::sync::atomic::Ordering::Relaxed) { 1.0 } else { a };
     if !alpha.is_null() {
         unsafe { *alpha = a };
     }
@@ -1124,4 +1129,108 @@ pub unsafe extern "C" fn hostUpdateGamepadMappings(mappings: *const c_char) -> c
     };
     with(|h| h.joysticks.refresh_gamepads());
     (n >= 0) as c_int
+}
+
+// Per-frame image grab for step-phase analysis without a display (tests; drafted by the local model).
+// env REVC_GRAB_RAW=<path>: append each grabbed frame as 192x108 8-bit gray (row-major) to that file.
+// REVC_GRAB_SKIP=<frames> (default 0) frames are skipped first, then REVC_GRAB_FRAMES=<n> (default 960) are grabbed.
+struct Grab { file: std::io::BufWriter<std::fs::File>, frame: u64, skip: u64, n: u64 }
+static GRAB: std::sync::Mutex<Option<Grab>> = std::sync::Mutex::new(None);
+static GRAB_INIT: std::sync::Once = std::sync::Once::new();
+
+/// Called once per frame before drawing. Returns true when this frame is to be grabbed.
+/// On first call opens the file from the env (create/truncate); if REVC_GRAB_RAW is unset, always returns false.
+/// Increments `frame` on every call; returns true when skip <= frame_before_increment < skip + n.
+pub(crate) fn grab_frame_wanted() -> bool {
+    let mut grab = GRAB.lock().unwrap();
+    GRAB_INIT.call_once(|| {
+        if let Some(path) = std::env::var("REVC_GRAB_RAW").ok() {
+            if let Ok(file) = std::fs::File::create(path) {
+                let skip = std::env::var("REVC_GRAB_SKIP")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(0);
+                let n = std::env::var("REVC_GRAB_FRAMES")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(960);
+                *grab = Some(Grab {
+                    file: std::io::BufWriter::new(file),
+                    frame: 0,
+                    skip,
+                    n,
+                });
+            }
+        }
+    });
+    if let Some(ref mut g) = *grab {
+        let wanted = g.skip <= g.frame && g.frame < g.skip + g.n;
+        g.frame += 1;
+        return wanted;
+    }
+    false
+}
+
+/// True while grabbing is configured and not finished (frame < skip + n), else false.
+pub(crate) fn grab_active() -> bool {
+    let grab = GRAB.lock().unwrap();
+    match grab.as_ref() {
+        Some(g) => g.frame < g.skip + g.n,
+        None => false,
+    }
+}
+
+static GRAB_ERR_PRINTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Downscales `rgba` (w*h*4 bytes, RGBA8) to 192x108 by box averaging: output pixel (ox, oy) averages source
+/// x in [ox*w/192, (ox+1)*w/192) and y in [oy*h/108, (oy+1)*h/108) (integer bounds computed in u64, at least one
+/// pixel each). Gray = (299*R + 587*G + 114*B) / 1000 per source pixel, averaged as u64 sums, rounded down.
+/// Appends the 20736 bytes to the file and flushes. Errors are printed once with eprintln and then ignored.
+pub(crate) fn grab_write(w: u32, h: u32, rgba: &[u8]) {
+    let mut grab = GRAB.lock().unwrap();
+    let g = match grab.as_mut() {
+        Some(g) => g,
+        None => return,
+    };
+
+    if rgba.len() < (w as usize) * (h as usize) * 4 {
+        return;
+    }
+    let mut buf = [0u8; 20736];
+    for oy in 0..108 {
+        let y_start = (oy as u64) * (h as u64) / 108;
+        let y_end = (((oy as u64) + 1) * (h as u64) / 108).max(y_start + 1);
+        for ox in 0..192 {
+            let x_start = (ox as u64) * (w as u64) / 192;
+            let x_end = (((ox as u64) + 1) * (w as u64) / 192).max(x_start + 1);
+            let mut sum = 0u64;
+            let mut count = 0u64;
+            for y in y_start..y_end {
+                let row_offset = y * w as u64 * 4;
+                for x in x_start..x_end {
+                    let idx = (row_offset + x * 4) as usize;
+                    let r = rgba[idx] as u64;
+                    let g = rgba[idx + 1] as u64;
+                    let b = rgba[idx + 2] as u64;
+                    sum += (299 * r + 587 * g + 114 * b) / 1000;
+                    count += 1;
+                }
+            }
+            buf[(oy * 192 + ox) as usize] = (sum / count) as u8;
+        }
+    }
+
+    use std::io::Write;
+    if let Err(e) = g.file.write_all(&buf) {
+        if !GRAB_ERR_PRINTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            eprintln!("revc: grab: {e}");
+        }
+        return;
+    }
+    if let Err(e) = g.file.flush() {
+        if !GRAB_ERR_PRINTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            eprintln!("revc: grab: {e}");
+        }
+        return;
+    }
 }

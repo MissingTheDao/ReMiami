@@ -2147,17 +2147,25 @@
 \ No newline at end of file
 --- a/src/renderer/WaterLevel.cpp
 +++ b/src/renderer/WaterLevel.cpp
-@@ -919,7 +919,8 @@
+@@ -28,6 +28,7 @@
+ #include "Occlusion.h"
+ #include "Replay.h"
+ #include "WaterLevel.h"
++bool RevcFrozen(const char *name);	// testhooks_bikes.cpp: REVC_FREEZE (step-phase analysis)
+ #include "SurfaceTable.h"
+ #include "WaterCreatures.h"
+ 
+@@ -919,7 +920,8 @@
  	
  	float fAngle = (CTimer::GetTimeInMilliseconds() & 4095) * (TWOPI / 4096.0f);
  	
 -	if ( !CTimer::GetIsPaused() )
 +	// revc (R6): the scroll advances once per game step (gStepDraw), not per displayed frame
-+	if ( !CTimer::GetIsPaused() && gStepDraw )
++	if ( !CTimer::GetIsPaused() && gStepDraw && !RevcFrozen("water") )
  	{
  		TEXTURE_ADDU       += windAddUV;
  		TEXTURE_ADDV       += windAddUV;
-@@ -1173,7 +1174,9 @@
+@@ -1173,7 +1175,9 @@
  	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void *)rwBLENDSRCALPHA);
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void *)rwBLENDINVSRCALPHA);
  	
@@ -2168,7 +2176,7 @@
  	{
  		RenderSeaBirds();
  		RenderShipsOnHorizon();
-@@ -1181,7 +1184,7 @@
+@@ -1181,7 +1185,7 @@
  		HandleBeachToysStuff();
  	}
  	

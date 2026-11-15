@@ -4389,7 +4389,15 @@
  	void LoadAllTextures();
 --- a/src/core/Game.cpp
 +++ b/src/core/Game.cpp
-@@ -96,6 +96,8 @@
+@@ -2,6 +2,7 @@
+ #include "platform.h"
+ 
+ #include "Game.h"
++bool RevcFrozen(const char *name);	// testhooks_bikes.cpp: REVC_FREEZE (step-phase analysis)
+ #include "main.h"
+ #include "RwHelper.h"
+ #include "Accident.h"
+@@ -96,6 +97,8 @@
  #include "TexturePools.h"
  #endif
  
@@ -4398,7 +4406,7 @@
  eLevelName CGame::currLevel;
  int32 CGame::currArea;
  bool CGame::bDemoMode = true;
-@@ -776,10 +778,8 @@
+@@ -776,10 +779,8 @@
  	if (b_FoundRecentSavedGameWantToLoad || FrontEndMenuManager.m_bWantToLoad)
  	{
  		LoadSplash("splash1");
@@ -4410,7 +4418,7 @@
  	}
  
  	b_FoundRecentSavedGameWantToLoad = false;
-@@ -788,14 +788,14 @@
+@@ -788,14 +789,14 @@
  	
  	if ( FrontEndMenuManager.m_bWantToLoad == true )
  	{
@@ -4433,7 +4441,7 @@
  		RestoreForStartLoad();
  	}
  	
-@@ -828,9 +828,7 @@
+@@ -828,9 +829,7 @@
  			currLevel = LEVEL_GENERIC;
  			CCollision::SortOutCollisionAfterLoad();
  		}
@@ -4444,7 +4452,7 @@
  	}
  	
  	CTimer::Update();
-@@ -882,6 +880,16 @@
+@@ -882,8 +881,18 @@
  		CRecordDataForGame::SaveOrRetrieveDataForThisFrame();
  		CRecordDataForChase::SaveOrRetrieveDataForThisFrame();
  		CPad::DoCheats();
@@ -4459,8 +4467,46 @@
 +		}
 +#endif
  		CClock::Update();
- 		CWeather::Update();
+-		CWeather::Update();
++		if (!RevcFrozen("weather")) CWeather::Update();
  
+ 		PUSH_MEMID(MEMID_SCRIPT);
+ 		CTheScripts::Process();
+@@ -903,7 +912,7 @@
+ #endif
+ 		CSetPieces::Update();
+ 		CEventList::Update();
+-		CParticle::Update();
++		if (!RevcFrozen("particles")) CParticle::Update();
+ 		gFireManager.Update();
+ 
+ 		// Otherwise even on 30 fps most probably you won't see any peds around Ocean View Hospital
+@@ -923,7 +932,7 @@
+ 			CTheCarGenerators::Process();
+ 		if (!CReplay::IsPlayingBack())
+ 			CCranes::UpdateCranes();
+-		CClouds::Update();
++		if (!RevcFrozen("clouds")) CClouds::Update();
+ 		CMovingThings::Update();
+ 		CWaterCannons::Update();
+ 		CUserDisplay::Process();
+@@ -940,14 +949,14 @@
+ 		CRubbish::Update();
+ 		CSpecialFX::Update();
+ 		CRopes::Update();
+-		CTimeCycle::Update();
++		if (!RevcFrozen("timecycle")) CTimeCycle::Update();
+ 		if (CReplay::ShouldStandardCameraBeProcessed())
+ 			TheCamera.Process();
+ 		CCullZones::Update();
+ 		if (!CReplay::IsPlayingBack())
+ 			CGameLogic::Update();
+ 		CBridge::Update();
+-		CCoronas::DoSunAndMoon();
++		if (!RevcFrozen("sunmoon")) CCoronas::DoSunAndMoon();
+ 		CCoronas::Update();
+ 		CShadows::UpdateStaticShadows();
+ 		CShadows::UpdatePermanentShadows();
 --- a/src/core/IniFile.cpp
 +++ b/src/core/IniFile.cpp
 @@ -10,6 +10,20 @@

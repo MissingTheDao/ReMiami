@@ -433,7 +433,11 @@ pub extern "C" fn revc_rw_present(vsync: i32) {
         }
     });
     super::frame_log_end();
-    if capture {
+    if capture && super::grab_active() {
+        if let Some((w, h, rgba)) = &shot {
+            super::grab_write(*w, *h, rgba);
+        }
+    } else if capture {
         super::with(|h| h.captured = shot);
     }
 }

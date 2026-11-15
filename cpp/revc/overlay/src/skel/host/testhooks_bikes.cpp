@@ -15,6 +15,7 @@
 #include "Camera.h"
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 // revc test hooks: bike rider pose vs the drawn bike (REVC_TEST=bikeride), wrecked bikes against a wall at the
@@ -25,6 +26,22 @@ extern void (*gTestRenderHook)(void);
 extern bool gStepDraw;	// main.cpp: a simulation step ran before this drawn frame
 extern float gRenderAlpha;	// main.cpp: interpolation alpha of this drawn frame
 extern "C" void revc_test_goto_spot(float x, float y, float z, float dx, float dy, float dz, int hour, int minute);
+
+// REVC_FREEZE=name,name,...: step-updated visual state that stops advancing once a test turns it on
+// (gRevcFreezeOn), to measure each one's share of the once-per-step image change. Names: clouds, timecycle,
+// weather, particles, sunmoon, water, postfx, lodfade.
+static bool gRevcFreezeOn = false;
+bool
+RevcFrozen(const char *name)
+{
+    static const char *list = getenv("REVC_FREEZE");
+    if (!gRevcFreezeOn || !list) return false;
+    size_t n = strlen(name);
+    for (const char *p = strstr(list, name); p; p = strstr(p + 1, name))
+        if ((p == list || p[-1] == ',') && (p[n] == ',' || p[n] == '\0'))
+            return true;
+    return false;
+}
 
 // === A. Bike Rider Check ===
 
@@ -41,6 +58,8 @@ BikeStep(void)
 {
     if (!brBike) return;
     uint32 t = CTimer::GetTimeInMilliseconds() - brStartMs;
+    if (t >= 1000)
+        gRevcFreezeOn = true;
     if (t < 6000) {
         brBike->SetIsStatic(false);
         if (getenv("REVC_TEST_BIKERIDE_SLALOM")) {

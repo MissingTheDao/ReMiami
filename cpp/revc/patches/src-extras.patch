@@ -49,17 +49,18 @@
  	drawMouse();
 --- a/src/extras/postfx.cpp
 +++ b/src/extras/postfx.cpp
-@@ -11,7 +11,9 @@
+@@ -11,7 +11,10 @@
  #include "RwHelper.h"
  #include "Camera.h"
  #include "MBlur.h"
 +#include "Timer.h"
  #include "postfx.h"
++bool RevcFrozen(const char *name);	// testhooks_bikes.cpp: REVC_FREEZE (step-phase analysis)
 +#include "Sprite2d.h"
  
  RwRaster *CPostFX::pFrontBuffer;
  RwRaster *CPostFX::pBackBuffer;
-@@ -22,28 +24,46 @@
+@@ -22,28 +25,46 @@
  
  static RwIm2DVertex Vertex[4];
  static RwIm2DVertex Vertex2[4];
@@ -118,7 +119,7 @@
  }
  
  void
-@@ -108,8 +128,12 @@
+@@ -108,8 +129,12 @@
  	RwIm2DVertexSetIntRGBA(&Vertex[3], 255, 255, 255, 255);
  
  
@@ -133,7 +134,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[0], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[0], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[0], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -117,8 +141,8 @@
+@@ -117,8 +142,8 @@
  	RwIm2DVertexSetV(&Vertex2[0], 0.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[0], 255, 255, 255, 255);
  
@@ -144,7 +145,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[1], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[1], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[1], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -126,8 +150,8 @@
+@@ -126,8 +151,8 @@
  	RwIm2DVertexSetV(&Vertex2[1], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[1], 255, 255, 255, 255);
  
@@ -155,7 +156,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[2], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[2], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[2], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -135,8 +159,8 @@
+@@ -135,8 +160,8 @@
  	RwIm2DVertexSetV(&Vertex2[2], 1.0f, 1.0f/RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetIntRGBA(&Vertex2[2], 255, 255, 255, 255);
  
@@ -166,7 +167,7 @@
  	RwIm2DVertexSetScreenZ(&Vertex2[3], RwIm2DGetNearScreenZ());
  	RwIm2DVertexSetCameraZ(&Vertex2[3], RwCameraGetNearClipPlane(cam));
  	RwIm2DVertexSetRecipCameraZ(&Vertex2[3], 1.0f/RwCameraGetNearClipPlane(cam));
-@@ -151,28 +175,6 @@
+@@ -151,28 +176,6 @@
  #include "shaders/obj/contrastPS.inc"
  	contrast_PS = rw::d3d::createPixelShader(contrastPS_cso);
  #endif
@@ -195,7 +196,7 @@
  }
  
  void
-@@ -196,16 +198,6 @@
+@@ -196,16 +199,6 @@
  		contrast_PS = nil;
  	}
  #endif
@@ -212,7 +213,7 @@
  }
  
  void
-@@ -226,7 +218,9 @@
+@@ -226,7 +219,9 @@
  	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
  
@@ -223,7 +224,7 @@
  
  
  	RwIm2DVertexSetIntRGBA(&Vertex2[0], r, g, b, a);
-@@ -242,7 +236,7 @@
+@@ -242,7 +237,7 @@
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
  
  	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
@@ -232,7 +233,7 @@
  }
  
  void
-@@ -282,11 +276,9 @@
+@@ -282,11 +277,9 @@
  
  		rw::d3d::im2dOverridePS = contrast_PS;
  #endif
@@ -247,7 +248,7 @@
  #endif
  	}else{
  		float f = Intensity;
-@@ -299,18 +291,17 @@
+@@ -299,18 +292,17 @@
  		rw::d3d::d3ddevice->SetPixelShaderConstantF(10, blurcolors, 1);
  		rw::d3d::im2dOverridePS = colourfilterVC_PS;
  #endif
@@ -271,7 +272,7 @@
  #endif
  }
  
-@@ -396,8 +387,11 @@
+@@ -396,8 +388,11 @@
  	assert(pFrontBuffer);
  	assert(pBackBuffer);
  
@@ -280,12 +281,12 @@
 +	extern int8 gUiStyle;
 +	if(type == MOTION_BLUR_LIGHT_SCENE && gUiStyle == 0){	// (revc: the consoles use each frame's time-cycle colour as it is; research)
 +		// revc (R6): the average runs over game steps, not displayed frames
-+		if(gStepDraw)
++		if(gStepDraw && !RevcFrozen("postfx"))
 +			SmoothColor(red, green, blue, blur);
  		red = AvgRed;
  		green = AvgGreen;
  		blue = AvgBlue;
-@@ -426,7 +420,7 @@
+@@ -426,7 +421,7 @@
  		if(MotionBlurOn){
  			if(!bJustInitialised)
  				RenderOverlayBlur(cam, red, green, blue, blur);
@@ -294,7 +295,7 @@
  			RenderOverlayShader(cam, red, green, blue, blur);
  		}
  		break;
-@@ -445,10 +439,27 @@
+@@ -445,10 +440,27 @@
  	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
  	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
  
