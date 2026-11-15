@@ -727,8 +727,8 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
 name = "retro-audio"
-version = "0.2.4"
-source = "git+https://github.com/MissingTheDao/retro-audio?rev=28aad163bc9e685840ec2837597370ff3b465450#28aad163bc9e685840ec2837597370ff3b465450"
+version = "0.2.5"
+source = "git+https://github.com/MissingTheDao/retro-audio?rev=cdcc59980a4e4360123ec868f7e71a8feb58153e#cdcc59980a4e4360123ec868f7e71a8feb58153e"
 
 [[package]]
 name = "retro-wgpu"

@@ -207,21 +207,32 @@ mod tonelist {
     }
 
 
-    /// The reverb environment must not change a 3D sound's direct path: with a large room set
-    /// (strong air absorption), a dry click 300 units away is as loud as with no reverb set.
+    /// The reverb environment's air absorption on a 3D sound's direct path: a large room set
+    /// (-18 mB/m, HF reference 3.5 kHz) and a dry 1 kHz click 300 units away. The old backend leaves
+    /// the direct path alone; retro applies the published loss as a high shelf at the HF reference
+    /// (factor 1, reverb item 3c), so the click loses what retro-audio's shelf gives at 1 kHz.
     #[test]
-    fn reverb_environment_leaves_direct_path() {
+    fn reverb_environment_air_on_direct_path() {
         // generic large-room listener in millibels (not a game preset)
         let room: [f32; 21] = [50.0, 1.0, 0.0, -1000.0, 0.0, 10.0, 1.0, 1.0, 0.0, 0.05, 0.0, 0.05,
                                0.25, 0.0, 0.25, 0.0, -18.0, 3500.0, 250.0, 0.0, 0x3f as f32];
         let mut none = room;
         none[16] = 0.0; // no air absorption
         let e = |b: &[f32]| b.iter().map(|x| x * x).sum::<f32>();
+        // shelf: -18 mB/m x 300 m = -54 dB at the reference, its square above it
+        let air = 10f32.powf(-18.0 * 300.0 / 2000.0);
+        let mut shelf = retro_audio::filter::HighShelf::default();
+        let w = |f: f32| 2.0 * std::f32::consts::PI * f / OUTPUT_RATE as f32;
+        shelf.set(air * air, w(3500.0));
+        let expected = 20.0 * shelf.gain_at(w(1000.0)).log10();
         for kind in ["revc", "retro"] {
             let with = e(&reverb_render_at(kind, &room, 0.0, 300.0, 500.0, 50.0));
             let without = e(&reverb_render_at(kind, &none, 0.0, 300.0, 500.0, 50.0));
             let db = 10.0 * (with / without).log10();
-            assert!(with > 0.0 && db.abs() < 0.5, "{kind}: direct path changed by {db:.1} dB");
+            let want = if kind == "revc" { 0.0 } else { expected };
+            println!("{kind}: direct path {db:.2} dB, expected {want:.2} dB");
+            // 1.5 dB: the click's edges spread energy below 1 kHz, where the shelf takes less
+            assert!(with > 0.0 && (db - want).abs() < 1.5, "{kind}: direct path {db:.1} dB, expected {want:.1} dB");
         }
     }
 

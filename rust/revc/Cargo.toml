@@ -18,7 +18,7 @@ sdl3-sys = "0.7"
 png = "0.18"
 revc-audio = { path = "../revc-audio" }
 # the second audio back end (audio/retro.rs); public crate, pinned; no device output of its own (SDL is ours)
-retro-audio = { git = "https://github.com/MissingTheDao/retro-audio", rev = "28aad163bc9e685840ec2837597370ff3b465450", default-features = false }
+retro-audio = { git = "https://github.com/MissingTheDao/retro-audio", rev = "cdcc59980a4e4360123ec868f7e71a8feb58153e", default-features = false }
 revc-timing = { path = "../revc-timing" }
 revc-formats = { path = "../revc-formats" }
 revc-import = { path = "../revc-import" }

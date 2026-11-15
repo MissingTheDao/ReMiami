@@ -69,10 +69,10 @@ fn source_3d(st: &ChannelState) -> Source3D {
         room_rolloff_factor: 0.0,
         // the original's DS3D buffers mute beyond max distance (measured in audio step 4)
         mute_at_max_distance: true,
-        // no air absorption on the direct path: the listener's air absorption reaches only the
-        // reverb (HF limit) until it is measured against the original (reverb item 3c). With the
-        // engine's default factor 1, distant sounds were low-passed to near silence.
-        air_absorption_factor: 0.0,
+        // air absorption on the direct path as published (factor 1): since retro-audio 0.2.5 the EFX
+        // path applies it as a high shelf at the HF reference, so low and mid frequencies stay
+        // (reverb item 3c, measured against the open implementation's shape)
+        air_absorption_factor: 1.0,
         ..Default::default()
     }
 }
