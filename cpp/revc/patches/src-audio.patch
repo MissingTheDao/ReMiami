@@ -228,7 +228,7 @@
  struct
  { 
  	const char *id;
-@@ -151,96 +143,44 @@
+@@ -151,96 +143,54 @@
  	return _effectsSupported; // usingEAX || usingEAX3 || _usingEFX;
  }
  
@@ -236,6 +236,9 @@
 +extern "C" void revc_reverb_set(float density, float diffusion, float gain, float gainHF, float decayTime,
 +                                float decayHFRatio, float reflectionsGain, float reflectionsDelay,
 +                                float lateGain, float lateDelay);
++
++// The full listener (millibels) for back ends that render the whole parameter set.
++extern "C" void revc_reverb_set_listener(const float *v, int n);
 +
 +static float RustReverb_mBToGain(float mB) { return mB > -10000.0f ? powf(10.0f, mB / 2000.0f) : 0.0f; }
 +
@@ -259,6 +262,13 @@
 +	                p->flReflectionsDelay,
 +	                Clamp(RustReverb_mBToGain((float)p->lReverb), 0.0f, 10.0f),
 +	                p->flReverbDelay);
++	const float v[21] = {
++		p->flEnvironmentSize, p->flEnvironmentDiffusion, (float)p->lRoom, (float)p->lRoomHF, (float)p->lRoomLF,
++		p->flDecayTime, p->flDecayHFRatio, p->flDecayLFRatio, (float)p->lReflections, p->flReflectionsDelay,
++		(float)p->lReverb, p->flReverbDelay, p->flEchoTime, p->flEchoDepth, p->flModulationTime,
++		p->flModulationDepth, p->flAirAbsorptionHF, p->flHFReference, p->flLFReference, p->flRoomRolloffFactor,
++		(float)p->ulFlags };
++	revc_reverb_set_listener(v, 21);
 +}
 +
 +// There is one audio "provider": the Rust mixer playing through SDL3. It always supports effects and
@@ -358,7 +368,7 @@
  }
  
  static bool8
-@@ -248,59 +188,17 @@
+@@ -248,59 +198,17 @@
  {
  	if ( curprovider == index )
  		return TRUE;
@@ -427,7 +437,7 @@
  }
  
  static bool8
-@@ -765,8 +663,6 @@
+@@ -765,8 +673,6 @@
  	if ( _bSampmanInitialised )
  		return TRUE;
  
@@ -436,7 +446,7 @@
  	for(int i = 0; i < MAX_STREAMS; i++)
  		aStream[i] = new CStream(ALStreamSources[i], ALStreamBuffers[i]);
  
-@@ -801,9 +697,6 @@
+@@ -801,9 +707,6 @@
  		_fEffectsLevel = 0.0f;
  			
  		_maxSamples = 0;
@@ -446,7 +456,7 @@
  	}
  	
  	{
-@@ -840,42 +733,9 @@
+@@ -840,42 +743,9 @@
  		int index = 0;
  		_maxSamples = Min(MAXCHANNELS, providers[index].sources);
  		
@@ -492,7 +502,7 @@
  
  		alGenSources(MAX_STREAMS*2, ALStreamSources[0]);
  		for ( int32 i = 0; i < MAX_STREAMS; i++ )
-@@ -898,10 +758,6 @@
+@@ -898,10 +768,6 @@
  		
  		if ( IsFXSupported() )
  		{
@@ -503,7 +513,7 @@
  			for ( int32 i = 0; i < MAXCHANNELS; i++ )
  				aChannel[i].SetReverbMix(ALEffectSlot, 0.0f);
  		}
-@@ -1078,24 +934,6 @@
+@@ -1078,24 +944,6 @@
  	for ( int32 i = 0; i < NUM_CHANNELS; i++ )
  		aChannel[i].Term();
  
@@ -528,7 +538,7 @@
  	for ( int32 i = 0; i < MAX_STREAMS; i++ )
  	{
  		alDeleteBuffers(NUM_STREAMBUFFERS, ALStreamBuffers[i]);
-@@ -1104,18 +942,6 @@
+@@ -1104,18 +952,6 @@
  	
  	CChannel::DestroyChannels();
  	
@@ -547,7 +557,7 @@
  	_fPrevEaxRatioDestination = 0.0f;
  	_usingEFX                 = false;
  	_fEffectsLevel            = 0.0f;
-@@ -1508,7 +1334,6 @@
+@@ -1508,7 +1344,6 @@
  	{
  		if ( IsFXSupported() )
  		{
@@ -555,7 +565,7 @@
  			
  			if ( nReverbFlag != FALSE )
  				aChannel[nChannel].SetReverbMix(ALEffectSlot, _fEffectsLevel);
-@@ -1524,6 +1349,10 @@
+@@ -1524,6 +1359,10 @@
  	ASSERT( nChannel < NUM_CHANNELS );
  	
  	uintptr addr;
@@ -566,7 +576,7 @@
  	
  	if ( nSfx < SAMPLEBANK_MAX )
  	{
-@@ -1981,11 +1810,59 @@
+@@ -1981,11 +1820,59 @@
  	}
  }
  

@@ -4,6 +4,7 @@ use retro_audio::{
     SoundBuffer, Channels, PanLaw, Listener, Mode3D, DistanceModel,
 };
 use revc_audio::reverb::ReverbParams;
+use retro_audio::reverb::{EfxReverbParams, MillibelListener};
 
 use super::backend::AudioBackend;
 use revc_audio::al::{AlStreams, State};
@@ -24,6 +25,8 @@ pub struct RetroBackend {
     last_stream_frames: Option<u64>,
     reverb_mixes: Vec<f32>,
     reverb_params: Option<ReverbParams>,
+    /// The game's full listener, converted (the reverb's second parameter path).
+    listener: Option<EfxReverbParams>,
 }
 
 struct ChannelState {
@@ -47,6 +50,12 @@ pub(crate) const LEVEL_3D: f32 = 0.8394;
 /// The volume a channel's voice plays at (3D voices at LEVEL_3D).
 fn voice_volume(st: &ChannelState) -> f32 {
     if st.is_2d { st.gain } else { st.gain * LEVEL_3D }
+}
+
+/// The reverb send for a channel. retro-audio scales the send by the voice volume; the 3D level
+/// is a property of the direct path's pan law only, so it is divided out of the send again.
+fn send_level(st: &ChannelState, mix: f32) -> f32 {
+    if st.is_2d { mix } else { mix / LEVEL_3D }
 }
 
 /// The channel's 3D source (the game's positions are listener-relative; inverse distance clamped).
@@ -79,6 +88,7 @@ impl RetroBackend {
             last_stream_frames: None,
             reverb_mixes: Vec::new(),
             reverb_params: None,
+            listener: None,
         }
     }
 
@@ -90,7 +100,7 @@ impl RetroBackend {
                 max_buses: 1,
                 voice_stealing: false,
                 command_capacity: 65536,
-                reverb: false,
+                reverb: true,
                 pan_law: PanLaw::DirectSound,
                 pan_law_3d: PanLaw::Linear,
             };
@@ -108,6 +118,9 @@ impl RetroBackend {
                     rolloff_factor: 1.0,
                     doppler_factor: 1.0,
                 });
+            }
+            if let (Some(eng), Some(p)) = (&mut self.engine, &self.listener) {
+                let _ = eng.set_environment_efx(p);
             }
         }
     }
@@ -151,12 +164,22 @@ impl AudioBackend for RetroBackend {
         self.reverb_params = Some(*p);
     }
 
+    fn reverb_set_listener(&mut self, l: &MillibelListener) {
+        let p = EfxReverbParams::from_millibels(l);
+        self.listener = Some(p);
+        if let Some(eng) = &mut self.engine {
+            let _ = eng.set_environment_efx(&p);
+        }
+    }
+
     fn sfx_set_2d(&mut self, id: usize, is_2d: bool) {
         if let Some(state) = self.channel_state.get_mut(id) {
             state.is_2d = is_2d;
             if let (Some(eng), Some(vid)) = (&mut self.engine, state.voice_id) {
                 let _ = eng.set_3d(vid, if is_2d { None } else { Some(source_3d(state)) });
                 let _ = eng.set_volume(vid, Volume::linear(voice_volume(state)));
+                let mix = self.reverb_mixes.get(id).copied().unwrap_or(0.0);
+                let _ = eng.set_send(vid, send_level(state, mix), 1.0);
             }
         }
     }
@@ -192,7 +215,7 @@ impl AudioBackend for RetroBackend {
                 looping: count == 0,
                 loop_start: if count == 0 { rs } else { 0 },
                 loop_end: if count == 0 { re } else { 0 },
-                send: 0.0, // the reverb comes in step 5
+                send: send_level(state, self.reverb_mixes.get(id).copied().unwrap_or(0.0)), // the game's per-source send (no extra HF cut on the send)
                 ..Default::default()
             };
 
@@ -311,6 +334,11 @@ impl AudioBackend for RetroBackend {
     fn sfx_set_reverb_mix(&mut self, id: usize, mix: f32) {
         if let Some(mixes) = self.reverb_mixes.get_mut(id) {
             *mixes = mix;
+        }
+        if let (Some(eng), Some(state)) = (&mut self.engine, self.channel_state.get(id)) {
+            if let Some(vid) = state.voice_id {
+                let _ = eng.set_send(vid, send_level(state, mix), 1.0);
+            }
         }
     }
 

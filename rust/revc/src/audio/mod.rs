@@ -500,6 +500,44 @@ pub extern "C" fn revc_reverb_set(
     with_backend(|d| d.both(|b| b.reverb_set(&p)));
 }
 
+/// The full environment listener in millibels, 21 values in the order of the listener struct
+/// (size, diffusion, room, room HF, room LF, decay, HF ratio, LF ratio, reflections, reflections
+/// delay, reverb, reverb delay, echo time/depth, modulation time/depth, air absorption, HF and LF
+/// reference, room rolloff, flags). Sent next to `revc_reverb_set`; back ends that render the full
+/// parameter set use it.
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_reverb_set_listener(v: *const c_float, n: c_int) {
+    if v.is_null() || n < 21 {
+        return;
+    }
+    // SAFETY: non-null and the caller passes at least 21 floats (n >= 21).
+    let s = unsafe { std::slice::from_raw_parts(v, 21) };
+    let l = retro_audio::reverb::MillibelListener {
+        environment_size: s[0],
+        diffusion: s[1],
+        room: s[2].round() as i32,
+        room_hf: s[3].round() as i32,
+        room_lf: s[4].round() as i32,
+        decay_time: s[5],
+        decay_hf_ratio: s[6],
+        decay_lf_ratio: s[7],
+        reflections: s[8].round() as i32,
+        reflections_delay: s[9],
+        reverb: s[10].round() as i32,
+        reverb_delay: s[11],
+        echo_time: s[12],
+        echo_depth: s[13],
+        modulation_time: s[14],
+        modulation_depth: s[15],
+        air_absorption_hf: s[16],
+        hf_reference: s[17],
+        lf_reference: s[18],
+        room_rolloff_factor: s[19],
+        decay_hf_limit: (s[20] as u32) & 0x20 != 0,
+    };
+    with_backend(|d| d.both(|b| b.reverb_set_listener(&l)));
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_sfx_set_2d(id: c_uint, is_2d: c_int) {
     with_backend(|d| d.both(|b| b.sfx_set_2d(id as usize, is_2d != 0)));

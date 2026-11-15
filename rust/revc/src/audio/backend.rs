@@ -10,6 +10,8 @@ pub trait AudioBackend: Send {
     fn sfx_close(&mut self);
     fn sfx_is_open(&self) -> bool;
     fn reverb_set(&mut self, p: &ReverbParams);
+    /// Full listener in millibels (all fields of the game's environment); back ends that render only the ten EFX values ignore it.
+    fn reverb_set_listener(&mut self, _l: &retro_audio::reverb::MillibelListener) {}
     fn sfx_set_2d(&mut self, id: usize, is_2d: bool);
     fn sfx_start(&mut self, id: usize, data: &[i16], freq: u32);
     fn sfx_stop(&mut self, id: usize);

@@ -103,4 +103,102 @@ mod tonelist {
             }
         }
     }
+
+    /// One click through a fresh backend with the reverb set as the game sets it (both calls).
+    fn reverb_render(kind: &str, v: &[f32], mix: f32) -> Vec<f32> {
+        let mb = |x: f32| if x > -10000.0 { 10f32.powf(x / 2000.0) } else { 0.0 };
+        let params = revc_audio::reverb::ReverbParams {
+            density: (v[0] * v[0] * v[0] / 16.0).clamp(0.0, 1.0),
+            diffusion: v[1],
+            gain: mb(v[2]),
+            gain_hf: mb(v[3]),
+            decay_time: v[5],
+            decay_hf_ratio: v[6],
+            reflections_gain: mb(v[8]).clamp(0.0, 3.16),
+            reflections_delay: v[9],
+            late_gain: mb(v[10]).clamp(0.0, 10.0),
+            late_delay: v[11],
+        };
+        let listener = retro_audio::reverb::MillibelListener {
+            environment_size: v[0],
+            diffusion: v[1],
+            room: v[2].round() as i32,
+            room_hf: v[3].round() as i32,
+            room_lf: v[4].round() as i32,
+            decay_time: v[5],
+            decay_hf_ratio: v[6],
+            decay_lf_ratio: v[7],
+            reflections: v[8].round() as i32,
+            reflections_delay: v[9],
+            reverb: v[10].round() as i32,
+            reverb_delay: v[11],
+            echo_time: v[12],
+            echo_depth: v[13],
+            modulation_time: v[14],
+            modulation_depth: v[15],
+            air_absorption_hf: v[16],
+            hf_reference: v[17],
+            lf_reference: v[18],
+            room_rolloff_factor: v[19],
+            decay_hf_limit: (v[20] as u32) & 0x20 != 0,
+        };
+        let mut b: Box<dyn AudioBackend> = if kind == "revc" { Box::new(RevcBackend::new()) } else { Box::new(RetroBackend::new()) };
+        b.sfx_open(8);
+        b.reverb_set(&params);
+        b.reverb_set_listener(&listener);
+        b.sfx_set_2d(0, false);
+        b.sfx_set_gain(0, 1.0);
+        b.sfx_set_position(0, 0.0, 0.0, 1.0);
+        b.sfx_set_distances(0, 100.0, 1.0);
+        b.sfx_set_pitch(0, 1.0);
+        b.sfx_set_loop_count(0, 1);
+        b.sfx_set_reverb_mix(0, mix);
+        b.sfx_start(0, &generate_click(), TONE_RATE);
+        let frames = ((v[5].min(8.0) * 1.5 + 0.5) * OUTPUT_RATE as f32) as usize;
+        let mut buf = vec![0.0f32; frames * 2];
+        let mut done = 0;
+        while done < frames {
+            let n = RENDER_BLOCK.min(frames - done);
+            b.render(&mut buf[done * 2..(done + n) * 2]);
+            done += n;
+        }
+        b.sfx_stop(0);
+        buf
+    }
+
+    /// Reverb level in the mix: a 0.1 s click at 1 m with the per-source send `mix`, through both
+    /// backends with the reverb set by both calls (reverb_set + reverb_set_listener). The sets come
+    /// from a local file (REVC_REVERB_SETS: `name mix` + 21 listener values in millibels); renders
+    /// go to REVC_REVERB_OUT for analysis.
+    #[test]
+    #[ignore]
+    fn reverb_level_report() {
+        let Ok(sets) = std::env::var("REVC_REVERB_SETS") else {
+            println!("SKIPPED: REVC_REVERB_SETS not set");
+            return;
+        };
+        let out = std::env::var("REVC_REVERB_OUT").unwrap_or_else(|_| "reverb_out".into());
+        std::fs::create_dir_all(&out).unwrap();
+        let energy = |b: &[f32], a: usize, z: usize| (a..z.min(b.len() / 2)).map(|f| b[f * 2] * b[f * 2] + b[f * 2 + 1] * b[f * 2 + 1]).sum::<f32>();
+        let db = |e: f32| 10.0 * (e + 1e-30).log10();
+        for line in std::fs::read_to_string(&sets).unwrap().lines() {
+            let t: Vec<&str> = line.split_whitespace().collect();
+            if line.starts_with('#') || t.len() < 23 {
+                continue;
+            }
+            let (name, mix): (&str, f32) = (t[0], t[1].parse().unwrap());
+            let v: Vec<f32> = t[2..23].iter().map(|x| x.parse().unwrap()).collect();
+            for kind in ["revc", "retro"] {
+                for (suffix, m) in [("", mix), ("_dry", 0.0)] {
+                    let buf = reverb_render(kind, &v, m);
+                    let bytes: Vec<u8> = buf.iter().flat_map(|x| x.to_le_bytes()).collect();
+                    std::fs::write(format!("{out}/{kind}_{name}{suffix}.f32"), bytes).unwrap();
+                    let (a, z) = ((0.110 * OUTPUT_RATE as f32) as usize, (0.25 * OUTPUT_RATE as f32) as usize);
+                    let (d, w) = (db(energy(&buf, 0, a)), db(energy(&buf, z, usize::MAX)));
+                    println!("{kind} {name}{suffix} mix {m:.3} dry_db {d:.2} wet_db {w:.2} wet_minus_dry {:.2}", w - d);
+                }
+            }
+        }
+    }
+
 }
