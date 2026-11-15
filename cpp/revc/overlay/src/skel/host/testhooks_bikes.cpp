@@ -15,6 +15,7 @@
 #include "Camera.h"
 #include <cmath>
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -117,7 +118,11 @@ extern "C" int
 revc_test_bikeride_setup(float mps)
 {
     float x = 480.0f, y = -1400.0f;
-    revc_test_goto_spot(x - 10.0f, y, -100.0f, -10.0f, -12.0f, 8.0f, 12, 0);
+    // REVC_TEST_BIKERIDE_TIME="hh:mm": another time of day (default 12:00)
+    int hh = 12, mm = 0;
+    if (const char *tm = getenv("REVC_TEST_BIKERIDE_TIME"))
+        sscanf(tm, "%d:%d", &hh, &mm);
+    revc_test_goto_spot(x - 10.0f, y, -100.0f, -10.0f, -12.0f, 8.0f, hh, mm);
 
     CStreaming::RequestModel(MI_PCJ600, STREAMFLAGS_DEPENDENCY);
     CStreaming::LoadAllRequestedModels(false);
