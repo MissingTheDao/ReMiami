@@ -149,7 +149,7 @@
  void revc_on_resize(int width, int height);
 --- a/src/skel/host/host.cpp
 +++ b/src/skel/host/host.cpp
-@@ -1,7 +1,7 @@
+@@ -1,17 +1,29 @@
  // Skeleton for the Rust host (rust/revc): SDL3 window, GL context, input and the process
  // entry point live in Rust; this file keeps the game-side skeleton logic. Derived from
  // skel/glfw/glfw.cpp with the Win32/Switch/Apple/X11 branches removed.
@@ -157,8 +157,21 @@
 +#if defined LIBRW_HOST
  
  
++#ifdef _WIN32
++#define WIN32_LEAN_AND_MEAN
++#define NOMINMAX
++#include <windows.h>
++#include <direct.h>
++#define LANG_OTHER LANG_NEUTRAL
++#define SUBLANG_OTHER SUBLANG_NEUTRAL
++DWORD _dwOperatingSystemVersion;
++#else
  long _dwOperatingSystemVersion;
-@@ -12,6 +12,8 @@
+ #include <sys/sysinfo.h>
++#endif
+ #include <errno.h>
+ #include <locale.h>
+ #include <signal.h>
  #include <stddef.h>
  
  #include "common.h"
@@ -167,7 +180,7 @@
  #include <stdio.h>
  #include "rwcore.h"
  #include "skeleton.h"
-@@ -22,6 +24,7 @@
+@@ -22,6 +34,7 @@
  #include "FileMgr.h"
  #include "Text.h"
  #include "Pad.h"
@@ -175,16 +188,22 @@
  #include "Timer.h"
  #include "DMAudio.h"
  #include "ControllerConfig.h"
-@@ -33,6 +36,8 @@
+@@ -33,6 +46,14 @@
  #include "AnimViewer.h"
  #include "Font.h"
  #include "MemoryMgr.h"
 +#include "Interpolation.h"
 +#include "Camera.h"
++extern float TEXTURE_ADDU, TEXTURE_ADDV, _TEXTURE_MASK_ADDU, _TEXTURE_MASK_ADDV, _TEXTURE_WAKE_ADDU, _TEXTURE_WAKE_ADDV;	// renderer/WaterLevel.cpp (C++ linkage)
++#ifdef _MSC_VER
++// common.h declares these for MSVC; the Win32 skeleton that defined them is not built.
++int strcasecmp(const char *str1, const char *str2) { return _stricmp(str1, str2); }
++int strncasecmp(const char *str1, const char *str2, size_t len) { return _strnicmp(str1, str2, len); }
++#endif
  
  // This is defined on project-level, via premake5 or cmake
  
-@@ -41,8 +46,12 @@
+@@ -41,8 +62,12 @@
  
  rw::EngineOpenParams openParams;
  
@@ -199,7 +218,25 @@
  
  static RwBool		  ForegroundApp = TRUE;
  static RwBool		  WindowIconified = FALSE;
-@@ -156,9 +165,12 @@
+@@ -85,6 +110,9 @@
+  */
+ void _psCreateFolder(const char *path)
+ {
++#ifdef _WIN32
++	_mkdir(path); // fails harmlessly when the folder exists
++#else
+ 	struct stat info;
+ 	char fullpath[PATH_MAX];
+ 	realpath(path, fullpath);
+@@ -94,6 +122,7 @@
+ 			mkdir(fullpath, 0755);
+ 		}
+ 	}
++#endif
+ }
+ 
+ /*
+@@ -156,9 +185,12 @@
  	}
  #else
  	rw::Image *image = RwCameraGetRaster(pCamera)->toImage();
@@ -214,7 +251,35 @@
  #endif
  	return nil;
  }
-@@ -241,8 +253,44 @@
+@@ -166,9 +198,19 @@
+ /*
+  *****************************************************************************
+  */
++#ifdef _WIN32
++RwUInt32
++#else
+ double
++#endif
+ psTimer(void)
+ {
++#ifdef _WIN32
++	LARGE_INTEGER freq, now;
++	QueryPerformanceFrequency(&freq);
++	QueryPerformanceCounter(&now);
++	return (RwUInt32)(now.QuadPart * 1000 / freq.QuadPart);
++#else
+ 	struct timespec start; 
+ #if defined(CLOCK_MONOTONIC_RAW)
+ 	clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+@@ -178,6 +220,7 @@
+ 	clock_gettime(CLOCK_MONOTONIC, &start);
+ #endif
+ 	return start.tv_sec * 1000.0 + start.tv_nsec/1000000.0;
++#endif
+ }
+ 
+ 
+@@ -241,8 +284,44 @@
   *****************************************************************************
   */
  
@@ -260,7 +325,38 @@
  
  /*
   *****************************************************************************
-@@ -1249,40 +1297,19 @@
+@@ -332,11 +411,18 @@
+ #endif
+ 
+ 
++#ifdef _WIN32
++	MEMORYSTATUSEX memStatus;
++	memStatus.dwLength = sizeof(memStatus);
++	GlobalMemoryStatusEx(&memStatus);
++	_dwMemAvailPhys = memStatus.ullAvailPhys;
++#else
+  	struct sysinfo systemInfo;
+ 	sysinfo(&systemInfo);
+ 	_dwMemAvailPhys = systemInfo.freeram;
+ 	debug("Physical memory size %u\n", systemInfo.totalram);
+ 	debug("Available physical memory %u\n", systemInfo.freeram);
++#endif
+ 	_dwOperatingSystemVersion = OS_WINXP; // To fool other classes
+   
+   TheText.Unload();
+@@ -1129,9 +1215,11 @@
+ 	return;
+ }
+ 
++#ifndef _WIN32
+ void terminateHandler(int sig, siginfo_t *info, void *ucontext) {
+ 	RsGlobal.quit = TRUE;
+ }
++#endif
+ 
+ #ifdef FLUSHABLE_STREAMING
+ void dummyHandler(int sig){
+@@ -1249,50 +1337,31 @@
  /*
   *****************************************************************************
   */
@@ -271,15 +367,7 @@
 -	CMDSTR cmdLine,
 -	int cmdShow)
 -{
-+// The main loop lives in Rust (rust/revc/src/main.rs):
-+//   revc_game_init(argc, argv);
-+//   loop { r = revc_game_frame_begin(); if r == 0 break; if r == 1 { poll events; revc_game_frame_run(); } }
-+//   revc_game_shutdown();
-+// One begin/run pair is one iteration of the original loop. A "session" is one run of the
-+// original inner loop; it restarts (without leaving the process) when a game is loaded or
-+// started from the menu.
-+static bool SessionStarted = false;
- 
+-
 -	RwInt32 argc;
 -	RwChar** argv;
 -	SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, nil, SPIF_SENDCHANGE);
@@ -293,7 +381,15 @@
 -		freopen("CONOUT$", "w", stderr);
 -	}
 -#endif
--
++// The main loop lives in Rust (rust/revc/src/main.rs):
++//   revc_game_init(argc, argv);
++//   loop { r = revc_game_frame_begin(); if r == 0 break; if r == 1 { poll events; revc_game_frame_run(); } }
++//   revc_game_shutdown();
++// One begin/run pair is one iteration of the original loop. A "session" is one run of the
++// original inner loop; it restarts (without leaving the process) when a game is loaded or
++// started from the menu.
++static bool SessionStarted = false;
+ 
 -#elif defined(REVC_RUST_MAIN)
 -// Rust owns main() (rust/revc); it calls this with the process argv.
 -extern "C" int
@@ -311,7 +407,19 @@
  	RwInt32 i;
  
  #ifdef USE_CUSTOM_ALLOCATOR
-@@ -1416,8 +1443,21 @@
+ 	InitMemoryMgr();
+ #endif
+ 
++#ifndef _WIN32
+ 	struct sigaction act;
+ 	act.sa_sigaction = terminateHandler;
+ 	act.sa_flags = SA_SIGINFO;
+ 	sigaction(SIGTERM, &act, NULL);
++#endif
+ #ifdef FLUSHABLE_STREAMING
+ 	struct sigaction sa;
+ 	sigemptyset(&sa.sa_mask);
+@@ -1416,8 +1485,21 @@
  #endif
  	
  
@@ -334,7 +442,7 @@
  		RwInitialised = TRUE;
  		
  		/* 
-@@ -1451,49 +1491,146 @@
+@@ -1451,49 +1533,146 @@
  		TheMemoryCard.m_bWantToLoad = false;
  		
  		CTimer::Update();
@@ -418,13 +526,13 @@
 +		CTimer::Stop();
 +		
 +		if ( FrontEndMenuManager.m_bFirstTime == true )
-+		{
+ 		{
+-			hostPollEvents();
 +			gGameState = GS_INIT_FRONTEND;
 +			TRACE("gGameState = GS_INIT_FRONTEND;");
 +		}
 +		else
- 		{
--			hostPollEvents();
++		{
 +			gGameState = GS_INIT_PLAYING_GAME;
 +			TRACE("gGameState = GS_INIT_PLAYING_GAME;");
 +		}
@@ -509,7 +617,7 @@
  //					    else if (CPad::GetPad(0)->GetLeftMouseJustDown())
  //						    ++gGameState;
  //					    else if (CPad::GetPad(0)->GetEnterJustDown())
-@@ -1505,11 +1642,11 @@
+@@ -1505,11 +1684,11 @@
  //					    else if (CPad::GetPad(0)->GetTabJustDown())
  //						    ++gGameState;
  
@@ -525,7 +633,7 @@
  //#ifndef NO_MOVIES
  //					    CloseClip();
  //					    CoUninitialize();
-@@ -1520,17 +1657,17 @@
+@@ -1520,17 +1699,17 @@
  //					    else
  //						    PlayMovieInWindow(cmdShow, "movies\\GTAtitles.mpg");
  
@@ -550,7 +658,7 @@
  //					    else if (CPad::GetPad(0)->GetLeftMouseJustDown())
  //						    ++gGameState;
  //					    else if (CPad::GetPad(0)->GetEnterJustDown())
-@@ -1542,229 +1679,190 @@
+@@ -1542,229 +1721,188 @@
  //					    else if (CPad::GetPad(0)->GetTabJustDown())
  //						    ++gGameState;
  
@@ -819,15 +927,6 @@
 -#else
 -		if ( !FrontEndMenuManager.m_bWantToRestart )
 -			break;
--#endif
--		
--		CPad::ResetCheats();
--		CPad::StopPadsShaking();
--		
--		DMAudio.ChangeMusicMode(MUSICMODE_DISABLE);
--		
--#ifdef PS2_MENU
--		CGame::ShutDownForRestart();
 +					CTimer::SetFixedFrameMs(0.0);
 +					gRenderAlpha = alpha;
 +					gRenderFrameSeconds = hostFrameSeconds();
@@ -836,8 +935,6 @@
 +					// screenshots repeat whatever the frame rate. Never true in normal play.
 +					// Same for the water texture scroll, which advances once per rendered frame.
 +					if (hostCaptureRequested()) {
-+						extern float TEXTURE_ADDU, TEXTURE_ADDV, _TEXTURE_MASK_ADDU, _TEXTURE_MASK_ADDV,
-+							_TEXTURE_WAKE_ADDU, _TEXTURE_WAKE_ADDV;
 +						CGeneral::SetRandomSeed(12345);
 +						TEXTURE_ADDU = TEXTURE_ADDV = 0.0f;
 +						_TEXTURE_MASK_ADDU = _TEXTURE_MASK_ADDV = 0.0f;
@@ -852,6 +949,15 @@
 +						if(getenv("REVC_TEST_RAIN"))
 +							printf("[revc-test] droplets on screen: %d (rain %.2f)\n", ScreenDroplets::ms_numDrops, CWeather::Rain);
  #endif
+-		
+-		CPad::ResetCheats();
+-		CPad::StopPadsShaking();
+-		
+-		DMAudio.ChangeMusicMode(MUSICMODE_DISABLE);
+-		
+-#ifdef PS2_MENU
+-		CGame::ShutDownForRestart();
+-#endif
 -		
 -		CTimer::Stop();
 -		
@@ -873,7 +979,7 @@
 -			FrontEndMenuManager.m_bWantToRestart = false;
 -			
 -			continue;
--		}
+ 		}
 -		
 -		CGame::ShutDown();	
 -		CTimer::Stop();
@@ -887,7 +993,7 @@
 -			DMAudio.ChangeMusicMode(MUSICMODE_GAME);
 -			LoadSplash(GetLevelSplashScreen(CGame::currLevel));
 -			FrontEndMenuManager.m_bWantToLoad = false;
- 		}
+-		}
 -		else
 +	}
 +	else
@@ -932,7 +1038,7 @@
  	
  #ifndef MASTER
  	if ( gbModelViewer )
-@@ -1790,7 +1888,6 @@
+@@ -1790,7 +1928,6 @@
  	RsEventHandler(rsTERMINATE, nil);
  
  
@@ -940,7 +1046,7 @@
  }
  
  /*
-@@ -1836,11 +1933,22 @@
+@@ -1836,11 +1973,22 @@
  
  		// the host (like glfw) returns 0.0 for non-existent axes(which is bullocks) so we treat it as deadzone, and keep value of previous frame.
  		// otherwise if this axis is present, -1 = released, 1 = pressed
@@ -965,7 +1071,7 @@
  	}
  	// TODO? L2-R2 axes(not buttons-that's fine) on joysticks that don't have SDL gamepad mapping AREN'T handled, and I think it's impossible to do without mapping.
  
-@@ -1879,24 +1987,69 @@
+@@ -1879,24 +2027,69 @@
  		
  		CPad *pad = CPad::GetPad(bs.padID);
  
@@ -1045,7 +1151,7 @@
  extern "C" void revc_on_joystick(int jid, int connected)
  {
  	if (!HostCallbacksEnabled)
-@@ -1918,10 +2071,15 @@
+@@ -1918,10 +2111,15 @@
  
  	} else if (!connected) {
  		if (PSGLOBAL(joy1id) == jid) {

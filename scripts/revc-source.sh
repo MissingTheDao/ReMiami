@@ -27,7 +27,7 @@ MANIFEST=$KIT/reVC.sha256
 TREE=${REVC_CPP_DIR:-$REPO/cpp/re3-miami}
 ORIG=$TREE/.reVC-original          # verified original files, kept for export (not part of the build)
 STAMP=$TREE/.revc-source
-DIFF=/usr/bin/diff
+DIFF=$(command -v diff)
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT

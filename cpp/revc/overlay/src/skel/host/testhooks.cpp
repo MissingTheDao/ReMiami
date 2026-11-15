@@ -669,7 +669,9 @@ revc_test_menu_page_id(const char *name)
 extern "C++" bool MenuSkinPS2Active(int page, bool gameNotLoaded);
 extern "C++" void MenuSkinPS2SetFocus(int page, bool list);	// (C++ linkage inside this file's extern "C" block)
 // Clips: the map zoom held (1 R1, -1 R2, 0 nothing), as the player would hold the shoulders.
+extern "C++" int gRevcTestMapZoom;
 int gRevcTestMapZoom = 0;
+extern "C++" int8 gPs2Setup;	// the PS2 style's controller setup 1-4 (core/ControllerConfig.cpp)
 void
 revc_test_map_zoom(int dir)
 {
@@ -694,7 +696,6 @@ revc_test_menu_state(int page, int option, int context, int layout, int legend)
 		float base = SCREEN_SCALE_Y(162.0f);
 		FrontEndMenuManager.m_fMapSize = layout == 0 ? base : layout == 1 ? base * 2.0f : SCREEN_SCALE_Y(1000.0f);
 	} else if (layout >= 0 && page == MENUPAGE_CONSOLE_CONTROLS && FrontEndMenuManager.m_nCurrScreen >= 0 && MenuSkinPS2Active(page, false)) {
-		extern int8 gPs2Setup;	// the PS2 style's controller setup 1-4
 		gPs2Setup = layout;
 	} else if (layout >= 0)
 		PadLayoutApply(layout);
@@ -783,7 +784,7 @@ revc_test_show_buttons(void)
 }
 
 // Controls menu "BUTTON PROMPTS" setting (skel/host/glyphs.cpp), as if chosen in the menu.
-extern int8 gButtonPromptsOverride;
+extern "C++" int8 gButtonPromptsOverride;
 void
 revc_test_set_prompt_style(int style)
 {
@@ -1359,7 +1360,7 @@ revc_test_swap_building(float x, float y, float z, const char *from, const char 
 #include "Weapon.h"
 #include "General.h"
 extern CWeaponEffects gCrossHair;	// weapons/WeaponEffects.cpp
-extern float TEXTURE_ADDU, TEXTURE_ADDV, _TEXTURE_MASK_ADDU, _TEXTURE_MASK_ADDV, _TEXTURE_WAKE_ADDU, _TEXTURE_WAKE_ADDV;
+extern "C++" float TEXTURE_ADDU, TEXTURE_ADDV, _TEXTURE_MASK_ADDU, _TEXTURE_MASK_ADDV, _TEXTURE_WAKE_ADDU, _TEXTURE_WAKE_ADDV;
 #ifdef USE_PS2_RAND
 extern unsigned long long myrand_seed;
 #else

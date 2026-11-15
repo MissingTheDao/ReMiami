@@ -550,18 +550,18 @@ calczShiftScale(Camera *cam)
 }
 
 inline void
-Camera::setNearPlane(float32 near)
+Camera::setNearPlane(float32 nearp)
 {
-	this->nearPlane = near;
+	this->nearPlane = nearp;
 	calczShiftScale(this);
 	if(this->getFrame())
 		this->getFrame()->updateObjects();
 }
 
 inline void
-Camera::setFarPlane(float32 far)
+Camera::setFarPlane(float32 farp)
 {
-	this->farPlane = far;
+	this->farPlane = farp;
 	calczShiftScale(this);
 	if(this->getFrame())
 		this->getFrame()->updateObjects();

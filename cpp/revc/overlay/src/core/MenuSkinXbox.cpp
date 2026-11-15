@@ -16,6 +16,7 @@
 #include "Timer.h"
 #include "Pad.h"
 #include "GenericGameStorage.h"
+extern int gConsoleOptionsSection;	// core/MenuScreensCustom.cpp (C++ linkage; declared here, outside the extern "C" functions)
 
 extern int8 gUiStyle;
 extern "C" int revc_import_rgba(int kind, const char *rel, int *width, int *height, unsigned char **rgba);
@@ -959,7 +960,6 @@ MenuSkinXboxSubTab(int page)
 extern "C" void
 MenuSkinXboxOptionsFor(int section)
 {
-	extern int gConsoleOptionsSection;
 	optionsOrigin = section == 1 ? MENUPAGE_SOUND_SETTINGS : section == 2 ? MENUPAGE_CONSOLE_CONTROLS : MENUPAGE_CONSOLE_DISPLAY;
 	gConsoleOptionsSection = section;
 	ConsoleAudioRows(true);
@@ -1229,7 +1229,6 @@ MenuSkinXboxInput(CMenuManager *m)
 	}
 	// Y on Display, Audio and Controls opens their "advanced" list; B there goes back to the page
 	if (SettingsSubTabs(m->m_nCurrScreen) && m->m_nCurrScreen != MENUPAGE_CONSOLE_OPTIONS && pad->GetTriangleJustDown()) {
-		extern int gConsoleOptionsSection;
 		optionsOrigin = m->m_nCurrScreen;
 		gConsoleOptionsSection = optionsOrigin == MENUPAGE_SOUND_SETTINGS ? 1 : optionsOrigin == MENUPAGE_CONSOLE_CONTROLS ? 2 : 0;
 		ConsoleAudioRows(true);
