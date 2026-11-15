@@ -1174,7 +1174,15 @@
  static uint8 DrunkBlurRed = 128;
 --- a/src/renderer/Particle.cpp
 +++ b/src/renderer/Particle.cpp
-@@ -195,6 +195,13 @@
+@@ -1,6 +1,7 @@
+ #include "common.h"
+ 
+ #include "main.h"
++#include "Interpolation.h"
+ #include "General.h"
+ #include "Timer.h"
+ #include "TxdStore.h"
+@@ -195,6 +196,13 @@
  RwRaster  *gpBoatWakeRaster;
  RwRaster  *gpFlame1Raster;
  RwRaster  *gpFlame5Raster;
@@ -1188,7 +1196,7 @@
  RwRaster  *gpRainDropSmallRaster;
  RwRaster  *gpBloodRaster;
  RwRaster  *gpLeafRaster[MAX_LEAF_FILES];
-@@ -250,6 +257,63 @@
+@@ -250,6 +258,63 @@
  
  
  
@@ -1252,7 +1260,7 @@
  void CParticle::ReloadConfig()
  {
  	debug("Initialising CParticleMgr...");
-@@ -303,6 +367,8 @@
+@@ -303,6 +368,8 @@
  
  		gParticleArray[i].m_nRotationStep = 0;
  	}
@@ -1261,7 +1269,7 @@
  }
  
  void CParticle::Initialise()
-@@ -671,6 +737,9 @@
+@@ -671,6 +738,9 @@
  		}
  	}
  
@@ -1271,7 +1279,15 @@
  	debug("CParticle ready");
  }
  
-@@ -1127,6 +1196,31 @@
+@@ -951,6 +1021,7 @@
+ 		psystem->m_vecTextureStretch.x = w;
+ 		psystem->m_vecTextureStretch.y = h;
+ 	}
++	pParticle->m_vecPrevPosition = pParticle->m_vecPosition;	// revc (R6): a new particle has no motion to blend
+ 	
+ 	pParticle->m_vecVelocity = vecDir;
+ 	
+@@ -1127,6 +1198,31 @@
  	if ( CTimer::GetIsPaused() )
  		return;
  
@@ -1303,7 +1319,15 @@
  	CRGBA color(0, 0, 0, 0);
  	
  	float fFricDeccel50 = pow(0.50f, CTimer::GetTimeStep());
-@@ -1740,7 +1834,8 @@
+@@ -1172,6 +1268,7 @@
+ 			CVector vecWind(0.0f, 0.0f, 0.0f);
+ 			
+ 			bRemoveParticle = false;
++			particle->m_vecPrevPosition = particle->m_vecPosition;	// revc (R6): drawn blended from here to the new position
+ 
+ 			CVector vecMoveStep = particle->m_vecVelocity * CTimer::GetTimeStep();
+ 			CVector vecPos = particle->m_vecPosition;
+@@ -1740,7 +1837,8 @@
  					++particle->m_nZRadiusTimer;
  			}
  
@@ -1313,9 +1337,40 @@
  			{
  				if ( particle->m_nAnimationSpeedTimer > psystem->m_nAnimationSpeed )
  				{
+@@ -2054,7 +2152,12 @@
+ 				float w;
+ 				float h;
+ 
+-				if ( CSprite::CalcScreenCoors(particle->m_vecPosition, &coors, &w, &h, true) )
++				// revc (R6): drawn between the last two game steps like the entities (t = 1 at 30 fps: as before)
++				CVector drawPos = particle->m_vecPosition;
++				float blend = Interpolation::DisplayBlend();
++				if ( blend < 1.0f )
++					drawPos = particle->m_vecPrevPosition + (particle->m_vecPosition - particle->m_vecPrevPosition) * blend;
++				if ( CSprite::CalcScreenCoors(drawPos, &coors, &w, &h, true) )
+ 				{
+ 					
+ 					if ( i == PARTICLE_ENGINE_STEAM
+@@ -2204,7 +2307,7 @@
+ 							}
+ 							else if ( psystem->Flags & SPEED_TRAIL )
+ 							{
+-								CVector vecPrevPos = particle->m_vecPosition - particle->m_vecVelocity;
++								CVector vecPrevPos = drawPos - particle->m_vecVelocity;
+ 								float fRotation;
+ 								float fTrailLength;
+ 								CVector vecScreenPosition;
 --- a/src/renderer/Particle.h
 +++ b/src/renderer/Particle.h
-@@ -56,6 +56,7 @@
+@@ -35,6 +35,7 @@
+ 	uint8     m_nCurrentFrame;
+ 	RwRGBA    m_Color;
+ 	CParticle *m_pNext;
++	CVector   m_vecPrevPosition;	// revc (R6): position at the start of the last game step; drawn blended by the render alpha
+ 	
+ 	CParticle()
+ 	{
+@@ -56,6 +57,7 @@
  	static float Cos(int32 value) { return m_CosTable[value]; }
  	
  	static void ReloadConfig();
@@ -1323,6 +1378,12 @@
  	static void Initialise();
  	static void Shutdown();
  	
+@@ -105,4 +107,4 @@
+ extern RwRaster *gpRainDripRaster[];
+ extern RwRaster *gpRainDripDarkRaster[];
+ 
+-VALIDATE_SIZE(CParticle, 0x58);
++VALIDATE_SIZE(CParticle, 0x58 + sizeof(CVector));	// revc: + m_vecPrevPosition
 --- a/src/renderer/ParticleMgr.cpp
 +++ b/src/renderer/ParticleMgr.cpp
 @@ -21,235 +21,14 @@
