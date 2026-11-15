@@ -16,6 +16,14 @@ mod tonelist;
 pub use backend::{AudioBackend, RevcBackend};
 pub use retro::RetroBackend;
 
+/// REVC_AUDIO_LAWS=eax3: today's engine follows the original's EAX-path laws measured in audio
+/// step 4 (mute beyond max distance, the measured pan curve); default (unset / `classic`): the
+/// laws it was calibrated with. The retro back end always uses the measured laws.
+pub(crate) fn eax_laws() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("REVC_AUDIO_LAWS").is_ok_and(|v| v.eq_ignore_ascii_case("eax3")))
+}
+
 use revc_audio::mixer::OUTPUT_RATE;
 use sdl3_sys::everything::*;
 use std::cell::RefCell;

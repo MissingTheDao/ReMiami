@@ -43,6 +43,9 @@ pub struct Mixer {
     reverb: Reverb,
     /// Mono reverb input for the current mix call (scratch, reused).
     wet: Vec<f32>,
+    /// 3D voices beyond their max distance go silent (DirectSound's mute-at-max-distance buffers);
+    /// off: they hold the level at max distance (OpenAL's clamped model).
+    mute_beyond_max: bool,
 }
 
 /// Counters for diagnostics and the regression harness, since the last `take_stats()`.
@@ -89,7 +92,13 @@ impl Mixer {
             stats: Stats::default(),
             reverb: Reverb::new(OUTPUT_RATE),
             wet: Vec::new(),
+            mute_beyond_max: false,
         }
+    }
+
+    /// See `mute_beyond_max`. The change is ramped like any gain change.
+    pub fn set_mute_beyond_max(&mut self, on: bool) {
+        self.mute_beyond_max = on;
     }
 
     pub fn set_2d(&mut self, id: usize, is_2d: bool) {
@@ -210,7 +219,7 @@ impl Mixer {
                 if !v.playing || v.pan_logged {
                     continue;
                 }
-                let (l, r, _) = v.gains();
+                let (l, r, _) = v.gains(false);
                 if l.max(r) > 0.02 && (l - r).abs() > 0.6 * l.max(r) {
                     eprintln!("[revc-audio] voice {i} one-sided: L {l:.3} R {r:.3} pos {:?} 2d {} freq {} len {}", v.pos, v.is_2d, v.freq, v.data.len());
                     v.pan_logged = true;
@@ -221,11 +230,12 @@ impl Mixer {
         self.wet.clear();
         self.wet.resize(frames, 0.0);
         let mut active = 0;
+        let mute = self.mute_beyond_max;
         for voice in &mut self.voices {
             if voice.playing {
                 active += 1;
                 self.stats.max_send = self.stats.max_send.max(voice.reverb_mix);
-                voice.mix_into(out, &mut self.wet);
+                voice.mix_into(out, &mut self.wet, mute);
             }
         }
         // The reverb always runs, so tails ring out after their voices stop.
@@ -243,13 +253,16 @@ impl Voice {
     /// use OpenAL's inverse distance clamped model (rolloff 1) and OpenAL Soft's stereo pan, which
     /// is linear in the sideways component: L = (1-p)/2, R = (1+p)/2 (0.5 each when centred).
     /// The send follows the source gain and distance attenuation, scaled by the send level.
-    fn gains(&self) -> (f32, f32, f32) {
+    fn gains(&self, mute_beyond_max: bool) -> (f32, f32, f32) {
         let g = self.gain.clamp(0.0, 1.0);
         let send = self.reverb_mix.clamp(0.0, 1.0);
         if self.is_2d {
             return (g, g, g * send);
         }
         let dist = (self.pos[0] * self.pos[0] + self.pos[1] * self.pos[1] + self.pos[2] * self.pos[2]).sqrt();
+        if mute_beyond_max && self.ref_dist > 0.0 && dist > self.max_dist.max(self.ref_dist) {
+            return (0.0, 0.0, 0.0);
+        }
         let att = if self.ref_dist > 0.0 {
             let d = dist.max(self.ref_dist).min(self.max_dist.max(self.ref_dist));
             self.ref_dist / (self.ref_dist + (d - self.ref_dist))
@@ -272,7 +285,7 @@ impl Voice {
         }
     }
 
-    fn mix_into(&mut self, out: &mut [f32], wet: &mut [f32]) {
+    fn mix_into(&mut self, out: &mut [f32], wet: &mut [f32], mute_beyond_max: bool) {
         let len = self.data.len();
         let step = self.freq as f64 * self.pitch.max(0.0) as f64 / OUTPUT_RATE as f64;
         if len == 0 || step <= 0.0 {
@@ -281,7 +294,7 @@ impl Voice {
             }
             return;
         }
-        let target = self.gains();
+        let target = self.gains(mute_beyond_max);
         let from = self.applied.unwrap_or(target);
         self.applied = Some(target);
         let (rs, re) = self.loop_region();

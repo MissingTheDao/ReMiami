@@ -48,6 +48,8 @@ fn source_3d(st: &ChannelState) -> Source3D {
         mode: Mode3D::HeadRelative,
         distance_model: DistanceModel::InverseClamped,
         room_rolloff_factor: 0.0,
+        // the original's DS3D buffers mute beyond max distance (measured in audio step 4)
+        mute_at_max_distance: true,
         ..Default::default()
     }
 }
