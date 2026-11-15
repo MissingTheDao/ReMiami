@@ -96,6 +96,13 @@ unsafe extern "C" {
     fn revc_test_pedhit_sample() -> i32;
     fn revc_test_pedhit_result(max_rise: *mut f32, car_dist: *mut f32);
     fn revc_test_pedhit_drawn(body_rise: *mut f32, head_rise: *mut f32, hit: *mut i32);
+    fn revc_test_bikeride_setup(mps: f32) -> i32;
+    fn revc_test_bikeride_sample() -> i32;
+    fn revc_test_bikeride_result(max_jump: *mut f32, jumps: *mut i32, frames: *mut i32);
+    fn revc_test_wreckbike_setup() -> i32;
+    fn revc_test_wreckbike_sample() -> i32;
+    fn revc_test_wreckbike_result(spawned: *mut i32, recoveries: *mut i32);
+    fn revc_test_pedlog();
     fn revc_test_menu_state(page: i32, option: i32, context: i32, layout: i32, legend: i32) -> i32;
     fn revc_test_menu_page_id(name: *const std::ffi::c_char) -> i32;
     fn revc_test_menu_input(down: i32, change: i32);
@@ -146,6 +153,8 @@ enum Scenario {
     SaveGame,
     Motion,
     PedHit,
+    BikeRide,
+    WreckBike,
     Scanner,
     Scenes,
     Menus,
@@ -180,6 +189,8 @@ enum Phase {
     /// Motion capture: scripted walk since game time `t0`, `step` into MOTION_SCRIPT.
     Motion { t0: u32, step: usize },
     PedHit,
+    BikeRide,
+    WreckBike { next_log: i32 },
     /// Scanner check: recording since game time `t0`.
     Scanner { t0: u32 },
     /// Pad script (REVC_TEST_PAD_SCRIPT): frames since the start state was set.
@@ -715,6 +726,8 @@ pub fn init() -> Result<bool, String> {
         "savegame" => Scenario::SaveGame,
         "motion" => Scenario::Motion,
         "pedhit" => Scenario::PedHit,
+        "bikeride" => Scenario::BikeRide,
+        "wreckbike" => Scenario::WreckBike,
         "screenshot" => Scenario::Screenshot,
         "menuwalk" => Scenario::MenuWalk,
         "fpsparity" => Scenario::FpsParity,
@@ -724,7 +737,7 @@ pub fn init() -> Result<bool, String> {
         "padscript" => Scenario::PadScript,
         "menusweep" => Scenario::MenuSweep,
         "cutscenes" => Scenario::Cutscenes,
-        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, scanner, scenes, menus, padscript, menusweep, cutscenes, screenshot, menuwalk, fpsparity)")),
+        other => return Err(format!("unknown REVC_TEST scenario '{other}' (boot, saveload, audio, formats, texmods, gamepad, spots, savegame, motion, pedhit, bikeride, wreckbike, scanner, scenes, menus, padscript, menusweep, cutscenes, screenshot, menuwalk, fpsparity)")),
     };
     let timeout: u64 = env("REVC_TEST_TIMEOUT", 180);
     let d = Driver {
@@ -889,7 +902,7 @@ impl Driver {
                         log("starting a new game");
                         self.phase = Phase::WaitPlaying;
                     }
-                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::Scanner | Scenario::Scenes | Scenario::Menus | Scenario::PadScript | Scenario::MenuSweep | Scenario::Screenshot | Scenario::MenuWalk | Scenario::FpsParity => {
+                    Scenario::SaveLoad | Scenario::Audio | Scenario::Formats | Scenario::TexMods | Scenario::Gamepad | Scenario::Spots | Scenario::SaveGame | Scenario::Motion | Scenario::PedHit | Scenario::BikeRide | Scenario::WreckBike | Scenario::Scanner | Scenario::Scenes | Scenario::Menus | Scenario::PadScript | Scenario::MenuSweep | Scenario::Screenshot | Scenario::MenuWalk | Scenario::FpsParity => {
                         if unsafe { revc_test_load_slot(self.slot) } == 0 {
                             self.fail(format!("save slot {} missing or invalid", self.slot + 1));
                             return self.finish();
@@ -974,6 +987,25 @@ impl Driver {
                     }
                     log(format!("pedhit: car at {kmh} km/h towards 5 peds"));
                     self.phase = Phase::PedHit;
+                    return false;
+                }
+                if self.scenario == Scenario::BikeRide {
+                    let mps: f32 = std::env::var("REVC_TEST_BIKERIDE_MPS").ok().and_then(|v| v.parse().ok()).unwrap_or(36.0);
+                    if unsafe { revc_test_bikeride_setup(mps) } == 0 {
+                        self.fail("bikeride: the bike model didn't load".into());
+                        return self.finish();
+                    }
+                    log(format!("bikeride: player on a bike held at {mps} m/s"));
+                    self.phase = Phase::BikeRide;
+                    return false;
+                }
+                if self.scenario == Scenario::WreckBike {
+                    if unsafe { revc_test_wreckbike_setup() } == 0 {
+                        self.fail("wreckbike: the bike model didn't load".into());
+                        return self.finish();
+                    }
+                    log("wreckbike: wrecked bikes pushed into the wall at the 2026-11-15 crash spot for 60 s".to_string());
+                    self.phase = Phase::WreckBike { next_log: 0 };
                     return false;
                 }
                 if self.scenario == Scenario::Formats {
@@ -1074,6 +1106,32 @@ impl Driver {
                     return false;
                 }
                 log("fpsparity: done".to_string());
+                return self.finish();
+            }
+            Phase::BikeRide => {
+                if unsafe { revc_test_bikeride_sample() } < 6000 {
+                    return false;
+                }
+                let (mut max_jump, mut jumps, mut frames) = (0.0f32, 0i32, 0i32);
+                unsafe { revc_test_bikeride_result(&mut max_jump, &mut jumps, &mut frames) };
+                log(format!("bikeride: rider head vs the drawn bike: max jump {max_jump:.3} m, {jumps} of {frames} frames over 0.05 m"));
+                if jumps > 0 {
+                    self.fail(format!("bikeride: the rider jumps against the bike ({jumps} frames over 0.05 m, max {max_jump:.3} m)"));
+                }
+                return self.finish();
+            }
+            Phase::WreckBike { next_log } => {
+                let ms = unsafe { revc_test_wreckbike_sample() };
+                if ms >= next_log {
+                    unsafe { revc_test_pedlog() };
+                    self.phase = Phase::WreckBike { next_log: next_log + 10000 };
+                }
+                if ms < 62000 {
+                    return false;
+                }
+                let (mut spawned, mut recoveries) = (0i32, 0i32);
+                unsafe { revc_test_wreckbike_result(&mut spawned, &mut recoveries) };
+                log(format!("wreckbike: {spawned} wrecked bikes, {recoveries} NaN recoveries"));
                 return self.finish();
             }
             Phase::PedHit => {

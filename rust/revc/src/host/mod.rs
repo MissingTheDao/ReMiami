@@ -827,7 +827,54 @@ pub unsafe extern "C" fn hostSimStepsDue(alpha: *mut f32) -> c_int {
     if !alpha.is_null() {
         unsafe { *alpha = a };
     }
+    frame_log_begin(steps as u32, a);
     steps as c_int
+}
+
+/// REVC_FRAME_LOG=path: one line per drawn frame (start us since the first frame, us since the previous frame's start,
+/// simulation steps run in it, render alpha, us from the frame's start until its present returned). For pacing
+/// measurements (step frames vs the display budget); off otherwise.
+struct FrameLog {
+    file: std::io::BufWriter<std::fs::File>,
+    t0: std::time::Instant,
+    start: std::time::Instant,
+    prev_start: Option<std::time::Instant>,
+    steps: u32,
+    alpha: f32,
+}
+static FRAME_LOG: std::sync::Mutex<Option<FrameLog>> = std::sync::Mutex::new(None);
+static FRAME_LOG_ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+fn frame_log_begin(steps: u32, alpha: f32) {
+    if !*FRAME_LOG_ON.get_or_init(|| {
+        let Some(path) = std::env::var_os("REVC_FRAME_LOG") else { return false };
+        let Ok(f) = std::fs::File::create(path) else { return false };
+        let now = std::time::Instant::now();
+        *FRAME_LOG.lock().unwrap() = Some(FrameLog { file: std::io::BufWriter::new(f), t0: now, start: now, prev_start: None, steps: 0, alpha: 0.0 });
+        true
+    }) {
+        return;
+    }
+    if let Some(l) = FRAME_LOG.lock().unwrap().as_mut() {
+        let now = std::time::Instant::now();
+        l.prev_start = Some(l.start);
+        l.start = now;
+        l.steps = steps;
+        l.alpha = alpha;
+    }
+}
+
+/// Called after the frame's present returned (host/wgpu.rs).
+pub(crate) fn frame_log_end() {
+    if !FRAME_LOG_ON.get().copied().unwrap_or(false) {
+        return;
+    }
+    if let Some(l) = FRAME_LOG.lock().unwrap().as_mut() {
+        use std::io::Write;
+        let now = std::time::Instant::now();
+        let since_prev = l.prev_start.map_or(0, |p| (l.start - p).as_micros());
+        let _ = writeln!(l.file, "{} {} {} {:.4} {}", (l.start - l.t0).as_micros(), since_prev, l.steps, l.alpha, (now - l.start).as_micros());
+    }
 }
 
 // ---------------------------------------------------------------- joysticks

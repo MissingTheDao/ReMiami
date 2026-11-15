@@ -133,6 +133,15 @@
  
  const uint32 CBike::nSaveStructSize =
  #ifdef COMPATIBLE_SAVES
+@@ -1036,7 +1037,7 @@
+ 		}else{
+ 			if(bIsStanding){
+ 				float f = Pow(0.97f, CTimer::GetTimeStep());
+-				m_fLeanLRAngle2 = m_fLeanLRAngle2*f - (Asin(GetRight().z) + DEGTORAD(15.0f) + idleAngle)*(1.0f-f);
++				m_fLeanLRAngle2 = m_fLeanLRAngle2*f - (Asin(Clamp(GetRight().z,-1.0f,1.0f)) + DEGTORAD(15.0f) + idleAngle)*(1.0f-f);	// revc: clamped as in the branch above (|z| > 1 by rounding gave NaN)
+ 			}else{
+ 				float f = Pow(0.95f, CTimer::GetTimeStep());
+ 				m_fLeanLRAngle2 = m_fLeanLRAngle2*f;
 @@ -1053,11 +1054,11 @@
  			if(m_aSuspensionSpringRatio[BIKESUSP_R1] < 1.0f || m_aSuspensionSpringRatio[BIKESUSP_R2] < 1.0f){
  				// BUG: this clamp makes no sense and the arguments seem swapped too

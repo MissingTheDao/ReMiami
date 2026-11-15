@@ -139,7 +139,33 @@ SnapshotBones(void)
 	}
 }
 
+// A transform in a body's frame and back (axes orthonormal, as for peds).
+static Xform
+ToLocal(const Xform &body, const Xform &w)
+{
+	Xform local;
+	CVector d = w.pos - body.pos;
+	local.pos = CVector(DotProduct(d, body.right), DotProduct(d, body.forward), DotProduct(d, body.up));
+	local.right = CVector(DotProduct(w.right, body.right), DotProduct(w.right, body.forward), DotProduct(w.right, body.up));
+	local.forward = CVector(DotProduct(w.forward, body.right), DotProduct(w.forward, body.forward), DotProduct(w.forward, body.up));
+	local.up = CVector(DotProduct(w.up, body.right), DotProduct(w.up, body.forward), DotProduct(w.up, body.up));
+	return local;
+}
+
+static Xform
+FromLocal(const Xform &body, const Xform &l)
+{
+	Xform w;
+	w.pos = body.pos + body.right * l.pos.x + body.forward * l.pos.y + body.up * l.pos.z;
+	w.right = body.right * l.right.x + body.forward * l.right.y + body.up * l.right.z;
+	w.forward = body.right * l.forward.x + body.forward * l.forward.y + body.up * l.forward.z;
+	w.up = body.right * l.up.x + body.forward * l.up.y + body.up * l.up.z;
+	return w;
+}
+
 // After Apply(peds): only for peds whose body was blended (same slot, continuous).
+// Bones are now blended in the body's local frame to avoid discontinuities caused by
+// fast vehicle movement triggering the world-space continuity guard.
 static void
 ApplyBones(float alpha)
 {
@@ -157,20 +183,28 @@ ApplyBones(float alpha)
 		    (int)b.prev.size() != b.hier->numNodes)
 			continue;
 		b.current.resize(b.hier->numNodes);
+		const Slot &s = gPeds.slots[i];
+		Xform bodyNow = Blend(s.prev, s.current, alpha);
 		// Like bodies: no blending across a jump. When a ped is knocked over its skeleton can
 		// change pose abruptly between two steps; blending across that drew peds thrown metres
-		// into the air (pedhit test: heads 12 m up at 320 fps). Then the ped's bones are drawn
-		// as the step left them.
+		// into the air (pedhit test: heads 12 m up at 320 fps). Now measured in the body's
+		// frame so vehicle speed does not trigger this guard.
 		bool continuous = true;
 		for (int n = 0; n < b.hier->numNodes; n++) {
 			GetRw(b.current[n], &b.hier->matrices[n]);
-			if (!Continuous(b.prev[n], b.current[n], 1.0f, 0.0f))
+			Xform lp = ToLocal(s.prev, b.prev[n]);
+			Xform lc = ToLocal(s.current, b.current[n]);
+			if (!Continuous(lp, lc, 1.0f, 0.0f))
 				continuous = false;
 		}
 		if (!continuous)
 			continue;
-		for (int n = 0; n < b.hier->numNodes; n++)
-			PutRw(Blend(b.prev[n], b.current[n], alpha), &b.hier->matrices[n]);
+		for (int n = 0; n < b.hier->numNodes; n++) {
+			Xform lp = ToLocal(s.prev, b.prev[n]);
+			Xform lc = ToLocal(s.current, b.current[n]);
+			Xform localBlended = Blend(lp, lc, alpha);
+			PutRw(FromLocal(bodyNow, localBlended), &b.hier->matrices[n]);
+		}
 		b.applied = true;
 	}
 }

@@ -78,3 +78,21 @@
  	void ModifyMatrixForBannerInWind(void);
  	void ProcessLightsForEntity(void);
  	void SetRwObjectAlpha(int32 alpha);
+--- a/src/entities/Physical.cpp
++++ b/src/entities/Physical.cpp
+@@ -19,6 +19,7 @@
+ #include "Automobile.h"
+ #include "Bike.h"
+ #include "Pickups.h"
++#include "NanGuard.h"
+ #include "Physical.h"
+ 
+ #ifdef WALLCLIMB_CHEAT
+@@ -157,6 +158,7 @@
+ void
+ CPhysical::RemoveAndAdd(void)
+ {
++	NanGuard::Check(this, "before RemoveAndAdd");	// revc: a NaN position would index the sectors out of range
+ 	int x, xstart, xmid, xend;
+ 	int y, ystart, ymid, yend;
+ 	CSector *s;

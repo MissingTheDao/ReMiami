@@ -8606,7 +8606,15 @@
 -}
 --- a/src/core/World.cpp
 +++ b/src/core/World.cpp
-@@ -1855,6 +1855,8 @@
+@@ -22,6 +22,7 @@
+ #include "Shadows.h"
+ #include "TempColModels.h"
+ #include "WaterLevel.h"
++#include "NanGuard.h"
+ #include "World.h"
+ 
+ #define OBJECT_REPOSITION_OFFSET_Z 2.0f
+@@ -1855,6 +1856,8 @@
  	}
  }
  
@@ -8615,7 +8623,7 @@
  void
  CWorld::SetPedsChoking(float x, float y, float z, float radius, CEntity* reason)
  {
-@@ -1862,7 +1864,15 @@
+@@ -1862,7 +1865,15 @@
  	for (int32 i = poolSize - 1; i >= 0; i--) {
  		CPed* pPed = CPools::GetPedPool()->GetSlot(i);
  		// suspicious copypaste
@@ -8632,6 +8640,31 @@
  			if (Abs(pPed->GetPosition().z - z) < 5.0f && Abs(pPed->GetPosition().x - x) < radius &&
  				Abs(pPed->GetPosition().y - y) < radius) {
  				if (!pPed->IsPlayer())
+@@ -1959,12 +1970,16 @@
+ 				}
+ 			}
+ 		}
++		// revc: NaN guard (NanGuard.cpp): the last finite matrix of every moving entity, then a check after control
++		for(CPtrNode *node = ms_listMovingEntityPtrs.first; node; node = node->next)
++			NanGuard::StepStart((CPhysical *)node->item);
+ 		for(CPtrNode *node = ms_listMovingEntityPtrs.first; node; node = node->next) {
+ 			CPhysical *movingEnt = (CPhysical *)node->item;
+ 			if(movingEnt->bRemoveFromWorld) {
+ 				RemoveEntityInsteadOfProcessingIt(movingEnt);
+ 			} else {
+ 				movingEnt->ProcessControl();
++				NanGuard::Check(movingEnt, "ProcessControl");
+ 				if(movingEnt->GetIsStatic()) { movingEnt->RemoveFromMovingList(); }
+ 			}
+ 		}
+@@ -1976,6 +1991,7 @@
+ 					RemoveEntityInsteadOfProcessingIt(movingEnt);
+ 				} else {
+ 					movingEnt->ProcessControl();
++					NanGuard::Check(movingEnt, "ProcessControl (postponed)");
+ 					if(movingEnt->GetIsStatic()) { movingEnt->RemoveFromMovingList(); }
+ 				}
+ 			}
 --- a/src/core/Zones.cpp
 +++ b/src/core/Zones.cpp
 @@ -33,94 +33,49 @@

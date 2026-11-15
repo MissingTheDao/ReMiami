@@ -432,6 +432,7 @@ pub extern "C" fn revc_rw_present(vsync: i32) {
             }
         }
     });
+    super::frame_log_end();
     if capture {
         super::with(|h| h.captured = shot);
     }
