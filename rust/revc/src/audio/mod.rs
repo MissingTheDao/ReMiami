@@ -10,7 +10,9 @@
 //! shadow mode for the regression harness will be added later.
 
 mod backend;
+mod retro;
 pub use backend::{AudioBackend, RevcBackend};
+pub use retro::RetroBackend;
 
 use revc_audio::mixer::OUTPUT_RATE;
 use sdl3_sys::everything::*;
@@ -102,10 +104,14 @@ impl Dispatch {
             Box::new(RevcBackend::new())
         });
 
-        let shadow = if std::env::var("REVC_AUDIO_SHADOW").is_ok_and(|v| v == "1") {
-            Some(Box::new(RevcBackend::new()) as Box<dyn AudioBackend>)
-        } else {
-            None
+        // REVC_AUDIO_SHADOW=<name> runs that back end in shadow (1 = revc, the harness check)
+        let shadow = match std::env::var("REVC_AUDIO_SHADOW").as_deref() {
+            Ok("1") => Some(Box::new(RevcBackend::new()) as Box<dyn AudioBackend>),
+            Ok(n) if !n.is_empty() => Self::backend_from_name(n).or_else(|| {
+                eprintln!("revc: audio: shadow back end {n} not known, none");
+                None
+            }),
+            _ => None,
         };
 
         Self {
@@ -120,6 +126,7 @@ impl Dispatch {
     fn backend_from_name(name: &str) -> Option<Box<dyn AudioBackend>> {
         match name {
             "revc" => Some(Box::new(RevcBackend::new())),
+            "retro" => Some(Box::new(RetroBackend::new())),
             _ => None,
         }
     }

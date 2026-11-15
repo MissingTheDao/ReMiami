@@ -14,7 +14,7 @@ pub trait AudioBackend: Send {
     fn sfx_start(&mut self, id: usize, data: &[i16], freq: u32);
     fn sfx_stop(&mut self, id: usize);
     fn sfx_reset(&mut self, id: usize);
-    fn sfx_is_playing(&self, id: usize) -> bool;
+    fn sfx_is_playing(&mut self, id: usize) -> bool;
     fn sfx_set_pitch(&mut self, id: usize, pitch: f32);
     fn sfx_set_gain(&mut self, id: usize, gain: f32);
     fn sfx_set_position(&mut self, id: usize, x: f32, y: f32, z: f32);
@@ -115,7 +115,7 @@ impl AudioBackend for RevcBackend {
         }
     }
 
-    fn sfx_is_playing(&self, id: usize) -> bool {
+    fn sfx_is_playing(&mut self, id: usize) -> bool {
         self.mixer.as_ref().map(|m| m.is_playing(id)).unwrap_or(false)
     }
 
