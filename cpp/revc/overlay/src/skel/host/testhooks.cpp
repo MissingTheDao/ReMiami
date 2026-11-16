@@ -381,12 +381,16 @@ revc_test_menu_input(int down, int change)
 void
 revc_test_world_start(int kind, float x, float y, float heading)
 {
-	revc_test_scene(x, y, heading, 12, 0, 0);
+	// REVC_TEST_CLOCK=hh:mm: another hour than noon (light comparisons with the original)
+	int hour = 12, minute = 0;
+	if (const char *clock = getenv("REVC_TEST_CLOCK"))
+		sscanf(clock, "%d:%d", &hour, &minute);
+	revc_test_scene(x, y, heading, hour, minute, 0);
 	if (const char *layout = getenv("REVC_TEST_PAD_LAYOUT"))	// (0/1: Standard/Classic pad bindings, as for the menus)
 		PadLayoutApply(atoi(layout));
 	if (kind == 0)
 		return;
-	int mi = kind == 2 ? MI_PCJ600 : kind == 3 ? MI_BLOODRB : kind == 4 ? MI_MAVERICK : kind == 5 ? MI_CHEETAH : kind == 6 ? MI_GLENDALE : MI_INFERNUS;	// (5, 6: cars with flat tail-light panels, light checks)	// (3: the Bloodring Banger, the car the PS2 tests can spawn; 4: a heli, flying tests)
+	int mi = kind == 2 ? MI_PCJ600 : kind == 3 ? MI_BLOODRB : kind == 4 ? MI_MAVERICK : kind == 5 ? MI_CHEETAH : kind == 6 ? MI_GLENDALE : kind == 7 ? MI_ADMIRAL : MI_INFERNUS;	// (5, 6: cars with flat tail-light panels, light checks)	// (3: the Bloodring Banger, the car the PS2 tests can spawn; 4: a heli, flying tests)
 	CStreaming::RequestModel(mi, STREAMFLAGS_DEPENDENCY);
 	CStreaming::LoadAllRequestedModels(false);
 	CPlayerPed *ped = FindPlayerPed();

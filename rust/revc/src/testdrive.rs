@@ -1485,6 +1485,7 @@ impl Driver {
                         "cheetah_straight" => unsafe { revc_test_world_start(5, MOONLITE.0, MOONLITE.1, 0.0) },	// (light checks)
                         "glendale_straight" => unsafe { revc_test_world_start(6, MOONLITE.0, MOONLITE.1, 0.0) },
                         "cheetah_open" => unsafe { revc_test_world_start(5, -1500.0, -1200.0, 0.0) },
+                        "admiral_open" => unsafe { revc_test_world_start(7, -1500.0, -1200.0, 0.0) },
                         other => {
                             self.fail(format!("pad script start state {other:?} not known (menu_base, foot_open, car_straight, car_open, bike_straight, bloodrb_straight, bloodrb_open, heli_open)"));
                             return self.finish();
