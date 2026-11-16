@@ -88,7 +88,7 @@ and the Rust toolchain pinned in `rust/rust-toolchain.toml` (x86_64-pc-windows-m
 - Check out with LF line endings (`git config core.autocrlf false` before checkout): the source
   manifest and patches are compared byte for byte.
 - `scripts/revc-source.sh prepare <copy>` runs in Git Bash (it needs `diff`, `patch`, `sha256sum`).
-- SDL3: the official `SDL3-devel-<version>-VC.zip`; put its `libd` on `LIB` for the link and
+- SDL3: the official `SDL3-devel-<version>-VC.zip`; put its `lib\x64` on `LIB` for the link and
   `SDL3.dll` next to `remiami.exe`.
 - mpg123: built from its source with CMake and MSVC as a static library
   (`ports/cmake`, `-DBUILD_SHARED_LIBS=OFF -DBUILD_LIBOUT123=OFF -DBUILD_PROGRAMS=OFF`), installed
