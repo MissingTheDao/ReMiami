@@ -1208,6 +1208,95 @@
  	static void LoadZone(const char *line);
  	static void LoadCullZone(const char *line);
  	static void LoadPickup(const char *line);
+--- a/src/core/Fire.cpp
++++ b/src/core/Fire.cpp
+@@ -19,6 +19,7 @@
+ #include "CarAI.h"
+ 
+ CFireManager gFireManager;
++extern bool gXboxFire;	// (renderer/Particle.cpp: the Xbox particle table is loaded)
+ 
+ CFire::CFire()
+ {
+@@ -115,27 +116,61 @@
+ 		gFireManager.StartFire(FindPlayerPed(), m_pSource, 0.8f, 1);
+ 	}
+ 	if (CTimer::GetTimeInMilliseconds() > m_nNextTimeToAddFlames) {
+-		m_nNextTimeToAddFlames = CTimer::GetTimeInMilliseconds() + (m_fWaterExtinguishCountdown < 0.3f ? 400 : (m_fWaterExtinguishCountdown < 0.7f ? 200 : 80));
+-		firePos = m_vecPos;
+-
+-		if (veh && veh->IsVehicle() && veh->IsCar()) {
+-			CVehicleModelInfo *mi = ((CVehicleModelInfo*)CModelInfo::GetModelInfo(veh->GetModelIndex()));
+-			CVector ModelInfo = mi->m_positions[CAR_POS_HEADLIGHTS];
+-			ModelInfo = m_pEntity->GetMatrix() * ModelInfo;
+-
+-			firePos.x = ModelInfo.x;
+-			firePos.y = ModelInfo.y;
+-			firePos.z = ModelInfo.z + 0.15f;
+-		}
++		if (gXboxFire) {
++			// revc: the Xbox's flames (research on the Xbox build): 50 ms for a full fire, a slower rise
++			// not scaled by the strength, a jitter on vehicles, its own flame for a moving car and no smoke
++			m_nNextTimeToAddFlames = CTimer::GetTimeInMilliseconds() + (m_fWaterExtinguishCountdown < 0.3f ? 400 : (m_fWaterExtinguishCountdown < 0.7f ? 200 : 50));
++			firePos = m_vecPos;
++			float size = 1.0f;
++			if (veh && veh->IsVehicle() && veh->IsCar()) {
++				CVehicleModelInfo *mi = (CVehicleModelInfo*)CModelInfo::GetModelInfo(veh->GetModelIndex());
++				firePos = m_pEntity->GetMatrix() * mi->m_positions[CAR_POS_HEADLIGHTS];
++			}
++			CVector dir(0.0f, 0.0f, CGeneral::GetRandomNumberInRange(0.004375f, 0.035f));
++			bool moving = false;
++			if (veh && veh->IsVehicle()) {
++				moving = veh->m_vecMoveSpeed.x * veh->m_vecMoveSpeed.x + veh->m_vecMoveSpeed.y * veh->m_vecMoveSpeed.y > 0.003f;
++				firePos.x += CGeneral::GetRandomNumberInRange(-0.25f, 0.25f);
++				firePos.y += CGeneral::GetRandomNumberInRange(-0.25f, 0.25f);
++			}
++			if (!m_pEntity) {
++				firePos.x += CGeneral::GetRandomNumberInRange(0.0f, 2.0f);
++				firePos.y += CGeneral::GetRandomNumberInRange(0.0f, 2.0f);
++				firePos.z -= 0.5f;
++				size = 2.5f;
++				dir.z *= 3.7f;
++			}
++			int32 rot = (int32)CGeneral::GetRandomNumberInRange(0.0f, 20.0f);
++			if (!moving) {
++				CParticle::AddParticle(PARTICLE_CARFLAME, firePos, dir, nil, size, 0, rot, 0, 0);
++			} else {
++				size *= 1.4f;
++				firePos.z += 0.2f;
++				CParticle::AddParticle(PARTICLE_CARFLAME_MOVING, firePos, dir, nil, size, 0, rot, 0, 0);
++			}
++		} else {
++			m_nNextTimeToAddFlames = CTimer::GetTimeInMilliseconds() + (m_fWaterExtinguishCountdown < 0.3f ? 400 : (m_fWaterExtinguishCountdown < 0.7f ? 200 : 80));
++			firePos = m_vecPos;
++
++			if (veh && veh->IsVehicle() && veh->IsCar()) {
++				CVehicleModelInfo *mi = ((CVehicleModelInfo*)CModelInfo::GetModelInfo(veh->GetModelIndex()));
++				CVector ModelInfo = mi->m_positions[CAR_POS_HEADLIGHTS];
++				ModelInfo = m_pEntity->GetMatrix() * ModelInfo;
++
++				firePos.x = ModelInfo.x;
++				firePos.y = ModelInfo.y;
++				firePos.z = ModelInfo.z + 0.15f;
++			}
+ 
+-		CParticle::AddParticle(PARTICLE_CARFLAME, firePos,
+-			CVector(0.0f, 0.0f, CGeneral::GetRandomNumberInRange(0.0125f, 0.1f) * m_fStrength),
++			CParticle::AddParticle(PARTICLE_CARFLAME, firePos,
++				CVector(0.0f, 0.0f, CGeneral::GetRandomNumberInRange(0.0125f, 0.1f) * m_fStrength),
+ 				0, m_fStrength, 0, 0, 0, 0);
+ 
+-		CGeneral::GetRandomNumber(); CGeneral::GetRandomNumber(); CGeneral::GetRandomNumber(); /* unsure why these three rands are called */
++			CGeneral::GetRandomNumber(); CGeneral::GetRandomNumber(); CGeneral::GetRandomNumber(); /* unsure why these three rands are called */
+ 
+-		CParticle::AddParticle(PARTICLE_CARFLAME_SMOKE, firePos,
+-			CVector(0.0f, 0.0f, 0.0f), 0, 0.0f, 0, 0, 0, 0);
++			CParticle::AddParticle(PARTICLE_CARFLAME_SMOKE, firePos,
++				CVector(0.0f, 0.0f, 0.0f), 0, 0.0f, 0, 0, 0, 0);
++		}
+ 	}
+ 	if (CTimer::GetTimeInMilliseconds() < m_nExtinguishTime || m_bIsScriptFire) {
+ 		if (CTimer::GetTimeInMilliseconds() > m_nStartTime)
 --- a/src/core/Frontend.cpp
 +++ b/src/core/Frontend.cpp
 @@ -24,6 +24,7 @@
@@ -5327,7 +5416,7 @@
 +static const VisualStyle visualStyles[] = {
 +	{ CPostFX::POSTFX_PC, false, false, 1.2f, 0, false, CONTROL_STANDARD, false, false, "RVC_VS0" },
 +	{ CPostFX::POSTFX_NORMAL, true, false, 1.0f, 1, true, CONTROL_CLASSIC, false, false, "RVC_VS1" },
-+	{ CPostFX::POSTFX_NORMAL, true, true, 1.0f, 2, true, CONTROL_CLASSIC, true, true, "RVC_VS2" },
++	{ CPostFX::POSTFX_NORMAL, false, true, 1.0f, 2, true, CONTROL_CLASSIC, true, true, "RVC_VS2" },
 +	{ CPostFX::POSTFX_MOBILE, false, false, 0.0f, -1, false, -1, true, false, "RVC_VS3" },
 +};
 +// revc (user 2026-11-16: "choosing a visual style should set every option to that style's
@@ -5589,7 +5678,7 @@
  
  	#ifdef PS2_ALPHA_TEST
 -		gPS2alphaTest = false;
-+		gPS2alphaTest = gUiStyle != 0;	// revc (FixMods S9): as the UI style's visual preset (consoles on, PC off)
++		gPS2alphaTest = gUiStyle == 1;	// revc (FixMods S9): as the UI style's visual preset (the PS2 only)
 +	#endif
 +	#ifdef RW_WGPU
 +		rw::wgpu::antialiasing = 0;

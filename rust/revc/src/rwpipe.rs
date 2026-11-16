@@ -412,7 +412,12 @@ unsafe fn draw_simple(header: &InstanceDataHeader, inst: &InstanceData, model: &
     }
 }
 
-/// gl3 drawInst_GSemu: the PS2 GS alpha test, failing pixels still write colour but not depth.
+/// The PS2 GS alpha test (TEST: ATE on, GEQUAL, AFAIL = FB_ONLY): one draw in which every pixel
+/// writes colour and only pixels at or above the reference write depth (GSALPHATESTREF in 0..255,
+/// 128 = the GS's 64 of 128; the fade code lowers it). wgpu has no per-pixel depth mask, so the
+/// draw is split into a depth-only pass (alpha test on, colour kept by a ZERO/ONE blend) and a
+/// colour pass without depth write, drawn LEQUAL against that depth: pixels of the mesh behind its
+/// own opaque pixels stay hidden, as the GS shows them when the opaque part was drawn first.
 unsafe fn draw_inst(header: &InstanceDataHeader, inst: &InstanceData, model: &ModelState) {
     unsafe {
         if rs(dev::GSALPHATEST) == 0 || current_draw_state().blend == 0 {
@@ -423,11 +428,15 @@ unsafe fn draw_inst(header: &InstanceDataHeader, inst: &InstanceData, model: &Mo
         let alphafunc = rs(dev::ALPHATESTFUNC);
         if zwrite != 0 {
             let alpharef = rs(dev::ALPHATESTREF);
-            let gsalpharef = rs(dev::GSALPHATESTREF);
+            let (src, dst) = (rs(dev::SRCBLEND), rs(dev::DESTBLEND));
             set_rs(dev::ALPHATESTFUNC, dev::ALPHAGREATEREQUAL);
-            set_rs(dev::ALPHATESTREF, gsalpharef);
+            set_rs(dev::ALPHATESTREF, rs(dev::GSALPHATESTREF));
+            set_rs(dev::SRCBLEND, dev::BLENDZERO);
+            set_rs(dev::DESTBLEND, dev::BLENDONE);
             draw_simple(header, inst, model);
-            set_rs(dev::ALPHATESTFUNC, dev::ALPHALESS);
+            set_rs(dev::SRCBLEND, src);
+            set_rs(dev::DESTBLEND, dst);
+            set_rs(dev::ALPHATESTFUNC, dev::ALPHAALWAYS);
             set_rs(dev::ZWRITEENABLE, 0);
             draw_simple(header, inst, model);
             set_rs(dev::ZWRITEENABLE, 1);

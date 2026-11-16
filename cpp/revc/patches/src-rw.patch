@@ -264,10 +264,43 @@
  	return gPluginOffset != -1;
 --- a/src/rw/RwHelper.cpp
 +++ b/src/rw/RwHelper.cpp
-@@ -96,10 +96,18 @@
+@@ -64,6 +64,7 @@
  #endif
  }
  
++int VisualStyleIndex(void);	// (core/MenuScreensCustom.cpp)
+ void
+ DefinedState(void)
+ {
+@@ -86,9 +87,12 @@
+ 
+ #ifdef LIBRW
+ 	rw::SetRenderState(rw::ALPHATESTFUNC, rw::ALPHAGREATEREQUAL);
+-	rw::SetRenderState(rw::ALPHATESTREF, 3);
++	// revc: the Xbox drops only nearly clear texels (GREATER 4 of 255; research on the Xbox build), the
++	// PC GREATER 2; keyed on the visual style
++	rw::SetRenderState(rw::ALPHATESTREF, VisualStyleIndex() == 2 ? 5 : 3);
+ 
+ 	rw::SetRenderState(rw::GSALPHATEST, gPS2alphaTest);
++	rw::SetRenderState(rw::GSALPHATESTREF, 128);
+ #else
+ 	// D3D stuff
+ 	RwD3D8SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
+@@ -96,10 +100,29 @@
+ #endif
+ }
+ 
++// revc: the PS2 fades an entity with its own alpha test: z is written where the pixel alpha is
++// above a quarter of the fade alpha (never below 8 of the GS's 128), colour everywhere (research
++// on the PS2 build); 255 = not fading, the ordinary 0.5. Only read with the PS2 transparency on.
++void
++SetFadeAlphaRef(int alpha)
++{
++#ifdef LIBRW
++	rw::SetRenderState(rw::GSALPHATESTREF, alpha >= 255 ? 128 : 2 * Max(alpha >> 2, 8) + 1);
++#endif
++}
++
 +// revc: the console styles draw back faces, as the consoles do: the Xbox sets "no culling" and never
 +// turns culling on (its world renderer lacks the PC's calls), and no PS2 code sets a cull mode
 +// (research on both builds); the PC style culls as the PC release does
@@ -284,7 +317,7 @@
  		RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)mode);
  	else
  		RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
-@@ -111,10 +119,7 @@
+@@ -111,10 +134,7 @@
  {
  	if(!bDebugRenderGroups)
  		return;
@@ -296,7 +329,7 @@
  	static WCHAR tmp[256];
  	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, name, -1, tmp, sizeof(tmp));
  	D3DPERF_BeginEvent(0xFFFFFFFF, tmp);
-@@ -126,10 +131,7 @@
+@@ -126,10 +146,7 @@
  {
  	if(!bDebugRenderGroups)
  		return;
@@ -308,6 +341,16 @@
  	D3DPERF_EndEvent();
  #endif
  }
+--- a/src/rw/RwHelper.h
++++ b/src/rw/RwHelper.h
+@@ -2,6 +2,7 @@
+ 
+ extern bool bDebugRenderGroups;
+ extern bool gPS2alphaTest;
++void SetFadeAlphaRef(int alpha);
+ extern bool gBackfaceCulling;
+ 
+ void OpenCharsetSafe();
 --- a/src/rw/TexRead.cpp
 +++ b/src/rw/TexRead.cpp
 @@ -37,6 +37,141 @@
@@ -551,3 +594,25 @@
  	static bool isTxdLoaded(int slot);
 +	static int GetNumSlots(void) { return ms_pTxdPool->GetSize(); }
  };
+--- a/src/rw/VisibilityPlugins.cpp
++++ b/src/rw/VisibilityPlugins.cpp
+@@ -302,7 +302,9 @@
+ 	flags = RpGeometryGetFlags(geo);
+ 	RpGeometrySetFlags(geo, flags | rpGEOMETRYMODULATEMATERIALCOLOR);
+ 	RpGeometryForAllMaterials(geo, SetAlphaCB, (void*)alpha);
++	SetFadeAlphaRef(alpha);
+ 	RENDERCALLBACK(atomic);
++	SetFadeAlphaRef(255);
+ 	RpGeometryForAllMaterials(geo, SetAlphaCB, (void*)255);
+ 	RpGeometrySetFlags(geo, flags);
+ 	return atomic;
+@@ -352,7 +354,9 @@
+ 		RpGeometryForAllMaterials(geo, SetAlphaCB, (void*)alpha);
+ 		if(geo != RpAtomicGetGeometry(atomic))
+ 			RpAtomicSetGeometry(atomic, geo, rpATOMICSAMEBOUNDINGSPHERE); // originally 5 (mistake?)
++		SetFadeAlphaRef(alpha);
+ 		RENDERCALLBACK(atomic);
++		SetFadeAlphaRef(255);
+ 		RpGeometryForAllMaterials(geo, SetAlphaCB, (void*)255);
+ 		RpGeometrySetFlags(geo, flags);
+ 	}

@@ -1,7 +1,10 @@
 use crate::cscan::{atof, atoi};
 
 /// Maximum number of particle systems that can be loaded.
-pub const MAX_PARTICLES: usize = 83;
+pub const MAX_PARTICLES: usize = 84;
+/// The Xbox-only type (C++ `PARTICLE_CARFLAME_MOVING`, the last entry): the PC file has no row for it,
+/// so its slot gets the name here and its values from the Xbox file.
+const CARFLAME_MOVING: usize = 83;
 
 /// Represents a single particle system configuration, matching the C++ `tParticleSystemData` layout.
 #[repr(C)]
@@ -553,12 +556,17 @@ pub unsafe extern "C" fn revc_particle_cfg_apply_style(table: *mut ParticleSyste
     // CRLF to LF, as the game's text-mode load does.
     let normalized: Vec<u8> = data.iter().copied().filter(|&b| b != b'\r').collect();
 
-    // Merge the configuration into the table.
-    let n = merge_by_name(&normalized, unsafe { std::slice::from_raw_parts_mut(table, MAX_PARTICLES) });
+    // Merge the configuration into the table; the Xbox-only type is merged into its named slot.
+    let slots = unsafe { std::slice::from_raw_parts_mut(table, MAX_PARTICLES) };
+    let moving = &mut slots[CARFLAME_MOVING];
+    moving.name = [0; 20];
+    moving.name[..15].copy_from_slice(b"CARFLAME_MOVING");
+    moving.type_ = CARFLAME_MOVING as i32;
+    let n = merge_by_name(&normalized, slots);
 
     // If no animation frames are available, disable animation for specific flame types.
     if frames_available == 0 {
-        let names: [&[u8]; 3] = [b"FLAME", b"CARFLAME", b"FIREBALL"];
+        let names: [&[u8]; 4] = [b"FLAME", b"CARFLAME", b"CARFLAME_MOVING", b"FIREBALL"];
         for entry in unsafe { std::slice::from_raw_parts_mut(table, MAX_PARTICLES) } {
             // Find the length of the name in the struct (up to first NUL).
             let name_len = entry.name.iter().position(|&b| b == 0).unwrap_or(20);

@@ -260,10 +260,20 @@ sharp; it is not a player setting (user decision 2026-11-09) but the hook for th
 only when scaled or antialiased) on both backends; in game at 50 % (temporary setting, since
 removed): world at half resolution, HUD identical to 100 %.
 
+**Console transparency.** The PS2 alpha test follows the PS2 GS state (TEST GEQUAL 0.5 with
+FB_ONLY, research on the PS2 build): one draw in which every pixel writes colour and only pixels
+with alpha >= 0.5 write depth. wgpu has no per-pixel depth mask, so `rwpipe.rs` `draw_inst` draws
+a depth-only pass (alpha test on, colour kept by a ZERO/ONE blend) and then the colour pass
+without depth write, LEQUAL. Fading entities lower the reference to a quarter of the fade alpha
+(`SetFadeAlphaRef`), as the PS2 does. The Xbox has no such rule: its blended draws drop texels
+with alpha <= 4 of 255 and write depth (the PC drops <= 2), so the Xbox style sets that reference
+and leaves the PS2 alpha test off. Textured lighting clamps at white before the texture in every
+mesh shader, which is the PS2's 128 white point; no style has an overbright path.
+
 **Visual style presets (plan task 13).** Graphics > Visual Style (both builds) picks a platform
 look in one step: PC (PC colour filter, no PS2 alpha test, MatFX cars), PS2 (PS2/Xbox filter,
-PS2 alpha test), XBOX (as PS2 plus the Neo pipelines: vehicle reflections, rim light, world
-lightmaps, road gloss; the reference look), MOBILE (mobile filter). The Neo switches are set only
+PS2 alpha test), XBOX (PS2/Xbox filter without the PS2 alpha test, the Xbox's alpha reference, plus the
+Neo pipelines: vehicle reflections, rim light, world lightmaps, road gloss; the reference look), MOBILE (mobile filter). The Neo switches are set only
 when game/neo/neo.txd exists. It stores nothing itself: it reads and sets the individual options
 (which stay in the menu and the ini), and shows CUSTOM for any other combination. Motion blur and
 antialiasing are not part of a style. Xbox/PS2 HUD and menus are a later step.

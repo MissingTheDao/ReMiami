@@ -29,7 +29,7 @@ const TEXTUREADDRESSV: i32 = 3;
 const TEXTUREFILTER: i32 = 4;
 pub(crate) const VERTEXALPHA: i32 = 5;
 pub(crate) const SRCBLEND: i32 = 6;
-const DESTBLEND: i32 = 7;
+pub(crate) const DESTBLEND: i32 = 7;
 const ZTESTENABLE: i32 = 8;
 pub(crate) const ZWRITEENABLE: i32 = 9;
 const FOGENABLE: i32 = 10;
@@ -53,7 +53,7 @@ const STENCILKEEP: u32 = 1;
 const STENCILALWAYS: u32 = 8;
 const CULLNONE: u32 = 1;
 pub(crate) const BLENDSRCALPHA: u32 = 5;
-pub(crate) const ALPHALESS: u32 = 2;
+pub(crate) const BLENDZERO: u32 = 1;
 pub(crate) const BLENDONE: u32 = 2;
 const BLENDINVSRCALPHA: u32 = 6;
 
