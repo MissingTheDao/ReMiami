@@ -103,11 +103,17 @@ fn render_thread_wanted() -> bool {
 const CLEAR_IMAGE: u32 = 1;
 const CLEAR_Z: u32 = 2;
 
+/// REVC_RENDERER_BACKEND=vulkan|dx12|gl picks the wgpu backend; the default is DX12 on Windows
+/// (user 2026-11-16, for testing; a menu toggle is planned) and Vulkan elsewhere.
 fn backend() -> Backend {
     match std::env::var("REVC_RENDERER_BACKEND").as_deref() {
         Ok("gl") | Ok("opengl") => Backend::Gl,
+        Ok("vulkan") | Ok("vk") => Backend::Vulkan,
         #[cfg(windows)]
         Ok("dx12") | Ok("d3d12") => Backend::Dx12,
+        #[cfg(windows)]
+        _ => Backend::Dx12,
+        #[cfg(not(windows))]
         _ => Backend::Vulkan,
     }
 }
