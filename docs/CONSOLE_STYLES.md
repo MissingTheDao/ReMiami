@@ -533,8 +533,9 @@ the PS2 style, while `[Graphics] Ps2WorldModels` is on (default), CStreaming::Co
 loads those instead of the PC ones (map and cutscene objects, weapons, vehicles, peds): same
 geometry, the PS2's own baked vertex lighting. Peds only from an import that wrote
 `models-world/skins.txt` (older imports keep the PC's peds until the disc is imported again). The
-Xbox import leaves its skinned models out for now (their native skin isn't converted yet), except
-the cutscene hands model. Textures the
+Xbox import converts its skinned models the same way (`xboxgeom.rs`: the native skin's per-vertex
+weight bytes and bone slots become the PC skin), except the cutscene hands model, which keeps the
+Xbox's skin extension as before. Textures the
 PS2 models use that a PC dictionary lacks (e.g. `hot_bottles1`) are added from the PS2 world pack
 when the dictionary loads.
 

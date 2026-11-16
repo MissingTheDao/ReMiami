@@ -34,6 +34,82 @@ fn unpack_normal(v: u32) -> [f32; 3] {
     [x, y, z]
 }
 
+/// The native Xbox skin extension's body (struct: platform 5, bone count, the used-bone table,
+/// weights per vertex and stride, a per-vertex buffer of weight bytes and u16 slot*3 values, the
+/// inverse matrices, split data) as the PC skin body (librw xbox skinUninstanceCB); the vertex
+/// order is the converted geometry's (1:1).
+fn convert_native_skin(body: &[u8], nv: usize) -> Result<Vec<u8>, String> {
+    let kids = chunks(body, 0, body.len())?;
+    let st = kids.iter().find(|c| c.ty == ID_STRUCT).ok_or("skin without native struct")?;
+    let sd = &body[st.start..st.end];
+    if u32_at(sd, 0)? != PLATFORM_XBOX {
+        return Err("skin without native struct".into());
+    }
+    let num_bones = u32_at(sd, 4)? as i32;
+    let off_table1 = 8;
+    let off_table2 = off_table1 + 256 * 4;
+    let off_num_used_bones = off_table2 + 256 * 4;
+    let off_num_weights = off_num_used_bones + 4;
+    let off_ptr = off_num_weights + 4;
+    let off_stride = off_ptr + 4;
+    let off_vbuf = off_stride + 4;
+    let num_used_bones = u32_at(sd, off_num_used_bones)? as i32;
+    let num_weights = u32_at(sd, off_num_weights)? as i32;
+    let stride = u32_at(sd, off_stride)? as i32;
+    if !(0..=255).contains(&num_bones) || !(0..=255).contains(&num_used_bones) || !(1..=4).contains(&num_weights) || stride < num_weights * 3 || stride > 64 {
+        return Err("skin header out of range".into());
+    }
+
+    if sd.len() < off_vbuf + nv * stride as usize {
+        return Err("skin buffer truncated".into());
+    }
+    let off_matrices = off_vbuf + nv * stride as usize;
+    if sd.len() < off_matrices + num_bones as usize * 16 * 4 {
+        return Err("skin buffer truncated".into());
+    }
+
+    let mut bone_indices = vec![0u8; nv * 4];
+    let mut weights = vec![0.0f32; nv * 4];
+    for v in 0..nv {
+        let p = off_vbuf + v * stride as usize;
+        for j in 0..num_weights as usize {
+            let w_byte = sd[p + j];
+            let w = w_byte as f32 / 255.0;
+            let raw_idx = u16_at(sd, p + num_weights as usize + 2 * j)? as usize;
+            let table_idx = raw_idx / 3;
+            if table_idx >= 256 {
+                return Err("skin bone index out of range".into());
+            }
+            let bone_idx = u32_at(sd, off_table1 + table_idx * 4)? as i32;
+            if w > 0.0 && bone_idx < 0 {
+                return Err("skin bone index out of range".into());
+            }
+            bone_indices[v * 4 + j] = if w > 0.0 { bone_idx as u8 } else { 0 };
+            weights[v * 4 + j] = w;
+        }
+    }
+
+    let mut out = Vec::new();
+    out.push(num_bones as u8);
+    out.push(num_used_bones as u8);
+    out.push(num_weights as u8);
+    out.push(0);
+    for i in 0..num_used_bones as usize {
+        out.push(u32_at(sd, off_table1 + i * 4)? as u8);
+    }
+    out.extend_from_slice(&bone_indices);
+    for w in &weights {
+        out.extend_from_slice(&w.to_le_bytes());
+    }
+    for i in 0..num_bones as usize * 16 {
+        out.extend_from_slice(&sd[off_matrices + i * 4..off_matrices + i * 4 + 4]);
+    }
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    Ok(out)
+}
+
 fn convert_geometry(d: &[u8], g: Chunk, keep_skin: bool) -> Result<Vec<u8>, String> {
     let kids = chunks(d, g.start, g.end)?;
     let st = *kids.iter().find(|c| c.ty == ID_STRUCT).ok_or("geometry without struct")?;
@@ -51,11 +127,6 @@ fn convert_geometry(d: &[u8], g: Chunk, keep_skin: bool) -> Result<Vec<u8>, Stri
     let ext_kids = chunks(d, ext.start, ext.end)?;
     let bin = ext_kids.iter().find(|c| c.ty == ID_BINMESH).ok_or("no mesh header")?;
     let nat = ext_kids.iter().find(|c| c.ty == ID_NATIVEDATA).ok_or("no native data")?;
-    // (skinned geometry keeps its weights in the native skin extension, which isn't converted yet:
-    // the PC model stays in use for peds)
-    if !keep_skin && ext_kids.iter().any(|c| c.ty == ID_SKIN) {
-        return Err("skinned (native Xbox skin)".into());
-    }
     let num_meshes = u32_at(d, bin.start + 4)? as usize;
     // native data: struct header, platform, then the size field the offsets count from (less the
     // 0x18 bytes of the resource entry header that preceded it in memory)
@@ -182,6 +253,9 @@ fn convert_geometry(d: &[u8], g: Chunk, keep_skin: bool) -> Result<Vec<u8>, Stri
         match c.ty {
             ID_NATIVEDATA | ID_VERTEXFMT => {}
             ID_BINMESH => put_chunk(&mut ext_body, ID_BINMESH, c.ver, &b),
+            // the native skin (weights in its own vertex buffer) becomes the PC's; the cutscene
+            // hands model keeps it (keep_skin)
+            ID_SKIN if !keep_skin => put_chunk(&mut ext_body, ID_SKIN, c.ver, &convert_native_skin(&d[c.start..c.end], nv)?),
             _ => put_chunk(&mut ext_body, c.ty, c.ver, &d[c.start..c.end]),
         }
     }
@@ -247,7 +321,7 @@ mod tests {
 
     /// A one-mesh Xbox geometry: a strip of 4 prelit vertices with two coordinate sets.
     fn native_clump() -> Vec<u8> {
-        let ver = 0x1400ffff;
+        let ver = 0x1400ffffu32;
         let (nv, stride) = (4u32, 12 + 4 + 16);
         let idx: [u16; 4] = [0, 1, 2, 3];
         // header from the size field on: size, serial u16, meshes u16, prim, vertices, stride,
@@ -337,5 +411,66 @@ mod tests {
     fn normals_unpack() {
         let n = unpack_normal(1023 | (0 << 11) | ((-511i32 as u32 & 0x3FF) << 22));
         assert!((n[0] - 1.0).abs() < 1e-6 && n[1] == 0.0 && (n[2] + 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn skinned_geometry_converts_its_skin() {
+        let mut body = Vec::new();
+        let ver = 0x1400ffffu32;
+        let struct_size = 2072 + 2 * 6 + 3 * 16 * 4 + 12;
+        body.extend_from_slice(&ID_STRUCT.to_le_bytes());
+        body.extend_from_slice(&(struct_size as u32).to_le_bytes());
+        body.extend_from_slice(&ver.to_le_bytes());
+        body.extend_from_slice(&PLATFORM_XBOX.to_le_bytes());
+        body.extend_from_slice(&3i32.to_le_bytes());
+        for i in 0..256 {
+            if i == 0 { body.extend_from_slice(&2i32.to_le_bytes()); }
+            else if i == 1 { body.extend_from_slice(&0i32.to_le_bytes()); }
+            else { body.extend_from_slice(&(-1i32).to_le_bytes()); }
+        }
+        body.extend_from_slice(&vec![0u8; 256 * 4]);
+        body.extend_from_slice(&2i32.to_le_bytes());
+        body.extend_from_slice(&2i32.to_le_bytes());
+        body.extend_from_slice(&0u32.to_le_bytes());
+        body.extend_from_slice(&6i32.to_le_bytes());
+        body.extend_from_slice(&[255, 0, 0, 0, 3, 0]);
+        body.extend_from_slice(&[128, 127, 3, 0, 0, 0]);
+        for _ in 0..3 {
+            for j in 0..16 {
+                if j == 0 || j == 5 || j == 10 || j == 15 {
+                    body.extend_from_slice(&1.0f32.to_le_bytes());
+                } else {
+                    body.extend_from_slice(&0.0f32.to_le_bytes());
+                }
+            }
+        }
+        body.extend_from_slice(&0i32.to_le_bytes());
+        body.extend_from_slice(&0i32.to_le_bytes());
+        body.extend_from_slice(&0i32.to_le_bytes());
+
+        let res = convert_native_skin(&body, 2).unwrap();
+        assert_eq!(&res[0..4], &[3, 2, 2, 0]);
+        assert_eq!(&res[4..6], &[2, 0]);
+        assert_eq!(&res[6..14], &[2,0,0,0, 0,2,0,0]);
+        let w0 = [1.0f32, 0.0, 0.0, 0.0];
+        let w1 = [128.0f32 / 255.0, 127.0 / 255.0, 0.0, 0.0];
+        for i in 0..4 {
+            assert!((f32_at(&res, 14 + i * 4).unwrap() - w0[i]).abs() < 1e-6);
+        }
+        for i in 0..4 {
+            assert!((f32_at(&res, 14 + 16 + i * 4).unwrap() - w1[i]).abs() < 1e-6);
+        }
+        let mat_start = 14 + 32;
+        for m in 0..3 {
+            for j in 0..16 {
+                let expected = if j == 0 || j == 5 || j == 10 || j == 15 { 1.0f32 } else { 0.0f32 };
+                assert!((f32_at(&res, mat_start + (m * 16 + j) * 4).unwrap() - expected).abs() < 1e-6);
+            }
+        }
+        assert_eq!(&res[res.len()-12..], &[0u8; 12]);
+
+        let mut bad_body = body.clone();
+        bad_body[12..16].copy_from_slice(&4u32.to_le_bytes());
+        assert!(convert_native_skin(&bad_body, 2).is_err());
     }
 }
