@@ -6,11 +6,14 @@
 //! DMA chain of VIF packets (the `NativeData` extension) that unpacks the vertices batch by batch
 //! into VU memory. Converted here is the default material pipeline, the one the map models use:
 //! per batch position (V3-32), UV (V2-32), RGBA (V4-8, 0..255) and normal (V3-8, n/128), strip
-//! batches overlapping by two vertices. Anything else (skinned peds, vehicles, broken-out
-//! attributes) is an error, and the PC model stays in use. Ported from librw's PS2 uninstance
-//! (src/ps2/ps2.cpp, MIT).
+//! batches overlapping by two vertices. Skinned geometries (peds, cutscene characters) add a
+//! broken-out V4-32 weights attribute: per batch a DMA ref tag points at the weights inside the
+//! mesh data (overlapping like the inline batches); their native skin extension becomes the PC
+//! one (per-vertex bone indices and weights, the inverse matrices kept). Anything else is an
+//! error, and the PC model stays in use. Ported from librw's PS2 uninstance (src/ps2/ps2.cpp,
+//! ps2skin.cpp, MIT).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeSet};
 
 const ID_STRUCT: u32 = 1;
 const ID_EXT: u32 = 3;
@@ -19,6 +22,7 @@ const ID_GEOMLIST: u32 = 0x1a;
 const ID_GEOMETRY: u32 = 0x0f;
 const ID_BINMESH: u32 = 0x50e;
 const ID_NATIVEDATA: u32 = 0x510;
+const ID_SKIN: u32 = 0x116;
 
 const GEO_TRISTRIP: u16 = 0x01;
 const GEO_PRELIT: u16 = 0x08;
@@ -68,19 +72,27 @@ pub(crate) fn put_chunk(out: &mut Vec<u8>, ty: u32, ver: u32, body: &[u8]) {
     out.extend_from_slice(body);
 }
 
-/// One decoded vertex: position, UV, prelit colour, normal (as in the stream).
+/// One decoded vertex: position, UV, prelit colour, normal (as in the stream), weights, bones.
 #[derive(Clone, Copy)]
 struct Vertex {
     pos: [f32; 3],
     uv: [f32; 2],
     rgba: [u8; 4],
     normal: [i8; 3],
+    weights: [f32; 4],
+    bones: [u8; 4],
 }
 
 impl Vertex {
-    fn key(&self) -> ([u32; 5], [u8; 4], [i8; 3]) {
+    fn key(&self) -> ([u32; 5], [u8; 4], [i8; 3], [u32; 4], [u8; 4]) {
         let b = |f: f32| f.to_bits();
-        ([b(self.pos[0]), b(self.pos[1]), b(self.pos[2]), b(self.uv[0]), b(self.uv[1])], self.rgba, self.normal)
+        (
+            [b(self.pos[0]), b(self.pos[1]), b(self.pos[2]), b(self.uv[0]), b(self.uv[1])],
+            self.rgba,
+            self.normal,
+            [b(self.weights[0]), b(self.weights[1]), b(self.weights[2]), b(self.weights[3])],
+            self.bones,
+        )
     }
 }
 
@@ -90,13 +102,14 @@ const UNPACK_XYZ: u8 = 0x68;
 const UNPACK_UV: u8 = 0x64;
 const UNPACK_RGBA: u8 = 0x6e;
 const UNPACK_NORMAL: u8 = 0x6a;
+const UNPACK_WEIGHTS: u8 = 0x6c;
 
 /// The vertices of one mesh's DMA chain, batch after batch (strip batches overlap by two).
 fn mesh_vertices(data: &[u8], strip: bool) -> Result<Vec<Vertex>, String> {
     let word = |i: usize| u32_at(data, i * 4);
     let mut out: Vec<Vertex> = Vec::new();
     let mut batch: Vec<(u8, usize, usize)> = Vec::new(); // (command, count, byte offset)
-    let flush = |batch: &mut Vec<(u8, usize, usize)>, out: &mut Vec<Vertex>| -> Result<(), String> {
+    let flush = |batch: &mut Vec<(u8, usize, usize)>, out: &mut Vec<Vertex>, data: &[u8]| -> Result<(), String> {
         if batch.is_empty() {
             return Ok(());
         }
@@ -122,7 +135,21 @@ fn mesh_vertices(data: &[u8], strip: bool) -> Result<Vec<Vertex>, String> {
                 }
                 _ => [0; 3],
             };
-            verts.push(Vertex { pos, uv, rgba, normal });
+            let (mut wts, mut bns) = ([0.0; 4], [0u8; 4]);
+            if let Some((_, m, o)) = find(UNPACK_WEIGHTS) {
+                if i < m {
+                    for k in 0..4 {
+                        let w = u32_at(data, o + i * 16 + k * 4)?;
+                        let weight = f32::from_bits(w & !0x3FF);
+                        let index = ((w & 0x3FF) >> 2) as u8;
+                        let mut bone = if index != 0 { index - 1 } else { 0 };
+                        if weight == 0.0 { bone = 0; }
+                        wts[k] = weight;
+                        bns[k] = bone;
+                    }
+                }
+            }
+            verts.push(Vertex { pos, uv, rgba, normal, weights: wts, bones: bns });
         }
         let skip = if strip && !out.is_empty() { 2.min(verts.len()) } else { 0 };
         out.extend_from_slice(&verts[skip..]);
@@ -130,7 +157,7 @@ fn mesh_vertices(data: &[u8], strip: bool) -> Result<Vec<Vertex>, String> {
         Ok(())
     };
     // VIF codes from word `i` to `end`: unpacks inline, batches end at MSCAL/MSCALF/MSCNT
-    let vif = |mut i: usize, end: usize, batch: &mut Vec<(u8, usize, usize)>, out: &mut Vec<Vertex>| -> Result<(), String> {
+    let vif = |mut i: usize, end: usize, batch: &mut Vec<(u8, usize, usize)>, out: &mut Vec<Vertex>, data: &[u8]| -> Result<(), String> {
         while i < end {
             let c = word(i)?;
             let cmd = (c >> 24) as u8;
@@ -144,13 +171,13 @@ fn mesh_vertices(data: &[u8], strip: bool) -> Result<Vec<Vertex>, String> {
                 let words = ((32usize >> vl) * (vn as usize + 1) * num).div_ceil(32);
                 let cmd = cmd & !0x10; // (the mask bit)
                 match cmd {
-                    UNPACK_XYZ | UNPACK_UV | UNPACK_RGBA | UNPACK_NORMAL => batch.push((cmd, num, i * 4)),
+                    UNPACK_XYZ | UNPACK_UV | UNPACK_RGBA | UNPACK_NORMAL | UNPACK_WEIGHTS => batch.push((cmd, num, i * 4)),
                     other => return Err(format!("unpack {other:#x} (not the default pipeline)")),
                 }
                 i += words;
             } else {
                 match cmd {
-                    0x14 | 0x15 | 0x17 => flush(batch, out)?,
+                    0x14 | 0x15 | 0x17 => flush(batch, out, data)?,
                     0x20 => i += 1,
                     0x30 | 0x31 => i += 4,
                     0x4a => i += 2 * ((c >> 16) & 0xff) as usize,
@@ -170,18 +197,31 @@ fn mesh_vertices(data: &[u8], strip: bool) -> Result<Vec<Vertex>, String> {
         let qwc = (t0 & 0xffff) as usize;
         match t0 & 0x7000_0000 {
             0x1000_0000 => {
-                vif(q * 4 + 2, (q + 1 + qwc) * 4, &mut batch, &mut out)?;
+                vif(q * 4 + 2, (q + 1 + qwc) * 4, &mut batch, &mut out, data)?;
                 q += 1 + qwc;
             }
             0x6000_0000 => {
-                vif(q * 4 + 2, (q + 1 + qwc) * 4, &mut batch, &mut out)?;
+                vif(q * 4 + 2, (q + 1 + qwc) * 4, &mut batch, &mut out, data)?;
                 break;
             }
-            0x3000_0000 => return Err("broken-out attributes (DMA ref)".into()),
+            0x3000_0000 => {
+                let addr = word(q * 4 + 1)?;
+                let word3 = word(q * 4 + 3)?;
+                let cmd = (word3 >> 24) as u8;
+                let num = match (word3 >> 16) & 0xff {
+                    0 => 256,
+                    n => n as usize,
+                };
+                let cmd = cmd & !0x10;
+                if cmd == UNPACK_WEIGHTS {
+                    batch.push((cmd, num, addr as usize * 16));
+                }
+                q += 1;
+            }
             _ => return Err(format!("unknown DMA tag {t0:#x}")),
         }
     }
-    flush(&mut batch, &mut out)?;
+    flush(&mut batch, &mut out, data)?;
     Ok(out)
 }
 
@@ -224,7 +264,7 @@ fn convert_geometry(d: &[u8], g: Chunk) -> Result<Vec<u8>, String> {
     }
     // vertices (shared between meshes when equal) and per-mesh index lists
     let mut verts: Vec<Vertex> = Vec::new();
-    let mut lookup: HashMap<([u32; 5], [u8; 4], [i8; 3]), u32> = HashMap::new();
+    let mut lookup: HashMap<([u32; 5], [u8; 4], [i8; 3], [u32; 4], [u8; 4]), u32> = HashMap::new();
     let mut meshes: Vec<(u32, Vec<u32>)> = Vec::new();
     let mut o = nat_struct.start + 4;
     for m in 0..num_meshes {
@@ -321,11 +361,79 @@ fn convert_geometry(d: &[u8], g: Chunk) -> Result<Vec<u8>, String> {
             b.extend_from_slice(&i.to_le_bytes());
         }
     }
+
+    // the skin extension: the PS2's native one (platform, bone counts, [used bones], the inverse
+    // matrices, [16 bytes and split data, ignored]) becomes the PC's with the per-vertex weights
+    let skin = ext_kids.iter().find(|c| c.ty == ID_SKIN).copied();
+    let mut skin_body = Vec::new();
+    let skin_ver = skin.map(|s| s.ver).unwrap_or(0);
+    if let Some(sk) = skin {
+        let body = &d[sk.start..sk.end];
+        let inner = chunks(body, 0, body.len())?;
+        let inner_struct = inner.iter().find(|c| c.ty == ID_STRUCT).ok_or("skin without native struct")?;
+        let inner_body = &body[inner_struct.start..inner_struct.end];
+        if inner_body.len() < 8 || u32_at(inner_body, 0)? != 4 {
+            return Err("skin without native struct".into());
+        }
+        let (num_bones, num_used_bones_in) = (inner_body[4] as usize, inner_body[5] as usize);
+        let o = 8 + num_used_bones_in;
+        let inv_mats = inner_body.get(o..o + num_bones * 64).ok_or("skin truncated inverse matrices")?.to_vec();
+
+        let mut has_weights = false;
+        for v in &verts {
+            if v.weights.iter().any(|&w| w > 0.0) {
+                has_weights = true;
+                break;
+            }
+        }
+        if !has_weights {
+            return Err("skin without weights".into());
+        }
+        
+        let mut bone_set = BTreeSet::new();
+        let mut max_w = 0usize;
+        for v in &verts {
+            let mut cnt = 0;
+            for k in 0..4 {
+                if v.weights[k] > 0.0 {
+                    bone_set.insert(v.bones[k]);
+                    cnt += 1;
+                }
+            }
+            if cnt > max_w { max_w = cnt; }
+        }
+        let used_bones: Vec<u8> = bone_set.into_iter().collect();
+        let num_used_bones = used_bones.len();
+        let max_weights = if max_w == 0 { 1 } else { max_w };
+        
+        let mut pc_skin = Vec::new();
+        pc_skin.push(num_bones as u8);
+        pc_skin.push(num_used_bones as u8);
+        pc_skin.push(max_weights as u8);
+        pc_skin.push(0);
+        pc_skin.extend_from_slice(&used_bones);
+        for v in &verts {
+            pc_skin.extend_from_slice(&v.bones);
+        }
+        for v in &verts {
+            for &w in &v.weights {
+                pc_skin.extend_from_slice(&w.to_le_bytes());
+            }
+        }
+        pc_skin.extend_from_slice(&inv_mats);
+        pc_skin.extend_from_slice(&0u32.to_le_bytes()); // boneLimit
+        pc_skin.extend_from_slice(&0u32.to_le_bytes()); // numMeshes
+        pc_skin.extend_from_slice(&0u32.to_le_bytes()); // rleSize
+        
+        skin_body = pc_skin;
+    }
+    
     let mut ext_body = Vec::new();
     for c in &ext_kids {
         match c.ty {
             ID_NATIVEDATA => {}
             ID_BINMESH => put_chunk(&mut ext_body, ID_BINMESH, c.ver, &b),
+            ID_SKIN => put_chunk(&mut ext_body, ID_SKIN, skin_ver, &skin_body),
             _ => put_chunk(&mut ext_body, c.ty, c.ver, &d[c.start..c.end]),
         }
     }
@@ -484,5 +592,113 @@ mod tests {
         let i = d.windows(4).position(|w| w == [0, 0, 3, 0x6e]).unwrap();
         d[i + 3] = 0x6d;
         assert!(convert_dff(&d).is_err());
+    }
+
+    /// The inline part of one batch (positions, UVs, colours, MSCALF), padded so that the
+    /// DMA tag's last 8 bytes plus this fill whole qwords.
+    fn inline_batch(pts: &[[f32; 3]]) -> Vec<u8> {
+        let n = pts.len() as u32;
+        let mut s = Vec::new();
+        let mut unpack = |cmd: u32, data: Vec<u8>| {
+            s.extend_from_slice(&(cmd << 24 | n << 16).to_le_bytes());
+            s.extend_from_slice(&data);
+        };
+        unpack(0x68, pts.iter().flatten().flat_map(|f| f.to_le_bytes()).collect());
+        unpack(0x64, pts.iter().flat_map(|p| [p[0], p[1]]).flat_map(|f| f.to_le_bytes()).collect());
+        unpack(0x6e, pts.iter().flat_map(|_| [10u8, 20, 30, 255]).collect());
+        s.extend_from_slice(&(0x15u32 << 24).to_le_bytes());
+        while s.len() % 16 != 8 {
+            s.push(0);
+        }
+        s
+    }
+
+    #[test]
+    fn skinned_strip_keeps_weights() {
+        let ver = 0x0c02ffff;
+        let b0 = inline_batch(&[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]);
+        let b1 = inline_batch(&[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0]]);
+        // chain: ref (batch 0 weights), cnt + inline batch 0, ref (batch 1 weights), ret + inline
+        // batch 1, then the weights: 4 entries, batch 1's start one entry later (strip overlap 2)
+        let addr0 = (16 + 8 + b0.len() + 16 + 8 + b1.len()) / 16;
+        let mut data = Vec::new();
+        let tag = |data: &mut Vec<u8>, w: [u32; 4]| w.iter().for_each(|x| data.extend_from_slice(&x.to_le_bytes()));
+        tag(&mut data, [0x3000_0003, addr0 as u32, 0x0100_0105, 0x6c03_8004]);
+        data.extend_from_slice(&(0x1000_0000u32 | ((8 + b0.len()) / 16 - 1) as u32).to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&b0);
+        tag(&mut data, [0x3000_0003, addr0 as u32 + 1, 0x0100_0105, 0x6c03_8004]);
+        data.extend_from_slice(&(0x6000_0000u32 | ((8 + b1.len()) / 16 - 1) as u32).to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&b1);
+        assert_eq!(data.len(), addr0 * 16);
+        // vertex k: weight 1.0 on bone k % 3 (bones 0, 1, 2, 0)
+        for bone in [0u32, 1, 2, 0] {
+            tag(&mut data, [1.0f32.to_bits() & !0x3FF | (bone + 1) << 2, 0, 0, 0]);
+        }
+        let mut nat = Vec::new();
+        nat.extend_from_slice(&4u32.to_le_bytes());
+        nat.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        nat.extend_from_slice(&1u32.to_le_bytes());
+        nat.extend_from_slice(&data);
+        let mut nat_chunk = Vec::new();
+        put_chunk(&mut nat_chunk, ID_STRUCT, ver, &nat);
+        let mut bin = Vec::new();
+        for w in [1u32, 1, 4, 4, 0] {
+            bin.extend_from_slice(&w.to_le_bytes());
+        }
+        // native skin, old format: platform, 3 bones, no used bones, three identity matrices
+        let mut skin = Vec::new();
+        skin.extend_from_slice(&4u32.to_le_bytes());
+        skin.extend_from_slice(&[3, 0, 0, 0]);
+        let identity: Vec<u8> = (0..16).flat_map(|i| (if i % 5 == 0 { 1.0f32 } else { 0.0 }).to_le_bytes()).collect();
+        for _ in 0..3 {
+            skin.extend_from_slice(&identity);
+        }
+        let mut skin_chunk = Vec::new();
+        put_chunk(&mut skin_chunk, ID_STRUCT, ver, &skin);
+        let mut ext = Vec::new();
+        put_chunk(&mut ext, ID_BINMESH, ver, &bin);
+        put_chunk(&mut ext, ID_NATIVEDATA, ver, &nat_chunk);
+        put_chunk(&mut ext, ID_SKIN, ver, &skin_chunk);
+        let mut st = Vec::new();
+        st.extend_from_slice(&(0x0bu16).to_le_bytes());
+        st.extend_from_slice(&[1, 1]);
+        for w in [2u32, 4, 1] {
+            st.extend_from_slice(&w.to_le_bytes());
+        }
+        for f in [1.0f32, 1.0, 1.0, 0.5, 0.5, 0.0, 1.0] {
+            st.extend_from_slice(&f.to_le_bytes());
+        }
+        st.extend_from_slice(&[0; 8]);
+        let mut geo = Vec::new();
+        put_chunk(&mut geo, ID_STRUCT, ver, &st);
+        put_chunk(&mut geo, ID_EXT, ver, &ext);
+        let mut list = Vec::new();
+        put_chunk(&mut list, ID_STRUCT, ver, &1u32.to_le_bytes());
+        put_chunk(&mut list, ID_GEOMETRY, ver, &geo);
+        let mut clump = Vec::new();
+        put_chunk(&mut clump, ID_GEOMLIST, ver, &list);
+        let mut file = Vec::new();
+        put_chunk(&mut file, ID_CLUMP, ver, &clump);
+
+        let out = convert_dff(&file).unwrap();
+        let clump = chunks(&out, 0, out.len()).unwrap()[0];
+        let list = chunks(&out, clump.start, clump.end).unwrap()[0];
+        let geo = chunks(&out, list.start, list.end).unwrap()[1];
+        let kids = chunks(&out, geo.start, geo.end).unwrap();
+        assert_eq!(u32_at(&out, kids[0].start + 8).unwrap(), 4, "four vertices");
+        let ext = chunks(&out, kids[1].start, kids[1].end).unwrap();
+        assert_eq!(ext.iter().map(|c| c.ty).collect::<Vec<_>>(), vec![ID_BINMESH, ID_SKIN], "native data dropped");
+        let s = &out[ext[1].start..ext[1].end];
+        assert_eq!(s.len(), 4 + 3 + 16 + 64 + 192 + 12);
+        assert_eq!(&s[0..7], &[3, 3, 1, 0, 0, 1, 2], "bones, used bones, max weights, used bone list");
+        assert_eq!(&s[7..23], &[0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0], "bone indices per vertex");
+        for v in 0..4 {
+            assert_eq!(f32_at(s, 23 + v * 16).unwrap(), 1.0, "vertex {v} first weight");
+            assert_eq!(f32_at(s, 23 + v * 16 + 4).unwrap(), 0.0);
+        }
+        assert_eq!(&s[87..151], &identity[..], "first inverse matrix");
+        assert_eq!(&s[279..291], &[0; 12], "no split data");
     }
 }

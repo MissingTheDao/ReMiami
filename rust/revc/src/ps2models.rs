@@ -74,12 +74,54 @@ pub unsafe extern "C" fn revc_ps2_model_free(p: *mut u8, len: usize) {
 /// `out` holds `cap` bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn revc_console_wheels(out: *mut c_char, cap: usize) -> c_int {
+    unsafe { console_file("models-world/wheels.dff", out, cap) }
+}
+
+/// The console's `default.ide` (`<import>/<console>/maps/default.ide`: the PS2's four weapons drawn
+/// to 50 m, the Xbox's ten wheels to 100 m) under the same conditions as revc_console_wheels: 1 with
+/// its path in `out`, else 0 and the PC's DATA\DEFAULT.IDE loads.
+///
+/// # Safety
+/// `out` holds `cap` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_console_default_ide(out: *mut c_char, cap: usize) -> c_int {
+    unsafe { console_file("maps/default.ide", out, cap) }
+}
+
+/// 1 when the world style's console import may serve ped models too (an import that converts
+/// skinned models or leaves them out: revc_import::SKINS_MARKER); 0 keeps the PC's peds.
+#[unsafe(no_mangle)]
+pub extern "C" fn revc_console_peds_ok() -> c_int {
+    let console = match crate::texmods::world_style() {
+        1 if ON.load(Ordering::Relaxed) => "ps2",
+        2 if XBOX_ON.load(Ordering::Relaxed) => "xbox",
+        _ => return 0,
+    };
+    crate::discimport::cache_dir().join(console).join("models-world").join(revc_import::SKINS_MARKER).is_file() as c_int
+}
+
+/// The console's `handling.cfg` (`<import>/<console>/data/handling.cfg`) under the same conditions
+/// as revc_console_wheels: 1 with its path in `out`, else 0 and the PC's DATA\HANDLING.CFG loads.
+///
+/// # Safety
+/// `out` holds `cap` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_console_handling(out: *mut c_char, cap: usize) -> c_int {
+    unsafe { console_file("data/handling.cfg", out, cap) }
+}
+
+/// `rel` in the import of the world style's console, while its world models are on: 1 with the
+/// path in `out`, else 0.
+///
+/// # Safety
+/// `out` holds `cap` bytes.
+unsafe fn console_file(rel: &str, out: *mut c_char, cap: usize) -> c_int {
     let console = match crate::texmods::world_style() {
         1 if crate::ps2models::ON.load(std::sync::atomic::Ordering::Relaxed) => "ps2",
         2 if crate::ps2models::XBOX_ON.load(std::sync::atomic::Ordering::Relaxed) => "xbox",
         _ => return 0,
     };
-    let path = crate::discimport::cache_dir().join(console).join("models-world").join("wheels.dff");
+    let path = crate::discimport::cache_dir().join(console).join(rel);
     crate::discimport::note_access(&path);
     if !path.is_file() {
         return 0;

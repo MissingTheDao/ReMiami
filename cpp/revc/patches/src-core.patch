@@ -982,7 +982,7 @@
  #include "FileLoader.h"
  #include "MemoryHeap.h"
  #include "Streaming.h"
-@@ -46,6 +48,31 @@
+@@ -46,6 +48,32 @@
  	LoadingScreen("Loading the Game", gString, nil);
  }
  
@@ -995,6 +995,7 @@
 +// the UI style the level loaded with (the menu notes when the style changes from it)
 +int8 gMapStyleLevelStyle = -1;
 +extern "C" int revc_console_wheels(char *out, size_t cap);	// (rust/revc/src/ps2models.rs)
++extern "C" int revc_console_default_ide(char *out, size_t cap);
 +extern int8 gUiStyle;
 +#endif
 +// revc: the hidden dynamic objects stay dummies (CPopulation::ConvertToRealObject asks)
@@ -1014,7 +1015,7 @@
  void
  CFileLoader::LoadLevel(const char *filename)
  {
-@@ -64,6 +91,19 @@
+@@ -64,6 +92,23 @@
  	fd = CFileMgr::OpenFile(filename, "r");
  	assert(fd > 0);
  
@@ -1024,8 +1025,12 @@
 +	char mapStylePath[512];
 +	if(revc_map_style_begin(filename, mapStylePath, sizeof(mapStylePath)) && mapStylePath[0])
 +		CdStreamAddImage(mapStylePath);
-+	if(CGeneral::faststricmp(GetFilename(filename), "gta_vc.dat") == 0)
++	if(CGeneral::faststricmp(GetFilename(filename), "gta_vc.dat") == 0){
 +		gMapStyleLevelStyle = gUiStyle;
++		// revc: the handling table loaded before the settings; now that the world's style is
++		// fixed, load it again so a console style gets its console's table (no vehicle exists yet)
++		mod_HandlingManager.LoadHandlingData();
++	}
 +#define MAP_STYLE_FILE(f) (revc_map_style_file(f, mapStylePath, sizeof(mapStylePath)) ? mapStylePath : (f))
 +#else
 +#define MAP_STYLE_FILE(f) (f)
@@ -1034,7 +1039,7 @@
  	for(line = LoadLine(fd); line; line = LoadLine(fd)){
  		if(*line == '#')
  			continue;
-@@ -86,13 +126,22 @@
+@@ -86,13 +131,30 @@
  			LoadCollisionFile(line+10, 0);
  		}else if(strncmp(line, "MODELFILE", 9) == 0){
  			LoadingScreenLoadingFile(line + 10);
@@ -1055,11 +1060,19 @@
  		}else if(strncmp(line, "IDE", 3) == 0){
  			LoadingScreenLoadingFile(line + 4);
 -			LoadObjectTypes(line + 4);
-+			LoadObjectTypes(MAP_STYLE_FILE(line + 4));
++			// revc: the console styles' own default.ide (ps2models.rs revc_console_default_ide)
++			char ideName[512];
++			const char *ideFile = GetFilename(line + 4);
++			if (strncasecmp(ideFile, "DEFAULT.IDE", 11) == 0 && (ideFile[11] == '\0' || ideFile[11] == ' ' || ideFile[11] == '\r') &&
++			    revc_console_default_ide(ideName, sizeof(ideName)) == 1) {
++				printf("revc: console default.ide: %s\n", ideName);
++				LoadObjectTypes(ideName);
++			} else
++				LoadObjectTypes(MAP_STYLE_FILE(line + 4));
  		}else if(strncmp(line, "IPL", 3) == 0){
  			if(!objectsLoaded){
  				LoadingScreenLoadingFile("Collision");
-@@ -110,7 +159,7 @@
+@@ -110,7 +172,7 @@
  			}
  			PUSH_MEMID(MEMID_WORLD);
  			LoadingScreenLoadingFile(line + 4);
@@ -1068,7 +1081,7 @@
  			POP_MEMID();
  		}else if(strncmp(line, "SPLASH", 6) == 0){
  #ifndef DISABLE_LOADING_SCREEN
-@@ -123,6 +172,21 @@
+@@ -123,6 +185,21 @@
  		}
  	}
  
@@ -1090,7 +1103,7 @@
  	CFileMgr::CloseFile(fd);
  	RwTexDictionarySetCurrent(savedTxd);
  
-@@ -162,6 +226,20 @@
+@@ -162,6 +239,20 @@
  		if(RwStreamFindChunk(stream, rwID_TEXDICTIONARY, nil, nil))
  			txd = RwTexDictionaryGtaStreamRead(stream);
  		RwStreamClose(stream, nil);
@@ -1111,7 +1124,7 @@
  	}
  	if(txd == nil)
  		txd = RwTexDictionaryCreate();
-@@ -1202,6 +1280,10 @@
+@@ -1202,6 +1293,10 @@
  	if(mi == nil)
  		return;
  	assert(mi->IsSimple());
@@ -1122,7 +1135,7 @@
  
  	if(!CStreaming::IsObjectInCdImage(id))
  		debug("Not in cdimage %s\n", mi->GetModelName());
-@@ -1217,6 +1299,12 @@
+@@ -1217,6 +1312,12 @@
  			ThePaths.RegisterMapObject((CTreadable*)entity);
  		}else
  			entity = new CBuilding;
@@ -1135,7 +1148,7 @@
  		entity->SetModelIndexNoCreate(id);
  		entity->GetMatrix() = CMatrix(xform);
  		entity->m_level = CTheZones::GetLevelFromPosition(&entity->GetPosition());
-@@ -1227,7 +1315,7 @@
+@@ -1227,7 +1328,7 @@
  			if(mi->m_isSubway)
  				entity->bIsSubway = true;
  		}
@@ -1144,7 +1157,7 @@
  			entity->bIsVisible = false;
  		CWorld::Add(entity);
  
-@@ -1237,11 +1325,23 @@
+@@ -1237,11 +1338,23 @@
  				CColStore::GetBoundingBox(col->level).ContainRect(entity->GetBoundRect());
  		}else
  			entity->bUsesCollision = false;
@@ -1168,7 +1181,7 @@
  		entity->SetModelIndexNoCreate(id);
  		entity->GetMatrix() = CMatrix(xform);
  		CWorld::Add(entity);
-@@ -1249,6 +1349,16 @@
+@@ -1249,6 +1362,16 @@
  			entity->bIsVisible = false;
  		entity->m_level = CTheZones::GetLevelFromPosition(&entity->GetPosition());
  		entity->m_area = area;
@@ -8019,14 +8032,16 @@
  	static void Init(void);
 --- a/src/core/Streaming.cpp
 +++ b/src/core/Streaming.cpp
-@@ -505,9 +505,20 @@
+@@ -505,9 +505,22 @@
  }
  #endif
  
-+// revc (roadmap R4, "exact PS2 models"): the PS2's own version of a map or cutscene model in the
-+// PS2 style (rust/revc/src/ps2models.rs); freed when the conversion returns.
++// revc (roadmap R4, "exact PS2 models"): the console's own version of a model (map, cutscene,
++// weapon, vehicle, ped) in its style (rust/revc/src/ps2models.rs); freed when the conversion
++// returns. A model the import couldn't convert has no file and the PC's loads.
 +extern "C" uint8 *revc_ps2_model(const char *name, size_t *len);
 +extern "C" void revc_ps2_model_free(uint8 *p, size_t len);
++extern "C" int revc_console_peds_ok(void);	// (an import from before skinned models converted: PC peds)
 +struct Ps2ModelBuffer {
 +	uint8 *p = nil;
 +	size_t n = 0;
@@ -8040,11 +8055,11 @@
  	RwMemory mem;
  	RwStream *stream;
  	int cdsize;
-@@ -525,6 +536,13 @@
+@@ -525,6 +538,13 @@
  	if(streamId < STREAM_OFFSET_TXD){
  		// Model
  		mi = CModelInfo::GetModelInfo(streamId);
-+		if(mi->GetModelType() != MITYPE_VEHICLE && mi->GetModelType() != MITYPE_PED &&
++		if((mi->GetModelType() != MITYPE_PED || revc_console_peds_ok()) &&
 +		   (ps2Model.p = revc_ps2_model(mi->GetModelName(), &ps2Model.n)) != nil){
 +			RwStreamClose(stream, &mem);
 +			mem.start = ps2Model.p;

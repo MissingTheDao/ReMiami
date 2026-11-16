@@ -104,6 +104,11 @@ pub struct Lift {
     pub dest: &'static str,
 }
 
+/// Written into `<console>/models-world/` by an import whose models are safe to use for peds too
+/// (skinned models converted with their weights, or left out). Older imports lack it: their files
+/// may carry a console's native skin, so the game keeps the PC's ped models then.
+pub const SKINS_MARKER: &str = "skins.txt";
+
 pub const MANIFEST: &[Lift] = &[
     // Xbox front end: menu sprites (pad outline, A/B/X/Y, D-pad, icons, radio logos), the
     // 1536x1536 pause-menu map (UserInterface.txd) and its two bitmap fonts.
@@ -114,6 +119,9 @@ pub const MANIFEST: &[Lift] = &[
     // collects (core/BriefLists.cpp).
     Lift { kind: DiscKind::Xbox, dir: "neo/Hints.txt", exts: &[], dest: "neo" },
     Lift { kind: DiscKind::Xbox, dir: "neo/UnlockedItems.txt", exts: &[], dest: "neo" },
+    // The screen droplets' mask (a 64x64 1-bit circle; extras/screendroplets.cpp). The other Neo
+    // files (gloss maps, reflection mask, tweaking tables) are the game's neo folder, the same content.
+    Lift { kind: DiscKind::Xbox, dir: "neo/dropmask.dds", exts: &[], dest: "neo" },
     // The pause menu's Maestro animation (R3_Menu.anm): the selection bar's five outline shapes.
     Lift { kind: DiscKind::Xbox, dir: "neo/UserInterface/models/R3_Menu.anm", exts: &[], dest: "ui" },
     // HUD and fonts (DXT5: smoother alpha than the PC's DXT3).
@@ -130,9 +138,19 @@ pub const MANIFEST: &[Lift] = &[
     Lift { kind: DiscKind::Ps2, dir: "MODELS/FRONTEN2.TXD", exts: &[], dest: "models" },
     Lift { kind: DiscKind::Ps2, dir: "MODELS/FRONTEN1.TXD", exts: &[], dest: "models" },
     Lift { kind: DiscKind::Ps2, dir: "MODELS/HUD.TXD", exts: &[], dest: "models" },
+    // The PS2's shared dictionaries: the wheel textures (its default.dat loads MISC.TXD where the
+    // PC loads WHEELS.TXD), the generic one and the particles (ps2pack.rs). Not FONTS.TXD: its glyph
+    // sheets are laid out differently from the PC's.
+    Lift { kind: DiscKind::Ps2, dir: "MODELS/MISC.TXD", exts: &[], dest: "models" },
+    Lift { kind: DiscKind::Ps2, dir: "MODELS/GENERIC.TXD", exts: &[], dest: "models" },
+    Lift { kind: DiscKind::Ps2, dir: "MODELS/PARTICLE.TXD", exts: &[], dest: "models" },
     Lift { kind: DiscKind::Ps2, dir: "TXD/", exts: &[".txd"], dest: "txd" },
     // PS2 time cycle: 5 rows differ from the PC's (the PS2 visual style uses it, plan task 13).
     Lift { kind: DiscKind::Ps2, dir: "DATA/TIMECYC.DAT", exts: &[], dest: "data" },
+    // The consoles' handling tables (one field each differs from the PC's: the Xbox's Greenwood
+    // front lights, the PS2's BF Injection flags); the console world styles load them (HandlingMgr.cpp).
+    Lift { kind: DiscKind::Ps2, dir: "DATA/HANDLING.CFG", exts: &[], dest: "data" },
+    Lift { kind: DiscKind::Xbox, dir: "data/handling.cfg", exts: &[], dest: "data" },
     // PS2 ped animations: 13 differ from the PC's (walk_start, idle_armed, the woman's walks, ...);
     // the PS2 UI style plays them (animation/AnimManager.cpp ReplacePedAnimsFromPS2).
     Lift { kind: DiscKind::Ps2, dir: "ANIM/PED.IFP", exts: &[], dest: "anim" },
@@ -230,6 +248,9 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
     if wanted.is_empty() {
         return Err("nothing to import from this disc".into());
     }
+    // the converted models start afresh: a model this version refuses must not stay from an
+    // earlier import (SKINS_MARKER is written again below)
+    let _ = std::fs::remove_dir_all(root.join("models-world"));
     // Disk space: the files to write, an upper bound for the converted archive contents, plus a
     // margin (space.rs); refused before anything is written when short
     let ps2_audio: Vec<Entry> = if disc.kind == DiscKind::Ps2 {
@@ -295,7 +316,7 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                     let off = u32::from_le_bytes(e[0..4].try_into().unwrap()) as u64 * 2048;
                     let size = u32::from_le_bytes(e[4..8].try_into().unwrap()) as usize * 2048;
                     let raw = disc.read_range(&i, off, size).map_err(|err| format!("{name}: {err}"))?;
-                    let converted = xboxlm::img_entry(&raw).and_then(|d| xboxgeom::convert_dff(&d));
+                    let converted = xboxlm::img_entry(&raw).and_then(|d| xboxgeom::convert_dff_with(&d, name == "cshands.dff"));
                     match converted {
                         Ok(data) => {
                             let dest = root.join("models-world").join(&name);
@@ -350,6 +371,7 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                 report.written.push(dest);
             }
             eprintln!("revc-import: {models} Xbox models converted; kept as PC models: {kept_pc:?}");
+            space::write_file(&root.join("models-world").join(SKINS_MARKER), b"skinned models converted or left out\n")?;
             if let Some(g) = disc.find("models/generic.txd").cloned() {
                 let data = disc.read(&g).map_err(|e| format!("generic.txd: {e}"))?;
                 let dest = root.join("world").join("generic.txd");
@@ -419,6 +441,7 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
                     report.written.push(dest);
                 }
                 eprintln!("revc-import: {models} PS2 models converted; kept as PC models: {kept_pc:?}");
+                space::write_file(&root.join("models-world").join(SKINS_MARKER), b"skinned models converted or left out\n")?;
             }
         }
         // Cutscenes whose animation or camera path differ from the PC's in substance (not only in

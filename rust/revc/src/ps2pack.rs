@@ -4,7 +4,8 @@
 //! only.
 //!
 //! PS2 (the game can't read PS2 native TXDs; revc_import::ps2tex decodes them): the HUD (`hud`),
-//! the menu art (`frontend1`, `frontend2`: the game's names for FRONTEN1/2.TXD) and the loading,
+//! the menu art (`frontend1`, `frontend2`: the game's names for FRONTEN1/2.TXD), the wheel, generic
+//! and particle textures (`wheels` from MISC.TXD, `generic`, `particle`) and the loading,
 //! splash and intro screens (global entries: they load into a shared slot and their texture names
 //! are unique). Not the fonts: the PS2's glyph sheets are laid out differently from the PC's, which
 //! the font code's tables expect.
@@ -43,6 +44,10 @@ fn sources(cache: &Path, console: Console) -> Vec<(String, PathBuf)> {
             ("hud".to_string(), root.join("models/hud.txd")),
             ("frontend1".to_string(), root.join("models/fronten1.txd")),
             ("frontend2".to_string(), root.join("models/fronten2.txd")),
+            // (the PS2 loads its wheel textures from MISC.TXD, the PC from WHEELS.TXD)
+            ("wheels".to_string(), root.join("models/misc.txd")),
+            ("generic".to_string(), root.join("models/generic.txd")),
+            ("particle".to_string(), root.join("models/particle.txd")),
         ],
         Console::Xbox => vec![
             ("hud".to_string(), root.join("models/hud.txd")),

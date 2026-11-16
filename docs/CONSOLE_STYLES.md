@@ -346,8 +346,12 @@ changing the style in the menu shows "map data changes on next start".
   objects by id): draw distances, flags and texture dictionaries come from the console. Objects only
   the console has get free ids; their converted models (and empty dictionaries the console's texture
   pack fills, for three PS2 dictionaries the PC lacks) come in a small extra image written next to
-  the import. `default.ide` (weapons, wheels, the Xbox's hand model entry) stays the PC's: it isn't
-  map data, so the Xbox's ten longer wheel draw distances aren't used.
+  the import. `default.ide` (weapons, wheels, the Xbox's hand model entry) and `handling.cfg` come
+  from the console as whole files under the same conditions (`ps2models.rs`
+  `revc_console_default_ide`, `revc_console_handling`): the PS2's four weapons drawn to 50 m, the
+  Xbox's ten wheels to 100 m, one handling field each (the Xbox's Greenwood front lights, the PS2's
+  BF Injection flags). The handling table is loaded again when the level starts, once the style
+  is known.
 - **Placements (IPL)** match by model name and position rounded to a metre. A matched placement takes
   the console's line (interior, exact position, rotation) with the PC's id; a PC placement the
   console doesn't have is still created (the pools keep their order, which saves refer to) but
@@ -522,10 +526,15 @@ the main index is built at the first texture, before the settings load.
 PS2 models (roadmap R4, "exact PS2 models"): a PS2 import also converts the disc's models from
 GTA3.IMG (PS2 native geometry: VIF unpacks of position, UV, prelit colour and normal in strip
 batches) to ordinary geometry (`rust/revc-import/src/ps2geom.rs`, after librw's PS2 uninstance)
-into `<import cache>/ps2/models-world/` (4,326 of 4,584; skinned peds and vehicles use broken-out
-attributes and stay PC models). In the PS2 style, while `[Graphics] Ps2WorldModels` is on
-(default), CStreaming::ConvertBufferToObject loads those instead of the PC ones (map and cutscene
-objects; not vehicles or peds): same geometry, the PS2's own baked vertex lighting. Textures the
+into `<import cache>/ps2/models-world/` (4,583 of 4,584). Skinned models (peds, cutscene
+characters) keep their bone weights in a broken-out attribute (a DMA ref per batch into the mesh
+data); they convert with their weights, and the PS2's native skin extension becomes the PC one. In
+the PS2 style, while `[Graphics] Ps2WorldModels` is on (default), CStreaming::ConvertBufferToObject
+loads those instead of the PC ones (map and cutscene objects, weapons, vehicles, peds): same
+geometry, the PS2's own baked vertex lighting. Peds only from an import that wrote
+`models-world/skins.txt` (older imports keep the PC's peds until the disc is imported again). The
+Xbox import leaves its skinned models out for now (their native skin isn't converted yet), except
+the cutscene hands model. Textures the
 PS2 models use that a PC dictionary lacks (e.g. `hot_bottles1`) are added from the PS2 world pack
 when the dictionary loads.
 

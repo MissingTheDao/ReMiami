@@ -533,7 +533,46 @@
  
  // platform specific
  static void openim2d_uv2(void);
-@@ -115,17 +112,6 @@
+@@ -102,10 +99,37 @@
+ 	return RwTextureCreate(ras);
+ }
+ 
++// revc: the Xbox disc's own mask (neo/dropmask.dds, imported) when there is one
++extern "C" int revc_import_image(const char *rel, int *w, int *h, unsigned char **rgba);
++extern "C" void revc_texmod_free(unsigned char *rgba, int width, int height);
++static RwTexture*
++LoadDiscDropMask(void)
++{
++	int w, h;
++	unsigned char *px;
++	if(!revc_import_image("xbox/neo/dropmask.dds", &w, &h, &px))
++		return nil;
++	rw::Image *img = rw::Image::create(w, h, 32);
++	img->pixels = px;
++	img->stride = w * 4;
++	rw::Raster *ras = rw::Raster::create(w, h, 32, rw::Raster::C8888 | rw::Raster::TEXTURE);
++	rw::Texture *tex = nil;
++	if(ras && ras->setFromImage(img))
++		tex = rw::Texture::create(ras);
++	else if(ras)
++		ras->destroy();
++	img->pixels = nil;
++	img->destroy();
++	revc_texmod_free(px, w, h);
++	return tex;
++}
++
+ void
+ ScreenDroplets::InitDraw(void)
+ {
+-	ms_maskTex = CreateDropMask(64);
++	ms_maskTex = LoadDiscDropMask();
++	if(ms_maskTex == nil)
++		ms_maskTex = CreateDropMask(64);
+ 
+ 	ms_screenTex = RwTextureCreate(nil);
+ 	RwTextureSetFilterMode(ms_screenTex, rwFILTERLINEAR);
+@@ -115,17 +139,6 @@
  #include "shaders/obj/screenDroplet_PS.inc"
  	screenDroplet_PS = rw::d3d::createPixelShader(screenDroplet_PS_cso);
  #endif
@@ -551,7 +590,7 @@
  
  	ms_initialised = 1;
  }
-@@ -148,12 +134,6 @@
+@@ -148,12 +161,6 @@
  		screenDroplet_PS = nil;
  	}
  #endif
@@ -564,7 +603,7 @@
  
  	closeim2d_uv2();
  }
-@@ -210,10 +190,7 @@
+@@ -210,10 +217,7 @@
  	rw::d3d::im2dOverridePS = screenDroplet_PS;
  	rw::d3d::setTexture(1, ms_screenTex);
  #endif
@@ -576,7 +615,7 @@
  
  	RenderBuffer::ClearRenderBuffer();
  	for(drop = &ms_drops[0]; drop < &ms_drops[MAXDROPS]; drop++)
-@@ -225,10 +202,6 @@
+@@ -225,10 +229,6 @@
  	rw::d3d::im2dOverridePS = nil;
  	rw::d3d::setTexture(1, nil);
  #endif
@@ -587,7 +626,7 @@
  
  	RwRenderStateSet(rwRENDERSTATEFOGENABLE, FALSE);
  	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-@@ -705,113 +678,26 @@
+@@ -705,113 +705,26 @@
  }
  #endif
  

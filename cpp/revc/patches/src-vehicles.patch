@@ -189,11 +189,12 @@
  
 --- a/src/vehicles/HandlingMgr.cpp
 +++ b/src/vehicles/HandlingMgr.cpp
-@@ -134,199 +134,21 @@
+@@ -134,199 +134,30 @@
  	field_10 = 0.98f;
  }
  
 +// The parser and the unit conversions are in Rust (rust/revc/src/handling.rs); the tables stay here.
++extern "C" int revc_console_handling(char *out, size_t cap);
 +extern "C" void revc_handling_load(const uint8 *data, size_t len, tHandlingData *cars, tBikeHandlingData *bikes,
 +                                   tFlyingHandlingData *flying, tBoatHandlingData *boats);
 +static_assert(sizeof(tHandlingData) == 220 && sizeof(tBikeHandlingData) == 64 && sizeof(tFlyingHandlingData) == 76 &&
@@ -213,10 +214,9 @@
 -	tBoatHandlingData *boatHandling;
 -	tBikeHandlingData *bikeHandling;
 -
- 	CFileMgr::SetDir("DATA");
+-	CFileMgr::SetDir("DATA");
 -	CFileMgr::LoadFile(HandlingFilename, work_buff, sizeof(work_buff), "r");
-+	int len = CFileMgr::LoadFile(HandlingFilename, work_buff, sizeof(work_buff), "r");
- 	CFileMgr::SetDir("");
+-	CFileMgr::SetDir("");
 -
 -	start = (char*)work_buff;
 -	end = start+1;
@@ -392,14 +392,24 @@
 -				ConvertDataToGameUnits(handling);
 -			}
 -		}
--	}
++	// revc: the console styles' own table (ps2models.rs revc_console_handling)
++	char consolePath[512];
++	int len;
++	if(revc_console_handling(consolePath, sizeof(consolePath)) == 1){
++		printf("revc: console handling: %s\n", consolePath);
++		len = CFileMgr::LoadFile(consolePath, work_buff, sizeof(work_buff), "r");
++	}else{
++		CFileMgr::SetDir("DATA");
++		len = CFileMgr::LoadFile(HandlingFilename, work_buff, sizeof(work_buff), "r");
++		CFileMgr::SetDir("");
+ 	}
 +	if(len < 0)
 +		len = 0;
 +	revc_handling_load(work_buff, len, HandlingData, BikeHandlingData, FlyingHandlingData, BoatHandlingData);
  }
  
  int
-@@ -344,69 +166,6 @@
+@@ -344,69 +175,6 @@
  }
  
  

@@ -19,6 +19,7 @@ const ID_GEOMETRY: u32 = 0x0f;
 const ID_BINMESH: u32 = 0x50e;
 const ID_NATIVEDATA: u32 = 0x510;
 const ID_VERTEXFMT: u32 = 0x511;
+const ID_SKIN: u32 = 0x116;
 
 const GEO_PRELIT: u32 = 0x08;
 const GEO_NORMALS: u32 = 0x10;
@@ -33,7 +34,7 @@ fn unpack_normal(v: u32) -> [f32; 3] {
     [x, y, z]
 }
 
-fn convert_geometry(d: &[u8], g: Chunk) -> Result<Vec<u8>, String> {
+fn convert_geometry(d: &[u8], g: Chunk, keep_skin: bool) -> Result<Vec<u8>, String> {
     let kids = chunks(d, g.start, g.end)?;
     let st = *kids.iter().find(|c| c.ty == ID_STRUCT).ok_or("geometry without struct")?;
     let word = u32_at(d, st.start)?;
@@ -50,6 +51,11 @@ fn convert_geometry(d: &[u8], g: Chunk) -> Result<Vec<u8>, String> {
     let ext_kids = chunks(d, ext.start, ext.end)?;
     let bin = ext_kids.iter().find(|c| c.ty == ID_BINMESH).ok_or("no mesh header")?;
     let nat = ext_kids.iter().find(|c| c.ty == ID_NATIVEDATA).ok_or("no native data")?;
+    // (skinned geometry keeps its weights in the native skin extension, which isn't converted yet:
+    // the PC model stays in use for peds)
+    if !keep_skin && ext_kids.iter().any(|c| c.ty == ID_SKIN) {
+        return Err("skinned (native Xbox skin)".into());
+    }
     let num_meshes = u32_at(d, bin.start + 4)? as usize;
     // native data: struct header, platform, then the size field the offsets count from (less the
     // 0x18 bytes of the resource entry header that preceded it in memory)
@@ -190,18 +196,18 @@ fn convert_geometry(d: &[u8], g: Chunk) -> Result<Vec<u8>, String> {
     Ok(body)
 }
 
-fn rebuild(d: &[u8], start: usize, end: usize, out: &mut Vec<u8>, converted: &mut usize) -> Result<(), String> {
+fn rebuild(d: &[u8], start: usize, end: usize, out: &mut Vec<u8>, converted: &mut usize, keep_skin: bool) -> Result<(), String> {
     for c in chunks(d, start, end)? {
         match c.ty {
             ID_CLUMP | ID_GEOMLIST => {
                 let mut body = Vec::new();
-                rebuild(d, c.start, c.end, &mut body, converted)?;
+                rebuild(d, c.start, c.end, &mut body, converted, keep_skin)?;
                 put_chunk(out, c.ty, c.ver, &body);
             }
             ID_GEOMETRY => {
                 let st = chunks(d, c.start, c.end)?.into_iter().find(|k| k.ty == ID_STRUCT).ok_or("geometry without struct")?;
                 if d.get(st.start + 3).copied().unwrap_or(0) != 0 {
-                    put_chunk(out, c.ty, c.ver, &convert_geometry(d, c)?);
+                    put_chunk(out, c.ty, c.ver, &convert_geometry(d, c, keep_skin)?);
                     *converted += 1;
                 } else {
                     put_chunk(out, c.ty, c.ver, &d[c.start..c.end]);
@@ -216,13 +222,19 @@ fn rebuild(d: &[u8], start: usize, end: usize, out: &mut Vec<u8>, converted: &mu
 /// An Xbox DFF (clump, unpacked from the archive) with its native geometries converted; Err when
 /// it has none or one of them isn't a plain mesh.
 pub fn convert_dff(d: &[u8]) -> Result<Vec<u8>, String> {
+    convert_dff_with(d, false)
+}
+
+/// convert_dff, with `keep_skin` converting a skinned geometry too and keeping its native Xbox skin
+/// extension as it is (the cutscene hands model: extras/CutsceneHands.cpp draws it that way).
+pub fn convert_dff_with(d: &[u8], keep_skin: bool) -> Result<Vec<u8>, String> {
     let first = chunks(d, 0, d.len()).ok().and_then(|c| c.first().copied()).ok_or("not a RenderWare file")?;
     if first.ty != ID_CLUMP {
         return Err("not a clump".into());
     }
     let mut out = Vec::new();
     let mut converted = 0;
-    rebuild(d, 0, first.end, &mut out, &mut converted)?;
+    rebuild(d, 0, first.end, &mut out, &mut converted, keep_skin)?;
     if converted == 0 {
         return Err("no Xbox geometry".into());
     }
