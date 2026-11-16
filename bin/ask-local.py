@@ -56,7 +56,7 @@ try:
                           'num_predict': a.max_tokens, 'num_ctx': 32768}}
       url = os.environ.get('LOCAL_AI_URL', 'http://127.0.0.1:11434') + '/api/chat'
       req = urllib.request.Request(url, json.dumps(body).encode(), {'Content-Type': 'application/json'})
-      r = json.load(urllib.request.urlopen(req, timeout=1800))
+      r = json.load(urllib.request.urlopen(req, timeout=3600))
       out = r['message']['content']
       usage_ = (r.get('prompt_eval_count'), r.get('eval_count'))
       cut = r.get('done_reason') == 'length'
@@ -65,7 +65,7 @@ try:
               'chat_template_kwargs': {'enable_thinking': a.think}}
       url = os.environ.get('LOCAL_AI_URL', 'http://127.0.0.1:8091') + '/v1/chat/completions'
       req = urllib.request.Request(url, json.dumps(body).encode(), {'Content-Type': 'application/json'})
-      r = json.load(urllib.request.urlopen(req, timeout=1800))
+      r = json.load(urllib.request.urlopen(req, timeout=3600))
       out = r['choices'][0]['message']['content']
       cut = r['choices'][0].get('finish_reason') == 'length'
       u = r.get('usage', {})

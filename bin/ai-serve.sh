@@ -20,8 +20,10 @@ else
 fi
 PORT=${PORT:-8091}
 echo "ai-serve: profile $PROFILE (${RAM_GIB} GiB RAM), $(basename "$MODEL"), n-cpu-moe $NCPUMOE, ctx $CTX" >&2
+# One slot: a request gets the whole context and a second one waits in the server's queue (with
+# several slots they share the context, and two long requests fail each other).
 exec "$AI/llama.cpp/build/bin/llama-server" -m "$MODEL" --alias qwen3.6-35b-a3b \
-  -ngl 99 --n-cpu-moe "$NCPUMOE" -c "$CTX" \
+  -ngl 99 --n-cpu-moe "$NCPUMOE" -c "$CTX" --parallel 1 \
   -fa on --cache-type-k q8_0 --cache-type-v q8_0 \
   --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0 \
   --host 127.0.0.1 --port "$PORT" "$@"
