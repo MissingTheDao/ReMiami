@@ -88,12 +88,12 @@ fn record(r: &mut Renderer, gpu: &Gpu) {
 
     // Into the render target: a clear and a red quad.
     r.set_target(rt);
-    r.clear(Some([0.0, 0.3, 0.0, 1.0]), true);
+    r.clear(Some([0.0, 0.3, 0.0, 1.0]), true, false);
     let st = DrawState { xform: [2.0 / 16.0, -2.0 / 16.0, -1.0, 1.0], z_test: 0, z_write: 0, alpha_func: 0, ..base() };
     r.draw_2d(&st, 4, &quad(4.0, 4.0, 12.0, 12.0, 1.0, [255, 0, 0, 255]), Some(&[0, 1, 2, 0, 2, 3]));
     r.set_target(0);
 
-    r.clear(Some([0.1, 0.1, 0.2, 1.0]), true);
+    r.clear(Some([0.1, 0.1, 0.2, 1.0]), true, false);
     let xf = Xform { proj: proj(), view: view(), world: IDENTITY };
     // Lit mesh: ambient, a directional light and a point light; textured.
     let mut model = ModelState::new(IDENTITY);

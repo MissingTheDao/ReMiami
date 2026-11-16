@@ -239,6 +239,67 @@ pub fn mat_mul(a: &Mat4, b: &Mat4) -> Mat4 {
     r
 }
 
+/// librw stencil operations (rwrender.h STENCIL_*).
+pub(crate) fn stencil_op(o: u8) -> wgpu::StencilOperation {
+    match o {
+        1 => wgpu::StencilOperation::Keep,
+        2 => wgpu::StencilOperation::Zero,
+        3 => wgpu::StencilOperation::Replace,
+        4 => wgpu::StencilOperation::IncrementClamp,
+        5 => wgpu::StencilOperation::DecrementClamp,
+        6 => wgpu::StencilOperation::Invert,
+        7 => wgpu::StencilOperation::IncrementWrap,
+        8 => wgpu::StencilOperation::DecrementWrap,
+        _ => wgpu::StencilOperation::Keep,
+    }
+}
+
+/// librw stencil functions (rwrender.h STENCIL_*).
+pub(crate) fn stencil_compare(f: u8) -> wgpu::CompareFunction {
+    match f {
+        1 => wgpu::CompareFunction::Never,
+        2 => wgpu::CompareFunction::Less,
+        3 => wgpu::CompareFunction::Equal,
+        4 => wgpu::CompareFunction::LessEqual,
+        5 => wgpu::CompareFunction::Greater,
+        6 => wgpu::CompareFunction::NotEqual,
+        7 => wgpu::CompareFunction::GreaterEqual,
+        8 => wgpu::CompareFunction::Always,
+        _ => wgpu::CompareFunction::Always,
+    }
+}
+
+#[cfg(test)]
+mod stencil_table_tests {
+    use super::*;
+
+    #[test]
+    fn stencil_op_table() {
+        assert_eq!(stencil_op(1), wgpu::StencilOperation::Keep);
+        assert_eq!(stencil_op(2), wgpu::StencilOperation::Zero);
+        assert_eq!(stencil_op(3), wgpu::StencilOperation::Replace);
+        assert_eq!(stencil_op(4), wgpu::StencilOperation::IncrementClamp);
+        assert_eq!(stencil_op(5), wgpu::StencilOperation::DecrementClamp);
+        assert_eq!(stencil_op(6), wgpu::StencilOperation::Invert);
+        assert_eq!(stencil_op(7), wgpu::StencilOperation::IncrementWrap);
+        assert_eq!(stencil_op(8), wgpu::StencilOperation::DecrementWrap);
+        assert_eq!(stencil_op(99), wgpu::StencilOperation::Keep);
+    }
+
+    #[test]
+    fn stencil_compare_table() {
+        assert_eq!(stencil_compare(1), wgpu::CompareFunction::Never);
+        assert_eq!(stencil_compare(2), wgpu::CompareFunction::Less);
+        assert_eq!(stencil_compare(3), wgpu::CompareFunction::Equal);
+        assert_eq!(stencil_compare(4), wgpu::CompareFunction::LessEqual);
+        assert_eq!(stencil_compare(5), wgpu::CompareFunction::Greater);
+        assert_eq!(stencil_compare(6), wgpu::CompareFunction::NotEqual);
+        assert_eq!(stencil_compare(7), wgpu::CompareFunction::GreaterEqual);
+        assert_eq!(stencil_compare(8), wgpu::CompareFunction::Always);
+        assert_eq!(stencil_compare(99), wgpu::CompareFunction::Always);
+    }
+}
+
 /// Device state for one draw, filled by the C++ device (`RevcDrawState` in wgpudevice.cpp).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -274,6 +335,22 @@ pub struct DrawState {
     pub shader_params: [f32; 8],
     /// Anisotropic filtering (1 = off), used with trilinear filtering.
     pub max_anisotropy: u32,
+    /// Stencil state (RW values; enable 0 = off).
+    pub stencil: Stencil,
+}
+
+/// librw stencil render state values (rwrender.h), as the device stores them.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Stencil {
+    pub enable: u32,
+    pub fail: u32,
+    pub zfail: u32,
+    pub pass: u32,
+    pub func: u32,
+    pub reference: u32,
+    pub read_mask: u32,
+    pub write_mask: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -298,6 +375,16 @@ pub(crate) struct MeshDraw {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct StencilKey {
+    pub(crate) fail: u8,
+    pub(crate) zfail: u8,
+    pub(crate) pass: u8,
+    pub(crate) func: u8,
+    pub(crate) read_mask: u8,
+    pub(crate) write_mask: u8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct PipeKey {
     pub(crate) kind: Kind,
     /// Im2D override shader (DrawState::shader).
@@ -309,6 +396,8 @@ pub(crate) struct PipeKey {
     pub(crate) cull: u32,
     /// MSAA sample count of the target (the scene's; texture targets have 1).
     pub(crate) samples: u32,
+    /// Stencil test and update (low 8 bits of the RW masks); None = stencil off.
+    pub(crate) stencil: Option<StencilKey>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -347,11 +436,11 @@ impl From<Mat4> for Xform {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Op {
-    Clear { color: Option<[f64; 4]>, depth: bool },
+    Clear { color: Option<[f64; 4]>, depth: bool, stencil: bool },
     /// Immediate geometry (first/count vertices) or, with `mesh` = (geometry, model uniform), an
     /// index range of a stored geometry.
     /// For skinned meshes the third value is the bone-matrix block.
-    Draw { pipe: PipeKey, texture: u32, sampler: SamplerKey, uniform: u32, first: u32, count: u32, mesh: Option<MeshDraw> },
+    Draw { pipe: PipeKey, texture: u32, sampler: SamplerKey, uniform: u32, first: u32, count: u32, mesh: Option<MeshDraw>, stencil_ref: u8 },
     /// The frame so far copied into a texture at (x, y) (librw rasterRenderFast of the camera).
     CopyFrame { texture: u32, x: u32, y: u32 },
     /// Following clears and draws go to this texture (a camera rendering into a texture, like
@@ -640,9 +729,9 @@ impl Recorder {
         self.frame.dead_geometries.push(id);
     }
 
-    /// Camera clear: colour (when given) and/or depth.
-    pub fn clear(&mut self, color: Option<[f64; 4]>, depth: bool) {
-        self.frame.ops.push(Op::Clear { color, depth });
+    /// Camera clear: colour (when given), depth and/or stencil (to 0).
+    pub fn clear(&mut self, color: Option<[f64; 4]>, depth: bool, stencil: bool) {
+        self.frame.ops.push(Op::Clear { color, depth, stencil });
     }
 
     fn expand(&mut self, prim: u32, num_verts: usize, indices: Option<&[u16]>) {
@@ -764,6 +853,19 @@ impl Recorder {
         let uniform = f.uniforms.len() as u32 - 1;
 
         let s = f.settings;
+        let stencil = if state.stencil.enable != 0 {
+            Some(StencilKey {
+                fail: state.stencil.fail as u8,
+                zfail: state.stencil.zfail as u8,
+                pass: state.stencil.pass as u8,
+                func: state.stencil.func as u8,
+                read_mask: state.stencil.read_mask as u8,
+                write_mask: state.stencil.write_mask as u8,
+            })
+        } else {
+            None
+        };
+        let stencil_ref = if stencil.is_some() { state.stencil.reference as u8 } else { 0 };
         let pipe = PipeKey {
             // Past the overlay marker the scene is finished and the HUD draws single-sampled.
             samples: if self.recording_target == 0 && !(self.recording_overlay && s.overlay_split()) { s.samples } else { 1 },
@@ -774,21 +876,23 @@ impl Recorder {
             z_test: state.z_test != 0,
             z_write: state.z_write != 0,
             cull: state.cull,
+            stencil,
         };
         let texture = if self.textures.contains(&state.texture) { state.texture } else { 0 };
         let sampler = SamplerKey { filter: state.filter, address_u: state.address_u, address_v: state.address_v, anisotropy: state.max_anisotropy.clamp(1, 16) as u16 };
-        if let Some(Op::Draw { pipe: p, texture: t, sampler: s, uniform: un, first: fi, count: n, mesh: me }) = f.ops.last_mut()
+        if let Some(Op::Draw { pipe: p, texture: t, sampler: s, uniform: un, first: fi, count: n, mesh: me, stencil_ref: sr }) = f.ops.last_mut()
             && *me == mesh
             && *p == pipe
             && *t == texture
             && *s == sampler
             && *un == uniform
             && *fi + *n == first
+            && *sr == stencil_ref
         {
             *n += count;
             return;
         }
-        f.ops.push(Op::Draw { pipe, texture, sampler, uniform, first, count, mesh });
+        f.ops.push(Op::Draw { pipe, texture, sampler, uniform, first, count, mesh, stencil_ref });
     }
 
     /// Following clears and draws render into texture `texture` (level 0), or into the scene

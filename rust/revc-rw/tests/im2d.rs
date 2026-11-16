@@ -34,7 +34,7 @@ fn render(backend: Backend) -> Vec<u8> {
     let texels = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255];
     let tex = r.upload_texture(&gpu, 0, 2, 2, TexData::Rgba8, &[&texels], false);
 
-    r.clear(Some([0.0, 0.0, 1.0, 1.0]), true);
+    r.clear(Some([0.0, 0.0, 1.0, 1.0]), true, false);
     let fan = 5;
     r.draw_2d(&base(), fan, &quad(0.0, 0.0, 32.0, 32.0, [255, 0, 0, 255]), None);
     let textured = DrawState { texture: tex, ..base() };
@@ -45,7 +45,7 @@ fn render(backend: Backend) -> Vec<u8> {
     // Alpha 5 is below the reference of 10: nothing drawn.
     r.draw_2d(&blended, fan, &quad(32.0, 32.0, 64.0, 64.0, [255, 255, 0, 5]), None);
     // Depth-only clear mid-frame keeps the colour.
-    r.clear(None, true);
+    r.clear(None, true, false);
     r.draw_2d(&base(), fan, &quad(60.0, 60.0, 64.0, 64.0, [0, 255, 0, 255]), None);
 
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -113,7 +113,7 @@ fn dxt_case(backend: Backend, width: u32, height: u32, kind: u8, data: TexData, 
     // Blended over black without alpha test: the frame shows colour * alpha, which checks the
     // decoded alpha too (the frame itself keeps no alpha).
     let state = DrawState { texture: tex, alpha_func: 0, blend: 1, ..base() };
-    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true, false);
     r.draw_2d(&state, 5, &quad(0.0, 0.0, 64.0, 64.0, [255, 255, 255, 255]), None);
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
@@ -190,7 +190,7 @@ fn im3d(backend: Backend) {
         [v(x0, y0), v(x1, y0), v(x1, y1), v(x0, y1)]
     };
     let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, ..base() };
-    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true, false);
     // At z, the view spans -z..z: red covers the middle, green (nearer) its left half.
     r.draw_3d(&state, 5, &quad3(-10.0, -10.0, 10.0, 10.0, 20.0, [255, 0, 0, 255]), None, &proj.into());
     r.draw_3d(&state, 5, &quad3(-5.0, -5.0, 0.0, 5.0, 10.0, [0, 255, 0, 255]), None, &proj.into());
@@ -252,7 +252,7 @@ fn mesh(backend: Backend) {
     world[15] = 1.0;
     let model = ModelState { ambient: [0.2, 0.2, 0.2, 1.0], lights, ..ModelState::new(world) };
     let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, ..base() };
-    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true, false);
     r.draw_mesh(&state, geo, 0, 6, &proj.into(), &model, &MeshExtras::default());
     r.draw_mesh(&state, geo, 6, 6, &proj.into(), &ModelState { mat_color: [0.5, 0.5, 0.5, 1.0], ..model }, &MeshExtras::default());
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -309,7 +309,7 @@ fn skin(backend: Backend) {
     world[14] = 10.0;
     let model = ModelState::new(world);
     let state = DrawState { z_test: 1, z_write: 0, alpha_func: 0, ..base() };
-    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true, false);
     r.draw_mesh(&state, geo, 0, 6, &proj.into(), &model, &MeshExtras { bones: Some(&[ident, moved]), env: None });
     r.draw_mesh(&state, geo, 6, 6, &proj.into(), &ModelState { mat_color: [0.0, 1.0, 0.0, 1.0], ..model }, &MeshExtras { bones: Some(&[ident, moved]), env: None });
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -375,7 +375,7 @@ fn env(backend: Backend) {
     let second = ModelState { tex_matrix: texm2, fx_params: [0.5, 0.0, 0.0, 0.0], ..first };
     let e = MeshExtras { bones: None, env: Some(EnvMap { texture: env_tex, filter: 1, address_u: 1, address_v: 1 }) };
     let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, blend: 1, src_blend: 2, dst_blend: 6, ..base() };
-    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true, false);
     r.draw_mesh(&state, geo, 0, 6, &proj.into(), &first, &e);
     r.draw_mesh(&state, geo, 6, 6, &proj.into(), &second, &e);
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -416,10 +416,10 @@ fn copy_frame(backend: Backend) {
     let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
     let blank = vec![0u8; (SIZE * SIZE * 4) as usize];
     let tex = r.upload_texture(&gpu, 0, SIZE, SIZE, TexData::Rgba8, &[&blank], false);
-    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true, false);
     r.draw_2d(&base(), 5, &quad(0.0, 0.0, 32.0, 16.0, [255, 0, 0, 255]), None);
     r.copy_frame(tex, 0, 0);
-    r.clear(Some([0.0, 0.0, 1.0, 1.0]), true);
+    r.clear(Some([0.0, 0.0, 1.0, 1.0]), true, false);
     r.draw_2d(&DrawState { texture: tex, ..base() }, 5, &quad(0.0, 0.0, 64.0, 64.0, [255, 255, 255, 255]), None);
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
@@ -464,7 +464,7 @@ fn colour_filter(backend: Backend) {
     let mut p = [0.0f32; 8];
     p[..4].copy_from_slice(&blur);
     let contrast = [1.2f32, 1.1, 1.3, 0.0, 0.02, -0.01, 0.03, 0.0];
-    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true, false);
     r.draw_2d(&DrawState { texture: tex, shader: 1, shader_params: p, ..base() }, 5, &quad(0.0, 0.0, 32.0, 64.0, [255; 4]), None);
     r.draw_2d(&DrawState { texture: tex, shader: 2, shader_params: contrast, ..base() }, 5, &quad(32.0, 0.0, 64.0, 64.0, [255; 4]), None);
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -514,9 +514,9 @@ fn render_to_texture(backend: Backend) {
     let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
     let blank = vec![0u8; 16 * 16 * 4];
     let tex = r.upload_texture(&gpu, 0, 16, 16, TexData::Rgba8, &[&blank], false);
-    r.clear(Some([0.0, 0.0, 1.0, 1.0]), true);
+    r.clear(Some([0.0, 0.0, 1.0, 1.0]), true, false);
     r.set_target(tex);
-    r.clear(Some([1.0, 0.0, 0.0, 1.0]), true);
+    r.clear(Some([1.0, 0.0, 0.0, 1.0]), true, false);
     // Green square in the texture's left half (xform for a 16x16 target).
     let small = DrawState { xform: [2.0 / 16.0, -2.0 / 16.0, -1.0, 1.0], ..base() };
     r.draw_2d(&small, 5, &quad(0.0, 0.0, 8.0, 16.0, [0, 255, 0, 255]), None);
@@ -582,7 +582,7 @@ fn neo_world(backend: Backend) {
     let model = ModelState { ambient: [0.1, 0.1, 0.1, 1.0], lights, extra, ..ModelState::new(world) };
     let e = MeshExtras { bones: None, env: Some(EnvMap { texture: lmtex, filter: 1, address_u: 3, address_v: 3 }) };
     let state = DrawState { z_test: 1, z_write: 1, alpha_func: 0, shader: MESH_NEO_WORLD, ..base() };
-    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true, false);
     r.draw_mesh(&state, geo, 0, 6, &proj.into(), &model, &e);
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
@@ -630,7 +630,7 @@ fn droplet(backend: Backend) {
     let q = quad(0.0, 0.0, 64.0, 64.0, [255, 255, 255, 128]);
     let verts: Vec<Vertex2DUV2> = q.iter().map(|v| Vertex2DUV2 { base: *v, u2: 0.75, v2: 0.5 }).collect();
     let state = DrawState { texture: mask, blend: 1, alpha_func: 0, ..base() };
-    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+    r.clear(Some([0.0, 0.0, 0.0, 1.0]), true, false);
     r.draw_2d_uv2(&state, 5, &verts, None, &EnvMap { texture: screen, filter: 1, address_u: 3, address_v: 3 });
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
@@ -671,7 +671,7 @@ fn msaa(backend: Backend) {
     let edge_pixels = |samples: u32| {
         let mut r = Renderer::with_samples(&gpu, wgpu::TextureFormat::Rgba8Unorm, samples);
         let v = |x: f32, y: f32| Vertex2D { x, y, z: 0.0, w: 1.0, r: 255, g: 255, b: 255, a: 255, u: 0.0, v: 0.0 };
-        r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+        r.clear(Some([0.0, 0.0, 0.0, 1.0]), true, false);
         r.draw_2d(&base(), 3, &[v(0.0, 0.0), v(64.0, 0.0), v(0.0, 61.0)], None);
         let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: None,
@@ -720,7 +720,7 @@ fn aa_levels(backend: Backend) {
     for (i, (name, aa)) in Antialiasing::LEVELS.iter().enumerate() {
         r.set_antialiasing(&gpu, Antialiasing::level(i as u32));
         assert_eq!(r.antialiasing(), *aa, "{backend:?} {name}");
-        r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+        r.clear(Some([0.0, 0.0, 0.0, 1.0]), true, false);
         r.draw_2d(&base(), 3, &[v(0.0, 0.0), v(64.0, 0.0), v(0.0, 61.0)], None);
         let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: None,
@@ -784,7 +784,7 @@ fn overlay(backend: Backend) {
     for (level, scale, marker) in [(0, 100, true), (0, 50, true), (0, 67, true), (1, 100, true), (2, 100, true), (4, 100, true), (7, 75, true), (0, 50, false)] {
         r.set_antialiasing(&gpu, Antialiasing::level(level));
         r.set_render_scale(scale);
-        r.clear(Some([0.0, 0.0, 0.0, 1.0]), true);
+        r.clear(Some([0.0, 0.0, 0.0, 1.0]), true, false);
         r.draw_2d(&base(), 3, &[v(0.0, 0.0), v(64.0, 0.0), v(0.0, 61.0)], None);
         if marker {
             r.begin_overlay();

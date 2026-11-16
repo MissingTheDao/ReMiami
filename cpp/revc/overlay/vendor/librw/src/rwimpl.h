@@ -2928,7 +2928,7 @@ void revc_device_im2d_uv2(PrimitiveType prim, void *v, int32 nv, void *i, int32 
 }
 
 static_assert(sizeof(Device) == 136, "Device layout (rwdevice.rs)");
-static_assert(sizeof(DrawState) == 120, "DrawState layout (revc_rw::frame::DrawState)");
+static_assert(sizeof(DrawState) == 152, "DrawState layout (revc_rw::frame::DrawState)");
 
 
 inline Camera **hCurrentCamera(void) { return &engine->currentCamera; }

@@ -102,6 +102,7 @@ fn render_thread_wanted() -> bool {
 /// rwCAMERACLEARIMAGE, rwCAMERACLEARZ
 const CLEAR_IMAGE: u32 = 1;
 const CLEAR_Z: u32 = 2;
+const CLEAR_STENCIL: u32 = 4;
 
 /// REVC_RENDERER_BACKEND=vulkan|dx12|gl picks the wgpu backend; the default is DX12 on Windows
 /// (user 2026-11-16, for testing; a menu toggle is planned) and Vulkan elsewhere.
@@ -244,7 +245,7 @@ pub extern "C" fn revc_rw_begin_frame(_window: *mut c_void) {
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_rw_clear(r: f32, g: f32, b: f32, a: f32, mode: u32) {
     let color = (mode & CLEAR_IMAGE != 0).then_some([r as f64, g as f64, b as f64, a as f64]);
-    with_front(|f| f.clear(color, mode & CLEAR_Z != 0));
+    with_front(|f| f.clear(color, mode & CLEAR_Z != 0, mode & CLEAR_STENCIL != 0));
 }
 
 /// Creates (id 0) or updates a texture from mip levels, RGBA8 (`dxt` 0) or DXT1/3/5 blocks;

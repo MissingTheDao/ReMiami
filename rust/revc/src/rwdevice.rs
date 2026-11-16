@@ -12,7 +12,7 @@ use crate::math::RwMatrix;
 use crate::rwraster::{self, Raster, WgpuRaster};
 use crate::rwscene::{Camera, PERSPECTIVE};
 use crate::rwtexture::Texture;
-use revc_rw::frame::{DrawState, EnvMap, Vertex2D, Vertex2DUV2, Vertex3D, Xform};
+use revc_rw::frame::{DrawState, EnvMap, Stencil, Vertex2D, Vertex2DUV2, Vertex3D, Xform};
 use std::ffi::{c_char, c_void};
 use std::ptr::{addr_of, addr_of_mut, null, null_mut};
 
@@ -40,6 +40,7 @@ const STENCILFAIL: i32 = 14;
 const STENCILZFAIL: i32 = 15;
 const STENCILPASS: i32 = 16;
 const STENCILFUNCTION: i32 = 17;
+const STENCILFUNCTIONREF: i32 = 18;
 const STENCILFUNCTIONMASK: i32 = 19;
 const STENCILFUNCTIONWRITEMASK: i32 = 20;
 pub(crate) const ALPHATESTFUNC: i32 = 21;
@@ -78,7 +79,7 @@ struct RenderState {
     alpha_ref: u32,
     gsalpha: u32,
     gsalpharef: u32,
-    /// STENCILENABLE .. STENCILFUNCTIONWRITEMASK, kept but unused
+    /// STENCILENABLE .. STENCILFUNCTIONWRITEMASK (index = id - STENCILENABLE)
     stencil: [u32; 8],
 }
 const RS_ZERO: RenderState = RenderState {
@@ -565,6 +566,17 @@ pub unsafe fn current_draw_state() -> DrawState {
     }
     s.fog_color = rs.fog_color;
     s.xform = [2.0 / w, -2.0 / h, -1.0, 1.0];
+    let st = |i: i32| rs.stencil[(i - STENCILENABLE) as usize];
+    s.stencil = Stencil {
+        enable: st(STENCILENABLE),
+        fail: st(STENCILFAIL),
+        zfail: st(STENCILZFAIL),
+        pass: st(STENCILPASS),
+        func: st(STENCILFUNCTION),
+        reference: st(STENCILFUNCTIONREF),
+        read_mask: st(STENCILFUNCTIONMASK),
+        write_mask: st(STENCILFUNCTIONWRITEMASK),
+    };
     s
 }
 
@@ -1013,4 +1025,4 @@ pub unsafe extern "C" fn revc_device_im2d_uv2(prim: u32, v: *mut c_void, nv: i32
     unsafe { im2d_render_indexed_primitive_uv2(prim, v, nv, i, ni, tex1) }
 }
 
-const _: () = assert!(size_of::<Device>() == 136 && size_of::<DrawState>() == 120 && size_of::<EngineOpenParams>() == 32);
+const _: () = assert!(size_of::<Device>() == 136 && size_of::<DrawState>() == 152 && size_of::<EngineOpenParams>() == 32);

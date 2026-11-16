@@ -133,6 +133,9 @@ struct DrawState
 	uint32 shader;
 	float32 shaderParams[8];
 	uint32 maxAnisotropy;
+	// RW stencil render states (STENCILENABLE .. STENCILFUNCTIONWRITEMASK; enable 0 = off).
+	uint32 stencilEnable, stencilFail, stencilZFail, stencilPass;
+	uint32 stencilFunction, stencilRef, stencilReadMask, stencilWriteMask;
 };
 
 // Im2D vertices with a second coordinate set (re3 screen droplets: Im2DVertex + u2, v2), drawn

@@ -1749,7 +1749,7 @@ impl WgpuBackend {
                         wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
                     );
                 }
-                Op::Clear { color, depth } => {
+                Op::Clear { color, depth, .. } => {
                     if !target_ok {
                         continue;
                     }
@@ -1760,7 +1760,7 @@ impl WgpuBackend {
                     started |= cur_target == 0;
                     bound = Bound::default();
                 }
-                Op::Draw { pipe, texture, sampler, uniform, first, count, mesh } => {
+                Op::Draw { pipe, texture, sampler, uniform, first, count, mesh, .. } => {
                     if !target_ok {
                         continue;
                     }
@@ -1983,8 +1983,8 @@ impl Renderer {
         self.front.destroy_texture(id);
     }
 
-    pub fn clear(&mut self, color: Option<[f64; 4]>, depth: bool) {
-        self.front.clear(color, depth);
+    pub fn clear(&mut self, color: Option<[f64; 4]>, depth: bool, stencil: bool) {
+        self.front.clear(color, depth, stencil);
     }
 
     pub fn draw_2d(&mut self, state: &DrawState, prim: u32, verts: &[Vertex2D], indices: Option<&[u16]>) {

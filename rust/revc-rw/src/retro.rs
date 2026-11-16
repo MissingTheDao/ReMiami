@@ -12,7 +12,7 @@
 //! (`RwFxaa`, frame.rs's shader as a retro-wgpu post pass); SMAA is the same port in both.
 
 use crate::frame::{Frame, MESH_NEO_GLOSS, MESH_NEO_RIM, MESH_NEO_VEHICLE, MESH_NEO_WORLD, ModelState, TexData};
-use crate::front::{BONE_FLOATS, HashMap, HashSet, Kind, MeshDraw, Op, PipeKey, SamplerKey, Upload};
+use crate::front::{BONE_FLOATS, HashMap, HashSet, Kind, MeshDraw, Op, PipeKey, SamplerKey, Upload, stencil_compare, stencil_op};
 use retro_wgpu as rw;
 
 /// RW `U` uniforms (72 floats): the per-draw block; a mesh's `M` (ModelState) is its instance block.
@@ -154,6 +154,15 @@ fn pipeline_state(pipe: &PipeKey) -> rw::PipelineState {
         // The frame has no alpha channel (as in WgpuBackend): alpha stays 1.
         color_mask: rw::ColorMask { rgb: true, alpha: false },
         depth: rw::DepthState { compare: if pipe.z_test { wgpu::CompareFunction::LessEqual } else { wgpu::CompareFunction::Always }, write: pipe.z_write },
+        stencil: match pipe.stencil {
+            Some(k) => rw::StencilState::both(rw::StencilFace {
+                compare: stencil_compare(k.func),
+                fail: stencil_op(k.fail),
+                depth_fail: stencil_op(k.zfail),
+                pass: stencil_op(k.pass),
+            }, k.read_mask, k.write_mask),
+            None => rw::StencilState::OFF,
+        },
         cull: match pipe.cull {
             2 => Some(wgpu::Face::Back),
             3 => Some(wgpu::Face::Front),
@@ -484,13 +493,13 @@ impl RetroBackend {
                         }
                     }
                 }
-                Op::Clear { color, depth } => {
+                Op::Clear { color, depth, stencil } => {
                     if !cur_ok {
                         continue;
                     }
-                    self.r.clear(color.map(|c| [c[0], c[1], c[2], 1.0]), depth.then_some(1.0), None);
+                    self.r.clear(color.map(|c| [c[0], c[1], c[2], 1.0]), depth.then_some(1.0), stencil.then_some(0));
                 }
-                Op::Draw { pipe, texture, sampler: smp, uniform, first, count, mesh } => {
+                Op::Draw { pipe, texture, sampler: smp, uniform, first, count, mesh, stencil_ref } => {
                     if !cur_ok {
                         continue;
                     }
@@ -522,7 +531,7 @@ impl RetroBackend {
                         range: None,
                         base_vertex: 0,
                         pipeline: &pipeline,
-                        stencil_reference: 0,
+                        stencil_reference: stencil_ref,
                         blend_constant: [0.0; 4],
                         textures: &textures,
                         bones: None,
