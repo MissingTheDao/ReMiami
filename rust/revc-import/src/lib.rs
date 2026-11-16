@@ -11,6 +11,7 @@ pub mod iso9660;
 pub mod ps2geom;
 pub mod ps2tex;
 pub mod version;
+pub mod xbealpha;
 pub mod xboxgeom;
 pub mod xboxlm;
 pub mod xdvdfs;
@@ -294,6 +295,22 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
     let maps = lift_map_files(disc, &root, &mut report)?;
     eprintln!("revc-import: {maps} map files");
     if disc.kind == DiscKind::Xbox {
+        // The Xbox style's per-model alpha test (cut-out thresholds per model id), read out of the
+        // executable whose hash was checked above (xbealpha). Older imports lack the file: the
+        // game then keeps its ordinary alpha test for every model.
+        // (the made-up discs of the tests have no real executable: xbealpha has its own tests)
+        #[cfg(test)]
+        let made_up = version::ACCEPT_ANY.with(|a| a.get());
+        #[cfg(not(test))]
+        let made_up = false;
+        if !made_up {
+            let xbe_e = disc.find("default.xbe").cloned().ok_or("the boot file default.xbe is missing")?;
+            let xbe = disc.read(&xbe_e).map_err(|e| format!("default.xbe: {e}"))?;
+            let rows = xbealpha::extract(&xbe).map_err(|e| format!("the per-model alpha table: {e}"))?;
+            let dest = root.join("data").join("alpharef.txt");
+            space::write_file(&dest, xbealpha::to_text(&rows).as_bytes())?;
+            report.written.push(dest);
+        }
         // World lightmaps (the textures of the Xbox's MatFX dual pass, `<model>@`, and the second
         // coordinates; xboxlm)
         // (skipped if the disc has no gta3.img: not a full game disc)

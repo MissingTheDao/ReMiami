@@ -434,6 +434,16 @@ Later: the import has no format version (`IMPORTED.txt` records only the disc im
 count), so the first change to what an import writes will need one, to tell an old import from a
 current one.
 
+## Xbox per-model alpha test (import side)
+
+The Xbox build gives some models their own alpha-test threshold instead of the ordinary one. That
+table is not a data file on the disc: it is part of the executable's code. The Xbox import reads it
+out of the player's `default.xbe` (only the accepted, hash-checked version;
+`rust/revc-import/src/xbealpha.rs` interprets the few code forms that build the table) and writes
+`xbox/data/alpharef.txt`, one `model-id scale` per line. Nothing from the table is in the
+repository. An Xbox import made before this has no such file: importing the disc again adds it;
+without it every model keeps the ordinary alpha test.
+
 ## Console menus: PC pages and Quit
 
 In the PS2 and Xbox styles the pause menu shows the console skin's own pages. A switch to a page the
