@@ -1139,6 +1139,11 @@ MenuSkinXboxInput(CMenuManager *m)
 		lastPage = m->m_nCurrScreen;
 	int n = ARRAY_SIZE(tabs), cur = CurrentTab(m->m_nCurrScreen);
 	if (barFocus && !MenuSkinXboxDialog(m->m_nCurrScreen)) {
+		// revc: the consoles' map responds on its tab: left stick scrolls; R1/R2 zoom on the PS2, the right stick on the Xbox
+		if (m->m_nCurrScreen == MENUPAGE_MAP && !pad->NewState.DPadUp && !pad->NewState.DPadDown && !pad->NewState.DPadLeft && !pad->NewState.DPadRight) {
+			bool goBack = false;
+			m->AdditionalOptionInput(goBack);
+		}
 		if (b) {
 			sound(SOUND_FRONTEND_BACK);
 			m->m_bShutDownFrontEndRequested = true;

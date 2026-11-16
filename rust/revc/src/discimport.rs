@@ -118,10 +118,18 @@ unsafe extern "C" fn on_file_chosen(_: *mut c_void, filelist: *const *const c_ch
     });
 }
 
-/// 1 if a complete import from this kind of disc (0 Xbox, 1 PS2) is in the cache.
+/// 1 if a complete import from an accepted version of this kind of disc (0 Xbox, 1 PS2) is in
+/// the cache. An import of another version is reported once (the CONSOLE DISCS message).
 #[unsafe(no_mangle)]
 pub extern "C" fn revc_import_status(kind: c_int) -> c_int {
     let kind = if kind == 1 { DiscKind::Ps2 } else { DiscKind::Xbox };
+    static REPORTED: [std::sync::atomic::AtomicBool; 2] = [std::sync::atomic::AtomicBool::new(false), std::sync::atomic::AtomicBool::new(false)];
+    if let Some(p) = revc_import::import_problem(&cache_dir(), kind) {
+        let i = (kind == DiscKind::Ps2) as usize;
+        if !REPORTED[i].swap(true, std::sync::atomic::Ordering::Relaxed) {
+            set_message(p);
+        }
+    }
     revc_import::imported(&cache_dir(), kind) as c_int
 }
 

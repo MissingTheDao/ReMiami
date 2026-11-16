@@ -10,6 +10,7 @@
 pub mod iso9660;
 pub mod ps2geom;
 pub mod ps2tex;
+pub mod version;
 pub mod xboxgeom;
 pub mod xboxlm;
 pub mod xdvdfs;
@@ -214,6 +215,12 @@ pub struct Report {
 /// `cache/<kind>/IMPORTED.txt` (which image, how many files) last, as the marker that the
 /// import is complete.
 pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, String> {
+    // only the versions the console styles follow (version.rs); nothing is written otherwise
+    let ver = version::identify(disc)?;
+    if !ver.accepted {
+        return Err(format!("this is the {}; the {} style needs the {} disc. Nothing was imported.",
+            ver.name, if disc.kind == DiscKind::Ps2 { "PS2" } else { "Xbox" }, version::needed(disc.kind)));
+    }
     let root = cache.join(disc.kind.dir());
     let wanted: Vec<(Entry, &Lift)> = disc
         .entries
@@ -444,9 +451,11 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
         }
     }
     let marker = format!(
-        "imported from {}\nfiles {}\n(from the player's own disc; not for redistribution)\n",
+        "imported from {}\nfiles {}\nversion {}\nsha256 {}\n(from the player's own disc; not for redistribution)\n",
         image.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
-        report.written.len()
+        report.written.len(),
+        ver.name,
+        ver.sha256
     );
     std::fs::write(root.join("IMPORTED.txt"), marker).map_err(|e| e.to_string())?;
     Ok(report)
@@ -488,9 +497,27 @@ fn xbox_lightmaps(disc: &mut Disc, dir_e: &Entry, img_e: &Entry) -> Result<(Vec<
     Ok((bin, txd))
 }
 
-/// Whether `cache` holds a complete import from this kind of disc.
+/// Whether `cache` holds a complete import from an accepted version of this kind of disc
+/// (an older import without its hash, or another version, does not count; the folder is left
+/// as it is).
 pub fn imported(cache: &Path, kind: DiscKind) -> bool {
-    cache.join(kind.dir()).join("IMPORTED.txt").is_file()
+    let Ok(content) = std::fs::read_to_string(cache.join(kind.dir()).join("IMPORTED.txt")) else { return false };
+    content.lines().filter_map(|l| l.strip_prefix("sha256 ")).any(|hex| version::known(kind, hex.trim()).is_some_and(|(_, ok)| ok))
+}
+
+/// Why an import in `cache` doesn't count (another version, or an older import without its
+/// hash), for the player; None when there is none or it is fine.
+pub fn import_problem(cache: &Path, kind: DiscKind) -> Option<String> {
+    let content = std::fs::read_to_string(cache.join(kind.dir()).join("IMPORTED.txt")).ok()?;
+    if imported(cache, kind) {
+        return None;
+    }
+    let console = if kind == DiscKind::Ps2 { "PS2" } else { "Xbox" };
+    let found = match content.lines().find_map(|l| l.strip_prefix("version ")) {
+        Some(v) => v.trim().to_string(),
+        None => format!("an unchecked import ({})", content.lines().find_map(|l| l.strip_prefix("imported from ")).unwrap_or("unknown image").trim()),
+    };
+    Some(format!("the imported {console} disc is {found}; the {console} style needs the {} disc. Import it again from that disc.", version::needed(kind)))
 }
 
 #[cfg(test)]

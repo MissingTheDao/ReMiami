@@ -111,6 +111,7 @@ fn temp(name: &str, data: &[u8]) -> PathBuf {
 
 #[test]
 fn xbox_disc_is_read_detected_and_imported() {
+    crate::version::ACCEPT_ANY.with(|a| a.set(true));
     let iso = temp("xbox", &xbox_image());
     let mut disc = Disc::open(&iso).unwrap();
     assert_eq!(disc.kind, DiscKind::Xbox);
@@ -128,6 +129,7 @@ fn xbox_disc_is_read_detected_and_imported() {
 
 #[test]
 fn ps2_disc_is_read_detected_and_imported() {
+    crate::version::ACCEPT_ANY.with(|a| a.set(true));
     let iso = temp("ps2", &ps2_image());
     let mut disc = Disc::open(&iso).unwrap();
     assert_eq!(disc.kind, DiscKind::Ps2);
@@ -176,7 +178,8 @@ fn vehicle_txds_come_from_the_cars_section() {
 
 #[test]
 fn map_files_keep_their_folders() {
-    let d = |p: &str| map_file_dest(p).map(|x| x.to_string_lossy().into_owned());
+    // ('/' on every platform: Windows joins with '\')
+    let d = |p: &str| map_file_dest(p).map(|x| x.to_string_lossy().replace('\\', "/"));
     assert_eq!(d("DATA/MAPS/BANK/BANK.IPL").as_deref(), Some("maps/maps/bank/bank.ipl"));
     assert_eq!(d("data/maps/bank/bank.col").as_deref(), Some("maps/maps/bank/bank.col"));
     assert_eq!(d("DATA/MAPS/GENERIC.IDE").as_deref(), Some("maps/maps/generic.ide"));
@@ -191,7 +194,7 @@ fn map_files_keep_their_folders() {
 
 #[test]
 fn ps2_audio_keeps_its_folders() {
-    let d = |p: &str| ps2_audio_dest(p).map(|x| x.to_string_lossy().into_owned());
+    let d = |p: &str| ps2_audio_dest(p).map(|x| x.to_string_lossy().replace('\\', "/"));
     assert_eq!(d("AUDIO/MUSIC/FLASH.VB").as_deref(), Some("audio/music/flash.vb"));
     assert_eq!(d("AUDIO/CUTSCENE/COK/COK_4A.VB").as_deref(), Some("audio/cutscene/cok/cok_4a.vb"));
     assert_eq!(d("AUDIO/SFX/SET0.VB"), None);
@@ -202,4 +205,44 @@ fn ps2_audio_keeps_its_folders() {
 fn import_refuses_when_space_is_short() {
     let err = space::check(std::path::Path::new("/x"), 1_600_000_000, Some(2_000_000_000)).unwrap_err();
     assert!(err.contains("not enough disk space") && err.contains("2.67 GB") && err.contains("2.00 GB"), "{err}");
+}
+
+#[test]
+fn unknown_disc_version_is_refused() {
+    // the made-up Xbox disc's default.xbe is no known version: nothing is imported
+    let iso = temp("xbox_refused", &xbox_image());
+    let mut disc = Disc::open(&iso).unwrap();
+    let cache = iso.parent().unwrap().join("cache");
+    let err = import(&mut disc, &iso, &cache).err().expect("refused");
+    assert!(err.contains("Xbox disc (unknown version)") && err.contains("Xbox US (Rev 1)"), "{err}");
+    assert!(!cache.join("xbox").exists());
+    assert!(!imported(&cache, DiscKind::Xbox));
+}
+
+#[test]
+fn import_of_another_version_is_reported() {
+    let dir = std::env::temp_dir().join(format!("revc-import-ver-{}", std::process::id()));
+    let ps2 = dir.join("ps2");
+    std::fs::create_dir_all(&ps2).unwrap();
+    // an import from before the version check (no hash): not counted, named by its image
+    std::fs::write(ps2.join("IMPORTED.txt"), "imported from VC (v3.00).iso
+files 3
+").unwrap();
+    assert!(!imported(&dir, DiscKind::Ps2));
+    let p = import_problem(&dir, DiscKind::Ps2).unwrap();
+    assert!(p.contains("an unchecked import (VC (v3.00).iso)") && p.contains("PS2 US v1.40"), "{p}");
+    // a recorded other version
+    std::fs::write(ps2.join("IMPORTED.txt"), "imported from x.iso
+version PS2 US v3.00
+sha256 e8e2547f2162f7e953c45063031e3b4a84a31ca0d32e4e7bc4e4e35483cd16f8
+").unwrap();
+    assert!(!imported(&dir, DiscKind::Ps2));
+    assert!(import_problem(&dir, DiscKind::Ps2).unwrap().contains("is PS2 US v3.00;"));
+    // the accepted version
+    std::fs::write(ps2.join("IMPORTED.txt"), "version PS2 US v1.40
+sha256 39f5abacc6aa77c498cd0a23c38158b78b87d303995734105ef8cbc7b0297b23
+").unwrap();
+    assert!(imported(&dir, DiscKind::Ps2));
+    assert!(import_problem(&dir, DiscKind::Ps2).is_none());
+    let _ = std::fs::remove_dir_all(&dir);
 }

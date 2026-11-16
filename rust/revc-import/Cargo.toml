@@ -7,6 +7,8 @@ publish.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+# SHA-256 of a disc's boot executable: which version it is (version.rs; DM 2026-11-16)
+sha2 = "0.10"
 # statvfs for the free-space check before an import (space.rs; unix only)
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

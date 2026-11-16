@@ -3705,7 +3705,7 @@
  				if (CPad::GetPad(0)->GetRightMouseJustDown() || CPad::GetPad(0)->GetCrossJustDown()) {
  					if (mapCrosshair.y > m_fMapCenterY - m_fMapSize && mapCrosshair.y < m_fMapCenterY + m_fMapSize &&
  						mapCrosshair.x > m_fMapCenterX - m_fMapSize && mapCrosshair.x < m_fMapCenterX + m_fMapSize) {
-@@ -3597,11 +5248,45 @@
+@@ -3597,12 +5248,49 @@
  						float x = ((mapCrosshair.x - diffX) / (m_fMapSize * 2)) * (WORLD_SIZE_X / MENU_MAP_WIDTH_SCALE) - (WORLD_SIZE_X / 2 + MENU_MAP_LEFT_OFFSET * MENU_MAP_LENGTH_UNIT);
  						float y = (WORLD_SIZE_Y / 2 - MENU_MAP_TOP_OFFSET * MENU_MAP_LENGTH_UNIT) - ((mapCrosshair.y - diffY) / (m_fMapSize * 2)) * (WORLD_SIZE_Y / MENU_MAP_HEIGHT_SCALE);
  						CRadar::ToggleTargetMarker(x, y);
@@ -3715,6 +3715,7 @@
  				}
  			}
  
+-			if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
 +			// revc: the PS2 zooms while R1 (in) or R2 (out) is held: the map's half size +-15 per 30 Hz
 +			// menu update, linear, 162 to 1000; zooming
 +			// in keeps the map's centre, zooming out first pulls the centre 1/n of the way back to its
@@ -3731,6 +3732,8 @@
 +			const bool zoomIn = CPad::GetPad(0)->GetRightShoulder1() || gRevcTestMapZoom > 0;
 +			const bool ps2Zoom = PS2_SKIN_ON && (zoomIn || CPad::GetPad(0)->GetRightShoulder2() || gRevcTestMapZoom < 0) &&
 +				!CPad::GetPad(0)->GetMouseWheelUp() && !CPad::GetPad(0)->GetMouseWheelDown();
++			const int16 rsy = CPad::GetPad(0)->GetRightStickY();
++			const bool xboxZoom = XBOX_SKIN_ON && (rsy < -32 || rsy > 32);
 +			if (ps2Zoom) {
 +				const float base = MENU_Y(162.0f), step = MENU_Y(15.0f), top = MENU_Y(1000.0f);
 +				const float cx0 = MENU_X_LEFT_ALIGNED(320.0f), cy0 = MENU_Y(195.0f);
@@ -3748,11 +3751,13 @@
 +						m_fMapCenterY = Clamp(m_fMapCenterY, cy0 - (m_fMapSize - base), cy0 + (m_fMapSize - base));
 +					}
 +				}
-+			} else
- 			if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
++			} else if (xboxZoom) {
++				for (int i = 0; i < zoomSteps; i++) ZOOM(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, rsy < 0);
++			} else if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
  				if (CPad::GetPad(0)->GetMouseWheelDown() && m_fMapSize > MENU_X(MAP_SIZE_TO_ALLOW_X_MOVE))
  					ZOOM(mapCrosshair.x, mapCrosshair.y, false);
-@@ -3715,11 +5400,11 @@
+ 				else
+@@ -3715,11 +5403,11 @@
  			break;
  		}
  		case MENUPAGE_SOUND_SETTINGS:
@@ -3766,7 +3771,7 @@
  					m_nHoverOption = HOVEROPTION_NEXT_RADIO;
  			}
  			break;
-@@ -3882,6 +5567,7 @@
+@@ -3882,6 +5570,7 @@
  CMenuManager::PrintRadioSelector(void)
  {
  	static uint32 lastRadioChange = 0;
@@ -3774,7 +3779,7 @@
  
  	CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(418.f), MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT),
  		MENU_X_LEFT_ALIGNED(228.f), MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT),
-@@ -3994,7 +5680,9 @@
+@@ -3994,7 +5683,9 @@
  
  	// Middle one(third) is colored differently depending on if it's in transition.
  	// If not in transition then this icon indicates selected radio, and should be on top of all icons. thus drawn last
@@ -3785,7 +3790,7 @@
  		m_aFrontEndSprites[third + MENUSPRITE_WILDSTYLE].Draw(m_LeftMostRadioX + MENU_X(MENURADIO_ICON_SIZE * 2), MENU_Y(MENURADIO_ICON_Y), MENU_X(MENURADIO_ICON_SIZE), MENU_Y(MENURADIO_ICON_SIZE),
  			CRGBA(INACTIVE_RADIO_COLOR.r, INACTIVE_RADIO_COLOR.g, INACTIVE_RADIO_COLOR.b, FadeIn(INACTIVE_RADIO_COLOR.a)));		
  	} else {
-@@ -4005,13 +5693,15 @@
+@@ -4005,13 +5696,15 @@
  
  	static bool radioChangeRequested = false;
  	static uint32 lastScrollCheck = 0;
@@ -3803,7 +3808,7 @@
  				radioChangeRequested = true;
  			}
  		}
-@@ -4020,7 +5710,7 @@
+@@ -4020,7 +5713,7 @@
  				m_LeftMostRadioX += MENU_X(6.f);
  			} else {
  				m_ScrollRadioBy = 0;
@@ -3812,7 +3817,7 @@
  				radioChangeRequested = true;
  			}
  		}
-@@ -4100,7 +5790,7 @@
+@@ -4100,7 +5793,7 @@
  	}
  
  	if (CPad::GetPad(0)->GetTabJustDown()) {
@@ -3821,7 +3826,7 @@
  		m_bShowMouse = false;
  		switch (m_nCurrExLayer) {
  		case HOVEROPTION_BACK:
-@@ -4136,7 +5826,7 @@
+@@ -4136,7 +5829,7 @@
  		if (!m_bPressedUpOnList) {
  			m_bPressedUpOnList = true;
  			lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
@@ -3830,7 +3835,7 @@
  			ScrollUpListByOne();
  		}
  	} else {
-@@ -4158,7 +5848,7 @@
+@@ -4158,7 +5851,7 @@
  		if (!m_bPressedDownOnList) {
  			m_bPressedDownOnList = true;
  			lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
@@ -3839,7 +3844,7 @@
  			ScrollDownListByOne();
  		}
  	} else {
-@@ -4174,7 +5864,7 @@
+@@ -4174,7 +5867,7 @@
  				m_bPressedPgUpOnList = true;
  				lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
  				m_bShowMouse = false;
@@ -3848,7 +3853,7 @@
  				PageUpList(false);
  			}
  		}
-@@ -4186,14 +5876,14 @@
+@@ -4186,14 +5879,14 @@
  				m_bPressedPgDnOnList = true;
  				lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
  				m_bShowMouse = false;
@@ -3865,7 +3870,7 @@
  			if (m_nTotalListRow >= MAX_VISIBLE_OPTION_ON_SCREEN) {
  				m_nFirstVisibleRowOnList = 0;
  			}
-@@ -4203,7 +5893,7 @@
+@@ -4203,7 +5896,7 @@
  		if (CPad::GetPad(0)->GetEnd()) {
  			m_nCurrExLayer = HOVEROPTION_LIST;
  			m_bShowMouse = false;
@@ -3874,7 +3879,7 @@
  			if (m_nTotalListRow >= MAX_VISIBLE_OPTION_ON_SCREEN) {
  				m_nFirstVisibleRowOnList = m_nTotalListRow - MAX_VISIBLE_OPTION_ON_SCREEN;
  			}
-@@ -4297,6 +5987,8 @@
+@@ -4297,6 +5990,8 @@
  
  	if (!m_AllowNavigation && m_firstStartCounter == 255)
  		m_AllowNavigation = true;
@@ -3883,7 +3888,7 @@
  	if (!m_bShowMouse && m_nCurrScreen != MENUPAGE_MAP && (m_nMouseOldPosX != m_nMousePosX || m_nMouseOldPosY != m_nMousePosY)) {
  		m_bShowMouse = true;
  	}
-@@ -4351,7 +6043,7 @@
+@@ -4351,7 +6046,7 @@
  				++m_nOptionMouseHovering;
  			}
  			m_nOptionHighlightTransitionBlend = 0;
@@ -3892,7 +3897,7 @@
  		}
  	}
  
-@@ -4458,16 +6150,21 @@
+@@ -4458,16 +6153,21 @@
  			|| CPad::GetPad(0)->GetAnaloguePadLeftJustUp() || CPad::GetPad(0)->GetAnaloguePadRightJustUp()
  			|| CPad::GetPad(0)->GetMouseWheelUpJustDown() || CPad::GetPad(0)->GetMouseWheelDownJustDown()) {
  			int option = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action;
@@ -3918,7 +3923,7 @@
  
  		}
  		if (CPad::GetPad(0)->GetBackJustDown() || CPad::GetPad(0)->GetEscapeJustDown()) {
-@@ -4547,7 +6244,8 @@
+@@ -4547,7 +6247,8 @@
  		}
  	}
  	if (changeValueBy != 0) {
@@ -3928,7 +3933,7 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_NOTHING
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_LABEL
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_YES
-@@ -4558,9 +6256,22 @@
+@@ -4558,9 +6259,22 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_RESTOREDEF
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_DRAWDIST
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_MOUSESENS
@@ -3954,7 +3959,7 @@
  	}
  	ProcessUserInput(goDown, goUp, optionSelected, goBack, changeValueBy);
  #ifdef CUSTOM_FRONTEND_OPTIONS
-@@ -4661,7 +6372,7 @@
+@@ -4661,7 +6375,7 @@
  	int oldOption = m_nCurrOption;
  	if (goDown) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -3963,7 +3968,7 @@
  
  		m_nCurrOption++;
  		if (m_nCurrOption == NUM_MENUROWS || (aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_NOTHING)) {
-@@ -4672,7 +6383,7 @@
+@@ -4672,7 +6386,7 @@
  	}
  	if (goUp) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -3972,7 +3977,7 @@
  
  		if (m_nCurrOption == (aScreens[m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL)) {
  			while (m_nCurrOption != NUM_MENUROWS - 1
-@@ -4957,7 +6668,7 @@
+@@ -4957,7 +6671,7 @@
  					ControlsManager.MakeControllerActionsBlank();
  					ControlsManager.InitDefaultControlConfiguration();
  					ControlsManager.InitDefaultControlConfigMouse(MousePointerStateHelper.GetMouseSetUp());
@@ -3981,7 +3986,7 @@
  					if (AllValidWinJoys.m_aJoys[JOYSTICK1].m_bInitialised) {
  						DIDEVCAPS devCaps;
  						devCaps.dwSize = sizeof(DIDEVCAPS);
-@@ -5042,21 +6753,21 @@
+@@ -5042,21 +6756,21 @@
  			int saveSlot = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_SaveSlot;
  			if (saveSlot >= SAVESLOT_1 && saveSlot <= SAVESLOT_8 && Slots[m_nCurrOption] != SLOT_OK)
  #endif
@@ -4007,7 +4012,7 @@
  			m_ShowEmptyBindingError = true;
  		}
  	}
-@@ -5342,7 +7053,6 @@
+@@ -5342,7 +7056,6 @@
  		return SCREEN_STRETCH_Y(y);
  }
  
@@ -4015,7 +4020,7 @@
  void
  CMenuManager::CloseDialog(void)
  {
-@@ -5438,6 +7148,30 @@
+@@ -5438,6 +7151,30 @@
  
  	DefinedState();
  
@@ -4046,7 +4051,7 @@
  	CSprite2d::DrawRect(CRect(0, SCREEN_HEIGHT, SCREEN_WIDTH, 0), CRGBA(0, 0, 0, 160));
  
  	// Ofc this is not hardcoded like that on Xbox, it should be a texture
-@@ -5463,7 +7197,6 @@
+@@ -5463,7 +7200,6 @@
  	CFont::PrintString(x, y - SCREEN_SCALE_Y(numOfLines / 2.f), m_pDialogText);
  	CFont::DrawFonts();
  }
@@ -4054,7 +4059,7 @@
  
  void
  CMenuManager::ProcessFileActions()
-@@ -5488,13 +7221,11 @@
+@@ -5488,13 +7224,11 @@
  				CTheScripts::ScriptToLoad = 0;
  #endif
  
@@ -4072,7 +4077,7 @@
  				DoSettingsBeforeStartingAGame();
  				m_bWantToLoad = true;
  			} else
-@@ -5527,7 +7258,7 @@
+@@ -5527,7 +7261,7 @@
  		}
  		case MENUPAGE_SAVING_IN_PROGRESS:
  		{
@@ -4081,7 +4086,7 @@
  			if (m_bDialogOpen && DialogTextCmp("FESZ_WR")) {
  				uint32 startTime = CTimer::GetTimeInMillisecondsPauseMode();
  				int8 SaveSlot = PcSaveHelper.SaveSlot(m_nCurrSaveSlot);
-@@ -5561,7 +7292,7 @@
+@@ -5561,7 +7295,7 @@
  				SetDialogText("FESZ_WR");
  				ToggleDialog(true);
  			}
@@ -4090,7 +4095,7 @@
  			static bool waitedForScreen = false;
  
  			if (waitedForScreen) {
-@@ -5577,7 +7308,7 @@
+@@ -5577,7 +7311,7 @@
  				waitedForScreen = false;
  			} else if (m_nMenuFadeAlpha >= 255)
  				waitedForScreen = true;
@@ -4099,7 +4104,7 @@
  			break;
  		}
  	}
-@@ -5590,7 +7321,8 @@
+@@ -5590,7 +7324,8 @@
  
  		// Reminder: You need REGISTER_START_BUTTON defined to make it work.
  		if ((CPad::GetPad(0)->GetStartJustDown() || CPad::GetPad(0)->GetEscapeJustDown())
@@ -4109,7 +4114,7 @@
  			|| m_bShutDownFrontEndRequested || m_bStartUpFrontEndRequested
  #ifdef REGISTER_START_BUTTON
  			|| CPad::GetPad(0)->GetStartJustDown() && !m_bGameNotLoaded
-@@ -5598,9 +7330,7 @@
+@@ -5598,9 +7333,7 @@
  			) {
  
  			if (m_nCurrScreen != MENUPAGE_LOADING_IN_PROGRESS
@@ -4120,7 +4125,7 @@
  				) {
  				DoRWStuffStartOfFrame(0, 0, 0, 0, 0, 0, 255);
  				DoRWStuffEndOfFrame();
-@@ -5608,6 +7338,8 @@
+@@ -5608,6 +7341,8 @@
  				DoRWStuffEndOfFrame();
  			}
  
@@ -4129,7 +4134,7 @@
  			if (m_bShutDownFrontEndRequested)
  				m_bMenuActive = false;
  			else if (m_bStartUpFrontEndRequested)
-@@ -5626,6 +7358,11 @@
+@@ -5626,6 +7361,11 @@
  				CPad::StopPadsShaking();
  #endif
  			} else {
@@ -4141,7 +4146,7 @@
  #ifdef EXTENDED_COLOURFILTER
  				// we always expect CPostFX to be open
  				CMBlur::BlurOn = true;
-@@ -5708,22 +7445,22 @@
+@@ -5708,22 +7448,22 @@
  	m_bStartUpFrontEndRequested = false;
  	m_bShutDownFrontEndRequested = false;
  
@@ -4168,7 +4173,7 @@
  	DMAudio.ChangeMusicMode(MUSICMODE_GAME);
  	if (m_bSpritesLoaded) {
  		printf("REMOVE frontend\n");
-@@ -5827,56 +7564,62 @@
+@@ -5827,56 +7567,62 @@
  
  	// Because m_fMapSize is half of the map length(hence * 2), and map consists of 3x3 tiles(hence / 3).
  	float halfTile = m_fMapSize * 2.f / 3.f / 2.f;
@@ -4258,7 +4263,7 @@
  		CFont::SetWrapx(MENU_X_RIGHT_ALIGNED(40.0f));
  		CFont::SetRightJustifyWrap(MENU_X_LEFT_ALIGNED(84.0f));
  		CFont::SetBackGroundOnlyTextOff();
-@@ -5885,31 +7628,31 @@
+@@ -5885,31 +7631,31 @@
  		CFont::SetDropColor(CRGBA(0, 0, 0, FadeIn(255)));
  		CFont::SetCentreOn();
  		CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
@@ -4298,7 +4303,7 @@
  		int x = MENU_X_LEFT_ALIGNED(160.0f);
  
  		for (int16 i = 0; i < CRadar::MapLegendCounter; i++) {
-@@ -5917,9 +7660,9 @@
+@@ -5917,9 +7663,9 @@
  
  			if (i == secondColumnStart) {
  				x = MENU_X_LEFT_ALIGNED(350.0f);
@@ -4310,7 +4315,7 @@
  			}
  		}
  	}
-@@ -5933,12 +7676,15 @@
+@@ -5933,12 +7679,15 @@
  		mapCrosshair.y = m_nMousePosY;
  	}
  
@@ -4326,7 +4331,7 @@
  
  #endif
  	m_bMenuMapActive = false;
-@@ -5957,10 +7703,10 @@
+@@ -5957,10 +7706,10 @@
  	m_PrefsRadioStation += increaseBy;
  	m_ScrollRadioBy = increaseBy;
  	if (m_ScrollRadioBy == 1) {
@@ -5069,7 +5074,7 @@
  	#define POSTFX_SELECTORS
  #endif	
  
-@@ -107,31 +132,354 @@
+@@ -107,31 +132,415 @@
  	#define SELECT_CONTROLLER_TYPE
  #endif
  
@@ -5215,6 +5220,19 @@
 +	{ CPostFX::POSTFX_NORMAL, true, true, 1.0f, 2, true, CONTROL_CLASSIC, true, true, "RVC_VS2" },
 +	{ CPostFX::POSTFX_MOBILE, false, false, 0.0f, -1, false, -1, true, false, "RVC_VS3" },
 +};
++// revc (user 2026-11-16: "choosing a visual style should set every option to that style's
++// default"): the options a style sets besides its look. -1 = left as it is (the consoles' values
++// are being researched; Mobile has no console to copy). Machine and personal choices (resolution,
++// vsync, antialiasing, frame limiter, language, bindings, HUD area, screen position, wide screen,
++// pad layout, radio station) are never touched.
++struct StyleDefaults { int16 brightness; int8 subtitles; int8 sfxVolume; int8 musicVolume; int8 radarMode; int8 legends; int8 vibration; int8 invertPad; };
++static const StyleDefaults styleDefaults[] = {
++	{ 256, 0, 49, 49, 0, 1, 0, 0 },	// PC (the PC release's defaults, CMenuManager::CMenuManager)
++	{ -1, -1, -1, -1, -1, -1, -1, -1 },	// PS2 (US v1.40: research pending)
++	{ -1, -1, -1, -1, -1, -1, -1, -1 },	// Xbox (research pending)
++	{ -1, -1, -1, -1, -1, -1, -1, -1 },	// Mobile
++};
++static_assert(ARRAY_SIZE(styleDefaults) == ARRAY_SIZE(visualStyles), "one row per style");
 +// Turning vibration on gives a short rumble, as on the consoles (the user noticed it on real
 +// hardware): the Xbox's StartShake(150, 150) that just runs out (XBE EVENT_DoChangeVibration,
 +// research), the original PC/GAMEPAD_MENU code's StartShake(350, 150) stopped after 500 ms in the
@@ -5316,6 +5334,53 @@
 +#endif
 +}
 +
++#ifdef PED_CAR_DENSITY_SLIDERS
++void PedDensityChange(float before, float after);
++void CarDensityChange(float before, float after);
++#endif
++
++static void
++ApplyStyleDefaults(int i)
++{
++	// the settings every style shares
++#ifdef PED_CAR_DENSITY_SLIDERS
++	// (the game's own density, 0.6 on every platform; the console styles' caps follow, IniFile.h)
++	PedDensityChange(CIniFile::PedNumberMultiplier, 0.6f);
++	CarDensityChange(CIniFile::CarNumberMultiplier, 0.6f);
++	CIniFile::PedNumberMultiplier = CIniFile::CarNumberMultiplier = 0.6f;
++#endif
++	FrontEndMenuManager.m_PrefsCutsceneBorders = true;
++	TheCamera.bFreeCam = false;
++	FrontEndMenuManager.m_PrefsMP3BoostVolume = 0;
++	DMAudio.SetMP3BoostVolume(0);
++	FrontEndMenuManager.m_PrefsDMA = true;
++	DMAudio.SetDynamicAcousticModelingStatus(true);
++	gButtonPromptsOverride = 0;
++
++	// the style's own values (-1: left as it is)
++	const StyleDefaults &d = styleDefaults[i];
++	if (d.brightness >= 0)
++		FrontEndMenuManager.m_PrefsBrightness = d.brightness;
++	if (d.subtitles >= 0)
++		FrontEndMenuManager.m_PrefsShowSubtitles = d.subtitles != 0;
++	if (d.sfxVolume >= 0) {
++		FrontEndMenuManager.m_PrefsSfxVolume = d.sfxVolume;
++		DMAudio.SetEffectsMasterVolume(d.sfxVolume);
++	}
++	if (d.musicVolume >= 0) {
++		FrontEndMenuManager.m_PrefsMusicVolume = d.musicVolume;
++		DMAudio.SetMusicMasterVolume(d.musicVolume);
++	}
++	if (d.radarMode >= 0)
++		FrontEndMenuManager.m_PrefsRadarMode = d.radarMode;
++	if (d.legends >= 0)
++		FrontEndMenuManager.m_PrefsShowLegends = d.legends != 0;
++	if (d.vibration >= 0)
++		FrontEndMenuManager.m_PrefsUseVibration = d.vibration != 0;
++	if (d.invertPad >= 0)
++		CPad::bInvertLook4Pad = d.invertPad != 0;
++}
++
 +// revc (user 2026-11-12): the PS2 and Xbox styles only with that console's disc imported (Options >
 +// CONSOLE DISCS): without it their menus, fonts and textures would fall back to a half-PC mix.
 +// Test runs (REVC_TEST) keep any style.
@@ -5389,6 +5454,7 @@
 +	for (int i = 0; i < n && !UiStyleAvailable(visualStyles[next].ui); i++)	// (skip the consoles without a disc)
 +		next = action == FEOPTION_ACTION_LEFT ? (next + n - 1) % n : (next + 1) % n;
 +	ApplyVisualStyle(next);
++	ApplyStyleDefaults(next);	// (revc: and every other option to the style's default)
 +	FrontEndMenuManager.SaveSettings();
 +	MapStyleRestartNote();
 +}
@@ -5435,7 +5501,7 @@
  		FrontEndMenuManager.m_PrefsVsyncDisp = true;
  		#ifdef LEGACY_MENU_OPTIONS
  			FrontEndMenuManager.m_PrefsVsync = true;
-@@ -306,7 +654,7 @@
+@@ -306,7 +715,7 @@
  
  wchar* DetectJoystickDraw(bool* disabled, bool userHovering) {
  
@@ -5444,7 +5510,7 @@
  	int numButtons;
  	int found = -1;
  	const char *joyname;
-@@ -420,13 +768,11 @@
+@@ -420,13 +829,11 @@
  		MENUACTION_MUSICVOLUME,		"FEA_MUS", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 40, 76, MENUALIGN_LEFT,
  		MENUACTION_SFXVOLUME,		"FEA_SFX", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		MENUACTION_MP3VOLUMEBOOST,	"FEA_MPB", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
@@ -5461,7 +5527,7 @@
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 367, MENUALIGN_CENTER,
  #else
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 327, MENUALIGN_CENTER,
-@@ -441,9 +787,8 @@
+@@ -441,9 +848,8 @@
  		MENUACTION_DRAWDIST,	"FEM_LOD", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		DENSITY_SLIDERS
  #ifdef LEGACY_MENU_OPTIONS
@@ -5472,7 +5538,7 @@
  #if defined LEGACY_MENU_OPTIONS && !defined EXTENDED_COLOURFILTER
  		MENUACTION_TRAILS,		"FED_TRA", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  #endif
-@@ -455,7 +800,6 @@
+@@ -455,7 +861,6 @@
  		MENUACTION_SCREENRES,	"FED_RES", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  		MULTISAMPLING_SELECTOR
@@ -5480,7 +5546,7 @@
  		DUALPASS_SELECTOR
  		CUTSCENE_BORDERS_TOGGLE
  		FREE_CAM_TOGGLE
-@@ -492,7 +836,7 @@
+@@ -492,7 +897,7 @@
  
  	// MENUPAGE_MAP = 6
  	{ "FEH_MAP", MENUPAGE_NONE, nil, nil,
@@ -5489,7 +5555,7 @@
  	},
  
  	// MENUPAGE_NEW_GAME_RELOAD = 7
-@@ -640,6 +984,8 @@
+@@ -640,6 +1045,8 @@
  #ifdef DETECT_JOYSTICK_MENU
  		MENUACTION_CHANGEMENU,	"FEC_JOD", {nil, SAVESLOT_NONE, MENUPAGE_DETECT_JOYSTICK}, 0, 0, MENUALIGN_CENTER,
  #endif
@@ -5498,7 +5564,7 @@
  		MENUACTION_CHANGEMENU,	"FEC_MOU", {nil, SAVESLOT_NONE, MENUPAGE_MOUSE_CONTROLS}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_RESTOREDEF,	"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_CONTROLLER_PC}, 320, 0, MENUALIGN_CENTER,
  		MENUACTION_GOBACK,		"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 320, 0, MENUALIGN_CENTER,
-@@ -659,6 +1005,7 @@
+@@ -659,6 +1066,7 @@
  #endif
  		 MENUACTION_CHANGEMENU,		"FEO_LAN", {nil, SAVESLOT_NONE, MENUPAGE_LANGUAGE_SETTINGS}, 0, 0, MENUALIGN_CENTER,
  		 MENUACTION_PLAYERSETUP,	"FET_PS", {nil, SAVESLOT_NONE, MENUPAGE_SKIN_SELECT}, 0, 0, MENUALIGN_CENTER,
@@ -5506,7 +5572,7 @@
  		 MENUACTION_GOBACK,			"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -673,6 +1020,7 @@
+@@ -673,6 +1081,7 @@
  	{ "FEM_MM", MENUPAGE_DISABLED, nil, nil,
  		  MENUACTION_CHANGEMENU,	"FEP_STG",	{nil, SAVESLOT_NONE,	MENUPAGE_NEW_GAME}, 320, 170, MENUALIGN_CENTER,
  		  MENUACTION_CHANGEMENU,	"FEP_OPT",	{nil, SAVESLOT_NONE,	MENUPAGE_OPTIONS}, 0, 0, MENUALIGN_CENTER,
@@ -5514,7 +5580,7 @@
  		  MENUACTION_CHANGEMENU,	"FEP_QUI",	{nil, SAVESLOT_NONE,	MENUPAGE_EXIT}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -699,7 +1047,7 @@
+@@ -699,7 +1108,7 @@
  		MENUACTION_CHANGEMENU,	"FEH_MAP",	{nil, SAVESLOT_NONE, MENUPAGE_MAP}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_CHANGEMENU,	"FEP_STA",	{nil, SAVESLOT_NONE, MENUPAGE_STATS}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_CHANGEMENU,	"FEH_BRI",	{nil, SAVESLOT_NONE, MENUPAGE_BRIEFS}, 0, 0, MENUALIGN_CENTER,
@@ -5523,7 +5589,7 @@
  		MENUACTION_CHANGEMENU,	"FEP_QUI",	{nil, SAVESLOT_NONE, MENUPAGE_EXIT}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -783,13 +1131,12 @@
+@@ -783,13 +1192,12 @@
  		MENUACTION_WIDESCREEN,	"FED_WIS", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  #ifdef LEGACY_MENU_OPTIONS
@@ -5539,7 +5605,7 @@
  		POSTFX_SELECTORS
  #elif defined LEGACY_MENU_OPTIONS
  		MENUACTION_TRAILS,		"FED_TRA", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
-@@ -809,6 +1156,46 @@
+@@ -809,6 +1217,46 @@
  	},
  #endif
  
@@ -5586,7 +5652,7 @@
  		
  #ifdef MISSION_REPLAY
  	// MENUPAGE_MISSION_RETRY = 57 on mobile
-@@ -826,3 +1213,284 @@
+@@ -826,3 +1274,272 @@
  
  #endif
  #endif
@@ -5648,30 +5714,18 @@
 +	FrontEndMenuManager.SaveSettings();
 +}
 +
-+// "reset to console defaults": revc's extra settings back to what the console style had (the
-+// UI style's visual-style preset: filter, alpha test, draw distance, trails, camera; densities
-+// 1.0, cutscene borders on, free cam off, no MP3 boost, dynamic acoustics on, automatic button
-+// prompts). The machine's own choices (resolution, vsync, antialiasing) and the language stay.
++// "reset to style defaults": the current visual style's look and option defaults again
++// (ApplyStyleDefaults; Custom: the UI style's preset), in every style.
 +static void
 +ConsoleDefaultsPress(int8 action)
 +{
 +	if (action != FEOPTION_ACTION_SELECT)
 +		return;
-+	if (gUiStyle == 1 || gUiStyle == 2)
-+		ApplyVisualStyle(gUiStyle);
-+#ifdef PED_CAR_DENSITY_SLIDERS
-+	// (the game's own density, 0.6 on every platform; the console styles' caps follow, IniFile.h)
-+	PedDensityChange(CIniFile::PedNumberMultiplier, 0.6f);
-+	CarDensityChange(CIniFile::CarNumberMultiplier, 0.6f);
-+	CIniFile::PedNumberMultiplier = CIniFile::CarNumberMultiplier = 0.6f;
-+#endif
-+	FrontEndMenuManager.m_PrefsCutsceneBorders = true;
-+	TheCamera.bFreeCam = false;
-+	FrontEndMenuManager.m_PrefsMP3BoostVolume = 0;
-+	DMAudio.SetMP3BoostVolume(0);
-+	FrontEndMenuManager.m_PrefsDMA = true;
-+	DMAudio.SetDynamicAcousticModelingStatus(true);
-+	gButtonPromptsOverride = 0;
++	int i = CurrentVisualStyle();
++	if (i < 0)
++		i = gUiStyle == 1 || gUiStyle == 2 ? gUiStyle : 0;	// (Custom: the UI style's preset)
++	ApplyVisualStyle(i);
++	ApplyStyleDefaults(i);
 +	FrontEndMenuManager.SaveSettings();
 +}
 +
