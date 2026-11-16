@@ -520,6 +520,10 @@ const MOTION_ROUTES: &[MotionRoute] = &[
     ("xbox_subtab_walking_driving", "start left left left a down a", "right", 60),
     ("xbox_row_controls_slow", "start left left left a down down", "down", 60),	// invert -> vibration
     ("xbox_option_toggle", "start left a down down", "right", 60),	// Display: subtitles on -> off
+    ("ps2_map_zoom", "start cross", "+r1:60", 60),	// (map checks: zoom and scroll reach the map page)
+    ("ps2_map_scroll", "start cross", "+right:60", 60),
+    ("xbox_map_zoom", "start a", "+black:60", 60),
+    ("xbox_map_scroll", "start a", "+right:60", 60),
 ];
 
 /// The pad script for a routed motion (MOTION_ROUTES).
