@@ -79,7 +79,10 @@ cleanup() { (( KEEP )) && echo "kept $T" || rm -rf "$TMP"; }
 trap cleanup EXIT
 
 failed=0
+# Stop between scenarios: while $REVC_STOP_FILE (default rust/target/STOP) exists, no further scenario starts.
+STOP=${REVC_STOP_FILE:-$ROOT/rust/target/STOP}
 for s in "${SCENARIOS[@]}"; do
+  if [[ -e $STOP ]]; then echo "== $s: not started ($STOP exists; scenarios after it skipped)"; failed=1; break; fi
   log=$OUT/$s.log
   ini=$ROOT/tests/config/$s.ini; [[ -f "$ini" ]] || ini=$ROOT/tests/config/reVC.ini
   [[ -n "${REVC_TEST_CONFIG:-}" ]] && ini=$REVC_TEST_CONFIG	# another config (menu shots per style)

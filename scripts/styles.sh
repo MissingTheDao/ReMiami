@@ -15,7 +15,8 @@
 #   PS2 and Xbox styles, besides: menuwalk (no menu path reaches a PC menu page but the listed ones).
 #   PC style, besides: formats and spots with the imports present and REVC_TEST_IMPORT_GUARD=1
 #   (the PC style must read nothing of them but the allowlist).
-#   REVC_TEST_BIN, REVC_GAME_DIR as for scripts/test.sh. Ends with a table; exit 1 if any failed.
+#   REVC_TEST_BIN, REVC_GAME_DIR as for scripts/test.sh. `touch rust/target/STOP` (REVC_STOP_FILE) stops it
+#   after the running check (test.sh honours the same file between scenarios). Ends with a table; exit 1 if any failed.
 set -uo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BLESS=() STYLES=()
@@ -32,8 +33,12 @@ REFS=${REVC_STYLE_REFS:-$ROOT/rust/target/style-refs}
 OUT=$ROOT/rust/target/test-output
 CFG=$(mktemp -d); trap 'rm -rf "$CFG"' EXIT
 declare -A RESULT
+# Stop between checks: while the file $REVC_STOP_FILE (default rust/target/STOP) exists, no further
+# check starts; the running one finishes and the script ends (the GPU is free for someone else).
+STOP=${REVC_STOP_FILE:-$ROOT/rust/target/STOP}
 run() { # name, then env assignments and scenarios for test.sh
   local name=$1; shift
+  if [[ -e $STOP ]]; then RESULT[$name]=STOPPED; echo "  [$name] not started ($STOP exists)"; return; fi
   if env "$@" "$ROOT/scripts/test.sh" "${BLESS[@]}" "${SCEN[@]}" > "$CFG/$name.out" 2>&1; then RESULT[$name]=PASS; else RESULT[$name]=FAIL; fi
   grep -E "^== |image diff" "$CFG/$name.out" | sed "s/^/  [$name] /"
 }
@@ -79,6 +84,6 @@ done
 echo; echo "| check | result |"; echo "|---|---|"
 failed=0
 for k in $(printf '%s\n' "${!RESULT[@]}" | sort); do
-  echo "| $k | ${RESULT[$k]} |"; [[ ${RESULT[$k]} == FAIL ]] && failed=1
+  echo "| $k | ${RESULT[$k]} |"; [[ ${RESULT[$k]} == FAIL || ${RESULT[$k]} == STOPPED ]] && failed=1
 done
 exit $failed
