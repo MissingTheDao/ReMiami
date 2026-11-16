@@ -5138,7 +5138,7 @@
  #else
  	#define DUALPASS_SELECTOR 
  #endif
-@@ -88,10 +95,28 @@
+@@ -88,10 +95,32 @@
  #endif
  
  #ifdef EXTENDED_COLOURFILTER
@@ -5156,7 +5156,10 @@
 +	void UiStyleAfterChange(int8 before, int8 after);
 +	void MapStyleRestartNote(void);
 +	CCFOSelect *uiStyleSelect;
-+	#define VISUAL_STYLE_SELECTOR MENUACTION_CFO_DYNAMIC, "RVC_VST", { new CCFODynamic(nil, nil, nil, VisualStyleDraw, VisualStyleButtonPress) }, 0, 0, MENUALIGN_LEFT, \
++	// (revc: the UI choices first, then the visual style with the look options it sets right below
++	// it, on the Graphics page: changing one of them by hand shows the style as Custom)
++	#define VISUAL_STYLE_SELECTOR MENUACTION_CFO_DYNAMIC, "RVC_VST", { new CCFODynamic(nil, nil, nil, VisualStyleDraw, VisualStyleButtonPress) }, 0, 0, MENUALIGN_LEFT,
++	#define UI_STYLE_SELECTORS \
 +		MENUACTION_CFO_SELECT, "RVC_UIS", { uiStyleSelect = new CCFOSelect(&gUiStyle, "Graphics", "UiStyle", uiStyleOpts, ARRAY_SIZE(uiStyleOpts), false, UiStyleAfterChange) }, 0, 0, MENUALIGN_LEFT, \
 +		MENUACTION_CFO_SELECT, "RVC_HUA", { new CCFOSelect(&gConsoleHudArea, "Graphics", "HudArea", hudAreaOpts, ARRAY_SIZE(hudAreaOpts), false) }, 0, 0, MENUALIGN_LEFT,
  	#define POSTFX_SELECTORS \
@@ -5164,10 +5167,11 @@
  		MENUACTION_CFO_SELECT, "FED_MBL", { new CCFOSelect((int8*)&CPostFX::MotionBlurOn, "Graphics", "MotionBlur", off_on, 2, false) }, 0, 0, MENUALIGN_LEFT,
  #else
 +	#define VISUAL_STYLE_SELECTOR
++	#define UI_STYLE_SELECTORS
  	#define POSTFX_SELECTORS
  #endif	
  
-@@ -107,31 +132,419 @@
+@@ -107,31 +136,419 @@
  	#define SELECT_CONTROLLER_TYPE
  #endif
  
@@ -5598,7 +5602,7 @@
  		FrontEndMenuManager.m_PrefsVsyncDisp = true;
  		#ifdef LEGACY_MENU_OPTIONS
  			FrontEndMenuManager.m_PrefsVsync = true;
-@@ -306,7 +719,7 @@
+@@ -306,7 +723,7 @@
  
  wchar* DetectJoystickDraw(bool* disabled, bool userHovering) {
  
@@ -5607,7 +5611,7 @@
  	int numButtons;
  	int found = -1;
  	const char *joyname;
-@@ -420,13 +833,11 @@
+@@ -420,13 +837,11 @@
  		MENUACTION_MUSICVOLUME,		"FEA_MUS", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 40, 76, MENUALIGN_LEFT,
  		MENUACTION_SFXVOLUME,		"FEA_SFX", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		MENUACTION_MP3VOLUMEBOOST,	"FEA_MPB", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
@@ -5624,7 +5628,7 @@
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 367, MENUALIGN_CENTER,
  #else
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 327, MENUALIGN_CENTER,
-@@ -441,9 +852,8 @@
+@@ -441,9 +856,8 @@
  		MENUACTION_DRAWDIST,	"FEM_LOD", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		DENSITY_SLIDERS
  #ifdef LEGACY_MENU_OPTIONS
@@ -5635,7 +5639,7 @@
  #if defined LEGACY_MENU_OPTIONS && !defined EXTENDED_COLOURFILTER
  		MENUACTION_TRAILS,		"FED_TRA", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  #endif
-@@ -455,7 +865,6 @@
+@@ -455,7 +869,6 @@
  		MENUACTION_SCREENRES,	"FED_RES", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  		MULTISAMPLING_SELECTOR
@@ -5643,7 +5647,7 @@
  		DUALPASS_SELECTOR
  		CUTSCENE_BORDERS_TOGGLE
  		FREE_CAM_TOGGLE
-@@ -492,7 +901,7 @@
+@@ -492,7 +905,7 @@
  
  	// MENUPAGE_MAP = 6
  	{ "FEH_MAP", MENUPAGE_NONE, nil, nil,
@@ -5652,7 +5656,7 @@
  	},
  
  	// MENUPAGE_NEW_GAME_RELOAD = 7
-@@ -640,6 +1049,8 @@
+@@ -640,6 +1053,8 @@
  #ifdef DETECT_JOYSTICK_MENU
  		MENUACTION_CHANGEMENU,	"FEC_JOD", {nil, SAVESLOT_NONE, MENUPAGE_DETECT_JOYSTICK}, 0, 0, MENUALIGN_CENTER,
  #endif
@@ -5661,7 +5665,7 @@
  		MENUACTION_CHANGEMENU,	"FEC_MOU", {nil, SAVESLOT_NONE, MENUPAGE_MOUSE_CONTROLS}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_RESTOREDEF,	"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_CONTROLLER_PC}, 320, 0, MENUALIGN_CENTER,
  		MENUACTION_GOBACK,		"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 320, 0, MENUALIGN_CENTER,
-@@ -659,6 +1070,7 @@
+@@ -659,6 +1074,7 @@
  #endif
  		 MENUACTION_CHANGEMENU,		"FEO_LAN", {nil, SAVESLOT_NONE, MENUPAGE_LANGUAGE_SETTINGS}, 0, 0, MENUALIGN_CENTER,
  		 MENUACTION_PLAYERSETUP,	"FET_PS", {nil, SAVESLOT_NONE, MENUPAGE_SKIN_SELECT}, 0, 0, MENUALIGN_CENTER,
@@ -5669,7 +5673,7 @@
  		 MENUACTION_GOBACK,			"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -673,6 +1085,7 @@
+@@ -673,6 +1089,7 @@
  	{ "FEM_MM", MENUPAGE_DISABLED, nil, nil,
  		  MENUACTION_CHANGEMENU,	"FEP_STG",	{nil, SAVESLOT_NONE,	MENUPAGE_NEW_GAME}, 320, 170, MENUALIGN_CENTER,
  		  MENUACTION_CHANGEMENU,	"FEP_OPT",	{nil, SAVESLOT_NONE,	MENUPAGE_OPTIONS}, 0, 0, MENUALIGN_CENTER,
@@ -5677,7 +5681,7 @@
  		  MENUACTION_CHANGEMENU,	"FEP_QUI",	{nil, SAVESLOT_NONE,	MENUPAGE_EXIT}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -699,7 +1112,7 @@
+@@ -699,7 +1116,7 @@
  		MENUACTION_CHANGEMENU,	"FEH_MAP",	{nil, SAVESLOT_NONE, MENUPAGE_MAP}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_CHANGEMENU,	"FEP_STA",	{nil, SAVESLOT_NONE, MENUPAGE_STATS}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_CHANGEMENU,	"FEH_BRI",	{nil, SAVESLOT_NONE, MENUPAGE_BRIEFS}, 0, 0, MENUALIGN_CENTER,
@@ -5686,7 +5690,7 @@
  		MENUACTION_CHANGEMENU,	"FEP_QUI",	{nil, SAVESLOT_NONE, MENUPAGE_EXIT}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -783,13 +1196,12 @@
+@@ -783,17 +1200,21 @@
  		MENUACTION_WIDESCREEN,	"FED_WIS", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  #ifdef LEGACY_MENU_OPTIONS
@@ -5696,13 +5700,24 @@
 -		MENUACTION_FRAMELIMIT,	"FEM_FRM", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
  		MULTISAMPLING_SELECTOR
 -		ISLAND_LOADING_SELECTOR
- 		DUALPASS_SELECTOR
+-		DUALPASS_SELECTOR
  #ifdef EXTENDED_COLOURFILTER
++		UI_STYLE_SELECTORS
++		// the visual style, then every look option it sets (the pipeline rows follow below)
 +		VISUAL_STYLE_SELECTOR
  		POSTFX_SELECTORS
- #elif defined LEGACY_MENU_OPTIONS
+-#elif defined LEGACY_MENU_OPTIONS
++		DUALPASS_SELECTOR
++#else
++		DUALPASS_SELECTOR
++#ifdef LEGACY_MENU_OPTIONS
  		MENUACTION_TRAILS,		"FED_TRA", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
-@@ -809,6 +1221,46 @@
+ #endif
++#endif
+ 		// re3.cpp inserts here pipeline selectors if neo/neo.txd exists and EXTENDED_PIPELINES defined
+ 		MENUACTION_CFO_DYNAMIC,	"FET_DEF", { new CCFODynamic(nil, nil, nil, nil, RestoreDefGraphics) }, 320, 0, MENUALIGN_CENTER,
+ 		MENUACTION_GOBACK,		"FEDS_TB", {nil, SAVESLOT_NONE, MENUPAGE_NONE}, 320, 0, MENUALIGN_CENTER,
+@@ -809,6 +1230,46 @@
  	},
  #endif
  
@@ -5749,7 +5764,7 @@
  		
  #ifdef MISSION_REPLAY
  	// MENUPAGE_MISSION_RETRY = 57 on mobile
-@@ -826,3 +1278,272 @@
+@@ -826,3 +1287,272 @@
  
  #endif
  #endif
@@ -5834,8 +5849,8 @@
 +ConsoleOptionsRows(int section)
 +{
 +	static const struct { int section; const char *heading; const char *keys[14]; } groups[] = {
-+		{ 0, "RVC_OSD", { "FEM_LOD", "FEM_PED", "FEM_CAR", "RVC_VSY", "FED_RES", "FEM_SCF", "RVC_AA", "FEM_ISL", "FEM_2PR", "FEM_CSB", "FEC_FRC" } },
-+		{ 0, "RVC_OSL", { "RVC_VST", "RVC_UIS", "RVC_HUA", "FED_CLF" } },
++		{ 0, "RVC_OSD", { "FEM_LOD", "FEM_PED", "FEM_CAR", "RVC_VSY", "FED_RES", "FEM_SCF", "RVC_AA", "FEM_ISL", "FEM_CSB", "FEC_FRC" } },
++		{ 0, "RVC_OSL", { "RVC_UIS", "RVC_HUA", "RVC_VST", "FED_CLF", "FEM_2PR" } },
 +		{ 1, "RVC_OSA", { "FEA_MPB", "FET_DAM" } },
 +		{ 2, "RVC_OSC", { "RVC_PLY", "RVC_GLY", "FEC_JOD", "FEC_RED", "FEC_MOU" } },
 +	};
