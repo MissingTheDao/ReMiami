@@ -19,6 +19,9 @@
 # motion: walks and turns at a fixed 144 fps with render interpolation, checks the player moves
 #   smoothly (jitter of body and bones), and makes rust/target/test-output/motion.mp4 to watch.
 # A scenario uses tests/config/<scenario>.ini if present, else tests/config/reVC.ini.
+# The PC colour filter's views (trails off / on; no other config uses that filter):
+#   REVC_TEST_CONFIG=tests/config/pcfilter.ini scripts/test.sh spots          (references spots-pcfilter)
+#   REVC_TEST_CONFIG=tests/config/pcfilter_trails.ini scripts/test.sh spots   (references spots-pcfilter-trails)
 # REVC_TEST_BIN=path runs that binary instead of building rust/.
 # Output and logs: rust/target/test-output/
 set -uo pipefail
