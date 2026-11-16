@@ -523,7 +523,23 @@
  #endif
 --- a/src/extras/screendroplets.cpp
 +++ b/src/extras/screendroplets.cpp
-@@ -57,9 +57,6 @@
+@@ -21,10 +21,15 @@
+ #include "custompipes.h"
+ #include "postfx.h"
+ #include "screendroplets.h"
++#include "CutsceneMgr.h"
+ 
+ // for 640
+ #define MAXSIZE 15
+ #define MINSIZE 4
++// revc: drops live in the Xbox's 640x480 back-buffer pixels (positions, sizes, motion) and are scaled
++// to the window only when drawn (research on the Xbox build: XBOX_DROPLETS.md)
++#define VW 640.0f
++#define VH 480.0f
+ 
+ int ScreenDroplets::ms_initialised;
+ RwTexture *ScreenDroplets::ms_maskTex;
+@@ -57,9 +62,6 @@
  #ifdef RW_D3D9
  static void *screenDroplet_PS;
  #endif
@@ -533,17 +549,17 @@
  
  // platform specific
  static void openim2d_uv2(void);
-@@ -102,6 +99,35 @@
+@@ -102,6 +104,35 @@
  	return RwTextureCreate(ras);
  }
  
-+// revc: the Xbox disc's own mask (neo/dropmask.dds, imported) when there is one, read the first time the
-+// Xbox visual style draws droplets (no other style reads console data); the made mask otherwise
++// revc: the Xbox disc's own mask (neo/dropmask.dds, imported) when there is one, read the first time
++// droplets are drawn, in any style (droplets are the Xbox's wherever they are switched on; with them
++// off nothing is read); the made mask without an Xbox import
 +extern "C" int revc_import_image(const char *rel, int *w, int *h, unsigned char **rgba);
 +extern "C" void revc_texmod_free(unsigned char *rgba, int width, int height);
 +static RwTexture *sDiscMaskTex;
 +static bool sDiscMaskTried;
-+int VisualStyleIndex(void);	// (core/MenuScreensCustom.cpp)
 +static RwTexture*
 +LoadDiscDropMask(void)
 +{
@@ -569,7 +585,7 @@
  void
  ScreenDroplets::InitDraw(void)
  {
-@@ -115,17 +141,6 @@
+@@ -115,17 +146,6 @@
  #include "shaders/obj/screenDroplet_PS.inc"
  	screenDroplet_PS = rw::d3d::createPixelShader(screenDroplet_PS_cso);
  #endif
@@ -587,7 +603,7 @@
  
  	ms_initialised = 1;
  }
-@@ -137,6 +152,11 @@
+@@ -137,6 +157,11 @@
  		RwTextureDestroy(ms_maskTex);
  		ms_maskTex = nil;
  	}
@@ -599,7 +615,7 @@
  	if(ms_screenTex){
  		RwTextureSetRaster(ms_screenTex, nil);
  		RwTextureDestroy(ms_screenTex);
-@@ -148,12 +168,6 @@
+@@ -148,12 +173,6 @@
  		screenDroplet_PS = nil;
  	}
  #endif
@@ -612,25 +628,32 @@
  
  	closeim2d_uv2();
  }
-@@ -199,7 +213,16 @@
+@@ -196,10 +215,23 @@
+ void
+ ScreenDroplets::Render(void)
+ {
++	// revc: as the Xbox: not drawn while switched off by the camera, in cutscenes, on foot in first
++	// person, or with no drops (research on the Xbox build)
++	int mode = TheCamera.Cams[TheCamera.ActiveCam].Mode;
++	if(!ms_enabled || CCutsceneMgr::IsRunning() || FindPlayerVehicle() == nil && mode == CCam::MODE_1STPERSON || ms_numDrops == 0)
++		return;
++
  	ScreenDrop *drop;
  
  	DefinedState();
 -	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(ms_maskTex));
 +	RwTexture *mask = ms_maskTex;
-+	if(VisualStyleIndex() == 2){
-+		if(!sDiscMaskTried){
-+			sDiscMaskTried = true;
-+			sDiscMaskTex = LoadDiscDropMask();
-+		}
-+		if(sDiscMaskTex)
-+			mask = sDiscMaskTex;
++	if(!sDiscMaskTried){
++		sDiscMaskTried = true;
++		sDiscMaskTex = LoadDiscDropMask();
 +	}
++	if(sDiscMaskTex)
++		mask = sDiscMaskTex;
 +	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(mask));
  	RwRenderStateSet(rwRENDERSTATEFOGENABLE, FALSE);
  	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, FALSE);
  	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, FALSE);
-@@ -210,10 +233,7 @@
+@@ -210,10 +242,7 @@
  	rw::d3d::im2dOverridePS = screenDroplet_PS;
  	rw::d3d::setTexture(1, ms_screenTex);
  #endif
@@ -642,7 +665,7 @@
  
  	RenderBuffer::ClearRenderBuffer();
  	for(drop = &ms_drops[0]; drop < &ms_drops[MAXDROPS]; drop++)
-@@ -225,10 +245,6 @@
+@@ -225,10 +254,6 @@
  	rw::d3d::im2dOverridePS = nil;
  	rw::d3d::setTexture(1, nil);
  #endif
@@ -653,7 +676,253 @@
  
  	RwRenderStateSet(rwRENDERSTATEFOGENABLE, FALSE);
  	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-@@ -705,113 +721,26 @@
+@@ -258,25 +283,29 @@
+ 	Im2DVertexUV2 *verts;
+ 	int first = StartStoring(6, 4, &indices, &verts);
+ 
+-	float scale = 0.5f*SCREEN_SCALE_X(drop->size);
+-
+-	float screenz = RwIm2DGetNearScreenZ();
+-	float z = RwCameraGetNearClipPlane(Scene.camera);
+-	float recipz = 1.0f/z;
+-
+-	float magSize = SCREEN_SCALE_Y(drop->magnification*(300.0f-40.0f) + 40.0f);
+-	float ul = drop->x - magSize;
+-	float vt = drop->y - magSize;
+-	float ur = drop->x + magSize;
+-	float vb = drop->y + magSize;
++	float sx = SCREEN_WIDTH / VW;
++	float sy = SCREEN_HEIGHT / VH;
++	float cx = drop->x * sx;
++	float cy = drop->y * sy;
++	float halfSize = drop->size * 0.5f * sy;
++
++	float magSize = (drop->magnification * (300.0f - 40.0f) + 40.0f) * sy;
++	float ul = cx - magSize;
++	float vt = cy - magSize;
++	float ur = cx + magSize;
++	float vb = cy + magSize;
+ 	ul = Max(ul, 0.0f)/RwRasterGetWidth(CPostFX::pBackBuffer);
+ 	vt = Max(vt, 0.0f)/RwRasterGetHeight(CPostFX::pBackBuffer);
+ 	ur = Min(ur, SCREEN_WIDTH)/RwRasterGetWidth(CPostFX::pBackBuffer);
+ 	vb = Min(vb, SCREEN_HEIGHT)/RwRasterGetHeight(CPostFX::pBackBuffer);
+ 
++	float screenz = RwIm2DGetNearScreenZ();
++	float z = RwCameraGetNearClipPlane(Scene.camera);
++	float recipz = 1.0f/z;
++
+ 	for(i = 0; i < 4; i++){
+-		RwIm2DVertexSetScreenX(&verts[i], drop->x + xy[i*2]*scale);
+-		RwIm2DVertexSetScreenY(&verts[i], drop->y + xy[i*2+1]*scale);
++		RwIm2DVertexSetScreenX(&verts[i], cx + xy[i*2]*halfSize);
++		RwIm2DVertexSetScreenY(&verts[i], cy + xy[i*2+1]*halfSize);
+ 		RwIm2DVertexSetScreenZ(&verts[i], screenz);
+ 		RwIm2DVertexSetCameraZ(&verts[i], z);
+ 		RwIm2DVertexSetRecipCameraZ(&verts[i], recipz);
+@@ -305,7 +334,7 @@
+ }
+ 
+ ScreenDroplets::ScreenDrop*
+-ScreenDroplets::NewDrop(float x, float y, float size, float lifetime, bool fades, int r, int g, int b)
++ScreenDroplets::NewDrop(float x, float y, float size, float lifetime, bool fades)
+ {
+ 	ScreenDrop *drop;
+ 	int i;
+@@ -322,9 +351,9 @@
+ 	drop->magnification = (MAXSIZE - size + 1.0f) / (MAXSIZE - MINSIZE + 1.0f);
+ 	drop->fades = fades;
+ 	drop->active = true;
+-	drop->color.r = r;
+-	drop->color.g = g;
+-	drop->color.b = b;
++	drop->color.r = 255;
++	drop->color.g = 255;
++	drop->color.b = 255;
+ 	drop->color.a = 255;
+ 	drop->time = 0.0f;
+ 	drop->lifetime = lifetime;
+@@ -357,31 +386,27 @@
+ 	for(drop = &ms_drops[0]; drop < &ms_drops[MAXDROPS]; drop++){
+ 		drop->active = false;
+ 		if(drop < &ms_drops[n]){
+-			x = CGeneral::GetRandomNumber() % (int)SCREEN_WIDTH;
+-			y = CGeneral::GetRandomNumber() % (int)SCREEN_HEIGHT;
+-			size = CGeneral::GetRandomNumberInRange(MINSIZE, MAXSIZE);
++			x = CGeneral::GetRandomNumber() % (int)VW;
++			y = CGeneral::GetRandomNumber() % (int)VH;
++			size = CGeneral::GetRandomNumber() % 11 + 4;
+ 			NewDrop(x, y, size, 2000.0f, true);
+ 		}
+ 	}
+ }
+ 
+ void
+-ScreenDroplets::FillScreenMoving(float amount, bool isBlood)
++ScreenDroplets::FillScreenMoving(float amount, float lifetime)
+ {
+-	int n = (ms_screenMoveDelta.z > 5.0f ? 1.5f : 1.0f)*amount*20.0f;
++	int n = int((ms_screenMoveDelta.z > 5.0f ? 1.5f : 1.0f) * amount * 20.0f);
+ 	float x, y, size;
+ 	ScreenDrop *drop;
+ 
+ 	while(n--)
+ 		if(ms_numDrops < MAXDROPS && ms_numDropsMoving < MAXDROPSMOVING){
+-			x = CGeneral::GetRandomNumber() % (int)SCREEN_WIDTH;
+-			y = CGeneral::GetRandomNumber() % (int)SCREEN_HEIGHT;
+-			size = CGeneral::GetRandomNumberInRange(MINSIZE, MAXSIZE);
+-			drop = nil;
+-			if(isBlood)
+-				drop = NewDrop(x, y, size, 2000.0f, true, 255, 0, 0);
+-			else
+-				drop = NewDrop(x, y, size, 2000.0f, true);
++			x = CGeneral::GetRandomNumber() % 640;
++			y = CGeneral::GetRandomNumber() % 480;
++			size = CGeneral::GetRandomNumber() % 11 + 4;
++			drop = NewDrop(x, y, size, lifetime, true);
+ 			if(drop)
+ 				SetMoving(drop);
+ 		}
+@@ -391,7 +416,7 @@
+ ScreenDroplets::RegisterSplash(CParticleObject *pobj)
+ {
+ 	CVector dist = pobj->GetPosition() - ms_prevCamPos;
+-	if(dist.MagnitudeSqr() < 50.0f){	// 20 originally
++	if(dist.MagnitudeSqr() < 20.0f){
+ 		ms_splashDuration = 14;
+ 		ms_splashObject = pobj;
+ 	}
+@@ -429,12 +454,10 @@
+ void
+ ScreenDroplets::SprayDrops(void)
+ {
+-	bool noRain = CCullZones::PlayerNoRain() || CCullZones::CamNoRain();
+-	if(!noRain && CWeather::Rain > 0.0f && ms_enabled){
+-		// 180 when looking stright up, 0 when looking up or down
++	if(CWeather::Rain > 0.0f && ms_enabled){
+ 		float angle = 180.0f - ms_camUpAngle;
+-		angle = Max(angle, 40.0f);	// want at least some rain
+-		FillScreenMoving((angle - 40.0f) / 150.0f * CWeather::Rain * 0.5f);
++		angle = Max(angle, 40.0f);
++		FillScreenMoving((angle - 40.0f) / 150.0f * CWeather::Rain * 0.5f, 2000.0f);
+ 	}
+ 
+ 	int i;
+@@ -445,31 +468,13 @@
+ 			if(dist.MagnitudeSqr() > 40.0f ||
+ 			   DotProduct(dist, ms_prevCamUp) < 0.0f) continue;
+ 
+-			FillScreenMoving(1.0f);
++			FillScreenMoving(1.0f, 2000.0f);
+ 		}
+ 	}
+ 
+-	static int ndrops[] = {
+-		125, 250, 500, 1000, 1000,
+-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+-	};
+ 	if(ms_splashDuration >= 0){
+-		if(ms_numDrops < MAXDROPS) {
+-			float numDropMult = 1.0f;
+-			if(ms_splashObject){
+-				float dist = (ms_splashObject->GetPosition() - ms_prevCamPos).Magnitude();
+-				numDropMult = 1.0f - (dist - 5.0f)/15.0f;
+-				if(numDropMult < 0) numDropMult = 0.0f;	// fix
+-			}
+-			int n = ndrops[ms_splashDuration] * numDropMult;
+-			while(n--)
+-				if(ms_numDrops < MAXDROPS){
+-					float x = CGeneral::GetRandomNumber() % (int)SCREEN_WIDTH;
+-					float y = CGeneral::GetRandomNumber() % (int)SCREEN_HEIGHT;
+-					float size = CGeneral::GetRandomNumberInRange(MINSIZE, MAXSIZE);
+-					NewDrop(x, y, size, 10000.0f, false);
+-				}
+-		}
++		if(ms_numDrops < MAXDROPS)
++			FillScreenMoving(1.0f, 2000.0f);
+ 		ms_splashDuration--;
+ 	}
+ }
+@@ -479,8 +484,7 @@
+ {
+ 	if(ms_numDrops < MAXDROPS){
+ 		moving->dist = 0.0f;
+-		NewDrop(moving->drop->x, moving->drop->y, MINSIZE, 500.0f, true,
+-			moving->drop->color.r, moving->drop->color.g, moving->drop->color.b);
++		NewDrop(moving->drop->x, moving->drop->y, MINSIZE, 500.0f, true);
+ 	}
+ }
+ 
+@@ -497,36 +501,33 @@
+ 	}
+ 	if(ms_screenMoveDelta.z > 0.0f && ms_camMoveDist > 0.3f){
+ 		if(ms_screenMoveDist > 0.5f && TheCamera.Cams[TheCamera.ActiveCam].Mode != CCam::MODE_1STPERSON){
+-			// movement when camera turns
+ 			moving->dist += ms_screenMoveDist;
+-			if(moving->dist > 20.0f && drop->color.a > 100)
++			if(moving->dist > 20.0f)
+ 				NewTrace(moving);
+ 
+ 			drop->x -= ms_screenMoveDelta.x;
+ 			drop->y += ms_screenMoveDelta.y;
+ 		}else{
+-			// movement out of center 
+ 			float d = ms_screenMoveDelta.z*0.2f;
+ 			float dx, dy, sum;
+-			dx = drop->x - SCREEN_WIDTH*0.5f + ms_screenMoveDelta.x;
+-			if(TheCamera.Cams[TheCamera.ActiveCam].Mode == CCam::MODE_1STPERSON)
+-				dy = drop->y - SCREEN_HEIGHT*1.2f - ms_screenMoveDelta.y;
+-			else
+-				dy = drop->y - SCREEN_HEIGHT*0.5f - ms_screenMoveDelta.y;
++			int mode = TheCamera.Cams[TheCamera.ActiveCam].Mode;
++			float c = (mode == CCam::MODE_1STPERSON) ? 1.2f : 0.5f;
++			dx = drop->x - (VW*0.5f + ms_screenMoveDelta.x);
++			dy = drop->y - (VH*c - ms_screenMoveDelta.y);
+ 			sum = fabs(dx) + fabs(dy);
+ 			if(sum > 0.001f){
+ 				dx /= sum;
+ 				dy /= sum;
+ 			}
+ 			moving->dist += d;
+-			if(moving->dist > 20.0f && drop->color.a > 100)
++			if(moving->dist > 20.0f)
+ 				NewTrace(moving);
+ 			drop->x += dx * d;
+ 			drop->y += dy * d;
+ 		}
+ 
+ 		if(drop->x < 0.0f || drop->y < 0.0f ||
+-		   drop->x > SCREEN_WIDTH || drop->y > SCREEN_HEIGHT){
++		   drop->x > VW || drop->y > VH){
+ 			moving->drop = nil;
+ 			ms_numDropsMoving--;
+ 		}
+@@ -547,6 +548,7 @@
+ void
+ ScreenDroplets::Fade(void)
+ {
++	if(!ms_enabled) return;
+ 	ScreenDrop *drop;
+ 	for(drop = &ms_drops[0]; drop < &ms_drops[MAXDROPS]; drop++)
+ 		if(drop->active)
+@@ -556,13 +558,12 @@
+ void
+ ScreenDroplets::ScreenDrop::Fade(void)
+ {
+-	int delta = CTimer::GetTimeStepInMilliseconds();
+-	time += delta;
+-	if(time < lifetime){
+-		color.a = 255 - time/lifetime*255;
+-	}else if(fades){
++	time += CTimer::GetTimeStepInMilliseconds();
++	if(time >= lifetime){
+ 		ScreenDroplets::ms_numDrops--;
+ 		active = false;
++	} else if(fades){
++		color.a = 255 - time / lifetime * 255;
+ 	}
+ }
+ 
+@@ -705,113 +706,26 @@
  }
  #endif
  
@@ -772,3 +1041,18 @@
  
 +
  #endif
+--- a/src/extras/screendroplets.h
++++ b/src/extras/screendroplets.h
+@@ -61,10 +61,10 @@
+ 	static void AddToRenderList(ScreenDrop *drop);
+ 
+ 	static void Clear(void);
+-	static ScreenDrop *NewDrop(float x, float y, float size, float lifetime, bool fades, int r = 255, int g = 255, int b = 255);
++	static ScreenDrop *NewDrop(float x, float y, float size, float lifetime, bool fades);
+ 	static void SetMoving(ScreenDroplets::ScreenDrop *drop);
+ 	static void FillScreen(int n);
+-	static void FillScreenMoving(float amount, bool isBlood = false);
++	static void FillScreenMoving(float amount, float lifetime);
+ 	static void RegisterSplash(CParticleObject *pobj);
+ 
+ 	static void ProcessCameraMovement(void);

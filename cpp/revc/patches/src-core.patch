@@ -5129,7 +5129,7 @@
  #ifdef FIX_BUGS
  		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void *)FALSE); // TODO: temp? this fixes OpenGL render but there should be a better place for this
  		// This has to be done BEFORE RwCameraBeginUpdate
-@@ -1630,15 +1845,30 @@
+@@ -1630,15 +1845,32 @@
  		        TheCamera.SetMotionBlurAlpha(150);
  
  #ifdef SCREEN_DROPLETS
@@ -5139,6 +5139,8 @@
 +			revc_device_set_output_transform(gXboxTrails ? 1 : 0);
 +		}
 +		if(gScreenDroplets){
++		if(CPostFX::pBackBuffer == nil)	// revc: no post effect has opened the frame copies yet (filter off)
++			CPostFX::Open(Scene.camera);
  		CPostFX::GetBackBuffer(Scene.camera);
 -		ScreenDroplets::Process();
 +		// Spawning, moving and fading drops is per game step (the original's 30 fps frames):
@@ -5161,7 +5163,7 @@
  		tbStartTimer(0, "Render2dStuff");
  		Render2dStuff();
  		tbEndTimer("Render2dStuff");
-@@ -1672,9 +1902,7 @@
+@@ -1672,9 +1904,7 @@
  	Render2dStuffAfterFade();
  	tbEndTimer("Render2dStuff-Fade");
  	// CCredits::Render(); // They added it to function above and also forgot it here
@@ -5172,7 +5174,7 @@
  
  	if (gbShowTimebars)
  		tbDisplay();
-@@ -1691,6 +1919,16 @@
+@@ -1691,6 +1921,16 @@
  }
  
  void
@@ -5189,7 +5191,7 @@
  FrontendIdle(void)
  {
  	CDraw::CalculateAspectRatio();
-@@ -1712,9 +1950,7 @@
+@@ -1712,9 +1952,7 @@
  
  	DefinedState(); // seems redundant, but breaks resolution change.
  	RenderMenus();

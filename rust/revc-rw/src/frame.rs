@@ -613,6 +613,8 @@ const ATTRS_2D_UV2: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => F
 
 // re3 im2d_UV2.vert + screenDroplet.frag: the droplet mask (tex) times the frame copy (tex1) at
 // the second coordinates, times the vertex colour; no perspective (w = 1), no fog, no alpha test.
+// Alpha is the vertex alpha times the mask's only, as the Xbox's stage 1 (SELECTARG1): the frame
+// copy's alpha (whatever the scene left in it) is not used.
 pub(crate) const UV2_SHADER: &str = r#"
 struct U { xform: vec4<f32>, alpha: vec4<f32>, fog: vec4<f32>, fog_color: vec4<f32>, proj: mat4x4<f32>, view: mat4x4<f32>, world: mat4x4<f32>, p0: vec4<f32>, p1: vec4<f32> };
 @group(0) @binding(0) var<uniform> u: U;
@@ -640,7 +642,8 @@ fn vs(@location(0) pos: vec4<f32>, @location(1) color: vec4<f32>, @location(2) u
 
 @fragment
 fn fs(i: Out) -> @location(0) vec4<f32> {
-    return i.color * textureSample(tex, samp, i.uv) * textureSample(tex1, samp1, i.uv1);
+    let m = i.color * textureSample(tex, samp, i.uv);
+    return vec4<f32>(m.rgb * textureSample(tex1, samp1, i.uv1).rgb, m.a);
 }
 "#;
 
