@@ -32,7 +32,8 @@ kwin_wayland --virtual --socket "$sock" --width "${SIZE%x*}" --height "${SIZE#*x
 kwin=$!
 # The local model (bin/ai-serve.sh) would take most of the VRAM: stop it for the run and restart it
 # afterwards if it was running (bin/ai-pause.sh counts overlapping runs).
-AI_PAUSE_PID=$$ "$(dirname "$0")/../bin/ai-pause.sh" hold
+AI_PAUSE_PID=$$ "$(dirname "$0")/../bin/ai-pause.sh" hold \
+  || { kill $kwin 2>/dev/null; wait $kwin 2>/dev/null; rm -f "$log"; echo "headless.sh: the local model is busy; nothing was run"; exit 3; }
 trap 'kill $kwin 2>/dev/null; wait $kwin 2>/dev/null; rm -f "$log"; AI_PAUSE_PID=$$ "$(dirname "$0")/../bin/ai-pause.sh" release' EXIT
 for _ in {1..100}; do [[ -S $XDG_RUNTIME_DIR/$sock ]] && break; sleep 0.1; done
 [[ -S $XDG_RUNTIME_DIR/$sock ]] || { echo "headless.sh: compositor did not start:"; cat "$log"; exit 2; }
