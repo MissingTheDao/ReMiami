@@ -15,7 +15,7 @@
 
 use crate::Gpu;
 pub use crate::front::*;
-use crate::front::{BONE_FLOATS, HashMap, Kind, MODEL_FLOATS, MeshDraw, Op, PipeKey, SamplerKey, Upload};
+use crate::front::{BONE_FLOATS, HashMap, Kind, MODEL_FLOATS, MeshDraw, Op, PipeKey, SamplerKey, Upload, stencil_compare, stencil_op};
 use crate::prim::generate_mips;
 
 
@@ -45,6 +45,7 @@ struct Bound {
     g2: Option<Slot>,
     g3: Option<Slot>,
     vb: Option<Vb>,
+    stencil_ref: Option<u8>,
 }
 
 
@@ -606,7 +607,15 @@ pub struct WgpuBackend {
     uv2_layout: wgpu::PipelineLayout,
 }
 
-const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+/// Depth with an 8-bit stencil (RW stencil states): 32-bit float depth where the device has it,
+/// else 24-bit (always available).
+fn depth_format(gpu: &Gpu) -> wgpu::TextureFormat {
+    if gpu.device.features().contains(wgpu::Features::DEPTH32FLOAT_STENCIL8) {
+        wgpu::TextureFormat::Depth32FloatStencil8
+    } else {
+        wgpu::TextureFormat::Depth24PlusStencil8
+    }
+}
 const ATTRS_2D: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x4, 1 => Unorm8x4, 2 => Float32x2];
 const ATTRS_3D: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Unorm8x4, 2 => Float32x2];
 const ATTRS_2D_UV2: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => Float32x4, 1 => Unorm8x4, 2 => Float32x2, 3 => Float32x2];
@@ -735,7 +744,7 @@ impl WgpuBackend {
     /// support on this device (1, 2, 4, 8, ...).
     pub fn supported_samples(gpu: &Gpu, wanted: u32) -> u32 {
         let colour = gpu.adapter.get_texture_format_features(SCENE_FORMAT).flags;
-        let depth = gpu.adapter.get_texture_format_features(DEPTH_FORMAT).flags;
+        let depth = gpu.adapter.get_texture_format_features(depth_format(gpu)).flags;
         // Without the adapter-specific format features only WebGPU's guaranteed 1 and 4 work.
         let specific = gpu.device.features().contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES);
         let ok = |n: u32| if specific { colour.sample_count_supported(n) && depth.sample_count_supported(n) } else { n == 1 || n == 4 };
@@ -1242,10 +1251,21 @@ impl WgpuBackend {
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
+                format: depth_format(gpu),
                 depth_write_enabled: Some(key.z_write),
                 depth_compare: Some(if key.z_test { wgpu::CompareFunction::LessEqual } else { wgpu::CompareFunction::Always }),
-                stencil: Default::default(),
+                stencil: match key.stencil {
+                    Some(k) => {
+                        let face = wgpu::StencilFaceState {
+                            compare: stencil_compare(k.func),
+                            fail_op: stencil_op(k.fail),
+                            depth_fail_op: stencil_op(k.zfail),
+                            pass_op: stencil_op(k.pass),
+                        };
+                        wgpu::StencilState { front: face, back: face, read_mask: k.read_mask as u32, write_mask: k.write_mask as u32 }
+                    }
+                    None => Default::default(),
+                },
                 bias: Default::default(),
             }),
             multisample: wgpu::MultisampleState { count: key.samples, ..Default::default() },
@@ -1576,7 +1596,7 @@ impl WgpuBackend {
                     mip_level_count: 1,
                     sample_count: sz.2,
                     dimension: wgpu::TextureDimension::D2,
-                    format: DEPTH_FORMAT,
+                    format: depth_format(gpu),
                     usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                     view_formats: &[],
                 });
@@ -1650,7 +1670,7 @@ impl WgpuBackend {
         let scene_depth = (size.0, size.1, self.samples);
         // `target` 0 is the scene; `first` is the scene's first pass of the frame.
         // `ov`: the overlay image the scene's draws go to past the overlay marker.
-        let begin = |enc: &mut wgpu::CommandEncoder, to: u32, first: bool, color: Option<[f64; 4]>, depth: bool, ov: Option<&wgpu::TextureView>| {
+        let begin = |enc: &mut wgpu::CommandEncoder, to: u32, first: bool, color: Option<[f64; 4]>, depth: bool, stencil: bool, ov: Option<&wgpu::TextureView>| {
             // The scene with MSAA draws into the multisampled target and resolves into the scene.
             let (view, resolve, depth_view) = match target_views.get(&to) {
                 Some((v, sz)) => (v, None, &depths[&(sz.0, sz.1, 1)].1),
@@ -1666,6 +1686,7 @@ impl WgpuBackend {
                 None => wgpu::LoadOp::Load,
             };
             let depth_load = if depth || first { wgpu::LoadOp::Clear(1.0) } else { wgpu::LoadOp::Load };
+            let stencil_load = if stencil || first { wgpu::LoadOp::Clear(0) } else { wgpu::LoadOp::Load };
             enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("frame"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1677,7 +1698,7 @@ impl WgpuBackend {
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: depth_view,
                     depth_ops: Some(wgpu::Operations { load: depth_load, store: wgpu::StoreOp::Store }),
-                    stencil_ops: None,
+                    stencil_ops: Some(wgpu::Operations { load: stencil_load, store: wgpu::StoreOp::Store }),
                 }),
                 ..Default::default()
             })
@@ -1706,7 +1727,7 @@ impl WgpuBackend {
                     drop(pass.take());
                     bound = Bound::default();
                     if !started {
-                        pass = Some(begin(enc, 0, true, None, false, None));
+                        pass = Some(begin(enc, 0, true, None, false, false, None));
                         started = true;
                         drop(pass.take());
                     }
@@ -1726,7 +1747,7 @@ impl WgpuBackend {
                     bound = Bound::default();
                     if !started {
                         // Nothing drawn yet: the scene is still last frame's.
-                        pass = Some(begin(enc, 0, true, None, false, None));
+                        pass = Some(begin(enc, 0, true, None, false, false, None));
                         started = true;
                         drop(pass.take());
                     }
@@ -1749,24 +1770,26 @@ impl WgpuBackend {
                         wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
                     );
                 }
-                Op::Clear { color, depth, .. } => {
+                Op::Clear { color, depth, stencil } => {
                     if !target_ok {
                         continue;
                     }
                     drop(pass.take());
                     let ov = overlay.as_ref().filter(|_| cur_target == 0).map(|o| &o.1);
-                    pass = Some(begin(enc, cur_target, cur_target == 0 && !started, color, depth || (ov.is_some() && overlay_fresh), ov));
+                    let fresh = ov.is_some() && overlay_fresh;
+                    pass = Some(begin(enc, cur_target, cur_target == 0 && !started, color, depth || fresh, stencil || fresh, ov));
                     overlay_fresh &= ov.is_none();
                     started |= cur_target == 0;
                     bound = Bound::default();
                 }
-                Op::Draw { pipe, texture, sampler, uniform, first, count, mesh, .. } => {
+                Op::Draw { pipe, texture, sampler, uniform, first, count, mesh, stencil_ref } => {
                     if !target_ok {
                         continue;
                     }
                     if pass.is_none() {
                         let ov = overlay.as_ref().filter(|_| cur_target == 0).map(|o| &o.1);
-                        pass = Some(begin(enc, cur_target, cur_target == 0 && !started, None, ov.is_some() && overlay_fresh, ov));
+                        let fresh = ov.is_some() && overlay_fresh;
+                        pass = Some(begin(enc, cur_target, cur_target == 0 && !started, None, fresh, fresh, ov));
                         overlay_fresh &= ov.is_none();
                         started |= cur_target == 0;
                         bound = Bound::default();
@@ -1778,6 +1801,10 @@ impl WgpuBackend {
                     if bound.pipe != Some(pipe) {
                         p.set_pipeline(&self.pipelines[&pipe]);
                         bound.pipe = Some(pipe);
+                    }
+                    if pipe.stencil.is_some() && bound.stencil_ref != Some(stencil_ref) {
+                        p.set_stencil_reference(stencil_ref as u32);
+                        bound.stencil_ref = Some(stencil_ref);
                     }
                     if bound.g0 != Some(uniform) {
                         p.set_bind_group(0, &self.uniform_bind, &[(uniform as u64 * self.uniform_stride) as u32]);
@@ -1845,7 +1872,7 @@ impl WgpuBackend {
         }
         drop(pass.take());
         if !started {
-            pass = Some(begin(enc, 0, true, None, false, None));
+            pass = Some(begin(enc, 0, true, None, false, false, None));
         }
         drop(pass);
         drop(overlay);

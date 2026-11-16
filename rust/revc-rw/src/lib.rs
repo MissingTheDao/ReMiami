@@ -106,7 +106,9 @@ impl Gpu {
             // desktop GPUs); otherwise they are decoded on the CPU.
             required_features: adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC
                 // MSAA counts beyond the guaranteed 1 and 4 (2x, 8x) need the adapter's own format features.
-                | adapter.features() & wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
+                | adapter.features() & wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
+                // 32-bit float depth with stencil (frame.rs); without it 24-bit depth + stencil.
+                | adapter.features() & wgpu::Features::DEPTH32FLOAT_STENCIL8,
             ..Default::default()
         }))
         .map_err(|e| format!("{backend:?} device: {e}"))?;
