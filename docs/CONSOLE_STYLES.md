@@ -631,3 +631,29 @@ becomes a row) with a Stats-style list; Xbox an "advanced" sub-tab on Display, A
 Controls; merged settings (motion blur into trails, aspect ratio into wide screen, map legend into
 the map's legend item, user music into the station strip); console discs as a third Load entry;
 no back/restore rows.
+
+## Checked against the console builds (2026-11-16)
+
+Behaviour read from the PS2 (US v1.40) and Xbox builds, in our own words; confidence per line.
+
+- Colour filter with trails: both consoles draw the same three-pass trails as the PC (a shifted
+  pass at twice the blur colour with alpha 30 of 255, then the plain and shifted frame added), the
+  Xbox in one shader pass with the same weights. The PS2 shifts by +2,+2 px at 640x448, the Xbox by
+  one row (0,+1) at 480 lines. Trails are on by default on both, with a menu option. reMiami's PS2
+  and Xbox filters match these weights. (high)
+- Map: both consoles take map input only once the page is entered (cross / A). The PS2 scrolls with
+  the D-pad or the left stick and zooms with R1/R2; the Xbox scrolls with the left stick only and
+  zooms with the right stick (up = in), half size 162-1000; its D-pad and A toggle the legend, the
+  PS2's cross does. (high)
+- Menu defaults on first start: the Xbox's brightness 256, subtitles on, music 63/127, sfx 102/127,
+  radar 0, legend on, vibration and invert off, Standard layout (high); the PS2's brightness 256,
+  volumes 102/127, legend on (high), subtitles, radar, vibration and invert off until a save loads
+  (medium). The visual style presets apply these (volumes on the PC's 0-64 scale).
+- Car-light quads: the Xbox hides them within 15 m of the camera and fades them in up to 30 m
+  (17 per metre); the PS2 uses the PC's rule. reMiami follows this with the Xbox visual style. (high)
+- Disc versions: the PS2 style follows US v1.40 and the Xbox style the US disc (Rev 1); the import
+  identifies a disc by the SHA-256 of its boot executable and accepts only these.
+- Known small differences not yet followed: the Xbox's trail copy includes the HUD; neither
+  console skips the first frame after the filter opens; the PS2 first-person-upside-down blur
+  colour; coronas and the Xbox gamma ramp are not compared yet.
+

@@ -13,4 +13,5 @@ How this list is kept:
 
 | Area | Difference (Steam build vs 2002 release) | reMiami | Since |
 |---|---|---|---|
-| (none recorded yet) | | | |
+| PC colour filter and trails | Same in both builds: trails (the frame fed back each frame) are off by default and have their own menu option; with trails off the filter draws nothing, and the lighting takes the time cycle's blur colours only while trails are on. Confidence: high (draw states and branches compared). | Follows it since 2026-11-16 (the PC filter's trails used to be forced on); they follow the menu's trails option | 2026-11-16 |
+| Car-light quads (brake, tail, reverse) | Flat untextured quads over the light panels, alpha-blended; faint (alpha 31 of 255) within 15 m of the camera, rising to full between 15 and 30 m. Confidence: high. | Same in the PC and PS2 styles | 2026-11-16 |

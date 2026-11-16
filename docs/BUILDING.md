@@ -74,12 +74,29 @@ reMiami's RenderWare shading runs on it.
 - `REVC_RENDERER=wgpu` selects the older wgpu back end, kept as a fallback (same images in the
   test suites). It also takes over automatically, with a `WARNING` in the log, if retro-wgpu fails
   to start.
-- `REVC_RENDERER_BACKEND=vulkan` (default) or `gl` picks the graphics API for either.
+- `REVC_RENDERER_BACKEND=vulkan` (default on Linux), `dx12` (default on Windows) or `gl` picks the
+  graphics API for either.
 - `REVC_RENDER_THREAD=1` draws on a render thread.
 - `REVC_RENDER_SHADOW=1` uses the older back end to present and draws retro-wgpu off-screen next
   to it, comparing the two (see `docs/RENDERER_PORT.md`).
 
-Not tested yet: Windows, Direct3D 12.
+### Windows (MSVC)
+
+Tested on Windows 11 with Visual Studio 2022 Build Tools (C++ workload), its CMake and Ninja,
+and the Rust toolchain pinned in `rust/rust-toolchain.toml` (x86_64-pc-windows-msvc):
+
+- Check out with LF line endings (`git config core.autocrlf false` before checkout): the source
+  manifest and patches are compared byte for byte.
+- `scripts/revc-source.sh prepare <copy>` runs in Git Bash (it needs `diff`, `patch`, `sha256sum`).
+- SDL3: the official `SDL3-devel-<version>-VC.zip`; put its `libd` on `LIB` for the link and
+  `SDL3.dll` next to `remiami.exe`.
+- mpg123: built from its source with CMake and MSVC as a static library
+  (`ports/cmake`, `-DBUILD_SHARED_LIBS=OFF -DBUILD_LIBOUT123=OFF -DBUILD_PROGRAMS=OFF`), installed
+  to a folder named by `MPG123_DIR`.
+- Build from the "x64 Native Tools" environment (vcvars64):
+  `cd rust && cargo build --release -p revc` with `MPG123_DIR` set.
+- The renderer uses Direct3D 12 by default; `REVC_RENDERER_BACKEND=vulkan` switches to Vulkan.
+  The spots views match the Linux references on both.
 
 ## Game data
 
