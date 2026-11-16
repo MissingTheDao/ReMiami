@@ -1486,6 +1486,7 @@ impl Driver {
                         "glendale_straight" => unsafe { revc_test_world_start(6, MOONLITE.0, MOONLITE.1, 0.0) },
                         "cheetah_open" => unsafe { revc_test_world_start(5, -1500.0, -1200.0, 0.0) },
                         "admiral_open" => unsafe { revc_test_world_start(7, -1500.0, -1200.0, 0.0) },
+                        "admiral_oceandrive" => unsafe { revc_test_world_start(7, 250.0, -1240.0, 180.0) },	// (Ocean Drive by the Ocean View hotel, south: light references)
                         other => {
                             self.fail(format!("pad script start state {other:?} not known (menu_base, foot_open, car_straight, car_open, bike_straight, bloodrb_straight, bloodrb_open, heli_open)"));
                             return self.finish();
