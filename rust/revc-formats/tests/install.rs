@@ -22,7 +22,11 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         let p = e.path();
         // Don't follow symlinked dirs (test.sh builds a game dir of symlinks pointing back here).
         if e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-            walk(&p, out);
+            // userfiles/ is the player's own folder (saves, console imports in console
+            // formats): not part of the PC install this test reads.
+            if !e.file_name().eq_ignore_ascii_case("userfiles") {
+                walk(&p, out);
+            }
         } else {
             out.push(p);
         }
