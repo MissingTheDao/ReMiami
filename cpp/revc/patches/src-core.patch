@@ -982,7 +982,7 @@
  #include "FileLoader.h"
  #include "MemoryHeap.h"
  #include "Streaming.h"
-@@ -46,6 +48,30 @@
+@@ -46,6 +48,31 @@
  	LoadingScreen("Loading the Game", gString, nil);
  }
  
@@ -994,6 +994,7 @@
 +static int gMapStyleHidden, gMapStyleHiddenObjects;
 +// the UI style the level loaded with (the menu notes when the style changes from it)
 +int8 gMapStyleLevelStyle = -1;
++extern "C" int revc_console_wheels(char *out, size_t cap);	// (rust/revc/src/ps2models.rs)
 +extern int8 gUiStyle;
 +#endif
 +// revc: the hidden dynamic objects stay dummies (CPopulation::ConvertToRealObject asks)
@@ -1013,7 +1014,7 @@
  void
  CFileLoader::LoadLevel(const char *filename)
  {
-@@ -64,6 +90,19 @@
+@@ -64,6 +91,19 @@
  	fd = CFileMgr::OpenFile(filename, "r");
  	assert(fd > 0);
  
@@ -1033,7 +1034,23 @@
  	for(line = LoadLine(fd); line; line = LoadLine(fd)){
  		if(*line == '#')
  			continue;
-@@ -92,7 +131,7 @@
+@@ -86,13 +126,22 @@
+ 			LoadCollisionFile(line+10, 0);
+ 		}else if(strncmp(line, "MODELFILE", 9) == 0){
+ 			LoadingScreenLoadingFile(line + 10);
+-			LoadModelFile(line + 10);
++			// revc: the console styles' own wheel model (ps2models.rs revc_console_wheels)
++			char wheelsPath[512];
++			const char *modelName = GetFilename(line + 10);	// (default.dat's lines keep a trailing space)
++			if (strncasecmp(modelName, "WHEELS.DFF", 10) == 0 && (modelName[10] == '\0' || modelName[10] == ' ' || modelName[10] == '\r') &&
++			    revc_console_wheels(wheelsPath, sizeof(wheelsPath)) == 1) {
++				printf("revc: console wheels: %s\n", wheelsPath);
++				LoadModelFile(wheelsPath);
++			} else {
++				LoadModelFile(line + 10);
++			}
+ 		}else if(strncmp(line, "HIERFILE", 8) == 0){
+ 			LoadingScreenLoadingFile(line + 9);
  			LoadClumpFile(line + 9);
  		}else if(strncmp(line, "IDE", 3) == 0){
  			LoadingScreenLoadingFile(line + 4);
@@ -1042,7 +1059,7 @@
  		}else if(strncmp(line, "IPL", 3) == 0){
  			if(!objectsLoaded){
  				LoadingScreenLoadingFile("Collision");
-@@ -110,7 +149,7 @@
+@@ -110,7 +159,7 @@
  			}
  			PUSH_MEMID(MEMID_WORLD);
  			LoadingScreenLoadingFile(line + 4);
@@ -1051,7 +1068,7 @@
  			POP_MEMID();
  		}else if(strncmp(line, "SPLASH", 6) == 0){
  #ifndef DISABLE_LOADING_SCREEN
-@@ -123,6 +162,21 @@
+@@ -123,6 +172,21 @@
  		}
  	}
  
@@ -1073,7 +1090,7 @@
  	CFileMgr::CloseFile(fd);
  	RwTexDictionarySetCurrent(savedTxd);
  
-@@ -162,6 +216,20 @@
+@@ -162,6 +226,20 @@
  		if(RwStreamFindChunk(stream, rwID_TEXDICTIONARY, nil, nil))
  			txd = RwTexDictionaryGtaStreamRead(stream);
  		RwStreamClose(stream, nil);
@@ -1094,7 +1111,7 @@
  	}
  	if(txd == nil)
  		txd = RwTexDictionaryCreate();
-@@ -1202,6 +1270,10 @@
+@@ -1202,6 +1280,10 @@
  	if(mi == nil)
  		return;
  	assert(mi->IsSimple());
@@ -1105,7 +1122,7 @@
  
  	if(!CStreaming::IsObjectInCdImage(id))
  		debug("Not in cdimage %s\n", mi->GetModelName());
-@@ -1217,6 +1289,12 @@
+@@ -1217,6 +1299,12 @@
  			ThePaths.RegisterMapObject((CTreadable*)entity);
  		}else
  			entity = new CBuilding;
@@ -1118,7 +1135,7 @@
  		entity->SetModelIndexNoCreate(id);
  		entity->GetMatrix() = CMatrix(xform);
  		entity->m_level = CTheZones::GetLevelFromPosition(&entity->GetPosition());
-@@ -1227,7 +1305,7 @@
+@@ -1227,7 +1315,7 @@
  			if(mi->m_isSubway)
  				entity->bIsSubway = true;
  		}
@@ -1127,7 +1144,7 @@
  			entity->bIsVisible = false;
  		CWorld::Add(entity);
  
-@@ -1237,11 +1315,23 @@
+@@ -1237,11 +1325,23 @@
  				CColStore::GetBoundingBox(col->level).ContainRect(entity->GetBoundRect());
  		}else
  			entity->bUsesCollision = false;
@@ -1151,7 +1168,7 @@
  		entity->SetModelIndexNoCreate(id);
  		entity->GetMatrix() = CMatrix(xform);
  		CWorld::Add(entity);
-@@ -1249,6 +1339,16 @@
+@@ -1249,6 +1349,16 @@
  			entity->bIsVisible = false;
  		entity->m_level = CTheZones::GetLevelFromPosition(&entity->GetPosition());
  		entity->m_area = area;

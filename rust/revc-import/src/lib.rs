@@ -450,6 +450,25 @@ pub fn import(disc: &mut Disc, image: &Path, cache: &Path) -> Result<Report, Str
             }
         }
     }
+    // The shared wheel model (MODELS/GENERIC/WHEELS.DFF, a plain file on both discs): converted
+    // like the archive's models, for the console styles' "console world models" (ps2models.rs)
+    if let Some(e) = disc.find("models/generic/wheels.dff").cloned() {
+        let raw = disc.read(&e).map_err(|err| format!("wheels.dff: {err}"))?;
+        let converted = match disc.kind {
+            // (the Xbox's is an ordinary model, not its native geometry: it loads as it is)
+            DiscKind::Xbox => xboxgeom::convert_dff(&raw).or_else(|why| if why.starts_with("no Xbox geometry") { Ok(raw.clone()) } else { Err(why) }),
+            DiscKind::Ps2 => ps2geom::convert_dff(&raw),
+        };
+        match converted {
+            Ok(data) => {
+                let dest = root.join("models-world").join("wheels.dff");
+                space::write_file(&dest, &data)?;
+                report.written.push(dest);
+            }
+            // (kept as the PC's wheels, like the archive models the converter can't take)
+            Err(why) => eprintln!("revc-import: wheels.dff kept as the PC model: {why}"),
+        }
+    }
     let marker = format!(
         "imported from {}\nfiles {}\nversion {}\nsha256 {}\n(from the player's own disc; not for redistribution)\n",
         image.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),

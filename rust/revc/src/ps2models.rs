@@ -65,3 +65,32 @@ pub unsafe extern "C" fn revc_ps2_model_free(p: *mut u8, len: usize) {
         drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(p, len)) });
     }
 }
+
+/// The console's shared wheel model (`<import>/<console>/models-world/wheels.dff`) while the world
+/// is in the PS2 or Xbox style with that console's world models on: 1 with its path in `out`
+/// (NUL-terminated, `cap` bytes), else 0 and the PC's MODELS\GENERIC\WHEELS.DFF loads.
+///
+/// # Safety
+/// `out` holds `cap` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn revc_console_wheels(out: *mut c_char, cap: usize) -> c_int {
+    let console = match crate::texmods::world_style() {
+        1 if crate::ps2models::ON.load(std::sync::atomic::Ordering::Relaxed) => "ps2",
+        2 if crate::ps2models::XBOX_ON.load(std::sync::atomic::Ordering::Relaxed) => "xbox",
+        _ => return 0,
+    };
+    let path = crate::discimport::cache_dir().join(console).join("models-world").join("wheels.dff");
+    crate::discimport::note_access(&path);
+    if !path.is_file() {
+        return 0;
+    }
+    let s = path.to_string_lossy();
+    if out.is_null() || s.len() + 1 > cap {
+        return 0;
+    }
+    unsafe {
+        std::ptr::copy_nonoverlapping(s.as_ptr(), out as *mut u8, s.len());
+        *out.add(s.len()) = 0;
+    }
+    1
+}
