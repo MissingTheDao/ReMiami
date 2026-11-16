@@ -533,13 +533,17 @@
  
  // platform specific
  static void openim2d_uv2(void);
-@@ -102,10 +99,37 @@
+@@ -102,6 +99,35 @@
  	return RwTextureCreate(ras);
  }
  
-+// revc: the Xbox disc's own mask (neo/dropmask.dds, imported) when there is one
++// revc: the Xbox disc's own mask (neo/dropmask.dds, imported) when there is one, read the first time the
++// Xbox visual style draws droplets (no other style reads console data); the made mask otherwise
 +extern "C" int revc_import_image(const char *rel, int *w, int *h, unsigned char **rgba);
 +extern "C" void revc_texmod_free(unsigned char *rgba, int width, int height);
++static RwTexture *sDiscMaskTex;
++static bool sDiscMaskTried;
++int VisualStyleIndex(void);	// (core/MenuScreensCustom.cpp)
 +static RwTexture*
 +LoadDiscDropMask(void)
 +{
@@ -565,14 +569,7 @@
  void
  ScreenDroplets::InitDraw(void)
  {
--	ms_maskTex = CreateDropMask(64);
-+	ms_maskTex = LoadDiscDropMask();
-+	if(ms_maskTex == nil)
-+		ms_maskTex = CreateDropMask(64);
- 
- 	ms_screenTex = RwTextureCreate(nil);
- 	RwTextureSetFilterMode(ms_screenTex, rwFILTERLINEAR);
-@@ -115,17 +139,6 @@
+@@ -115,17 +141,6 @@
  #include "shaders/obj/screenDroplet_PS.inc"
  	screenDroplet_PS = rw::d3d::createPixelShader(screenDroplet_PS_cso);
  #endif
@@ -590,7 +587,19 @@
  
  	ms_initialised = 1;
  }
-@@ -148,12 +161,6 @@
+@@ -137,6 +152,11 @@
+ 		RwTextureDestroy(ms_maskTex);
+ 		ms_maskTex = nil;
+ 	}
++	if(sDiscMaskTex){
++		RwTextureDestroy(sDiscMaskTex);
++		sDiscMaskTex = nil;
++	}
++	sDiscMaskTried = false;
+ 	if(ms_screenTex){
+ 		RwTextureSetRaster(ms_screenTex, nil);
+ 		RwTextureDestroy(ms_screenTex);
+@@ -148,12 +168,6 @@
  		screenDroplet_PS = nil;
  	}
  #endif
@@ -603,7 +612,25 @@
  
  	closeim2d_uv2();
  }
-@@ -210,10 +217,7 @@
+@@ -199,7 +213,16 @@
+ 	ScreenDrop *drop;
+ 
+ 	DefinedState();
+-	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(ms_maskTex));
++	RwTexture *mask = ms_maskTex;
++	if(VisualStyleIndex() == 2){
++		if(!sDiscMaskTried){
++			sDiscMaskTried = true;
++			sDiscMaskTex = LoadDiscDropMask();
++		}
++		if(sDiscMaskTex)
++			mask = sDiscMaskTex;
++	}
++	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(mask));
+ 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, FALSE);
+ 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, FALSE);
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, FALSE);
+@@ -210,10 +233,7 @@
  	rw::d3d::im2dOverridePS = screenDroplet_PS;
  	rw::d3d::setTexture(1, ms_screenTex);
  #endif
@@ -615,7 +642,7 @@
  
  	RenderBuffer::ClearRenderBuffer();
  	for(drop = &ms_drops[0]; drop < &ms_drops[MAXDROPS]; drop++)
-@@ -225,10 +229,6 @@
+@@ -225,10 +245,6 @@
  	rw::d3d::im2dOverridePS = nil;
  	rw::d3d::setTexture(1, nil);
  #endif
@@ -626,7 +653,7 @@
  
  	RwRenderStateSet(rwRENDERSTATEFOGENABLE, FALSE);
  	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-@@ -705,113 +705,26 @@
+@@ -705,113 +721,26 @@
  }
  #endif
  
