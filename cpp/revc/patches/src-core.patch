@@ -3987,7 +3987,7 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_NOTHING
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_LABEL
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_YES
-@@ -4558,9 +6290,22 @@
+@@ -4558,9 +6290,28 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_RESTOREDEF
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_DRAWDIST
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_MOUSESENS
@@ -4006,6 +4006,12 @@
 +	}
 +	// revc: the Xbox style's dialogs show their two choices side by side (OK left, Cancel right),
 +	// so left/right move between them, as on the Xbox (user report: the quit dialog took up/down only)
++	// revc: on the map page left/right scroll the map; the legend toggles with cross on the PS2 and
++	// with the D-pad's left/right (and A) on the Xbox, never with the stick (research on both builds;
++	// user report: scrolling switched the legend)
++	if (m_nCurrScreen == MENUPAGE_MAP && changeValueBy != 0 &&
++	    (PS2_SKIN_ON || (XBOX_SKIN_ON && !CPad::GetPad(0)->GetDPadLeftJustDown() && !CPad::GetPad(0)->GetDPadRightJustDown())))
++		changeValueBy = 0;
 +	if (XBOX_DIALOG_ON && changeValueBy != 0) {
 +		goDown = changeValueBy > 0;
 +		goUp = changeValueBy < 0;
@@ -4013,7 +4019,7 @@
  	}
  	ProcessUserInput(goDown, goUp, optionSelected, goBack, changeValueBy);
  #ifdef CUSTOM_FRONTEND_OPTIONS
-@@ -4661,7 +6406,7 @@
+@@ -4661,7 +6412,7 @@
  	int oldOption = m_nCurrOption;
  	if (goDown) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -4022,7 +4028,7 @@
  
  		m_nCurrOption++;
  		if (m_nCurrOption == NUM_MENUROWS || (aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_NOTHING)) {
-@@ -4672,7 +6417,7 @@
+@@ -4672,7 +6423,7 @@
  	}
  	if (goUp) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -4031,7 +4037,7 @@
  
  		if (m_nCurrOption == (aScreens[m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL)) {
  			while (m_nCurrOption != NUM_MENUROWS - 1
-@@ -4957,7 +6702,7 @@
+@@ -4957,7 +6708,7 @@
  					ControlsManager.MakeControllerActionsBlank();
  					ControlsManager.InitDefaultControlConfiguration();
  					ControlsManager.InitDefaultControlConfigMouse(MousePointerStateHelper.GetMouseSetUp());
@@ -4040,7 +4046,7 @@
  					if (AllValidWinJoys.m_aJoys[JOYSTICK1].m_bInitialised) {
  						DIDEVCAPS devCaps;
  						devCaps.dwSize = sizeof(DIDEVCAPS);
-@@ -5042,21 +6787,21 @@
+@@ -5042,21 +6793,21 @@
  			int saveSlot = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_SaveSlot;
  			if (saveSlot >= SAVESLOT_1 && saveSlot <= SAVESLOT_8 && Slots[m_nCurrOption] != SLOT_OK)
  #endif
@@ -4066,7 +4072,7 @@
  			m_ShowEmptyBindingError = true;
  		}
  	}
-@@ -5342,7 +7087,6 @@
+@@ -5342,7 +7093,6 @@
  		return SCREEN_STRETCH_Y(y);
  }
  
@@ -4074,7 +4080,7 @@
  void
  CMenuManager::CloseDialog(void)
  {
-@@ -5438,6 +7182,30 @@
+@@ -5438,6 +7188,30 @@
  
  	DefinedState();
  
@@ -4105,7 +4111,7 @@
  	CSprite2d::DrawRect(CRect(0, SCREEN_HEIGHT, SCREEN_WIDTH, 0), CRGBA(0, 0, 0, 160));
  
  	// Ofc this is not hardcoded like that on Xbox, it should be a texture
-@@ -5463,7 +7231,6 @@
+@@ -5463,7 +7237,6 @@
  	CFont::PrintString(x, y - SCREEN_SCALE_Y(numOfLines / 2.f), m_pDialogText);
  	CFont::DrawFonts();
  }
@@ -4113,7 +4119,7 @@
  
  void
  CMenuManager::ProcessFileActions()
-@@ -5488,13 +7255,11 @@
+@@ -5488,13 +7261,11 @@
  				CTheScripts::ScriptToLoad = 0;
  #endif
  
@@ -4131,7 +4137,7 @@
  				DoSettingsBeforeStartingAGame();
  				m_bWantToLoad = true;
  			} else
-@@ -5527,7 +7292,7 @@
+@@ -5527,7 +7298,7 @@
  		}
  		case MENUPAGE_SAVING_IN_PROGRESS:
  		{
@@ -4140,7 +4146,7 @@
  			if (m_bDialogOpen && DialogTextCmp("FESZ_WR")) {
  				uint32 startTime = CTimer::GetTimeInMillisecondsPauseMode();
  				int8 SaveSlot = PcSaveHelper.SaveSlot(m_nCurrSaveSlot);
-@@ -5561,7 +7326,7 @@
+@@ -5561,7 +7332,7 @@
  				SetDialogText("FESZ_WR");
  				ToggleDialog(true);
  			}
@@ -4149,7 +4155,7 @@
  			static bool waitedForScreen = false;
  
  			if (waitedForScreen) {
-@@ -5577,7 +7342,7 @@
+@@ -5577,7 +7348,7 @@
  				waitedForScreen = false;
  			} else if (m_nMenuFadeAlpha >= 255)
  				waitedForScreen = true;
@@ -4158,7 +4164,7 @@
  			break;
  		}
  	}
-@@ -5590,7 +7355,8 @@
+@@ -5590,7 +7361,8 @@
  
  		// Reminder: You need REGISTER_START_BUTTON defined to make it work.
  		if ((CPad::GetPad(0)->GetStartJustDown() || CPad::GetPad(0)->GetEscapeJustDown())
@@ -4168,7 +4174,7 @@
  			|| m_bShutDownFrontEndRequested || m_bStartUpFrontEndRequested
  #ifdef REGISTER_START_BUTTON
  			|| CPad::GetPad(0)->GetStartJustDown() && !m_bGameNotLoaded
-@@ -5598,9 +7364,7 @@
+@@ -5598,9 +7370,7 @@
  			) {
  
  			if (m_nCurrScreen != MENUPAGE_LOADING_IN_PROGRESS
@@ -4179,7 +4185,7 @@
  				) {
  				DoRWStuffStartOfFrame(0, 0, 0, 0, 0, 0, 255);
  				DoRWStuffEndOfFrame();
-@@ -5608,6 +7372,8 @@
+@@ -5608,6 +7378,8 @@
  				DoRWStuffEndOfFrame();
  			}
  
@@ -4188,7 +4194,7 @@
  			if (m_bShutDownFrontEndRequested)
  				m_bMenuActive = false;
  			else if (m_bStartUpFrontEndRequested)
-@@ -5626,14 +7392,24 @@
+@@ -5626,14 +7398,24 @@
  				CPad::StopPadsShaking();
  #endif
  			} else {
@@ -4216,7 +4222,7 @@
  				DoRWStuffStartOfFrame(0, 0, 0, 0, 0, 0, 255);
  				DoRWStuffEndOfFrame();
  				DoRWStuffStartOfFrame(0, 0, 0, 0, 0, 0, 255);
-@@ -5708,22 +7484,22 @@
+@@ -5708,22 +7490,22 @@
  	m_bStartUpFrontEndRequested = false;
  	m_bShutDownFrontEndRequested = false;
  
@@ -4243,7 +4249,7 @@
  	DMAudio.ChangeMusicMode(MUSICMODE_GAME);
  	if (m_bSpritesLoaded) {
  		printf("REMOVE frontend\n");
-@@ -5827,56 +7603,62 @@
+@@ -5827,56 +7609,62 @@
  
  	// Because m_fMapSize is half of the map length(hence * 2), and map consists of 3x3 tiles(hence / 3).
  	float halfTile = m_fMapSize * 2.f / 3.f / 2.f;
@@ -4333,7 +4339,7 @@
  		CFont::SetWrapx(MENU_X_RIGHT_ALIGNED(40.0f));
  		CFont::SetRightJustifyWrap(MENU_X_LEFT_ALIGNED(84.0f));
  		CFont::SetBackGroundOnlyTextOff();
-@@ -5885,31 +7667,31 @@
+@@ -5885,31 +7673,31 @@
  		CFont::SetDropColor(CRGBA(0, 0, 0, FadeIn(255)));
  		CFont::SetCentreOn();
  		CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
@@ -4373,7 +4379,7 @@
  		int x = MENU_X_LEFT_ALIGNED(160.0f);
  
  		for (int16 i = 0; i < CRadar::MapLegendCounter; i++) {
-@@ -5917,9 +7699,9 @@
+@@ -5917,9 +7705,9 @@
  
  			if (i == secondColumnStart) {
  				x = MENU_X_LEFT_ALIGNED(350.0f);
@@ -4385,7 +4391,7 @@
  			}
  		}
  	}
-@@ -5933,12 +7715,15 @@
+@@ -5933,12 +7721,15 @@
  		mapCrosshair.y = m_nMousePosY;
  	}
  
@@ -4401,7 +4407,7 @@
  
  #endif
  	m_bMenuMapActive = false;
-@@ -5957,10 +7742,10 @@
+@@ -5957,10 +7748,10 @@
  	m_PrefsRadioStation += increaseBy;
  	m_ScrollRadioBy = increaseBy;
  	if (m_ScrollRadioBy == 1) {
