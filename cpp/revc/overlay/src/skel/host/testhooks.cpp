@@ -673,8 +673,7 @@ revc_test_menu_page_id(const char *name)
 extern "C++" bool MenuSkinPS2Active(int page, bool gameNotLoaded);
 extern "C++" void MenuSkinPS2SetFocus(int page, bool list);	// (C++ linkage inside this file's extern "C" block)
 // Clips: the map zoom held (1 R1, -1 R2, 0 nothing), as the player would hold the shoulders.
-extern "C++" int gRevcTestMapZoom;
-int gRevcTestMapZoom = 0;
+extern "C++" int gRevcTestMapZoom = 0;	// (C++ linkage: core/Frontend.cpp reads it as C++)
 extern "C++" int8 gPs2Setup;	// the PS2 style's controller setup 1-4 (core/ControllerConfig.cpp)
 void
 revc_test_map_zoom(int dir)
