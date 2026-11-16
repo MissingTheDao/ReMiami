@@ -1260,7 +1260,10 @@ MenuSkinXboxDraw(CMenuManager *m, uint8 alpha)
 	DrawIconBar(m, DialogDim(alpha));
 	DrawHelpLine(m, DialogDim(alpha));
 	if (dropOpen && m->m_nCurrScreen == MENUPAGE_CONSOLE_CONTROLS) {
-		DrawDropDown(alpha);
+		// (behind the dialog: dimmed like the page, and its text drawn now, else the font
+		// buffer's flush at the end puts the entries over the dialog's card)
+		DrawDropDown(dropConfirm ? DialogDim(alpha) : alpha);
+		CFont::DrawFonts();
 		if (dropConfirm) {
 			MenuSkinXboxDialogBack(alpha);
 			wchar buf[96];
