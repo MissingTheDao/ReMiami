@@ -266,11 +266,10 @@ DrawTabs(CMenuManager *m, uint8 alpha)
 
 // page: the Map page has a fifth row (R1 \ R2 button - Zoom) and "Scroll" for the arrows; the
 // Save page navigates with up/down only (as on the PS2).
-// revc: the consoles' map responds on its tab: left stick scrolls; R1/R2 zoom on the PS2, the right stick on the Xbox
 static void
 DrawHelpBox(uint8 alpha, int page)
 {
-	const bool mapPage = page == MENUPAGE_MAP, savePage = page == MENUPAGE_CHOOSE_SAVE_SLOT, optionsPage = page == MENUPAGE_CONSOLE_OPTIONS;
+	const bool mapPage = page == MENUPAGE_MAP && pageFocus, savePage = page == MENUPAGE_CHOOSE_SAVE_SLOT, optionsPage = page == MENUPAGE_CONSOLE_OPTIONS;
 	const int rows = mapPage ? 5 : 4, nd = savePage || optionsPage ? 2 : 4;	// (the options list: up/down scroll)
 	// thick black outline, about 8 capture pixels all round (measured)
 	const float o = 8.0f;
@@ -677,11 +676,6 @@ MenuSkinPS2Input(CMenuManager *m)
 		m->m_nCurrOption = aScreens[m->m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL ? 1 : 0;
 		m->m_nFirstVisibleRowOnList = 0;
 		return true;
-	}
-	// revc: the consoles' map responds on its tab: left stick scrolls; R1/R2 zoom on the PS2, the right stick on the Xbox
-	if (m->m_nCurrScreen == MENUPAGE_MAP && !pad->NewState.DPadUp && !pad->NewState.DPadDown && !pad->NewState.DPadLeft && !pad->NewState.DPadRight) {
-		bool goBack = false;
-		m->AdditionalOptionInput(goBack);
 	}
 	int n = ARRAY_SIZE(tabs), perRow = (n + 1) / 2;
 	int cur = CurrentTab(m->m_nCurrScreen), row = cur / perRow, col = cur % perRow;

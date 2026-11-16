@@ -3705,7 +3705,7 @@
  				if (CPad::GetPad(0)->GetRightMouseJustDown() || CPad::GetPad(0)->GetCrossJustDown()) {
  					if (mapCrosshair.y > m_fMapCenterY - m_fMapSize && mapCrosshair.y < m_fMapCenterY + m_fMapSize &&
  						mapCrosshair.x > m_fMapCenterX - m_fMapSize && mapCrosshair.x < m_fMapCenterX + m_fMapSize) {
-@@ -3597,12 +5248,49 @@
+@@ -3597,11 +5248,78 @@
  						float x = ((mapCrosshair.x - diffX) / (m_fMapSize * 2)) * (WORLD_SIZE_X / MENU_MAP_WIDTH_SCALE) - (WORLD_SIZE_X / 2 + MENU_MAP_LEFT_OFFSET * MENU_MAP_LENGTH_UNIT);
  						float y = (WORLD_SIZE_Y / 2 - MENU_MAP_TOP_OFFSET * MENU_MAP_LENGTH_UNIT) - ((mapCrosshair.y - diffY) / (m_fMapSize * 2)) * (WORLD_SIZE_Y / MENU_MAP_HEIGHT_SCALE);
  						CRadar::ToggleTargetMarker(x, y);
@@ -3715,7 +3715,6 @@
  				}
  			}
  
--			if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
 +			// revc: the PS2 zooms while R1 (in) or R2 (out) is held: the map's half size +-15 per 30 Hz
 +			// menu update, linear, 162 to 1000; zooming
 +			// in keeps the map's centre, zooming out first pulls the centre 1/n of the way back to its
@@ -3732,8 +3731,39 @@
 +			const bool zoomIn = CPad::GetPad(0)->GetRightShoulder1() || gRevcTestMapZoom > 0;
 +			const bool ps2Zoom = PS2_SKIN_ON && (zoomIn || CPad::GetPad(0)->GetRightShoulder2() || gRevcTestMapZoom < 0) &&
 +				!CPad::GetPad(0)->GetMouseWheelUp() && !CPad::GetPad(0)->GetMouseWheelDown();
-+			const int16 rsy = CPad::GetPad(0)->GetRightStickY();
-+			const bool xboxZoom = XBOX_SKIN_ON && (rsy < -32 || rsy > 32);
++			if (XBOX_SKIN_ON) {
++				// revc: the Xbox's map (research on the Xbox build): the right stick zooms (up = in,
++				// 2 x stick x 30/256 per 30 Hz update, half size 162-1000), the left stick scrolls
++				// (the same rate; across only above half size 297); the D-pad doesn't scroll
++				CPad *pad = CPad::GetPad(0);
++				auto dead = [](int16 v) { return v > -8 && v < 8 ? 0 : (int)v; };
++				const int ry = dead(pad->NewState.RightStickY), lx = dead(pad->NewState.LeftStickX), ly = dead(pad->NewState.LeftStickY);
++				const float base = MENU_Y(162.0f), top = MENU_Y(1000.0f);
++				const float cx0 = MENU_X_LEFT_ALIGNED(320.0f), cy0 = MENU_Y(225.0f);
++				const float rate = 2.0f * 30.0f / 256.0f;
++				for (int i = 0; i < zoomSteps; i++) {
++					if (ry != 0) {
++						const float before = m_fMapSize;
++						const float after = Clamp(before - MENU_Y(ry * rate), base, top);
++						// zooming out pulls the centre toward the default by the share of the way
++						// back to the overview this step takes
++						if (after < before && before > base) {
++							const float f = (before - after) / (before - base);
++							m_fMapCenterX -= (m_fMapCenterX - cx0) * f;
++							m_fMapCenterY -= (m_fMapCenterY - cy0) * f;
++						}
++						m_fMapSize = after;
++					}
++					if (lx != 0 && m_fMapSize > MENU_Y(297.0f))
++						m_fMapCenterX -= MENU_X(lx * rate);
++					if (ly != 0)
++						m_fMapCenterY -= MENU_Y(ly * rate);
++					const float margin = m_fMapSize - base;
++					m_fMapCenterX = Clamp(m_fMapCenterX, cx0 - margin, cx0 + margin);
++					m_fMapCenterY = Clamp(m_fMapCenterY, cy0 - margin, cy0 + margin);
++				}
++				break;
++			}
 +			if (ps2Zoom) {
 +				const float base = MENU_Y(162.0f), step = MENU_Y(15.0f), top = MENU_Y(1000.0f);
 +				const float cx0 = MENU_X_LEFT_ALIGNED(320.0f), cy0 = MENU_Y(195.0f);
@@ -3751,13 +3781,11 @@
 +						m_fMapCenterY = Clamp(m_fMapCenterY, cy0 - (m_fMapSize - base), cy0 + (m_fMapSize - base));
 +					}
 +				}
-+			} else if (xboxZoom) {
-+				for (int i = 0; i < zoomSteps; i++) ZOOM(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, rsy < 0);
-+			} else if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
++			} else
+ 			if (CPad::GetPad(0)->GetMouseWheelDown() || CPad::GetPad(0)->GetPageDown() || CPad::GetPad(0)->GetRightShoulder2()) {
  				if (CPad::GetPad(0)->GetMouseWheelDown() && m_fMapSize > MENU_X(MAP_SIZE_TO_ALLOW_X_MOVE))
  					ZOOM(mapCrosshair.x, mapCrosshair.y, false);
- 				else
-@@ -3715,11 +5403,11 @@
+@@ -3715,11 +5433,11 @@
  			break;
  		}
  		case MENUPAGE_SOUND_SETTINGS:
@@ -3771,7 +3799,7 @@
  					m_nHoverOption = HOVEROPTION_NEXT_RADIO;
  			}
  			break;
-@@ -3882,6 +5570,7 @@
+@@ -3882,6 +5600,7 @@
  CMenuManager::PrintRadioSelector(void)
  {
  	static uint32 lastRadioChange = 0;
@@ -3779,7 +3807,7 @@
  
  	CSprite2d::Draw2DPolygon(MENU_X_LEFT_ALIGNED(418.f), MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT),
  		MENU_X_LEFT_ALIGNED(228.f), MENU_Y(MENURADIO_SELECTOR_START_Y + MENURADIO_SELECTOR_HEIGHT),
-@@ -3994,7 +5683,9 @@
+@@ -3994,7 +5713,9 @@
  
  	// Middle one(third) is colored differently depending on if it's in transition.
  	// If not in transition then this icon indicates selected radio, and should be on top of all icons. thus drawn last
@@ -3790,7 +3818,7 @@
  		m_aFrontEndSprites[third + MENUSPRITE_WILDSTYLE].Draw(m_LeftMostRadioX + MENU_X(MENURADIO_ICON_SIZE * 2), MENU_Y(MENURADIO_ICON_Y), MENU_X(MENURADIO_ICON_SIZE), MENU_Y(MENURADIO_ICON_SIZE),
  			CRGBA(INACTIVE_RADIO_COLOR.r, INACTIVE_RADIO_COLOR.g, INACTIVE_RADIO_COLOR.b, FadeIn(INACTIVE_RADIO_COLOR.a)));		
  	} else {
-@@ -4005,13 +5696,15 @@
+@@ -4005,13 +5726,15 @@
  
  	static bool radioChangeRequested = false;
  	static uint32 lastScrollCheck = 0;
@@ -3808,7 +3836,7 @@
  				radioChangeRequested = true;
  			}
  		}
-@@ -4020,7 +5713,7 @@
+@@ -4020,7 +5743,7 @@
  				m_LeftMostRadioX += MENU_X(6.f);
  			} else {
  				m_ScrollRadioBy = 0;
@@ -3817,7 +3845,7 @@
  				radioChangeRequested = true;
  			}
  		}
-@@ -4100,7 +5793,7 @@
+@@ -4100,7 +5823,7 @@
  	}
  
  	if (CPad::GetPad(0)->GetTabJustDown()) {
@@ -3826,7 +3854,7 @@
  		m_bShowMouse = false;
  		switch (m_nCurrExLayer) {
  		case HOVEROPTION_BACK:
-@@ -4136,7 +5829,7 @@
+@@ -4136,7 +5859,7 @@
  		if (!m_bPressedUpOnList) {
  			m_bPressedUpOnList = true;
  			lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
@@ -3835,7 +3863,7 @@
  			ScrollUpListByOne();
  		}
  	} else {
-@@ -4158,7 +5851,7 @@
+@@ -4158,7 +5881,7 @@
  		if (!m_bPressedDownOnList) {
  			m_bPressedDownOnList = true;
  			lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
@@ -3844,7 +3872,7 @@
  			ScrollDownListByOne();
  		}
  	} else {
-@@ -4174,7 +5867,7 @@
+@@ -4174,7 +5897,7 @@
  				m_bPressedPgUpOnList = true;
  				lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
  				m_bShowMouse = false;
@@ -3853,7 +3881,7 @@
  				PageUpList(false);
  			}
  		}
-@@ -4186,14 +5879,14 @@
+@@ -4186,14 +5909,14 @@
  				m_bPressedPgDnOnList = true;
  				lastTimeClickedScrollButton = CTimer::GetTimeInMillisecondsPauseMode();
  				m_bShowMouse = false;
@@ -3870,7 +3898,7 @@
  			if (m_nTotalListRow >= MAX_VISIBLE_OPTION_ON_SCREEN) {
  				m_nFirstVisibleRowOnList = 0;
  			}
-@@ -4203,7 +5896,7 @@
+@@ -4203,7 +5926,7 @@
  		if (CPad::GetPad(0)->GetEnd()) {
  			m_nCurrExLayer = HOVEROPTION_LIST;
  			m_bShowMouse = false;
@@ -3879,7 +3907,7 @@
  			if (m_nTotalListRow >= MAX_VISIBLE_OPTION_ON_SCREEN) {
  				m_nFirstVisibleRowOnList = m_nTotalListRow - MAX_VISIBLE_OPTION_ON_SCREEN;
  			}
-@@ -4297,6 +5990,8 @@
+@@ -4297,6 +6020,8 @@
  
  	if (!m_AllowNavigation && m_firstStartCounter == 255)
  		m_AllowNavigation = true;
@@ -3888,7 +3916,7 @@
  	if (!m_bShowMouse && m_nCurrScreen != MENUPAGE_MAP && (m_nMouseOldPosX != m_nMousePosX || m_nMouseOldPosY != m_nMousePosY)) {
  		m_bShowMouse = true;
  	}
-@@ -4351,7 +6046,7 @@
+@@ -4351,7 +6076,7 @@
  				++m_nOptionMouseHovering;
  			}
  			m_nOptionHighlightTransitionBlend = 0;
@@ -3897,7 +3925,7 @@
  		}
  	}
  
-@@ -4458,16 +6153,21 @@
+@@ -4458,16 +6183,21 @@
  			|| CPad::GetPad(0)->GetAnaloguePadLeftJustUp() || CPad::GetPad(0)->GetAnaloguePadRightJustUp()
  			|| CPad::GetPad(0)->GetMouseWheelUpJustDown() || CPad::GetPad(0)->GetMouseWheelDownJustDown()) {
  			int option = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action;
@@ -3923,7 +3951,7 @@
  
  		}
  		if (CPad::GetPad(0)->GetBackJustDown() || CPad::GetPad(0)->GetEscapeJustDown()) {
-@@ -4547,7 +6247,8 @@
+@@ -4547,7 +6277,8 @@
  		}
  	}
  	if (changeValueBy != 0) {
@@ -3933,7 +3961,7 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_NOTHING
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_LABEL
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_YES
-@@ -4558,9 +6259,22 @@
+@@ -4558,9 +6289,22 @@
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_RESTOREDEF
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_DRAWDIST
  			&& aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action != MENUACTION_MOUSESENS
@@ -3959,7 +3987,7 @@
  	}
  	ProcessUserInput(goDown, goUp, optionSelected, goBack, changeValueBy);
  #ifdef CUSTOM_FRONTEND_OPTIONS
-@@ -4661,7 +6375,7 @@
+@@ -4661,7 +6405,7 @@
  	int oldOption = m_nCurrOption;
  	if (goDown) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -3968,7 +3996,7 @@
  
  		m_nCurrOption++;
  		if (m_nCurrOption == NUM_MENUROWS || (aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_NOTHING)) {
-@@ -4672,7 +6386,7 @@
+@@ -4672,7 +6416,7 @@
  	}
  	if (goUp) {
  		if (m_nCurrScreen != MENUPAGE_MAP)
@@ -3977,7 +4005,7 @@
  
  		if (m_nCurrOption == (aScreens[m_nCurrScreen].m_aEntries[0].m_Action == MENUACTION_LABEL)) {
  			while (m_nCurrOption != NUM_MENUROWS - 1
-@@ -4957,7 +6671,7 @@
+@@ -4957,7 +6701,7 @@
  					ControlsManager.MakeControllerActionsBlank();
  					ControlsManager.InitDefaultControlConfiguration();
  					ControlsManager.InitDefaultControlConfigMouse(MousePointerStateHelper.GetMouseSetUp());
@@ -3986,7 +4014,7 @@
  					if (AllValidWinJoys.m_aJoys[JOYSTICK1].m_bInitialised) {
  						DIDEVCAPS devCaps;
  						devCaps.dwSize = sizeof(DIDEVCAPS);
-@@ -5042,21 +6756,21 @@
+@@ -5042,21 +6786,21 @@
  			int saveSlot = aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_SaveSlot;
  			if (saveSlot >= SAVESLOT_1 && saveSlot <= SAVESLOT_8 && Slots[m_nCurrOption] != SLOT_OK)
  #endif
@@ -4012,7 +4040,7 @@
  			m_ShowEmptyBindingError = true;
  		}
  	}
-@@ -5342,7 +7056,6 @@
+@@ -5342,7 +7086,6 @@
  		return SCREEN_STRETCH_Y(y);
  }
  
@@ -4020,7 +4048,7 @@
  void
  CMenuManager::CloseDialog(void)
  {
-@@ -5438,6 +7151,30 @@
+@@ -5438,6 +7181,30 @@
  
  	DefinedState();
  
@@ -4051,7 +4079,7 @@
  	CSprite2d::DrawRect(CRect(0, SCREEN_HEIGHT, SCREEN_WIDTH, 0), CRGBA(0, 0, 0, 160));
  
  	// Ofc this is not hardcoded like that on Xbox, it should be a texture
-@@ -5463,7 +7200,6 @@
+@@ -5463,7 +7230,6 @@
  	CFont::PrintString(x, y - SCREEN_SCALE_Y(numOfLines / 2.f), m_pDialogText);
  	CFont::DrawFonts();
  }
@@ -4059,7 +4087,7 @@
  
  void
  CMenuManager::ProcessFileActions()
-@@ -5488,13 +7224,11 @@
+@@ -5488,13 +7254,11 @@
  				CTheScripts::ScriptToLoad = 0;
  #endif
  
@@ -4077,7 +4105,7 @@
  				DoSettingsBeforeStartingAGame();
  				m_bWantToLoad = true;
  			} else
-@@ -5527,7 +7261,7 @@
+@@ -5527,7 +7291,7 @@
  		}
  		case MENUPAGE_SAVING_IN_PROGRESS:
  		{
@@ -4086,7 +4114,7 @@
  			if (m_bDialogOpen && DialogTextCmp("FESZ_WR")) {
  				uint32 startTime = CTimer::GetTimeInMillisecondsPauseMode();
  				int8 SaveSlot = PcSaveHelper.SaveSlot(m_nCurrSaveSlot);
-@@ -5561,7 +7295,7 @@
+@@ -5561,7 +7325,7 @@
  				SetDialogText("FESZ_WR");
  				ToggleDialog(true);
  			}
@@ -4095,7 +4123,7 @@
  			static bool waitedForScreen = false;
  
  			if (waitedForScreen) {
-@@ -5577,7 +7311,7 @@
+@@ -5577,7 +7341,7 @@
  				waitedForScreen = false;
  			} else if (m_nMenuFadeAlpha >= 255)
  				waitedForScreen = true;
@@ -4104,7 +4132,7 @@
  			break;
  		}
  	}
-@@ -5590,7 +7324,8 @@
+@@ -5590,7 +7354,8 @@
  
  		// Reminder: You need REGISTER_START_BUTTON defined to make it work.
  		if ((CPad::GetPad(0)->GetStartJustDown() || CPad::GetPad(0)->GetEscapeJustDown())
@@ -4114,7 +4142,7 @@
  			|| m_bShutDownFrontEndRequested || m_bStartUpFrontEndRequested
  #ifdef REGISTER_START_BUTTON
  			|| CPad::GetPad(0)->GetStartJustDown() && !m_bGameNotLoaded
-@@ -5598,9 +7333,7 @@
+@@ -5598,9 +7363,7 @@
  			) {
  
  			if (m_nCurrScreen != MENUPAGE_LOADING_IN_PROGRESS
@@ -4125,7 +4153,7 @@
  				) {
  				DoRWStuffStartOfFrame(0, 0, 0, 0, 0, 0, 255);
  				DoRWStuffEndOfFrame();
-@@ -5608,6 +7341,8 @@
+@@ -5608,6 +7371,8 @@
  				DoRWStuffEndOfFrame();
  			}
  
@@ -4134,7 +4162,7 @@
  			if (m_bShutDownFrontEndRequested)
  				m_bMenuActive = false;
  			else if (m_bStartUpFrontEndRequested)
-@@ -5626,6 +7361,11 @@
+@@ -5626,6 +7391,11 @@
  				CPad::StopPadsShaking();
  #endif
  			} else {
@@ -4146,7 +4174,7 @@
  #ifdef EXTENDED_COLOURFILTER
  				// we always expect CPostFX to be open
  				CMBlur::BlurOn = true;
-@@ -5708,22 +7448,22 @@
+@@ -5708,22 +7478,22 @@
  	m_bStartUpFrontEndRequested = false;
  	m_bShutDownFrontEndRequested = false;
  
@@ -4173,7 +4201,7 @@
  	DMAudio.ChangeMusicMode(MUSICMODE_GAME);
  	if (m_bSpritesLoaded) {
  		printf("REMOVE frontend\n");
-@@ -5827,56 +7567,62 @@
+@@ -5827,56 +7597,62 @@
  
  	// Because m_fMapSize is half of the map length(hence * 2), and map consists of 3x3 tiles(hence / 3).
  	float halfTile = m_fMapSize * 2.f / 3.f / 2.f;
@@ -4263,7 +4291,7 @@
  		CFont::SetWrapx(MENU_X_RIGHT_ALIGNED(40.0f));
  		CFont::SetRightJustifyWrap(MENU_X_LEFT_ALIGNED(84.0f));
  		CFont::SetBackGroundOnlyTextOff();
-@@ -5885,31 +7631,31 @@
+@@ -5885,31 +7661,31 @@
  		CFont::SetDropColor(CRGBA(0, 0, 0, FadeIn(255)));
  		CFont::SetCentreOn();
  		CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
@@ -4303,7 +4331,7 @@
  		int x = MENU_X_LEFT_ALIGNED(160.0f);
  
  		for (int16 i = 0; i < CRadar::MapLegendCounter; i++) {
-@@ -5917,9 +7663,9 @@
+@@ -5917,9 +7693,9 @@
  
  			if (i == secondColumnStart) {
  				x = MENU_X_LEFT_ALIGNED(350.0f);
@@ -4315,7 +4343,7 @@
  			}
  		}
  	}
-@@ -5933,12 +7679,15 @@
+@@ -5933,12 +7709,15 @@
  		mapCrosshair.y = m_nMousePosY;
  	}
  
@@ -4331,7 +4359,7 @@
  
  #endif
  	m_bMenuMapActive = false;
-@@ -5957,10 +7706,10 @@
+@@ -5957,10 +7736,10 @@
  	m_PrefsRadioStation += increaseBy;
  	m_ScrollRadioBy = increaseBy;
  	if (m_ScrollRadioBy == 1) {
@@ -5074,7 +5102,7 @@
  	#define POSTFX_SELECTORS
  #endif	
  
-@@ -107,31 +132,415 @@
+@@ -107,31 +132,419 @@
  	#define SELECT_CONTROLLER_TYPE
  #endif
  
@@ -5221,15 +5249,19 @@
 +	{ CPostFX::POSTFX_MOBILE, false, false, 0.0f, -1, false, -1, true, false, "RVC_VS3" },
 +};
 +// revc (user 2026-11-16: "choosing a visual style should set every option to that style's
-+// default"): the options a style sets besides its look. -1 = left as it is (the consoles' values
-+// are being researched; Mobile has no console to copy). Machine and personal choices (resolution,
++// default"): the options a style sets besides its look. -1 = left as it is (Mobile has no
++// console to copy). Machine and personal choices (resolution,
 +// vsync, antialiasing, frame limiter, language, bindings, HUD area, screen position, wide screen,
 +// pad layout, radio station) are never touched.
 +struct StyleDefaults { int16 brightness; int8 subtitles; int8 sfxVolume; int8 musicVolume; int8 radarMode; int8 legends; int8 vibration; int8 invertPad; };
 +static const StyleDefaults styleDefaults[] = {
 +	{ 256, 0, 49, 49, 0, 1, 0, 0 },	// PC (the PC release's defaults, CMenuManager::CMenuManager)
-+	{ -1, -1, -1, -1, -1, -1, -1, -1 },	// PS2 (US v1.40: research pending)
-+	{ -1, -1, -1, -1, -1, -1, -1, -1 },	// Xbox (research pending)
++	// PS2 US v1.40 (research on the PS2 build: brightness, volumes 102 of 127 and legend from its
++	// static data; subtitles, radar, vibration and invert are zero until a save loads)
++	{ 256, 0, 51, 51, 0, 1, 0, 0 },
++	// Xbox (research on the Xbox build, its first-run defaults: music 63 of 127, sfx 102 of 127,
++	// subtitles on). Volumes here on the PC's 0-64 scale.
++	{ 256, 1, 51, 32, 0, 1, 0, 0 },
 +	{ -1, -1, -1, -1, -1, -1, -1, -1 },	// Mobile
 +};
 +static_assert(ARRAY_SIZE(styleDefaults) == ARRAY_SIZE(visualStyles), "one row per style");
@@ -5501,7 +5533,7 @@
  		FrontEndMenuManager.m_PrefsVsyncDisp = true;
  		#ifdef LEGACY_MENU_OPTIONS
  			FrontEndMenuManager.m_PrefsVsync = true;
-@@ -306,7 +715,7 @@
+@@ -306,7 +719,7 @@
  
  wchar* DetectJoystickDraw(bool* disabled, bool userHovering) {
  
@@ -5510,7 +5542,7 @@
  	int numButtons;
  	int found = -1;
  	const char *joyname;
-@@ -420,13 +829,11 @@
+@@ -420,13 +833,11 @@
  		MENUACTION_MUSICVOLUME,		"FEA_MUS", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 40, 76, MENUALIGN_LEFT,
  		MENUACTION_SFXVOLUME,		"FEA_SFX", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		MENUACTION_MP3VOLUMEBOOST,	"FEA_MPB", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 0, 0, MENUALIGN_LEFT,
@@ -5527,7 +5559,7 @@
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 367, MENUALIGN_CENTER,
  #else
  		MENUACTION_RESTOREDEF,		"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_SOUND_SETTINGS}, 320, 327, MENUALIGN_CENTER,
-@@ -441,9 +848,8 @@
+@@ -441,9 +852,8 @@
  		MENUACTION_DRAWDIST,	"FEM_LOD", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		DENSITY_SLIDERS
  #ifdef LEGACY_MENU_OPTIONS
@@ -5538,7 +5570,7 @@
  #if defined LEGACY_MENU_OPTIONS && !defined EXTENDED_COLOURFILTER
  		MENUACTION_TRAILS,		"FED_TRA", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  #endif
-@@ -455,7 +861,6 @@
+@@ -455,7 +865,6 @@
  		MENUACTION_SCREENRES,	"FED_RES", {nil, SAVESLOT_NONE, MENUPAGE_DISPLAY_SETTINGS}, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  		MULTISAMPLING_SELECTOR
@@ -5546,7 +5578,7 @@
  		DUALPASS_SELECTOR
  		CUTSCENE_BORDERS_TOGGLE
  		FREE_CAM_TOGGLE
-@@ -492,7 +897,7 @@
+@@ -492,7 +901,7 @@
  
  	// MENUPAGE_MAP = 6
  	{ "FEH_MAP", MENUPAGE_NONE, nil, nil,
@@ -5555,7 +5587,7 @@
  	},
  
  	// MENUPAGE_NEW_GAME_RELOAD = 7
-@@ -640,6 +1045,8 @@
+@@ -640,6 +1049,8 @@
  #ifdef DETECT_JOYSTICK_MENU
  		MENUACTION_CHANGEMENU,	"FEC_JOD", {nil, SAVESLOT_NONE, MENUPAGE_DETECT_JOYSTICK}, 0, 0, MENUALIGN_CENTER,
  #endif
@@ -5564,7 +5596,7 @@
  		MENUACTION_CHANGEMENU,	"FEC_MOU", {nil, SAVESLOT_NONE, MENUPAGE_MOUSE_CONTROLS}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_RESTOREDEF,	"FET_DEF", {nil, SAVESLOT_NONE, MENUPAGE_CONTROLLER_PC}, 320, 0, MENUALIGN_CENTER,
  		MENUACTION_GOBACK,		"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 320, 0, MENUALIGN_CENTER,
-@@ -659,6 +1066,7 @@
+@@ -659,6 +1070,7 @@
  #endif
  		 MENUACTION_CHANGEMENU,		"FEO_LAN", {nil, SAVESLOT_NONE, MENUPAGE_LANGUAGE_SETTINGS}, 0, 0, MENUALIGN_CENTER,
  		 MENUACTION_PLAYERSETUP,	"FET_PS", {nil, SAVESLOT_NONE, MENUPAGE_SKIN_SELECT}, 0, 0, MENUALIGN_CENTER,
@@ -5572,7 +5604,7 @@
  		 MENUACTION_GOBACK,			"FEDS_TB", {nil, SAVESLOT_NONE, 0}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -673,6 +1081,7 @@
+@@ -673,6 +1085,7 @@
  	{ "FEM_MM", MENUPAGE_DISABLED, nil, nil,
  		  MENUACTION_CHANGEMENU,	"FEP_STG",	{nil, SAVESLOT_NONE,	MENUPAGE_NEW_GAME}, 320, 170, MENUALIGN_CENTER,
  		  MENUACTION_CHANGEMENU,	"FEP_OPT",	{nil, SAVESLOT_NONE,	MENUPAGE_OPTIONS}, 0, 0, MENUALIGN_CENTER,
@@ -5580,7 +5612,7 @@
  		  MENUACTION_CHANGEMENU,	"FEP_QUI",	{nil, SAVESLOT_NONE,	MENUPAGE_EXIT}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -699,7 +1108,7 @@
+@@ -699,7 +1112,7 @@
  		MENUACTION_CHANGEMENU,	"FEH_MAP",	{nil, SAVESLOT_NONE, MENUPAGE_MAP}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_CHANGEMENU,	"FEP_STA",	{nil, SAVESLOT_NONE, MENUPAGE_STATS}, 0, 0, MENUALIGN_CENTER,
  		MENUACTION_CHANGEMENU,	"FEH_BRI",	{nil, SAVESLOT_NONE, MENUPAGE_BRIEFS}, 0, 0, MENUALIGN_CENTER,
@@ -5589,7 +5621,7 @@
  		MENUACTION_CHANGEMENU,	"FEP_QUI",	{nil, SAVESLOT_NONE, MENUPAGE_EXIT}, 0, 0, MENUALIGN_CENTER,
     },
  
-@@ -783,13 +1192,12 @@
+@@ -783,13 +1196,12 @@
  		MENUACTION_WIDESCREEN,	"FED_WIS", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
  		VIDEOMODE_SELECTOR
  #ifdef LEGACY_MENU_OPTIONS
@@ -5605,7 +5637,7 @@
  		POSTFX_SELECTORS
  #elif defined LEGACY_MENU_OPTIONS
  		MENUACTION_TRAILS,		"FED_TRA", { nil, SAVESLOT_NONE, MENUPAGE_GRAPHICS_SETTINGS }, 0, 0, MENUALIGN_LEFT,
-@@ -809,6 +1217,46 @@
+@@ -809,6 +1221,46 @@
  	},
  #endif
  
@@ -5652,7 +5684,7 @@
  		
  #ifdef MISSION_REPLAY
  	// MENUPAGE_MISSION_RETRY = 57 on mobile
-@@ -826,3 +1274,272 @@
+@@ -826,3 +1278,272 @@
  
  #endif
  #endif
