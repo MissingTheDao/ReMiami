@@ -74,6 +74,38 @@ pub fn set_style(style: i32) {
     STYLE.store(style.clamp(0, 2), Ordering::Relaxed);
 }
 
+/// The style the level loaded with (mapstyle.rs, at gta_vc.dat); -1 before. The world's
+/// textures and console models follow it, not the live UI style: the map data cannot change
+/// in a running game, so a style chosen in game reaches the world at the next start (the menu
+/// says so) and the world never mixes one style's map data with another's textures or models.
+static WORLD_STYLE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+
+pub fn freeze_world_style(style: i32) {
+    // REVC_TEST_LIVE_WORLD=1: the old behaviour, the world following the live style (tests only)
+    if std::env::var_os("REVC_TEST_LIVE_WORLD").is_some() {
+        return;
+    }
+    WORLD_STYLE.store(style.clamp(0, 2), Ordering::Relaxed);
+}
+
+/// The style for world content: the level's, or the UI style before the level loads.
+pub fn world_style() -> i32 {
+    match WORLD_STYLE.load(Ordering::Relaxed) {
+        s if s >= 0 => s,
+        _ => style(),
+    }
+}
+
+/// Dictionaries of the interface (HUD, fonts, menus; files at a pack's top apply anywhere and are
+/// the loading screens): these follow the live UI style.
+fn ui_txd(txd: &str) -> bool {
+    matches!(txd, "" | "hud" | "fonts" | "frontend1" | "frontend2" | "ui" | "userinterface")
+}
+
+fn style_for(txd: &str) -> i32 {
+    if ui_txd(txd) { style() } else { world_style() }
+}
+
 /// The UI style a pack is for, from its file name: `pc-*`, `ps2-*`, `xbox-*` (any case); None for
 /// a pack that applies in every style.
 fn pack_style(zip: &Path) -> Option<i32> {
@@ -174,7 +206,10 @@ fn build_index(root: &Path) -> Index {
 }
 
 fn index() -> &'static Index {
-    let style = STYLE.load(Ordering::Relaxed);
+    index_for(style())
+}
+
+fn index_for(style: i32) -> &'static Index {
     INDEX[style as usize].get_or_init(|| {
         let mut idx = build_index(&mods_dir());
         if !idx.is_empty() {
@@ -197,10 +232,11 @@ fn index() -> &'static Index {
 /// (before the settings load), so the setting holds for every texture loaded after it.
 fn world_index() -> Option<&'static Index> {
     static WORLD: OnceLock<Index> = OnceLock::new();
-    if STYLE.load(Ordering::Relaxed) == 2 {
+    let style = world_style();
+    if style == 2 {
         return xbox_world_index();
     }
-    if STYLE.load(Ordering::Relaxed) != 1 || !PS2_WORLD.load(Ordering::Relaxed) {
+    if style != 1 || !PS2_WORLD.load(Ordering::Relaxed) {
         return None;
     }
     let idx = WORLD.get_or_init(|| {
@@ -318,10 +354,11 @@ pub fn find_rgba(txd: &str, tex: &str) -> Option<(u32, u32, Vec<u8>)> {
 }
 
 fn lookup(txd: &str, tex: &str) -> Option<&'static Source> {
-    let idx = index();
     let key = (txd.to_ascii_lowercase(), tex.to_ascii_lowercase());
+    let ui = ui_txd(&key.0);
+    let idx = index_for(style_for(&key.0));
     idx.get(&key)
-        .or_else(|| world_index().and_then(|w| w.get(&key)))
+        .or_else(|| if ui { None } else { world_index().and_then(|w| w.get(&key)) })
         .or_else(|| idx.get(&(String::new(), key.1.clone())))
 }
 
@@ -382,7 +419,7 @@ pub unsafe extern "C" fn revc_texmod_free_blocks(blocks: *mut c_uchar, size: usi
 pub unsafe extern "C" fn revc_texmod_from_world(txd: *const c_char, texture: *const c_char) -> c_int {
     let (txd, tex) = unsafe { (CStr::from_ptr(txd).to_string_lossy(), CStr::from_ptr(texture).to_string_lossy()) };
     let key = (txd.to_ascii_lowercase(), tex.to_ascii_lowercase());
-    (!index().contains_key(&key) && world_index().is_some_and(|w| w.contains_key(&key))) as c_int
+    (!index_for(style_for(&key.0)).contains_key(&key) && world_index().is_some_and(|w| w.contains_key(&key))) as c_int
 }
 
 /// # Safety

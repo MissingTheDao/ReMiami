@@ -1287,7 +1287,7 @@
 +	{ "RVC_AA7", "SSAA 2X" },
 +	{ "RVC_AA8", "SSAA 2X + MSAA 4X" },
 +	{ "RVC_VST", "VISUAL STYLE" },
-+	{ "RVC_MSR", "MAP DATA CHANGES ON NEXT START" },
++	{ "RVC_MSR", "THE WORLD CHANGES ON NEXT START" },
 +	{ "RVC_VS0", "PC" },
 +	{ "RVC_VS1", "PS2" },
 +	{ "RVC_VS2", "XBOX" },

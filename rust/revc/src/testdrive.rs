@@ -54,6 +54,7 @@
 //!                       the player's body and a bone move smoothly from frame to frame: jitter =
 //!                       mean |second difference| / mean |first difference| of their rendered
 //!                       positions, at most REVC_TEST_MAX_JITTER (default 0.5).
+//!   REVC_TEST_SWITCH_STYLE=n  after the save loads, switch the UI style to n (0 PC, 1 PS2, 2 Xbox) in game
 //! Options:
 //!   REVC_TEST_SHOT=path.png   write the final frame here
 //!   REVC_TEST_REF=path.png    compare against this; writes path.png.diff.png on failure
@@ -109,6 +110,7 @@ unsafe extern "C" {
     fn revc_test_menu_input(down: i32, change: i32);
     fn revc_test_menu_key(down: i32, up: i32, select: i32, back: i32, change: i32);
     fn revc_test_map_zoom(dir: i32);
+    fn revc_test_set_ui_style(style: i32);
     fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
     fn revc_test_hud_text(kind: i32);
     fn revc_test_fire(kind: i32);
@@ -1878,7 +1880,15 @@ impl Driver {
         let saved = std::fs::read(&path).ok().and_then(|d| crate::savegame::SimpleVars::from_bytes(d.get(4..)?)).map(|v| v.time_ms);
         let now = unsafe { revc_test_game_ms() };
         match saved {
-            Some(t) if now >= t => log(format!("loaded: game timer {now} ms (saved at {t} ms)")),
+            Some(t) if now >= t => {
+                log(format!("loaded: game timer {now} ms (saved at {t} ms)"));
+                // REVC_TEST_SWITCH_STYLE=<0|1|2>: change the UI style now, as from the menu (the
+                // world keeps the style it loaded with until the next start)
+                if let Some(s) = std::env::var("REVC_TEST_SWITCH_STYLE").ok().and_then(|v| v.parse::<i32>().ok()) {
+                    unsafe { revc_test_set_ui_style(s) };
+                    log(format!("UI style switched to {s} in game"));
+                }
+            }
             Some(t) => self.fail(format!("the save did not load: game timer {now} ms, the file has {t} ms")),
             None => self.fail(format!("cannot read the header of {}", path.display())),
         }

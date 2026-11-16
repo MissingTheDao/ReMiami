@@ -39,7 +39,7 @@ pub(crate) fn world_models_on(style: i32) -> bool {
 /// `name` a NUL-terminated string, `len` valid.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn revc_ps2_model(name: *const c_char, len: *mut usize) -> *mut u8 {
-    let console = match crate::texmods::style() {
+    let console = match crate::texmods::world_style() {
         1 if ON.load(Ordering::Relaxed) => "ps2",
         2 if XBOX_ON.load(Ordering::Relaxed) => "xbox",
         _ => return std::ptr::null_mut(),

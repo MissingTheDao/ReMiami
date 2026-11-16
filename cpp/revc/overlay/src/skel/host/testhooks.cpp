@@ -678,6 +678,13 @@ revc_test_map_zoom(int dir)
 	gRevcTestMapZoom = dir;
 }
 
+// REVC_TEST_SWITCH_STYLE: the UI style changed in a running game, as the menu does.
+void
+revc_test_set_ui_style(int style)
+{
+	gUiStyle = style;
+}
+
 int
 revc_test_menu_state(int page, int option, int context, int layout, int legend)
 {

@@ -435,6 +435,8 @@ pub unsafe extern "C" fn revc_map_style_begin(level: *const c_char, img: *mut c_
     if level.is_null() || key(&unsafe { CStr::from_ptr(level) }.to_string_lossy()) != "data/gta_vc.dat" {
         return 0;
     }
+    // the world keeps this style until the next start (textures and console models too)
+    crate::texmods::freeze_world_style(crate::texmods::style());
     // REVC_MAP_STYLE=0: the PC's map data in every style (tests: a same-style reference)
     if std::env::var("REVC_MAP_STYLE").as_deref() == Ok("0") {
         return 0;

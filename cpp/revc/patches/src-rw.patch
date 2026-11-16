@@ -264,7 +264,7 @@
  	return gPluginOffset != -1;
 --- a/src/rw/RwHelper.cpp
 +++ b/src/rw/RwHelper.cpp
-@@ -96,10 +96,14 @@
+@@ -96,10 +96,18 @@
  #endif
  }
  
@@ -272,15 +272,19 @@
 +// turns culling on (its world renderer lacks the PC's calls), and no PS2 code sets a cull mode
 +// (research on both builds); the PC style culls as the PC release does
 +extern int8 gUiStyle;
++extern int8 gMapStyleLevelStyle;	// (core/FileLoader.cpp: the style the level loaded with)
  void
  SetCullMode(uint32 mode)
  {
 -	if(gBackfaceCulling)
-+	if(gBackfaceCulling && gUiStyle == 0)
++	// the world's style, not the live UI style: console world geometry stays loaded until the
++	// next start and has faces the PC's culling drops (a style chosen in game: flat ground)
++	const int8 style = gMapStyleLevelStyle >= 0 ? gMapStyleLevelStyle : gUiStyle;
++	if(gBackfaceCulling && style == 0)
  		RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)mode);
  	else
  		RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
-@@ -111,10 +115,7 @@
+@@ -111,10 +119,7 @@
  {
  	if(!bDebugRenderGroups)
  		return;
@@ -292,7 +296,7 @@
  	static WCHAR tmp[256];
  	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, name, -1, tmp, sizeof(tmp));
  	D3DPERF_BeginEvent(0xFFFFFFFF, tmp);
-@@ -126,10 +127,7 @@
+@@ -126,10 +131,7 @@
  {
  	if(!bDebugRenderGroups)
  		return;
