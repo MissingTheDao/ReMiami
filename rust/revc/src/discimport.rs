@@ -49,7 +49,24 @@ pub fn accessed() -> Vec<String> {
 }
 
 pub fn cache_dir() -> PathBuf {
-    std::env::var_os("REVC_IMPORT_DIR").map_or_else(|| PathBuf::from("userfiles/import"), PathBuf::from)
+    std::env::var_os("REVC_IMPORT_DIR").map_or_else(|| game_path("userfiles/import"), PathBuf::from)
+}
+
+/// The game folder, set once at start (main.rs). The game changes the working directory while it
+/// loads some files (CFileMgr::SetDir, e.g. into TXD\ for the loading screens; on Windows that
+/// chdir succeeds), so paths into the game folder are made from this, not relative.
+static GAME_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+pub fn set_game_root(dir: &Path) {
+    let _ = GAME_ROOT.set(std::path::absolute(dir).unwrap_or_else(|_| dir.to_path_buf()));
+}
+
+/// `rel` inside the game folder (relative as given before the root is set).
+pub fn game_path(rel: impl AsRef<Path>) -> PathBuf {
+    match GAME_ROOT.get() {
+        Some(root) => root.join(rel),
+        None => rel.as_ref().to_path_buf(),
+    }
 }
 
 /// Imports from the image at `path` into the cache; Ok(summary) or Err(reason).

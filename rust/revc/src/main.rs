@@ -121,6 +121,7 @@ fn main() -> ExitCode {
         eprintln!("revc: set REVC_GAME_DIR to your Vice City data folder");
         return ExitCode::FAILURE;
     }
+    discimport::set_game_root(&dir);
 
     if let Some(image) = import {
         return match discimport::import_image(&image) {

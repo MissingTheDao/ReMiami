@@ -120,11 +120,11 @@ static COMPRESSED: AtomicUsize = AtomicUsize::new(0);
 static REPORTED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 fn mods_dir() -> PathBuf {
-    Path::new("mods").join("textures")
+    crate::discimport::game_path("mods").join("textures")
 }
 
 fn packs_dir() -> PathBuf {
-    Path::new("mods").join("packs")
+    crate::discimport::game_path("mods").join("packs")
 }
 
 /// Adds the image files of every pack in `dir` (zips, in name order) that the index lacks.
