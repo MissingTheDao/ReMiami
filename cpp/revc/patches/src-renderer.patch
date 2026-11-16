@@ -1763,14 +1763,15 @@
  		RwImageDestroy(image);
 --- a/src/renderer/Renderer.cpp
 +++ b/src/renderer/Renderer.cpp
-@@ -1,5 +1,6 @@
+@@ -1,5 +1,7 @@
  #define WITHD3D
  #include "common.h"
 +#include "Interpolation.h"
++#include "XboxAlphaRef.h"
  
  #include "main.h"
  #include "Lights.h"
-@@ -86,6 +87,16 @@
+@@ -86,6 +88,16 @@
  	gSortedVehiclesAndPeds.Shutdown();
  }
  
@@ -1787,7 +1788,7 @@
  void
  CRenderer::PreRender(void)
  {
-@@ -93,19 +104,19 @@
+@@ -93,19 +105,19 @@
  	CLink<CVisibilityPlugins::AlphaObjectInfo> *node;
  
  	for(i = 0; i < ms_nNoOfVisibleEntities; i++)
@@ -1811,7 +1812,7 @@
  	}
  #endif
  
-@@ -113,13 +124,13 @@
+@@ -113,13 +125,13 @@
  #ifdef SQUEEZE_PERFORMANCE
  		if (ms_aInVisibleEntityPtrs[i]->IsVehicle() && ((CVehicle*)ms_aInVisibleEntityPtrs[i])->IsHeli())
  #endif
@@ -1827,6 +1828,22 @@
  
  	CHeli::SpecialHeliPreRender();
  	CShadows::RenderExtraPlayerShadows();
+@@ -140,6 +152,7 @@
+ 	{
+ 		PUSH_RENDERGROUP(CModelInfo::GetModelInfo(e->GetModelIndex())->GetModelName());
+ 
++		XboxAlphaRefScope xboxAlpha(e->GetModelIndex(), 255);	// revc: the Xbox style's per-model alpha test
+ 		e->Render();
+ 
+ 		POP_RENDERGROUP();
+@@ -194,6 +207,7 @@
+ #endif
+ 
+ 	PUSH_RENDERGROUP(CModelInfo::GetModelInfo(e->GetModelIndex())->GetModelName());
++	XboxAlphaRefScope xboxAlpha(e->GetModelIndex(), 255);	// revc: the Xbox style's per-model alpha test (the whole entity)
+ 
+ 	resetLights = e->SetupLighting();
+ 
 --- a/src/renderer/Shadows.cpp
 +++ b/src/renderer/Shadows.cpp
 @@ -1237,7 +1237,8 @@

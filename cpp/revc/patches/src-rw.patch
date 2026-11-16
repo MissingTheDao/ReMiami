@@ -596,7 +596,33 @@
  };
 --- a/src/rw/VisibilityPlugins.cpp
 +++ b/src/rw/VisibilityPlugins.cpp
-@@ -302,7 +302,9 @@
+@@ -1,4 +1,5 @@
+ #include "common.h"
++#include "XboxAlphaRef.h"
+ 
+ #include "RwHelper.h"
+ #include "templates.h"
+@@ -212,6 +213,9 @@
+ 	SetCullMode(rwCULLMODECULLBACK);
+ }
+ 
++// revc: the model of the fading entity RenderFadingAtomic draws (-1 otherwise)
++static int gFadingModel = -1;
++
+ void
+ CVisibilityPlugins::RenderFadingEntities(CLinkList<AlphaObjectInfo> &list)
+ {
+@@ -234,7 +238,9 @@
+ 			SetAmbientColours();
+ 			e->bImBeingRendered = true;
+ 			PUSH_RENDERGROUP(mi->GetModelName());
++			gFadingModel = e->GetModelIndex();	// revc: for the Xbox style's per-model alpha test
+ 			RenderFadingAtomic((RpAtomic*)e->m_rwObject, node->item.sort);
++			gFadingModel = -1;
+ 			POP_RENDERGROUP();
+ 			e->bImBeingRendered = false;
+ 		}else
+@@ -302,7 +308,9 @@
  	flags = RpGeometryGetFlags(geo);
  	RpGeometrySetFlags(geo, flags | rpGEOMETRYMODULATEMATERIALCOLOR);
  	RpGeometryForAllMaterials(geo, SetAlphaCB, (void*)alpha);
@@ -606,7 +632,16 @@
  	RpGeometryForAllMaterials(geo, SetAlphaCB, (void*)255);
  	RpGeometrySetFlags(geo, flags);
  	return atomic;
-@@ -352,7 +354,9 @@
+@@ -343,6 +351,8 @@
+ 	if(fadefactor > 1.0f)
+ 		fadefactor = 1.0f;
+ 	alpha = mi->m_alpha * fadefactor;
++	// revc: the Xbox style's per-model alpha test with the fade alpha (the fading entity's model)
++	XboxAlphaRefScope xboxAlpha(gFadingModel, alpha);
+ 	if(alpha == 255)
+ 		RENDERCALLBACK(atomic);
+ 	else{
+@@ -352,7 +362,9 @@
  		RpGeometryForAllMaterials(geo, SetAlphaCB, (void*)alpha);
  		if(geo != RpAtomicGetGeometry(atomic))
  			RpAtomicSetGeometry(atomic, geo, rpATOMICSAMEBOUNDINGSPHERE); // originally 5 (mistake?)
