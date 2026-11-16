@@ -2,7 +2,7 @@
 //! textured quads (texture orientation, nearest filtering), RW alpha blending and alpha test,
 //! and a camera clear in the middle of a frame.
 
-use revc_rw::frame::{DrawState, Renderer, TexData, Vertex2D, readback_finish, readback_start};
+use revc_rw::frame::{DrawState, Renderer, Stencil, TexData, Vertex2D, readback_finish, readback_start};
 use revc_rw::{Backend, Gpu};
 
 const SIZE: u32 = 64;
@@ -830,4 +830,106 @@ fn overlay_vulkan() {
 #[test]
 fn overlay_gl() {
     overlay(Backend::Gl);
+}
+
+// RW stencil states: a mask drawn with REPLACE (where the alpha test passes), then a full-screen
+// fill drawn only where the stencil EQUALs the reference (CMBlur::OverlayRenderFx draws this way).
+fn stencil(backend: Backend) {
+    let gpu = Gpu::headless(backend).expect("gpu");
+    let mut r = Renderer::new(&gpu, wgpu::TextureFormat::Rgba8Unorm);
+
+    // 1. Clear colour to blue, depth true, stencil true (clears stencil to 0).
+    r.clear(Some([0.0, 0.0, 1.0, 1.0]), true, true);
+
+    // 2. Mask: draw quad (8,8)-(24,24) in black with stencil enable, func ALWAYS, pass REPLACE.
+    let mask_state = DrawState {
+        stencil: Stencil {
+            enable: 1,
+            fail: 1, // KEEP
+            zfail: 1, // KEEP
+            pass: 3, // REPLACE
+            func: 8, // ALWAYS
+            reference: 1,
+            read_mask: 0xFF,
+            write_mask: 0xFF,
+        },
+        ..base()
+    };
+    r.draw_2d(&mask_state, 5, &quad(8.0, 8.0, 24.0, 24.0, [0, 0, 0, 255]), None);
+
+    // 3. Also draw quad (40,8)-(56,24) with same stencil state but vertex alpha 5.
+    // Alpha 5 < alpha_ref 10/255 (approx 0.039), so fragment is discarded, no stencil write.
+    let discard_state = DrawState {
+        stencil: Stencil {
+            enable: 1,
+            fail: 1,
+            zfail: 1,
+            pass: 3,
+            func: 8,
+            reference: 1,
+            read_mask: 0xFF,
+            write_mask: 0xFF,
+        },
+        ..base()
+    };
+    r.draw_2d(&discard_state, 5, &quad(40.0, 8.0, 56.0, 24.0, [0, 0, 0, 5]), None);
+
+    // 4. Fill: draw full-screen quad in red with stencil func EQUAL, reference 1, pass KEEP.
+    let fill_state = DrawState {
+        stencil: Stencil {
+            enable: 1,
+            fail: 1, // KEEP
+            zfail: 1, // KEEP
+            pass: 1, // KEEP
+            func: 3, // EQUAL
+            reference: 1,
+            read_mask: 0xFF,
+            write_mask: 0, // No writes
+        },
+        ..base()
+    };
+    r.draw_2d(&fill_state, 5, &quad(0.0, 0.0, 64.0, 64.0, [255, 0, 0, 255]), None);
+
+    let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("target"),
+        size: wgpu::Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = target.create_view(&Default::default());
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    r.encode(&gpu, &mut enc, &view, (SIZE, SIZE));
+    r.end_frame();
+    let rb = readback_start(&gpu, &mut enc, &target, (SIZE, SIZE));
+    gpu.queue.submit([enc.finish()]);
+    let img = readback_finish(&gpu, rb).expect("readback");
+
+    // 5. Read back and assert.
+    // (16,16) is inside the mask quad (8-24, 8-24) and inside the fill quad.
+    // Stencil was set to 1 in mask area. Fill requires EQUAL 1. So red should appear.
+    assert!(near(px(&img, 16, 16), [255, 0, 0, 255]), "stencil point (16,16): expected red");
+
+    // (48,16) is inside the second mask quad, whose fragments the alpha test discarded: no stencil
+    // written there, so the fill does not draw and the clear colour stays.
+    assert!(near(px(&img, 48, 16), [0, 0, 255, 255]), "stencil point (48,16): expected blue (alpha-discarded mask writes no stencil)");
+
+    // (4,4) is outside both quads. Stencil 0. Fill requires EQUAL 1. Blue remains.
+    assert!(near(px(&img, 4, 4), [0, 0, 255, 255]), "stencil point (4,4): expected blue");
+
+    // (32,48) is inside fill quad but outside mask quad. Stencil 0. Fill requires EQUAL 1. Blue remains.
+    assert!(near(px(&img, 32, 48), [0, 0, 255, 255]), "stencil point (32,48): expected blue");
+}
+
+#[test]
+fn stencil_vulkan() {
+    stencil(Backend::Vulkan);
+}
+
+#[test]
+fn stencil_gl() {
+    stencil(Backend::Gl);
 }
