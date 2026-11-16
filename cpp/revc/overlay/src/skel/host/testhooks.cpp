@@ -386,7 +386,7 @@ revc_test_world_start(int kind, float x, float y, float heading)
 		PadLayoutApply(atoi(layout));
 	if (kind == 0)
 		return;
-	int mi = kind == 2 ? MI_PCJ600 : kind == 3 ? MI_BLOODRB : kind == 4 ? MI_MAVERICK : MI_INFERNUS;	// (3: the Bloodring Banger, the car the PS2 tests can spawn; 4: a heli, flying tests)
+	int mi = kind == 2 ? MI_PCJ600 : kind == 3 ? MI_BLOODRB : kind == 4 ? MI_MAVERICK : kind == 5 ? MI_CHEETAH : kind == 6 ? MI_GLENDALE : MI_INFERNUS;	// (5, 6: cars with flat tail-light panels, light checks)	// (3: the Bloodring Banger, the car the PS2 tests can spawn; 4: a heli, flying tests)
 	CStreaming::RequestModel(mi, STREAMFLAGS_DEPENDENCY);
 	CStreaming::LoadAllRequestedModels(false);
 	CPlayerPed *ped = FindPlayerPed();

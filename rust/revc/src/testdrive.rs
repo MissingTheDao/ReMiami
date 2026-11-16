@@ -1482,6 +1482,9 @@ impl Driver {
                         "bloodrb_straight" => unsafe { revc_test_world_start(3, MOONLITE.0, MOONLITE.1, 0.0) },	// the PS2 tests' cheat car
                         "bloodrb_open" => unsafe { revc_test_world_start(3, -1500.0, -1200.0, 0.0) },
                         "heli_open" => unsafe { revc_test_world_start(4, -1500.0, -1200.0, 0.0) },	// a Maverick on the airport tarmac
+                        "cheetah_straight" => unsafe { revc_test_world_start(5, MOONLITE.0, MOONLITE.1, 0.0) },	// (light checks)
+                        "glendale_straight" => unsafe { revc_test_world_start(6, MOONLITE.0, MOONLITE.1, 0.0) },
+                        "cheetah_open" => unsafe { revc_test_world_start(5, -1500.0, -1200.0, 0.0) },
                         other => {
                             self.fail(format!("pad script start state {other:?} not known (menu_base, foot_open, car_straight, car_open, bike_straight, bloodrb_straight, bloodrb_open, heli_open)"));
                             return self.finish();
