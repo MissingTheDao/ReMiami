@@ -1,5 +1,14 @@
 # reMiami
 
+> **Status: paused (2026-11-17).** Development is paused for now; issues and pull requests may go
+> unanswered. The last state builds and passes its unit tests on Linux (its last commits were not
+> built on Windows). It adds stencil support to the renderer, the Xbox style's per-model alpha test
+> (read from your own Xbox disc at import; re-import the disc to get it), and a fix for the
+> Xbox-style map moving by itself. Known open: in the PS2 and Xbox styles the screen effects (blood
+> drops, heat haze, boat water drops) are not drawn yet, and heat haze has not been checked on
+> screen in any style. The test switches `REVC_TEST_FX_MARK` and `REVC_TEST_STENCIL_OFF` do nothing
+> unless set.
+
 A long-term modernisation of [reVC](https://github.com/GTAmodding/re3) (the reverse-engineered
 source of GTA: Vice City, re3-miami branch): the game is ported to Rust piece by piece, in
 strangler style, while staying playable at every step.
