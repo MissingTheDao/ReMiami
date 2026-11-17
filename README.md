@@ -1,14 +1,15 @@
 # reMiami
 
 > **Status: paused (2026-11-17).** Development is paused for now; issues and pull requests may go
-> unanswered. The last state builds and passes its unit tests on Linux (its last commits were not
-> built on Windows). It adds stencil support to the renderer, the Xbox style's per-model alpha test
+> unanswered. The last state builds and passes its unit tests on Linux; on Windows it builds with
+> MSVC, and 9 of its unit tests fail there (reference values made on Linux differ in the last float
+> bits, and one test expects case-sensitive file names). It adds stencil support to the renderer, the Xbox style's per-model alpha test
 > (read from your own Xbox disc at import; re-import the disc to get it), and a fix for the
 > Xbox-style map moving by itself. Known open: in the PS2 and Xbox styles the screen effects (blood
 > drops, heat haze, boat water drops) are not drawn yet, and heat haze has not been checked on
 > screen in any style. This last state is released as a build kit (release `paused-20261117`): an
-> AppImage that builds the game on your computer from your own reVC source copy and runs it with
-> your own Vice City files (exactly the Steam release for PC, and optionally the PS2 US v1.40 and
+> AppImage for Linux and an .exe for Windows that build the game on your computer from your own
+> reVC source copy and run it with your own Vice City files (exactly the Steam release for PC, and optionally the PS2 US v1.40 and
 > Xbox US Rev 1 discs; other versions are refused); it contains no game data and no prebuilt game
 > (docs/BUILDING.md, "Build kit"). The test switches `REVC_TEST_FX_MARK` and `REVC_TEST_STENCIL_OFF`
 > do nothing unless set.
