@@ -1244,6 +1244,53 @@
  }
  
  static uint8 DrunkBlurRed = 128;
+@@ -590,6 +593,30 @@
+ 	return true;
+ }
+ 
++// revc test switch (REVC_TEST_FX_MARK=1, never set in play): the second pass of the water, blood
++// and heat-haze overlays draws solid magenta instead of the frame copy, so the stencil shape it is
++// limited to shows in a still picture.
++static bool
++FxMark(void)
++{
++	static int on = -1;
++	if(on < 0)
++		on = getenv("REVC_TEST_FX_MARK") != nil;
++	return on != 0;
++}
++
++static void
++FxMarkPass(RwIm2DVertex *verts)
++{
++	if(!FxMark())
++		return;
++	for(int v = 0; v < 4; v++)
++		RwIm2DVertexSetIntRGBA(&verts[v], 255, 0, 255, 255);
++	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, nil);
++	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
++}
++
+ void
+ CMBlur::OverlayRenderFx(RwCamera *cam, RwRaster *frontBuf)
+ {
+@@ -680,6 +707,7 @@
+ 					RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+ 					RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+ 				}
++				FxMarkPass(verts);
+ 				RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, verts, 4, Index, 6);
+ 			}
+ 			break;
+@@ -736,6 +764,7 @@
+ #endif
+ 				RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+ 				RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
++				FxMarkPass(verts);
+ 				RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, verts, 4, Index, 6);
+ 			}
+ 			break;
 --- a/src/renderer/Particle.cpp
 +++ b/src/renderer/Particle.cpp
 @@ -1,6 +1,7 @@
@@ -1254,7 +1301,15 @@
  #include "General.h"
  #include "Timer.h"
  #include "TxdStore.h"
-@@ -195,6 +196,13 @@
+@@ -18,6 +19,7 @@
+ #include "AudioScriptObject.h"
+ #include "ParticleObject.h"
+ #include "Particle.h"
++int VisualStyleIndex(void);	// (core/MenuScreensCustom.cpp: 2 = Xbox)
+ #include "soundlist.h"
+ #include "SaveBuf.h"
+ #include "debugmenu.h"
+@@ -195,6 +197,13 @@
  RwRaster  *gpBoatWakeRaster;
  RwRaster  *gpFlame1Raster;
  RwRaster  *gpFlame5Raster;
@@ -1268,7 +1323,7 @@
  RwRaster  *gpRainDropSmallRaster;
  RwRaster  *gpBloodRaster;
  RwRaster  *gpLeafRaster[MAX_LEAF_FILES];
-@@ -250,6 +258,67 @@
+@@ -250,6 +259,67 @@
  
  
  
@@ -1336,7 +1391,7 @@
  void CParticle::ReloadConfig()
  {
  	debug("Initialising CParticleMgr...");
-@@ -303,6 +372,8 @@
+@@ -303,6 +373,8 @@
  
  		gParticleArray[i].m_nRotationStep = 0;
  	}
@@ -1345,7 +1400,7 @@
  }
  
  void CParticle::Initialise()
-@@ -557,6 +628,7 @@
+@@ -557,6 +629,7 @@
  			
  			case PARTICLE_FLAME:
  			case PARTICLE_CARFLAME:
@@ -1353,7 +1408,7 @@
  				entry->m_ppRaster = &gpFlame1Raster;
  				break;
  			
-@@ -671,6 +743,9 @@
+@@ -671,6 +744,9 @@
  		}
  	}
  
@@ -1363,7 +1418,7 @@
  	debug("CParticle ready");
  }
  
-@@ -951,6 +1026,7 @@
+@@ -951,6 +1027,7 @@
  		psystem->m_vecTextureStretch.x = w;
  		psystem->m_vecTextureStretch.y = h;
  	}
@@ -1371,7 +1426,7 @@
  	
  	pParticle->m_vecVelocity = vecDir;
  	
-@@ -1127,6 +1203,31 @@
+@@ -1127,6 +1204,31 @@
  	if ( CTimer::GetIsPaused() )
  		return;
  
@@ -1403,7 +1458,7 @@
  	CRGBA color(0, 0, 0, 0);
  	
  	float fFricDeccel50 = pow(0.50f, CTimer::GetTimeStep());
-@@ -1172,6 +1273,7 @@
+@@ -1172,6 +1274,7 @@
  			CVector vecWind(0.0f, 0.0f, 0.0f);
  			
  			bRemoveParticle = false;
@@ -1411,7 +1466,7 @@
  
  			CVector vecMoveStep = particle->m_vecVelocity * CTimer::GetTimeStep();
  			CVector vecPos = particle->m_vecPosition;
-@@ -1740,7 +1842,8 @@
+@@ -1740,7 +1843,8 @@
  					++particle->m_nZRadiusTimer;
  			}
  
@@ -1421,7 +1476,19 @@
  			{
  				if ( particle->m_nAnimationSpeedTimer > psystem->m_nAnimationSpeed )
  				{
-@@ -2054,7 +2157,12 @@
+@@ -1934,7 +2038,10 @@
+ 					else
+ 						fxtype = FXTYPE_WATER1;
+ 		
+-					CMBlur::AddRenderFx(Scene.camera, &rect, screenZ, fxtype);
++					// revc: the Xbox spawns these but never draws them (only hides the sprite; research on
++					// the Xbox build): not in the Xbox visual style
++					if ( VisualStyleIndex() != 2 )
++						CMBlur::AddRenderFx(Scene.camera, &rect, screenZ, fxtype);
+ 					
+ 					canDraw = false;
+ 				}
+@@ -2054,7 +2161,12 @@
  				float w;
  				float h;
  
@@ -1435,7 +1502,7 @@
  				{
  					
  					if ( i == PARTICLE_ENGINE_STEAM
-@@ -2204,7 +2312,7 @@
+@@ -2204,7 +2316,7 @@
  							}
  							else if ( psystem->Flags & SPEED_TRAIL )
  							{

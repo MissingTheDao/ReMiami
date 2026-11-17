@@ -567,8 +567,12 @@ pub unsafe fn current_draw_state() -> DrawState {
     s.fog_color = rs.fog_color;
     s.xform = [2.0 / w, -2.0 / h, -1.0, 1.0];
     let st = |i: i32| rs.stencil[(i - STENCILENABLE) as usize];
+    // REVC_TEST_STENCIL_OFF=1 (test runs only): the stencil states are dropped as before stencil
+    // support, for before/after pictures
+    static STENCIL_OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let off = *STENCIL_OFF.get_or_init(|| std::env::var_os("REVC_TEST_STENCIL_OFF").is_some());
     s.stencil = Stencil {
-        enable: st(STENCILENABLE),
+        enable: if off { 0 } else { st(STENCILENABLE) },
         fail: st(STENCILFAIL),
         zfail: st(STENCILZFAIL),
         pass: st(STENCILPASS),
