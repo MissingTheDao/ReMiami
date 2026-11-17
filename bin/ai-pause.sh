@@ -33,13 +33,20 @@ case "${1:-}" in
       # Debounced: test.sh runs one headless run per scenario, and reloading the model between them
       # (~45 s of disk, CPU and VRAM traffic) would disturb the next run. Restart only after
       # AI_RESUME_DELAY seconds (default 120) with no new hold; the first waiter to claim the marker wins.
-      setsid bash -c '
+      # The waiter runs in a unit of its own: a caller that is itself a systemd unit (a play session
+      # started with systemd-run) would otherwise take it down when the unit stops.
+      waiter='
         sleep "${AI_RESUME_DELAY:-120}"
         for f in "$1"/hold/*; do [[ -e $f ]] && ! kill -0 "${f##*/}" 2>/dev/null && rm -f "$f"; done  # crashed runs
         [[ -z $(ls -A "$1/hold" 2>/dev/null) ]] || exit 0
         mv "$1/was-running" "$1/was-running.$$" 2>/dev/null || exit 0
         rm -f "$1/was-running.$$"
-        exec "$2/ai-start.sh"' _ "$S" "$(dirname "$0")" > /dev/null 2>&1 < /dev/null &
+        exec "$2/ai-start.sh"'
+      dir=$(cd "$(dirname "$0")" && pwd)
+      if ! systemd-run --user --quiet --collect --unit="revc-ai-resume-$$-$RANDOM" --setenv=AI_RESUME_DELAY="${AI_RESUME_DELAY:-120}" \
+          bash -c "$waiter" _ "$S" "$dir" > /dev/null 2>&1; then
+        setsid bash -c "$waiter" _ "$S" "$dir" > /dev/null 2>&1 < /dev/null &
+      fi
       echo "ai-pause: local model restarts in ${AI_RESUME_DELAY:-120} s if no other run starts" >&2
     fi ;;
   *) echo "usage: ai-pause.sh hold|release" >&2; exit 2 ;;
