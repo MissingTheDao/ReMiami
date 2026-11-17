@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# reMiami build kit: builds the game from the source inside this AppImage on your computer, then starts it.
+# Contains no game data, no reVC source and no prebuilt game. Needs no network and no root.
+#
+# usage: <this AppImage> --revc-source <reVC copy> --game <Vice City folder> [--ps2-disc <image>] [--xbox-disc <image>]
+#                         [--dest <dir>] [--jobs N] [--rebuild] [--check]
+# Exactly these versions are accepted, so every build plays the same (each is checked by SHA-256):
+#   --revc-source  the reVC source (re3 "miami" branch), snapshot dc2147268b17b86656b629d5370bf2e90229e618:
+#                  a folder or a .zip/.tar.* archive; every needed file is checked
+#   --game         Vice City for PC, the Steam release (gta-vc.exe sha256 8c2318d61bffaaff5e638449543dbf99ea932dca85f297c7190d2efd525b848f)
+#   --ps2-disc     optional, for the PS2 style: PS2 US v1.40 (SLUS-20552; boot file sha256 39f5abacc6aa77c4...)
+#   --xbox-disc    optional, for the Xbox style: Xbox US (Rev 1) (default.xbe sha256 9367714de9f4aa12...)
+#                  (disc image files, ISO or XISO; imported into <game>/userfiles/import)
+#   --dest         where to build (default: ${XDG_DATA_HOME:-~/.local/share}/remiami/<version>)
+#   --jobs N       parallel build jobs (default: half the CPUs)
+#   --rebuild      build again even if this version was built before
+#   --check        only check the tools and report what is missing
+# Once built, run it again with --game <folder> (no --revc-source needed) to play.
+set -uo pipefail
+HERE=${APPDIR:-$(cd "$(dirname "$0")" && pwd)}
+VERSION=$(cat "$HERE/VERSION")
+REVC_SRC= GAME= DEST= JOBS= REBUILD=0 CHECK=0 PS2= XBOX=
+PC_SHA256=8c2318d61bffaaff5e638449543dbf99ea932dca85f297c7190d2efd525b848f	# gta-vc.exe of the Steam release
+while (( $# )); do
+  case $1 in
+    --revc-source) REVC_SRC=$2; shift 2 ;;
+    --game) GAME=$2; shift 2 ;;
+    --ps2-disc) PS2=$2; shift 2 ;;
+    --xbox-disc) XBOX=$2; shift 2 ;;
+    --dest) DEST=$2; shift 2 ;;
+    --jobs) JOBS=$2; shift 2 ;;
+    --rebuild) REBUILD=1; shift ;;
+    --check) CHECK=1; shift ;;
+    -h|--help) sed -n '2,20p' "$HERE/AppRun" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "unknown argument: $1 (see --help)" >&2; exit 2 ;;
+  esac
+done
+DEST=${DEST:-${XDG_DATA_HOME:-$HOME/.local/share}/remiami/$VERSION}
+JOBS=${JOBS:-$(( ($(nproc) + 1) / 2 ))}
+BIN=$DEST/src/rust/target/release/remiami
+say() { printf '%s\n' "remiami: $*"; }
+
+# The tools the build needs, with what to install when one is missing (Arch/CachyOS names; other distros
+# have the same packages under similar names).
+missing=()
+need() { command -v "$1" >/dev/null 2>&1 || missing+=("$1 ($2)"); }
+need_pc() { pkg-config --exists "$1" 2>/dev/null || missing+=("$1 development files ($2)"); }
+check_tools() {
+  missing=()
+  need cargo "Rust: rustup (https://rustup.rs) or your distro's rust package, version 1.99.1"
+  need rustc "Rust, as above"
+  need cmake "cmake"
+  need ninja "ninja"
+  need clang "clang"
+  need clang++ "clang"
+  need pkg-config "pkgconf or pkg-config"
+  need patch "patch"
+  need diff "diffutils"
+  need sha256sum "coreutils"
+  if command -v pkg-config >/dev/null 2>&1; then
+    need_pc sdl3 "SDL 3: package sdl3, or libsdl3-dev"
+    need_pc libmpg123 "mpg123: package mpg123, or libmpg123-dev"
+    need_pc gl "OpenGL headers: libglvnd, or libgl-dev"
+  fi
+  # Rust 1.99.1 is the version this source is pinned to (rust/rust-toolchain.toml). With rustup it must be installed
+  # already: the kit never lets rustup download during the build.
+  if command -v rustup >/dev/null 2>&1; then
+    rustup toolchain list 2>/dev/null | grep -q '^1\.99\.1' || missing+=("Rust 1.99.1 for rustup: run  rustup toolchain install 1.99.1")
+  elif command -v rustc >/dev/null 2>&1; then
+    v=$(rustc --version | awk '{print $2}')
+    [[ $v == 1.99.1 ]] || say "note: rustc is $v; this source was built and tested with 1.99.1"
+  fi
+}
+check_tools
+if (( ${#missing[@]} )); then
+  say "these tools are missing (nothing was built):"
+  printf '  - %s\n' "${missing[@]}"
+  exit 3
+fi
+(( CHECK )) && { say "all build tools found"; exit 0; }
+
+if [[ -n $GAME ]]; then
+  [[ -d $GAME/models && -f $GAME/models/gta3.img ]] || { say "--game $GAME: not a Vice City folder (no models/gta3.img)"; exit 2; }
+  GAME=$(cd "$GAME" && pwd)
+  exe=$(find "$GAME" -maxdepth 1 -iname gta-vc.exe | head -1)
+  if [[ -z $exe ]] || [[ $(sha256sum "$exe" | cut -c1-64) != "$PC_SHA256" ]]; then
+    say "--game $GAME: not the Steam release of Vice City (gta-vc.exe missing or a different version)."
+    say "this build accepts only the Steam release, so every build plays the same (see --help)"
+    exit 2
+  fi
+fi
+for d in "$PS2" "$XBOX"; do
+  [[ -z $d || -e $d ]] || { say "disc image not found: $d"; exit 2; }
+  [[ -z $d || -n $GAME ]] || { say "importing a disc needs --game (the import goes into its userfiles folder)"; exit 2; }
+done
+
+if [[ ! -x $BIN || $REBUILD == 1 ]]; then
+  [[ -n $REVC_SRC ]] || { say "this version is not built yet: give --revc-source <your reVC copy> (see --help)"; exit 2; }
+  say "building reMiami $VERSION in $DEST (jobs: $JOBS; about 5-15 minutes)"
+  mkdir -p "$DEST"
+  rm -rf "$DEST/src.new"
+  cp -a "$HERE/src" "$DEST/src.new" || exit 1
+  chmod -R u+w "$DEST/src.new"
+  if [[ -d $DEST/src/rust/target ]]; then mv "$DEST/src/rust/target" "$DEST/src.new/rust/target"; fi
+  rm -rf "$DEST/src"; mv "$DEST/src.new" "$DEST/src"
+  cd "$DEST/src" || exit 1
+  scripts/revc-source.sh prepare "$REVC_SRC" --force || { say "the reVC copy was not accepted (see above)"; exit 4; }
+  export CARGO_NET_OFFLINE=true CARGO_BUILD_JOBS=$JOBS CMAKE_BUILD_PARALLEL_LEVEL=$JOBS NUM_JOBS=$JOBS
+  scripts/build.sh || { say "the build failed (see above)"; exit 5; }
+fi
+
+[[ -n $GAME ]] || { say "built: $BIN. To play: run this AppImage with --game <your Vice City folder>"; exit 0; }
+# The console discs: the game's importer accepts only PS2 US v1.40 and Xbox US (Rev 1) and imports nothing otherwise.
+for d in "$PS2" "$XBOX"; do
+  [[ -n $d ]] || continue
+  say "importing $d (only PS2 US v1.40 / Xbox US Rev 1 are accepted)"
+  (cd "$GAME" && REVC_GAME_DIR=$GAME REVC_ASSETS_DIR=$DEST/src/assets "$BIN" --import "$(cd "$(dirname "$d")" && pwd)/$(basename "$d")") \
+    || { say "the disc was not imported (see above)"; exit 6; }
+done
+say "starting reMiami $VERSION with $GAME"
+cd "$GAME" || exit 1
+REVC_GAME_DIR=$GAME REVC_ASSETS_DIR=$DEST/src/assets exec "$BIN"

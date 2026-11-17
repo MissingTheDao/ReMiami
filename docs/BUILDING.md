@@ -64,6 +64,29 @@ The result is `rust/target/release/remiami` and its SHA-256 is printed.
 
 For day-to-day work, `cd rust && cargo run` builds a dev binary and starts the game.
 
+
+## Build kit (AppImage)
+
+`packaging/buildkit/make-buildkit.sh <commit> <version> <runtime>` packs the repository at a commit into one
+AppImage: the source (`git archive`), the Rust crates vendored for every target in `Cargo.lock`, and a launcher. It
+holds no game data, no reVC source and no prebuilt game. The player runs it with their own copies:
+
+```bash
+./remiami-buildkit-<version>-x86_64.AppImage --check
+./remiami-buildkit-<version>-x86_64.AppImage --revc-source <reVC copy> --game <Vice City folder> \
+    [--ps2-disc <PS2 US v1.40 image>] [--xbox-disc <Xbox US Rev 1 image>]
+```
+
+It accepts exactly the versions the project is built and tested with, each checked by SHA-256, so every build plays
+the same: the reVC source at snapshot `dc21472`, Vice City for PC as the Steam release, and optionally the PS2 US v1.40
+and Xbox US (Rev 1) discs (`--ps2-disc`, `--xbox-disc`: imported with the game's own importer, which refuses other
+versions). `--help` lists the hashes.
+
+`--check` lists missing build tools (the same as under Requirements, plus Rust 1.99.1). The first run prepares the
+C++ tree from the reVC copy (`scripts/revc-source.sh prepare`, hash-checked), builds with `scripts/build.sh` without
+network access into `~/.local/share/remiami/<version>`, then starts the game; later runs need only `--game`. The pack
+step needs `mksquashfs` and the AppImage type2 runtime of the release pinned in the script (checked by sha256).
+
 ## Renderers
 
 The game draws through **retro-wgpu** by default: an engine-neutral renderer core, published at

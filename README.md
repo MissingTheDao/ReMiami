@@ -6,8 +6,12 @@
 > (read from your own Xbox disc at import; re-import the disc to get it), and a fix for the
 > Xbox-style map moving by itself. Known open: in the PS2 and Xbox styles the screen effects (blood
 > drops, heat haze, boat water drops) are not drawn yet, and heat haze has not been checked on
-> screen in any style. The test switches `REVC_TEST_FX_MARK` and `REVC_TEST_STENCIL_OFF` do nothing
-> unless set.
+> screen in any style. This last state is released as a build kit (release `paused-20261117`): an
+> AppImage that builds the game on your computer from your own reVC source copy and runs it with
+> your own Vice City files (exactly the Steam release for PC, and optionally the PS2 US v1.40 and
+> Xbox US Rev 1 discs; other versions are refused); it contains no game data and no prebuilt game
+> (docs/BUILDING.md, "Build kit"). The test switches `REVC_TEST_FX_MARK` and `REVC_TEST_STENCIL_OFF`
+> do nothing unless set.
 
 A long-term modernisation of [reVC](https://github.com/GTAmodding/re3) (the reverse-engineered
 source of GTA: Vice City, re3-miami branch): the game is ported to Rust piece by piece, in

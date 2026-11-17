@@ -14,3 +14,4 @@
 # Xbox Neo data) belong in game/, and test screenshots show the game's art.
 /tests/reference/
 /tests/reference-wgpu/
+/dist/
