@@ -1,0 +1,14 @@
+[package]
+name = "remiami-kit"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Its own workspace: not part of the game build.
+[workspace]
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1

@@ -87,6 +87,25 @@ C++ tree from the reVC copy (`scripts/revc-source.sh prepare`, hash-checked), bu
 network access into `~/.local/share/remiami/<version>`, then starts the game; later runs need only `--game`. The pack
 step needs `mksquashfs` and the AppImage type2 runtime of the release pinned in the script (checked by sha256).
 
+### Build kit for Windows (.exe)
+
+`packaging/buildkit/make-buildkit-win.sh <commit> <version> <remiami-kit.exe>` packs the same contents (source,
+vendored crates, `VERSION`, `packaging/buildkit/build.ps1`) as a `.tar.gz` behind a small launcher
+(`packaging/buildkit/win-launcher`, built with `cargo build --release` on Windows). The launcher unpacks it with the
+`tar.exe` that comes with Windows into `%LOCALAPPDATA%\remiami\<version>\kit` and runs `build.ps1` with Windows
+PowerShell. It takes the same options and checks the same hashes as the AppImage, plus two folders that Linux gets from
+the system:
+
+```bat
+remiami-buildkit-<version>-windows-x86_64.exe --check --sdl3 <SDL3-devel VC folder> --mpg123 <mpg123 folder>
+remiami-buildkit-<version>-windows-x86_64.exe --revc-source <reVC copy> --game <Vice City folder> --sdl3 <...> --mpg123 <...>
+```
+
+It needs Git for Windows (its `bash`, `diff`, `patch`), Visual Studio Build Tools with the C++ workload (MSVC, CMake,
+Ninja), rustup with Rust 1.99.1, the official `SDL3-devel-<version>-VC` package unpacked, and mpg123 built as a static
+library with CMake and MSVC (`ports/cmake`, `-DBUILD_SHARED_LIBS=OFF`). It builds into
+`%LOCALAPPDATA%\remiami\<version>` and copies `SDL3.dll` next to the game.
+
 ## Renderers
 
 The game draws through **retro-wgpu** by default: an engine-neutral renderer core, published at
