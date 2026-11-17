@@ -110,6 +110,7 @@ unsafe extern "C" {
     fn revc_test_menu_input(down: i32, change: i32);
     fn revc_test_menu_key(down: i32, up: i32, select: i32, back: i32, change: i32);
     fn revc_test_map_zoom(dir: i32);
+    fn revc_test_map_view(out: *mut f32);
     fn revc_test_set_ui_style(style: i32);
     fn revc_test_scene(x: f32, y: f32, heading: f32, hour: i32, minute: i32, weather: i32) -> f32;
     fn revc_test_hud_text(kind: i32);
@@ -611,6 +612,9 @@ fn motion_input(input: &str, page: i32, frame: u32) {
 }
 
 static MENU_SHOT_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+/// The map view (half size, centre) of the previous frame of a Map shot: nothing presses a button
+/// there, so it must not move (the Xbox map jumped every frame with the pad at rest, 2026-11-17).
+static MAP_VIEW: std::sync::Mutex<Option<[f32; 3]>> = std::sync::Mutex::new(None);
 static MENU_VIDEO_FRAME: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 fn menu_shots() -> (&'static str, &'static [MenuShot]) {
@@ -1370,6 +1374,7 @@ impl Driver {
                     let p = unsafe { revc_test_menu_page_id(name.as_ptr()) };
                     if unsafe { revc_test_menu_state(p, option, context, layout, legend) } != 0 {
                         *MENU_SHOT_START.lock().unwrap() = Some(std::time::Instant::now());
+                        *MAP_VIEW.lock().unwrap() = None;
                         self.phase = Phase::Menus { idx, frames: 1 };
                     }
                 } else if MENU_SHOT_START.lock().unwrap().is_none_or(|t| t.elapsed().as_millis() < wait as u128) {
@@ -1377,6 +1382,19 @@ impl Driver {
                     let name = std::ffi::CString::new(page).unwrap();
                     let p = unsafe { revc_test_menu_page_id(name.as_ptr()) };
                     unsafe { revc_test_menu_state(p, option, -1, -1, -1) };
+                    if page == "map" {
+                        let mut view = [0.0f32; 3];
+                        unsafe { revc_test_map_view(view.as_mut_ptr()) };
+                        let mut last = MAP_VIEW.lock().unwrap();
+                        // (from the third frame: the page and the shot's zoom are set by then)
+                        if frames >= 3
+                            && let Some(prev) = *last
+                            && prev.iter().zip(view).any(|(a, b)| (a - b).abs() > 0.01)
+                        {
+                            self.fail(format!("menu {set}_{id}: the map moved without input: size/centre {prev:?} -> {view:?}"));
+                        }
+                        *last = Some(view);
+                    }
                     self.phase = Phase::Menus { idx, frames: frames + 1 };
                 } else if frames < u32::MAX {
                     // waited long enough (real time: page fades and the highlight have settled)

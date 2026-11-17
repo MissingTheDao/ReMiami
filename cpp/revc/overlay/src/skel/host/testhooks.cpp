@@ -681,6 +681,15 @@ revc_test_map_zoom(int dir)
 	gRevcTestMapZoom = dir;
 }
 
+// The menu map's view: half size, centre x, centre y (the map must stay still without input).
+void
+revc_test_map_view(float *out)
+{
+	out[0] = FrontEndMenuManager.m_fMapSize;
+	out[1] = FrontEndMenuManager.m_fMapCenterX;
+	out[2] = FrontEndMenuManager.m_fMapCenterY;
+}
+
 // REVC_TEST_SWITCH_STYLE: the UI style changed in a running game, as the menu does.
 void
 revc_test_set_ui_style(int style)
